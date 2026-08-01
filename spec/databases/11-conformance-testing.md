@@ -61,10 +61,10 @@ Listed as requirements rather than omitted, so the gap is visible (`C0.20`).
 
   Nothing in this repository exercises concurrent access to a store.
 
-- **T11.9** *(amended — **partially implemented**)* Every parser and every
-  function that accepts untrusted input MUST be fuzzed, with the fuzz targets
-  **run, not merely committed**, on a bounded time budget with a committed seed
-  corpus. A crash, panic, abort, or stack overflow MUST fail the build.
+- **T11.9** *(amended — **implemented**)* Every parser and every function that
+  accepts untrusted input MUST be fuzzed, with the fuzz targets **run, not merely
+  committed**, on a bounded time budget with a committed seed corpus. A crash,
+  panic, abort, or stack overflow MUST fail the build.
 
   A stack overflow is not unwindable: `catch_unwind` does not catch it, a worker
   thread cannot contain it, and the process ends. For a component holding
@@ -77,11 +77,22 @@ Listed as requirements rather than omitted, so the gap is visible (`C0.20`).
   live in `openehr_store::conformance`, shared by all six, because six copies of
   one assertion is the arrangement that produced **W-01**.
 
-  **Not implemented for the `openehr` crate**, which is where the parsers
-  actually are: ISO 8601, `OBJECT_ID`, openEHR paths, AQL, and canonical-JSON
-  deserialization all accept documents from outside the process and none is
-  fuzzed. That is the larger half of this requirement and it remains open as
-  `lib:A-09`.
+  **Implemented for the parsers**, which is where the untrusted surface actually
+  is. `openehr-fuzz` drives five targets — ISO 8601, the identifier grammars,
+  AQL, openEHR paths, and canonical-JSON deserialization — each asserting a
+  property beyond "did not panic": lexical fidelity, `Display` round-trip,
+  idempotent AQL normalisation, and canonical round-trip through `validate()`.
+  That closes `lib:A-09`.
+
+  A seed corpus is not optional for a structured target. `canonical_json` seeded
+  with a real composition reaches roughly 4,800 covered edges; unseeded it would
+  exercise the JSON lexer and stop, because random bytes are never a valid
+  `COMPOSITION`. A target that runs millions of iterations against nothing
+  reports the same green as one that works.
+
+  Deep nesting is **not** treated as a finding: `lib:S1.15` states unbounded
+  recursion as a documented limitation a caller must bound, and a fuzzer pointed
+  at it would produce an impressive-looking result that means nothing.
 
 - **T11.7** *(amended — **not implemented**)* A redaction test MUST assert that
   no log line emitted during a full write-and-read cycle over a record containing

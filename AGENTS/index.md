@@ -27,9 +27,8 @@ Fourteen crates, each its own Cargo workspace. `openehr` is the Reference Model.
 the five-table schema, the projection onto rows, the commit rules, and the
 conformance suite. Six engine crates each supply one `Dialect`, owning exactly
 four things: type spellings, identifier quoting, placeholder style, and
-append-only enforcement. Only `openehr-sqlite` also has a `Store`. Six
-`openehr-<engine>-fuzz` harnesses drive the shared properties; they are
-`publish = false`.
+append-only enforcement. Only `openehr-sqlite` also has a `Store`. Seven fuzz harnesses drive the properties — six over the dialects and
+`openehr-fuzz` over the Reference Model parsers; all are `publish = false`.
 
 The eight publishable crates are live on crates.io at **0.1.1**. Each engine
 crate carries a dialect annex at `spec/14-<engine>-dialect.md`.

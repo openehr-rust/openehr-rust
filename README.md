@@ -367,7 +367,7 @@ Recorded rather than implied — see [`spec/audit.md`](spec/audit.md):
   rather than considered generalizations (`db:D-05`).
 - **SQL Server and Oracle DDL has never been parsed by the engine it names.**
   Both stay at **Dialect** — a gap in evidence, not a judgement that it is wrong.
-- **No fuzzing, and no concurrency testing of the SQLite store.**
+- **No concurrency testing of the SQLite store** (`db:D-02`).
 
 ## Repository layout
 
@@ -383,13 +383,14 @@ openehr-store/             engine-agnostic persistence
   scripts/verify-schema.sh Dialect -> Schema verification
 openehr-<engine>/          one Dialect each; sqlite also has a Store
   spec/14-<engine>-dialect.md   that dialect's annex and departures
+openehr-fuzz/              fuzz harness for the RM parsers; not published
 openehr-<engine>-fuzz/     fuzz harness per dialect; not published
-  fuzz_targets/, corpus/   two targets, committed seed corpus
+  fuzz_targets/, corpus/   17 targets in all, committed seed corpora
 .github/workflows/ci.yml   test, examples, schema, fuzz, claims
 ```
 
-Fourteen crates, **each its own Cargo workspace** — run cargo from inside a
-crate directory. Eight are published; the six fuzz harnesses are not.
+Fifteen crates, **each its own Cargo workspace** — run cargo from inside a
+crate directory. Eight are published; the seven fuzz harnesses are not.
 
 ## Contributing
 

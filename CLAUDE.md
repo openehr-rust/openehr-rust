@@ -12,9 +12,10 @@ plus the things that specifically trip up automated work here.
 
 ## Layout
 
-Fourteen crates, **each its own Cargo workspace**. There is no root workspace —
-run cargo from inside a crate directory. Eight are published at 0.1.1; the six
-`openehr-<engine>-fuzz` harnesses are `publish = false`.
+Fifteen crates, **each its own Cargo workspace**. There is no root workspace —
+run cargo from inside a crate directory. Eight are published at 0.1.1; the seven
+fuzz harnesses (`openehr-fuzz` and six `openehr-<engine>-fuzz`) are
+`publish = false`.
 
 | Crate | Role | Level |
 | --- | --- | --- |
@@ -26,7 +27,8 @@ run cargo from inside a crate directory. Eight are published at 0.1.1; the six
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
 | `openehr-mssql` | SQL Server dialect | **Dialect** |
 | `openehr-oracle` | Oracle dialect | **Dialect** |
-| `openehr-<engine>-fuzz` × 6 | fuzz harnesses | not published |
+| `openehr-fuzz` | fuzz harness for the RM parsers | not published |
+| `openehr-<engine>-fuzz` × 6 | dialect fuzz harnesses | not published |
 
 ## Commands
 

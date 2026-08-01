@@ -99,8 +99,8 @@ than either alone.
 
 ## What is in this repository
 
-**Fourteen crates**, each its own Cargo workspace: eight that are published, and
-six fuzz harnesses that are not.
+**Fifteen crates**, each its own Cargo workspace: eight that are published, and
+seven fuzz harnesses that are not.
 
 ### The published crates
 
@@ -122,9 +122,13 @@ All eight are on crates.io at **0.1.1**.
 
 ### The fuzz crates
 
-One per dialect — `openehr-<engine>-fuzz` — driving two properties: that an
+One per dialect — `openehr-<engine>-fuzz` — driving two properties each: that an
 identifier cannot escape its own quoting, and that every logical column type maps
-to something usable.
+to something usable. Plus `openehr-fuzz`, driving five targets over the Reference
+Model parsers, which is where the untrusted surface actually is: ISO 8601, the
+identifier grammars, AQL, openEHR paths, and canonical-JSON deserialization.
+
+Seventeen targets in total.
 
 - **W0.25** A fuzz crate MUST declare `publish = false`. It is a test harness; a
   registry release would claim it as part of the library's surface.
@@ -138,6 +142,15 @@ to something usable.
 - **W0.28** A fuzz property MUST be shown to **fail** against a deliberately
   broken implementation. A check that cannot fail is indistinguishable from a
   control that works (`db:T11.10`).
+- **W0.30** A fuzz target over a **structured** input MUST carry a seed corpus of
+  real instances. Random bytes are never a valid `COMPOSITION`, so an unseeded
+  target exercises the lexer and stops — and reports the same green as one that
+  works. Coverage is the evidence: seeded, `canonical_json` reaches roughly 4,800
+  edges against 650 for `iso8601`.
+- **W0.31** A fuzz target MUST NOT report a **documented limitation** as a
+  finding. `lib:S1.15` states that recursion depth on deserialization is
+  deliberately unbounded and that a caller must bound it; a fuzzer pointed at
+  that produces a result in seconds that looks like a defect and is not.
 
 ### Dialect annexes
 

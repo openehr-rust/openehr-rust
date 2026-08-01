@@ -19,8 +19,17 @@ Seventeen findings: two High (**A-15**, **A-16**), eight Medium (**A-01**,
 **A-03**, **A-06**, **A-11**, **A-12**, **A-13**, **A-14**, **A-17**) and seven
 Low. **Twelve are fixed** — A-01, A-03, A-04, A-06, A-07, A-11, A-12, A-13,
 A-14, A-15, A-16, A-17 — three of them with a residual recorded. **A-09**
-(no property-based testing) is now largely closed by `tests/properties.rs`;
-fuzzing remains, so it stays open with a narrowed scope. **A-10** was opened by the work that closed
+(no property-based testing) is closed: `tests/properties.rs` covers the laws, and
+`openehr-fuzz` now drives five targets over the parsers — ISO 8601, the
+identifier grammars, AQL, paths, and canonical-JSON deserialization — run in CI
+on every push rather than merely committed. The `canonical_json` target is
+seeded with a real composition and reaches roughly 4,800 covered edges, against
+650 for `iso8601`; without the seed it would have exercised the JSON lexer and
+nothing else.
+
+Deliberately **not** treated as findings: deep nesting on deserialization, which
+`S1.15` states as a documented limitation rather than a defect, and for which
+`serde_json`'s own recursion limit bounds the input. **A-10** was opened by the work that closed
 A-06, which is the usual pattern: closing a finding is what surfaces the next
 one.
 
@@ -76,7 +85,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-06 | Medium | 54 requirements implemented with no test | **fixed** |
 | A-07 | Low | `COMPOSITION` persistent/context invariant not implemented | **fixed** — the uncertainty was a misreading |
 | A-08 | Low | The `property` and `extract_*` terminology groups are not carried | open, by decision |
-| A-09 | Low | No property-based or fuzz testing; mutation verification is not systematic | **narrowed** — property tests added (`A-17`); fuzzing still open |
+| A-09 | Low | No property-based or fuzz testing; mutation verification is not systematic | **fixed** — property tests added (`A-17`); `openehr-fuzz` drives five targets over the parsers, run in CI |
 | A-10 | Low | `X11.24` fail-closed has no provokable error path | open |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |

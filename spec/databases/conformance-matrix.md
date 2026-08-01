@@ -98,6 +98,7 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `X15.15` no two dialects emit the same DDL | • | all six compared |
 | `X15.16` the comparison's coverage is asserted | • | `ENGINE_CRATES` count; added after **W-01** |
 | `X15.19` types that differ in reality differ in code | • | booleans ≥ 4 spellings, JSON ≥ 3 |
+| `T11.9` fuzzing, run not merely committed | • | 17 targets across 7 fuzz crates, seeded, in CI on every push |
 | `M3.22` schema declared once | • | |
 | `M3.23` foreign keys point backwards only | • | |
 | `M3.27` every `_text` has a nullable `_utc` partner | • | asserted over the whole schema |
@@ -118,7 +119,7 @@ silence (`W0.4`).
 | `PR12.5`, `PR12.6` | read auditing | only writes are recorded; an access investigation asks about reads |
 | `O10.14` | schema migration | no migration mechanism and no applied-version metadata |
 | `T11.6` | adversarial concurrency tests | nothing exercises concurrent access |
-| `T11.9` | fuzzing the `openehr` parsers | the six dialects **are** fuzzed (`quote`, `col_sql`, seeded, run in CI); the ISO 8601 / `OBJECT_ID` / path / AQL / JSON parsers are not — `lib:A-09` |
+
 | `T11.7` | redaction test over emitted logs | |
 | `X15.10` | cross-engine logical agreement | untestable: only one store exists |
 | `X15.11` | cross-engine chain verification | follows `M3.16` |

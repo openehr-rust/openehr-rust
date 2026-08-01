@@ -15,8 +15,8 @@ Detailed topic guides live in [`AGENTS/`](AGENTS/index.md).
 
 ## What this repository is
 
-Fourteen crates implementing openEHR in Rust: one Reference Model library, one
-engine-agnostic persistence library, six SQL engine crates, and six fuzz
+Fifteen crates implementing openEHR in Rust: one Reference Model library, one
+engine-agnostic persistence library, six SQL engine crates, and seven fuzz
 harnesses. The first eight are published to crates.io at 0.1.1; the fuzz crates
 are `publish = false`.
 
@@ -195,6 +195,7 @@ openehr-store/            engine-agnostic persistence
   scripts/verify-schema.sh
 openehr-<engine>/         one Dialect each; sqlite also has a Store
   spec/14-<engine>-dialect.md  that dialect's annex and its M14.x departures
+openehr-fuzz/             fuzz harness for the RM parsers; publish = false
 openehr-<engine>-fuzz/    fuzz harness per dialect; publish = false
 .github/workflows/ci.yml  test, examples, schema, fuzz, claims
 ```

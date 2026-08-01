@@ -164,7 +164,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        engine: [postgresql, sqlite, mysql, mariadb, mssql, oracle]
+        include:
+          - { engine: postgresql, crate: openehr-postgresql, targets: "quote col_sql" }
+          - { engine: sqlite,     crate: openehr-sqlite,     targets: "quote col_sql" }
+          - { engine: mysql,      crate: openehr-mysql,      targets: "quote col_sql" }
+          - { engine: mariadb,    crate: openehr-mariadb,    targets: "quote col_sql" }
+          - { engine: mssql,      crate: openehr-mssql,      targets: "quote col_sql" }
+          - { engine: oracle,     crate: openehr-oracle,     targets: "quote col_sql" }
+          # The Reference Model parsers -- the untrusted surface the dialect
+          # targets do not reach (`lib:A-09`).
+          - { engine: openehr,    crate: openehr,            targets: "iso8601 object_id aql path canonical_json" }
     steps:
       - uses: actions/checkout@v4
 
@@ -175,7 +184,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: openehr-${{ matrix.engine }}-fuzz
+          workspaces: ${{ matrix.crate }}-fuzz
 
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked
@@ -183,20 +192,18 @@ jobs:
       # Build separately from run, so a compile break is distinguishable from a
       # crash the fuzzer found. They are different failures with different fixes.
       - name: Build fuzz targets
-        working-directory: openehr-${{ matrix.engine }}
-        run: cargo fuzz build --fuzz-dir ../openehr-${{ matrix.engine }}-fuzz
+        working-directory: ${{ matrix.crate }}
+        run: cargo fuzz build --fuzz-dir ../${{ matrix.crate }}-fuzz
 
-      - name: Fuzz quote (identifier quoting cannot be escaped)
-        working-directory: openehr-${{ matrix.engine }}
-        run: >
-          cargo fuzz run --fuzz-dir ../openehr-${{ matrix.engine }}-fuzz
-          quote -- -max_total_time=60
-
-      - name: Fuzz col_sql (every logical type maps to something usable)
-        working-directory: openehr-${{ matrix.engine }}
-        run: >
-          cargo fuzz run --fuzz-dir ../openehr-${{ matrix.engine }}-fuzz
-          col_sql -- -max_total_time=60
+      - name: Fuzz
+        working-directory: ${{ matrix.crate }}
+        run: |
+          set -eu
+          for t in ${{ matrix.targets }}; do
+            echo "::group::fuzz $t"
+            cargo fuzz run --fuzz-dir ../${{ matrix.crate }}-fuzz "$t" -- -max_total_time=60
+            echo "::endgroup::"
+          done
 
       # A crash leaves an artifact. Upload it, because a fuzz failure whose
       # input is lost is a failure nobody can reproduce.
@@ -205,7 +212,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fuzz-artifacts-${{ matrix.engine }}
-          path: openehr-${{ matrix.engine }}-fuzz/artifacts/
+          path: ${{ matrix.crate }}-fuzz/artifacts/
           if-no-files-found: ignore
 
   # SQL Server and Oracle deliberately have no schema job: no server has ever

@@ -1,0 +1,1 @@
+SELECT o/data FROM COMPOSITION c CONTAINS OBSERVATION o WHERE o/name/value = $name

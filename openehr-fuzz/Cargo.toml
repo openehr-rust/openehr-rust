@@ -1,0 +1,60 @@
+# Fuzz targets for the openEHR Reference Model parsers.
+#
+# Not published (`publish = false`): a test harness, not part of the library's
+# surface.
+#
+# This is the half of `db:T11.9` the six dialect fuzz crates do not cover. A
+# dialect owns four small functions and only one takes untrusted input; *these*
+# are the parsers that read documents from outside the process.
+[package]
+name = "openehr-fuzz"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.90"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+openehr = { path = "../openehr" }
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[[bin]]
+name = "iso8601"
+path = "fuzz_targets/iso8601.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "object_id"
+path = "fuzz_targets/object_id.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "aql"
+path = "fuzz_targets/aql.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "path"
+path = "fuzz_targets/path.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "canonical_json"
+path = "fuzz_targets/canonical_json.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
