@@ -13,9 +13,14 @@ Requirement prefix: `W16`.
 
 ## Layout
 
-- **W16.1** *(amended)* The repository holds eight crates: `openehr` (the
-  Reference Model), `openehr-store` (engine-agnostic persistence), and six
-  `openehr-<engine>` crates. Shared normative text lives at the root, in `spec/`.
+- **W16.1** *(amended)* The repository holds **fourteen** crates: `openehr` (the
+  Reference Model), `openehr-store` (engine-agnostic persistence), six
+  `openehr-<engine>` dialect crates, and six `openehr-<engine>-fuzz` harnesses.
+  Shared normative text lives at the root, in `spec/`; each engine crate carries
+  only its own dialect annex (`X15.6`).
+
+  The eight non-fuzz crates are published; the six fuzz crates MUST NOT be
+  (`W0.25`).
 - **W16.2** *(amended)* An engine crate MUST be named `openehr-<engine>`, and the
   `<engine>` component MUST name the engine it actually targets. There are no
   `-map`, `-gen`, or per-engine `-store` crates.

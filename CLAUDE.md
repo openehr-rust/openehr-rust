@@ -12,8 +12,9 @@ plus the things that specifically trip up automated work here.
 
 ## Layout
 
-Eight crates, **each its own Cargo workspace**. There is no root workspace — run
-cargo from inside a crate directory.
+Fourteen crates, **each its own Cargo workspace**. There is no root workspace —
+run cargo from inside a crate directory. Eight are published at 0.1.1; the six
+`openehr-<engine>-fuzz` harnesses are `publish = false`.
 
 | Crate | Role | Level |
 | --- | --- | --- |
@@ -25,6 +26,7 @@ cargo from inside a crate directory.
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
 | `openehr-mssql` | SQL Server dialect | **Dialect** |
 | `openehr-oracle` | Oracle dialect | **Dialect** |
+| `openehr-<engine>-fuzz` × 6 | fuzz harnesses | not published |
 
 ## Commands
 
@@ -82,6 +84,11 @@ warnings — keep it there.**
   break all six dialects at compile time. Do not add a `_` arm to silence it —
   that is how one engine silently acquires another's types.
 - **`Cargo.lock` is committed** in every crate, unusually for libraries. Leave it.
+- **Fuzz properties live in `openehr_store::conformance`,** not in the fuzz
+  crates. A target is a thin call. Do not inline an assertion into six crates.
+- **Each engine crate has a dialect annex** at `spec/14-<engine>-dialect.md`.
+  A departure from a core requirement goes there as a numbered `M14.x`, not in a
+  code comment — `C0.16` calls an undeclared departure a defect.
 - **Rustdoc examples are compiled and run.** Do not add `no_run` or `ignore` to
   make one pass; that turns a checked claim into an unchecked one.
 - **Times are two columns.** `…_text` is authoritative and exact; `…_utc` is

@@ -99,7 +99,10 @@ than either alone.
 
 ## What is in this repository
 
-Eight crates, each its own Cargo workspace.
+**Fourteen crates**, each its own Cargo workspace: eight that are published, and
+six fuzz harnesses that are not.
+
+### The published crates
 
 | Crate | Role | Level |
 | --- | --- | --- |
@@ -114,6 +117,34 @@ Eight crates, each its own Cargo workspace.
 
 The [conformance matrix](databases/conformance-matrix.md) is the detailed
 version of that last column and is the one to trust.
+
+All eight are on crates.io at **0.1.1**.
+
+### The fuzz crates
+
+One per dialect — `openehr-<engine>-fuzz` — driving two properties: that an
+identifier cannot escape its own quoting, and that every logical column type maps
+to something usable.
+
+- **W0.25** A fuzz crate MUST declare `publish = false`. It is a test harness; a
+  registry release would claim it as part of the library's surface.
+- **W0.26** The properties a fuzz target drives MUST live in `openehr-store`,
+  shared by every fuzz crate. Six copies of one assertion is the arrangement that
+  produced **W-01**, and a fuzz harness repeating the mistake it exists to catch
+  would be worse than none.
+- **W0.27** A fuzz target MUST be **run**, not merely committed, with a committed
+  seed corpus and a bounded budget in CI. A committed target nobody executes is a
+  claim rather than a check (`db:T11.9`).
+- **W0.28** A fuzz property MUST be shown to **fail** against a deliberately
+  broken implementation. A check that cannot fail is indistinguishable from a
+  control that works (`db:T11.10`).
+
+### Dialect annexes
+
+- **W0.29** Every engine crate MUST carry `spec/14-<engine>-dialect.md`
+  (`db:X15.6`), stating what that dialect actually does and declaring every
+  departure as a numbered `M14.x` requirement. All six exist and all six are
+  **proposed** rather than ratified, so none counts as evidence for a level.
 
 - **W0.13** `openehr` and `openehr-store` are libraries, not ports; the ladder
   does not apply to them. Their assurance is the requirement-level status in

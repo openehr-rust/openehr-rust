@@ -380,12 +380,16 @@ openehr/                   the Reference Model library
   spec/                    library specification, audit, conformance matrix
   examples/                five runnable tutorials
 openehr-store/             engine-agnostic persistence
-  scripts/verify-schema.sh Dialect → Schema verification
+  scripts/verify-schema.sh Dialect -> Schema verification
 openehr-<engine>/          one Dialect each; sqlite also has a Store
+  spec/14-<engine>-dialect.md   that dialect's annex and departures
+openehr-<engine>-fuzz/     fuzz harness per dialect; not published
+  fuzz_targets/, corpus/   two targets, committed seed corpus
+.github/workflows/ci.yml   test, examples, schema, fuzz, claims
 ```
 
-Each crate is **its own Cargo workspace** — run cargo from inside a crate
-directory.
+Fourteen crates, **each its own Cargo workspace** — run cargo from inside a
+crate directory. Eight are published; the six fuzz harnesses are not.
 
 ## Contributing
 

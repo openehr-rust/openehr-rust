@@ -22,12 +22,17 @@ specifications decide what must be true (`W0.2`):
 
 ## The one-paragraph version
 
-Eight crates, each its own Cargo workspace. `openehr` is the Reference Model.
+Fourteen crates, each its own Cargo workspace. `openehr` is the Reference Model.
 `openehr-store` holds everything about persistence that is not a SQL spelling —
 the five-table schema, the projection onto rows, the commit rules, and the
 conformance suite. Six engine crates each supply one `Dialect`, owning exactly
 four things: type spellings, identifier quoting, placeholder style, and
-append-only enforcement. Only `openehr-sqlite` also has a `Store`.
+append-only enforcement. Only `openehr-sqlite` also has a `Store`. Six
+`openehr-<engine>-fuzz` harnesses drive the shared properties; they are
+`publish = false`.
+
+The eight publishable crates are live on crates.io at **0.1.1**. Each engine
+crate carries a dialect annex at `spec/14-<engine>-dialect.md`.
 
 ## The failure this architecture is shaped by
 
