@@ -199,8 +199,8 @@ MSRV is `rust-version` in `Cargo.toml` (currently 1.90), Rust edition 2024.
 
 ## Licence
 
-MIT OR Apache-2.0, at your option. See [`LICENSE-MIT`](LICENSE-MIT) and
-[`LICENSE-APACHE`](LICENSE-APACHE).
+Any of these, at your option — MIT, Apache-2.0, BSD-3-Clause, GPL-2.0-only, or
+GPL-3.0-only. See [`LICENSE.md`](LICENSE.md).
 
 openEHR specifications are published by the openEHR Foundation under CC-BY-SA;
 this crate is an independent implementation and is not endorsed by or affiliated

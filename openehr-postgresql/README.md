@@ -33,13 +33,13 @@ Four things: type spellings, identifier quoting, placeholder style, and how the
 engine enforces append-only. Everything else — which tables exist, which
 columns, which indexes, the projection from openEHR objects onto rows, the
 commit rules, the conformance suite — lives in
-[`openehr-store`](../openehr-store) and is shared by all five engines.
+[`openehr-store`](../openehr-store) and is shared by all six engines.
 
 That boundary is deliberate. The sibling FHIR monorepo in this repository gave
 each of six ports a full copy of the DDL generator, and one of the copies spent
 the fork's whole life emitting another engine's types (**F-08**). A dialect that
 owns only spellings cannot do that, and
-`openehr-sqlite/tests/dialects.rs` compares all five to make sure.
+`openehr-sqlite/tests/dialects.rs` compares all six to make sure.
 
 ## PostgreSQL-specific choices
 
@@ -73,4 +73,5 @@ assertions that it is *not* another engine's SQL.
 
 ## Licence
 
-MIT OR Apache-2.0.
+Any of these, at your option — MIT, Apache-2.0, BSD-3-Clause, GPL-2.0-only, or
+GPL-3.0-only. See [`LICENSE.md`](LICENSE.md).

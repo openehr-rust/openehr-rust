@@ -9,7 +9,7 @@ and runs the shared conformance suite against a **real database** in its own
 tests: every commit rule, every read, the archetype index, the append-only
 triggers, and DDL idempotence.
 
-SQLite is the only one of the five engines that can be verified without
+SQLite is the only one of the six engines that can be verified without
 provisioning a server, so it is the one where the shared logic actually gets
 exercised. See
 [`openehr-store/spec/conformance.md`](../openehr-store/spec/conformance.md).
@@ -82,9 +82,10 @@ cargo test
 
 Runs the shared suite against an in-memory database, plus this crate's own
 tests for the trigger, the validation gate, lexical fidelity, and DDL
-idempotence — and `tests/dialects.rs`, which compares all five engines' DDL and
+idempotence — and `tests/dialects.rs`, which compares all six engines' DDL and
 fails if any two agree.
 
 ## Licence
 
-MIT OR Apache-2.0.
+Any of these, at your option — MIT, Apache-2.0, BSD-3-Clause, GPL-2.0-only, or
+GPL-3.0-only. See [`LICENSE.md`](LICENSE.md).

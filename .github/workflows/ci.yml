@@ -1,0 +1,193 @@
+# Continuous integration for every crate in this monorepo.
+#
+# This file exists because `openehr-store/spec/conformance.md` claimed it did,
+# naming `.github/workflows/openehr.yml`, when no `.github/` directory had ever
+# existed here (`spec/audit.md` W-02). Every Schema-level conformance claim
+# rested on somebody running a script by hand.
+#
+# Two principles, both from the specification rather than from habit:
+#
+#   * The schema jobs MUST fail, never skip, when a database is absent
+#     (`C0.13`). A skip is indistinguishable from a pass in a CI summary, and
+#     the sibling FHIR monorepo carries a finding for two ports whose database
+#     jobs invoked a test target that did not exist.
+#
+#   * The schema jobs invoke the same `verify-schema.sh` a contributor runs
+#     locally, rather than a parallel implementation in YAML. Two ways of doing
+#     one check drift, and the one that drifts is always the one nobody runs.
+#     That is also why the script provisions its own container instead of using
+#     GitHub's `services:`.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  # Every crate is its own Cargo workspace, so each is built and tested
+  # separately. A single `cargo test --workspace` would silently cover one of
+  # the eight.
+  test:
+    name: test / ${{ matrix.crate }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crate:
+          - openehr
+          - openehr-store
+          - openehr-sqlite
+          - openehr-postgresql
+          - openehr-mysql
+          - openehr-mariadb
+          - openehr-mssql
+          - openehr-oracle
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal \
+            --component clippy,rustfmt
+          rustup default stable
+          rustc --version
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ matrix.crate }}
+
+      # Lints are `deny` in every manifest and clippy runs at `pedantic`. The
+      # tree is at zero warnings; `RUSTFLAGS: -D warnings` keeps it there.
+      - name: Clippy
+        working-directory: ${{ matrix.crate }}
+        run: cargo clippy --all-targets --all-features
+
+      - name: Test
+        working-directory: ${{ matrix.crate }}
+        run: cargo test --all-features
+
+      # Doctests are claims that compile and run. A crate whose examples stop
+      # working has documentation that is wrong, which is the defect class this
+      # repository's audit register is mostly about.
+      - name: Doc
+        working-directory: ${{ matrix.crate }}
+        run: cargo doc --no-deps --all-features
+
+  # The five runnable tutorials the README points at. A tutorial nobody runs is
+  # a tutorial that rots.
+  examples:
+    name: examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: openehr
+      - name: Run tutorials
+        working-directory: openehr
+        run: |
+          set -eu
+          for e in 01_build_composition 02_validate_incoming 03_paths_and_aql \
+                   04_versioning_and_audit 05_access_and_redaction; do
+            printf '%s: ' "$e"
+            cargo run -q --example "$e" >/dev/null
+            echo ok
+          done
+
+  # Conformance level Dialect -> Schema. This is the job that turns "somebody
+  # ran it once" into a standing claim.
+  #
+  # It has found a defect in every crate it has been run against: MySQL
+  # rejecting `CREATE INDEX IF NOT EXISTS` (A-13), three dialects enforcing
+  # append-only nowhere (A-15), and MariaDB emitting MySQL's script in its
+  # entirety (W-01).
+  schema:
+    name: schema / ${{ matrix.engine }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [postgresql, mysql, mariadb]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: openehr-${{ matrix.engine }}
+
+      # Fail rather than skip if there is no container runtime. A schema job
+      # that quietly does nothing reports the same green as one that verified
+      # the DDL, which is the precise failure `C0.13` forbids.
+      - name: Require a container runtime
+        run: |
+          command -v docker >/dev/null || {
+            echo "::error::no container runtime; this job must fail, not skip"
+            exit 1
+          }
+
+      - name: Verify generated DDL against a real ${{ matrix.engine }} server
+        env:
+          CONTAINER: docker
+        run: sh openehr-store/scripts/verify-schema.sh ${{ matrix.engine }}
+
+  # SQL Server and Oracle deliberately have no schema job: no server has ever
+  # parsed their DDL, so both crates are at level Dialect and their
+  # documentation says so. Adding a job that skipped would convert an honest
+  # gap into a false green.
+  #
+  # This job asserts the gap is still the one recorded, so that a crate cannot
+  # quietly start claiming Schema without a job to back it.
+  claims:
+    name: conformance claims match evidence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No crate claims a level with no evidence here
+        run: |
+          set -eu
+          for c in openehr-mssql openehr-oracle; do
+            if grep -qE 'Conformance level:\s*\**(Schema|Store|Verified)' \
+                 "$c/src/lib.rs" "$c/README.md"; then
+              echo "::error::$c claims Schema or above, but no CI job verifies it"
+              exit 1
+            fi
+          done
+          echo "mssql and oracle still claim Dialect, as recorded"
+
+      # W0.22-W0.23: one licence expression across all eight crates, and
+      # LICENSE.md as the only licence file. Shipping the full text of some
+      # licences and not others privileges those and understates the grant.
+      - name: Licence expression is harmonized
+        run: |
+          set -eu
+          want='license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"'
+          bad=0
+          for d in openehr openehr-store openehr-sqlite openehr-postgresql \
+                   openehr-mysql openehr-mariadb openehr-mssql openehr-oracle; do
+            grep -qxF "$want" "$d/Cargo.toml" \
+              || { echo "::error::$d/Cargo.toml licence is not the harmonized five"; bad=1; }
+            [ -f "$d/LICENSE.md" ] \
+              || { echo "::error::$d has no LICENSE.md"; bad=1; }
+            for stray in LICENSE-MIT LICENSE-APACHE LICENSE LICENSE.txt; do
+              [ -e "$d/$stray" ] \
+                && { echo "::error::$d/$stray shadows LICENSE.md (W0.23)"; bad=1; }
+            done
+          done
+          [ "$bad" -eq 0 ] || exit 1
+          echo "all eight crates declare the same five licences"

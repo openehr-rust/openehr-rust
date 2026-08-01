@@ -2,16 +2,20 @@
 //!
 //! # Conformance level: **Store**
 //!
-//! Unlike the other four engine crates, this one contains a working
+//! Unlike the other five engine crates, this one contains a working
 //! [`SqliteStore`] and runs [`openehr_store::conformance::run`] against a real
-//! database in its own test suite. `SQLite` is the only one of the five that can
+//! database in its own test suite. `SQLite` is the only one of the six that can
 //! be verified without provisioning a server, so it is the one where the shared
 //! logic is actually exercised — every commit rule, every read, every index.
 //!
 //! That matters beyond `SQLite`: the store logic lives in `openehr-store` and is
-//! shared, so verifying it here verifies it for all five. What remains
+//! shared, so verifying it here verifies it for all six. What remains
 //! unverified for the others is their driver glue and their DDL against a real
 //! parser, which is exactly what `spec/conformance.md` says.
+//!
+//! This crate also hosts the cross-dialect comparison in `tests/dialects.rs`,
+//! because that comparison needs to see every dialect and `openehr-store`
+//! cannot — they depend on it.
 //!
 //! ```
 //! use openehr_sqlite::SqliteStore;
