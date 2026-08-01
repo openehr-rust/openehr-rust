@@ -2,19 +2,19 @@
 
 [package]
 name = "openehr-sqlite"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.90"
-license = "MIT OR Apache-2.0"
+license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
 description = "openEHR persistence for SQLite: schema dialect and a complete embedded store"
 keywords = ["openehr", "ehr", "sqlite", "healthcare", "sql"]
 categories = ["database"]
-repository = "https://github.com/joelparkerhenderson/fhir-databases"
+repository = "https://github.com/openehr-rust/openehr-rust"
 readme = "README.md"
 
 [dependencies]
-openehr = { path = "../openehr", version = "0.1.0" }
-openehr-store = { path = "../openehr-store", version = "0.1.0" }
+openehr = { path = "../openehr", version = "0.1.1" }
+openehr-store = { path = "../openehr-store", version = "0.1.1" }
 serde_json = { version = "1", features = ["preserve_order"] }
 # `bundled` compiles a known SQLite rather than linking whatever the host
 # ships. The generated DDL and the JSON1 functions the store uses are
@@ -22,15 +22,21 @@ serde_json = { version = "1", features = ["preserve_order"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 
 [dev-dependencies]
-# The four other dialects, so one test can compare all five. The comparison has
+# The five other dialects, so one test can compare all six. The comparison has
 # to live somewhere that can see every dialect, and `openehr-store` cannot —
 # they depend on it. This crate is the one with a full test suite already, so
-# the cross-check lives here rather than in a sixth crate existing only to hold
-# one assertion.
-openehr-postgresql = { path = "../openehr-postgresql", version = "0.1.0" }
-openehr-mysql = { path = "../openehr-mysql", version = "0.1.0" }
-openehr-mssql = { path = "../openehr-mssql", version = "0.1.0" }
-openehr-oracle = { path = "../openehr-oracle", version = "0.1.0" }
+# the cross-check lives here rather than in a seventh crate existing only to
+# hold one assertion.
+#
+# `openehr-mariadb` was missing from this list for as long as it existed, so the
+# distinctness check covered five of six dialects and the one it omitted was a
+# byte-identical copy of `openehr-mysql`. An incomplete guard reports the same
+# green as a complete one.
+openehr-postgresql = { path = "../openehr-postgresql", version = "0.1.1" }
+openehr-mysql = { path = "../openehr-mysql", version = "0.1.1" }
+openehr-mariadb = { path = "../openehr-mariadb", version = "0.1.1" }
+openehr-mssql = { path = "../openehr-mssql", version = "0.1.1" }
+openehr-oracle = { path = "../openehr-oracle", version = "0.1.1" }
 
 [lints.rust]
 missing_docs = "deny"
