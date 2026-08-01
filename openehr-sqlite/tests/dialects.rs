@@ -8,10 +8,21 @@
 //! and it survived because six ports each owned a full copy of the generator
 //! and nothing ever compared them.
 //!
-//! Here the five dialects own only their type spellings, and this test compares
-//! all five. It lives in this crate because the comparison needs to see every
+//! Here the six dialects own only their type spellings, and this test compares
+//! all six. It lives in this crate because the comparison needs to see every
 //! dialect, and `openehr-store` cannot: they depend on it.
+//!
+//! # The guard was itself incomplete, and that is how F-08 recurred
+//!
+//! This list held five of the six dialects for as long as `openehr-mariadb`
+//! existed. The omitted one was a copy of `openehr-mysql` with the name
+//! substituted: same struct name, same `Idempotence`, byte-identical DDL, and a
+//! documented conformance claim naming a `MariaDB` 8.4 release that was never
+//! published. `no_two_dialects_emit_the_same_ddl` passed the whole time, because
+//! a comparison that does not include a dialect cannot find it identical to
+//! another. A partial guard and a complete one report the same green.
 
+use openehr_mariadb::MariadbDialect;
 use openehr_mssql::MssqlDialect;
 use openehr_mysql::MysqlDialect;
 use openehr_oracle::OracleDialect;
@@ -25,9 +36,28 @@ fn all() -> Vec<&'static dyn Dialect> {
         &PostgresqlDialect,
         &SqliteDialect,
         &MysqlDialect,
+        &MariadbDialect,
         &MssqlDialect,
         &OracleDialect,
     ]
+}
+
+/// Fails if a dialect crate exists that this comparison does not cover.
+///
+/// The check above is only as good as `all()`, and `all()` is hand-maintained —
+/// which is exactly how `openehr-mariadb` went unexamined. Tying the count to
+/// the number of engine crates makes adding a seventh engine and forgetting to
+/// list it a test failure rather than a silent reduction in coverage.
+#[test]
+fn every_engine_crate_is_in_the_comparison() {
+    const ENGINE_CRATES: usize = 6;
+    assert_eq!(
+        all().len(),
+        ENGINE_CRATES,
+        "a dialect crate is missing from `all()`; the distinctness check does not cover it"
+    );
+    let names: std::collections::HashSet<&str> = all().iter().map(|d| d.name()).collect();
+    assert_eq!(names.len(), ENGINE_CRATES, "two dialects report one name");
 }
 
 #[test]
@@ -49,8 +79,11 @@ fn every_dialect_is_self_consistent() {
 #[test]
 fn the_types_that_differ_between_engines_actually_differ() {
     let boolean: Vec<String> = all().iter().map(|d| d.col_sql(ColTy::Bool)).collect();
-    // PostgreSQL `boolean`, SQLite/Oracle numerics, MySQL `TINYINT(1)`,
-    // SQL Server `bit` — five engines, at least four spellings.
+    // PostgreSQL `boolean`, SQLite/Oracle numerics, MySQL and MariaDB
+    // `TINYINT(1)`, SQL Server `bit` — six engines, at least four spellings.
+    // MySQL and MariaDB genuinely agree here, which is why this is a floor on
+    // the number of spellings and not an equality: the dialects are separated by
+    // idempotence and trigger syntax, not by how they spell a boolean.
     let distinct: std::collections::HashSet<_> = boolean.iter().collect();
     assert!(
         distinct.len() >= 4,

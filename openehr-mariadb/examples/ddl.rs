@@ -4,6 +4,6 @@
 fn main() {
     print!(
         "{}",
-        openehr_store::ddl_script(&openehr_mariadb::MysqlDialect)
+        openehr_store::ddl_script(&openehr_mariadb::MariadbDialect)
     );
 }

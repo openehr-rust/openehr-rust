@@ -1,4 +1,4 @@
-//! openEHR persistence for **`MariaDB` 8.4**.
+//! openEHR persistence for **`MariaDB` 11.4**.
 //!
 //! One [`Dialect`]; the model, projection, commit rules, and conformance suite
 //! are in [`openehr_store`].
@@ -6,31 +6,49 @@
 //! # Conformance level: **Schema**
 //!
 //! No driver and no [`openehr_store::Store`] — but the DDL has been executed
-//! against **`MariaDB` 8.4**, re-applied as a no-op, and its append-only triggers
-//! observed refusing `UPDATE` and `DELETE`. Reproduce with
-//! `openehr-store/scripts/verify-schema.sh mariadb`.
+//! against **`MariaDB` 11.4**, re-applied as a no-op, and its append-only
+//! triggers observed refusing `UPDATE` and `DELETE` with a row present.
+//! Reproduce with `openehr-store/scripts/verify-schema.sh mariadb`.
 //!
-//! That run found two defects the golden tests could not (**A-13**, **A-15**):
-//! `MariaDB` rejects `CREATE INDEX IF NOT EXISTS`, and this dialect enforced
-//! append-only nowhere. Both are fixed above.
+//! # `MariaDB` is not `MySQL`, and this dialect is where that is decided
+//!
+//! This crate began as a copy of `openehr-mysql` with the name substituted, and
+//! for as long as that lasted it emitted **byte-identical** DDL to `MySQL` while
+//! its documentation claimed a `MariaDB` server had accepted it — against a
+//! version, "`MariaDB` 8.4", that has never existed. That is the sibling FHIR
+//! monorepo's **F-08**, an Oracle emitter shipping `MySQL` types, reproduced
+//! here. It survived because the cross-dialect comparison in
+//! `openehr-sqlite/tests/dialects.rs` compared five dialects and this was the
+//! sixth. Both holes are closed: the comparison now covers all six, and the two
+//! differences below are real engine facts rather than cosmetic edits.
+//!
+//! | `MariaDB` 11.4 | `MySQL` 8.4 | Consequence here |
+//! | --- | --- | --- |
+//! | `CREATE INDEX IF NOT EXISTS` (since 10.0.5) | not supported | indexes are their own statements, not folded into `CREATE TABLE` |
+//! | `CREATE OR REPLACE TRIGGER` (since 10.1.4) | not supported | no drop-then-create window where the table is unprotected |
+//!
+//! The second is the one that matters. `MySQL` must `DROP TRIGGER` before
+//! recreating it, which leaves an interval — short, but real — in which an
+//! append-only table would accept an `UPDATE`. `MariaDB` replaces the trigger in
+//! one statement, so the guarantee never lapses.
 //!
 //! ```
-//! use openehr_mariadb::MysqlDialect;
+//! use openehr_mariadb::MariadbDialect;
 //! use openehr_store::{ColTy, Dialect};
 //!
 //! // Lengths are mandatory here, unlike `PostgreSQL`: an unbounded column
 //! // cannot be indexed.
-//! assert_eq!(MysqlDialect.col_sql(ColTy::Id(255)), "VARCHAR(255)");
-//! assert_eq!(MysqlDialect.quote("openehr_version"), "`openehr_version`");
+//! assert_eq!(MariadbDialect.col_sql(ColTy::Id(255)), "VARCHAR(255)");
+//! assert_eq!(MariadbDialect.quote("openehr_version"), "`openehr_version`");
 //! ```
 
-use openehr_store::{ColTy, Dialect, Idempotence, Placeholder, Table};
+use openehr_store::{ColTy, Dialect, Placeholder, Table};
 
 /// The `MariaDB` dialect.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct MysqlDialect;
+pub struct MariadbDialect;
 
-impl Dialect for MysqlDialect {
+impl Dialect for MariadbDialect {
     fn name(&self) -> &'static str {
         "MariaDB"
     }
@@ -42,6 +60,12 @@ impl Dialect for MysqlDialect {
             // key or part of one.
             ColTy::Id(n) | ColTy::Text(n) => return format!("VARCHAR({n})"),
             ColTy::LongText => "LONGTEXT",
+            // `MariaDB`'s `JSON` is an alias for `LONGTEXT`, not a distinct
+            // binary type as in `MySQL`. The spelling is kept because it
+            // documents intent and because `json_valid()` and the `JSON_*`
+            // functions work against it; nothing here relies on binary storage,
+            // since the canonical bytes are regenerated from the parsed object
+            // rather than read back from the column.
             ColTy::Json => "JSON",
             // 64 characters: the longest ISO 8601 form this crate accepts is a
             // date-time with fractional seconds and an offset, well under half
@@ -68,41 +92,34 @@ impl Dialect for MysqlDialect {
         Placeholder::Question
     }
 
-    /// Indexes are declared inside `CREATE TABLE`.
-    ///
-    /// `MariaDB` accepts `CREATE TABLE IF NOT EXISTS` and rejects
-    /// `CREATE INDEX IF NOT EXISTS` — verified against `MariaDB` 8.4, which failed
-    /// the generated script at the first index with `ERROR 1064`. Declaring
-    /// the index inside the table makes it inherit the table's idempotence.
-    fn index_idempotence(&self) -> Idempotence {
-        Idempotence::Inline
-    }
+    // `index_idempotence` is deliberately left at the default,
+    // `Idempotence::IfNotExists`. This is the documented split from
+    // `openehr-mysql`, which must declare `Inline` because `MySQL` rejects
+    // `CREATE INDEX IF NOT EXISTS`. `MariaDB` has accepted it since 10.0.5, so
+    // an index here is its own statement and reads the way the schema declares
+    // it.
 
     fn append_only_sql(&self, table: &Table) -> Vec<String> {
-        // MariaDB has no `RAISE`; `SIGNAL SQLSTATE '45000'` is the documented way
-        // for a trigger to refuse, and is what a driver surfaces as an error.
-        // Without this the append-only guarantee would hold in application code
-        // only — and a guarantee that a SQL console can walk around is not one.
+        // `CREATE OR REPLACE TRIGGER` is the difference that matters against
+        // `MySQL`, which has neither it nor `CREATE TRIGGER IF NOT EXISTS` and
+        // so must drop first — leaving a window in which the table is
+        // unprotected. Here re-running `install()` never lapses the guarantee.
+        //
+        // `SIGNAL SQLSTATE '45000'` is the documented way for a trigger to
+        // refuse, and is what a driver surfaces as an error. Without it the
+        // append-only guarantee would hold in application code only, and a
+        // guarantee that a SQL console can walk around is not one.
         let name = self.quote(table.name);
         ["UPDATE", "DELETE"]
             .into_iter()
-            .flat_map(|op| {
+            .map(|op| {
                 let trigger = self.quote(&format!("trg_{}_no_{}", table.name, op.to_lowercase()));
-                // DROP-then-CREATE because MariaDB 8 has neither
-                // `CREATE TRIGGER IF NOT EXISTS` nor `CREATE OR REPLACE
-                // TRIGGER` — verified against 8.4, where re-running the script
-                // failed with `ERROR 1359`. This leaves a window in which the
-                // table is unprotected, which is tolerable only because it is
-                // confined to `install()`; do not reuse the idiom at run time.
-                [
-                    format!("DROP TRIGGER IF EXISTS {trigger}"),
-                    format!(
-                        "CREATE TRIGGER {trigger} BEFORE {op} ON {name} FOR EACH ROW \
-                         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = \
-                         '{} is append-only (openEHR V8.10)'",
-                        table.name
-                    ),
-                ]
+                format!(
+                    "CREATE OR REPLACE TRIGGER {trigger} BEFORE {op} ON {name} FOR EACH ROW \
+                     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = \
+                     '{} is append-only (openEHR V8.10)'",
+                    table.name
+                )
             })
             .collect()
     }
