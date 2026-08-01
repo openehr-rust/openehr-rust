@@ -1,0 +1,36 @@
+# The engine-agnostic half of openEHR persistence.
+#
+# The user asked for five database crates, not six. This one exists because the
+# sibling FHIR monorepo in this repository is a documented case study in what
+# happens without it: six ports each carrying a byte-identical copy of the same
+# core, a `scripts/check-shared-core.sh` written to police the copies, and an
+# audit finding (**F-08**) for the copy that drifted — `fhir-oracle`'s DDL
+# emitting MySQL types. One crate the five depend on cannot drift from itself.
+[workspace]
+
+[package]
+name = "openehr-store"
+version = "0.1.1"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
+description = "Engine-agnostic openEHR persistence: storage model, SQL dialect trait, commit semantics, and a conformance suite"
+keywords = ["openehr", "ehr", "database", "sql", "healthcare"]
+categories = ["database"]
+repository = "https://github.com/openehr-rust/openehr-rust"
+readme = "README.md"
+
+[dependencies]
+openehr = { path = "../openehr", version = "0.1.1" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"

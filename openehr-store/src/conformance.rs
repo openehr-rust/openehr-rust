@@ -1,0 +1,446 @@
+//! The suite every engine runs.
+//!
+//! # Why the tests live here and not in each engine crate
+//!
+//! Because a test copied five times is a test that agrees with itself four
+//! times and drifts once. The sibling FHIR monorepo in this repository records
+//! the consequence: its concurrency and redaction suites existed only for
+//! `PostgreSQL`, and porting them to two more engines immediately found three
+//! defects that had been shipping — one of them in a port already advertised at
+//! Store level.
+//!
+//! So the suite is written once, takes a [`Store`], and is called from each
+//! engine's own test target against a real connection.
+
+use crate::dialect::Dialect;
+use crate::error::Result;
+use crate::store::Store;
+use openehr::base::{HierObjectId, ObjectId, ObjectRef, ObjectVersionId};
+use openehr::rm::common::{
+    Archetyped, AuditDetails, CommitError, Contribution, LocatableAttrs, OriginalVersion,
+    PartyIdentified, Version,
+};
+use openehr::rm::data_types::{CodePhrase, DvDateTime};
+use openehr::rm::ehr::{Composition, Ehr};
+use openehr::terminology::{audit_change_type, composition_category, version_lifecycle_state};
+
+/// The record identifier the suite uses.
+pub const RECORD: &str = "87284370-2D4B-4E3D-A3F3-F303D2F4F34B";
+/// The committing system the suite uses.
+pub const SYSTEM: &str = "ehr1.example.org";
+
+/// Builds the suite's EHR.
+///
+/// # Panics
+///
+/// Never: every input is a literal known to parse.
+#[must_use]
+pub fn sample_ehr() -> Ehr {
+    let uid = HierObjectId::from_uid_str(RECORD).expect("literal");
+    let reference =
+        ObjectRef::new("local", "EHR", ObjectId::HierObjectId(uid.clone())).expect("literal");
+    Ehr::new(
+        HierObjectId::from_uid_str("11111111-2222-3333-4444-555555555555").expect("literal"),
+        uid,
+        reference.clone(),
+        reference,
+        DvDateTime::new("2026-08-01T09:00:00Z").expect("literal"),
+    )
+}
+
+/// Builds a valid composition.
+///
+/// # Panics
+///
+/// Never: every input is a literal known to parse.
+#[must_use]
+pub fn sample_composition(name: &str) -> Composition {
+    Composition::new(
+        LocatableAttrs::named(name, "openEHR-EHR-COMPOSITION.encounter.v1")
+            .expect("literal")
+            .with_archetype_details(
+                Archetyped::new("openEHR-EHR-COMPOSITION.encounter.v1", "1.1.0").expect("literal"),
+            ),
+        composition_category::EVENT,
+        PartyIdentified::named("Dr A Nurse")
+            .expect("literal")
+            .into(),
+        CodePhrase::new("ISO_639-1", "en").expect("literal"),
+        CodePhrase::new("ISO_3166-1", "GB").expect("literal"),
+    )
+    .expect("literal")
+}
+
+/// Builds a version of the sample composition.
+///
+/// # Panics
+///
+/// Never: every input is a literal known to parse.
+#[must_use]
+pub fn sample_version(n: u32, preceding: Option<u32>, minute: u32) -> Version<Composition> {
+    let id = |v: u32| -> ObjectVersionId {
+        format!("{RECORD}::{SYSTEM}::{v}").parse().expect("literal")
+    };
+    let owner = ObjectRef::new(
+        "local",
+        "EHR",
+        ObjectId::HierObjectId(HierObjectId::from_uid_str(RECORD).expect("literal")),
+    )
+    .expect("literal");
+    let audit = AuditDetails::new(
+        SYSTEM,
+        DvDateTime::new(&format!("2026-08-01T09:{minute:02}:00Z")).expect("literal"),
+        if preceding.is_none() {
+            audit_change_type::CREATION
+        } else {
+            audit_change_type::AMENDMENT
+        },
+        PartyIdentified::named("Dr A Nurse")
+            .expect("literal")
+            .into(),
+    )
+    .expect("literal");
+    OriginalVersion::new(
+        id(n),
+        preceding.map(id),
+        version_lifecycle_state::COMPLETE,
+        Some(sample_composition(&format!("Encounter {n}"))),
+        audit,
+        owner,
+    )
+    .expect("literal")
+    .into()
+}
+
+/// Builds the suite's contribution.
+///
+/// # Panics
+///
+/// Never: every input is a literal known to parse.
+#[must_use]
+pub fn sample_contribution(uid: &str, versions: &[u32]) -> Contribution {
+    Contribution::new(
+        HierObjectId::from_uid_str(uid).expect("literal"),
+        versions
+            .iter()
+            .map(|v| format!("{RECORD}::{SYSTEM}::{v}").parse().expect("literal"))
+            .collect(),
+        AuditDetails::new(
+            SYSTEM,
+            DvDateTime::new("2026-08-01T09:05:00Z").expect("literal"),
+            audit_change_type::CREATION,
+            PartyIdentified::named("Dr A Nurse")
+                .expect("literal")
+                .into(),
+        )
+        .expect("literal"),
+    )
+    .expect("literal")
+}
+
+/// Runs every store test against one engine.
+///
+/// Each engine's test target calls this with a connected, empty store. Every
+/// assertion states the failure it guards, because a suite shared by five
+/// engines is one nobody owns unless it explains itself.
+///
+/// # Errors
+///
+/// Returns the first engine error. A conformance failure panics instead, so the
+/// assertion message names what broke.
+///
+/// # Panics
+///
+/// Panics when the engine fails a conformance assertion — that is the test
+/// reporting, not a defect in this function.
+// Long on purpose: this is one narrative of a record's life — create, commit,
+// refuse, read back, time-travel, index — and splitting it into a dozen
+// helpers would hide the order, which is itself part of what is being tested.
+#[allow(clippy::too_many_lines)]
+pub fn run<S: Store>(store: &mut S) -> Result<()> {
+    let engine = store.engine();
+    store.install()?;
+
+    // Installing twice must be safe: a deployment runs migrations on every
+    // boot, and a schema installer that only works once is one that fails on
+    // the second pod.
+    store.install()?;
+
+    let ehr = sample_ehr();
+    let ehr_id = ehr.ehr_id().clone();
+    store.create_ehr(&ehr)?;
+
+    let round_tripped = store.get_ehr(&ehr_id)?;
+    assert_eq!(
+        round_tripped.ehr_id().to_string(),
+        ehr.ehr_id().to_string(),
+        "{engine}: an EHR did not round-trip"
+    );
+
+    // A second create must conflict rather than overwrite. Overwriting an EHR
+    // silently rebases every version in it.
+    assert!(
+        matches!(
+            store.create_ehr(&ehr),
+            Err(crate::StoreError::Conflict { .. })
+        ),
+        "{engine}: creating an EHR twice did not conflict"
+    );
+
+    let contribution_uid = "22222222-3333-4444-5555-666666666666";
+    store.create_contribution(&ehr_id, &sample_contribution(contribution_uid, &[1, 2]))?;
+
+    // --- the commit rules, which are the reason this suite exists -----------
+    let first = store.commit_composition(&ehr_id, &sample_version(1, None, 5), contribution_uid)?;
+    assert!(
+        first.created_container,
+        "{engine}: first commit did not create a container"
+    );
+
+    // A duplicate version id.
+    assert!(
+        matches!(
+            store.commit_composition(&ehr_id, &sample_version(1, None, 6), contribution_uid),
+            Err(crate::StoreError::Commit(CommitError::DuplicateVersion))
+        ),
+        "{engine}: a duplicate version id was accepted"
+    );
+
+    // A successor claiming no predecessor.
+    assert!(
+        matches!(
+            store.commit_composition(&ehr_id, &sample_version(2, None, 7), contribution_uid),
+            Err(crate::StoreError::Commit(
+                CommitError::PrecedingVersionMismatch
+            ))
+        ),
+        "{engine}: a rootless successor was accepted"
+    );
+
+    let second =
+        store.commit_composition(&ehr_id, &sample_version(2, Some(1), 10), contribution_uid)?;
+    assert!(!second.created_container);
+
+    // The concurrent-write case: two clients both read version 1 and both write
+    // version 3 against it. openEHR's answer is a branch, not a silent
+    // overwrite, so the store must refuse and let the caller decide.
+    assert!(
+        matches!(
+            store.commit_composition(&ehr_id, &sample_version(3, Some(1), 12), contribution_uid),
+            Err(crate::StoreError::Commit(CommitError::NotLatest))
+        ),
+        "{engine}: a stale predecessor was accepted — concurrent writes are being lost"
+    );
+
+    // --- reads ---------------------------------------------------------------
+    let container = HierObjectId::from_uid_str(RECORD)?;
+    let latest = store.latest_version(&container)?;
+    assert_eq!(latest.trunk_version, 2, "{engine}: wrong head version");
+
+    let all = store.all_versions(&container)?;
+    assert_eq!(all.len(), 2, "{engine}: wrong version count");
+    assert_eq!(
+        all[0].trunk_version, 1,
+        "{engine}: all_versions must be oldest first (V8.7a)"
+    );
+
+    let by_id: ObjectVersionId = format!("{RECORD}::{SYSTEM}::1").parse()?;
+    let one = store.get_version(&by_id)?;
+    assert_eq!(one.uid, by_id.to_string());
+    assert!(one.data_json.is_some(), "{engine}: content was not stored");
+    assert!(!one.is_deleted);
+    assert_eq!(one.audit_change_type_code, audit_change_type::CREATION);
+    assert_eq!(
+        one.audit_time_committed.text, "2026-08-01T09:05:00Z",
+        "{engine}: the authoritative lexical form of a commit time was altered"
+    );
+    assert!(
+        one.audit_time_committed.utc_seconds.is_some(),
+        "{engine}: an anchored instant produced no derived value"
+    );
+
+    // Time travel. At 09:07 the record was at version 1; at 09:20 at version 2.
+    let at_0907 = store.version_at_time(&container, &DvDateTime::new("2026-08-01T09:07:00Z")?)?;
+    assert_eq!(
+        at_0907.trunk_version, 1,
+        "{engine}: version_at_time went forwards"
+    );
+    let at_0920 = store.version_at_time(&container, &DvDateTime::new("2026-08-01T09:20:00Z")?)?;
+    assert_eq!(at_0920.trunk_version, 2);
+    // Before the first commit there was no version. "No version yet" and "the
+    // earliest version" are different answers, and a caller reconstructing what
+    // a clinician saw needs the difference.
+    assert!(
+        matches!(
+            store.version_at_time(&container, &DvDateTime::new("2026-08-01T08:00:00Z")?),
+            Err(crate::StoreError::NotFound { .. })
+        ),
+        "{engine}: version_at_time invented a version before the record existed"
+    );
+
+    // --- the index -----------------------------------------------------------
+    let found =
+        store.find_compositions_by_archetype(&ehr_id, "openEHR-EHR-COMPOSITION.encounter.v1")?;
+    assert_eq!(
+        found.len(),
+        2,
+        "{engine}: archetype index did not find both versions"
+    );
+    assert_eq!(found[0].category_code, composition_category::EVENT);
+    assert_eq!(found[0].language_code, "en");
+    assert_eq!(found[0].composer_name.as_deref(), Some("Dr A Nurse"));
+
+    let none =
+        store.find_compositions_by_archetype(&ehr_id, "openEHR-EHR-COMPOSITION.report.v1")?;
+    assert!(
+        none.is_empty(),
+        "{engine}: archetype index matched the wrong archetype"
+    );
+
+    // --- missing things ------------------------------------------------------
+    let absent = HierObjectId::from_uid_str("99999999-9999-4999-8999-999999999999")?;
+    assert!(matches!(
+        store.get_ehr(&absent),
+        Err(crate::StoreError::NotFound { .. })
+    ));
+    assert!(matches!(
+        store.latest_version(&absent),
+        Err(crate::StoreError::NotFound { .. })
+    ));
+
+    Ok(())
+}
+
+/// Checks one dialect's DDL without a database.
+///
+/// # Panics
+///
+/// Panics on a conformance failure, naming what broke.
+pub fn check_dialect<D: Dialect + ?Sized>(dialect: &D) {
+    let name = dialect.name();
+    let statements = dialect.ddl();
+    let index_statements = if dialect.index_idempotence() == crate::Idempotence::Inline {
+        0
+    } else {
+        crate::TABLES.iter().map(|t| t.indexes.len()).sum::<usize>()
+    };
+    assert_eq!(
+        statements.len(),
+        crate::TABLES.len()
+            + index_statements
+            + crate::TABLES
+                .iter()
+                .filter(|t| t.append_only)
+                .map(|t| dialect.append_only_sql(t).len())
+                .sum::<usize>(),
+        "{name}: unexpected statement count"
+    );
+
+    // A dialect that declares `Guard` must actually wrap the statement. The
+    // default `guard` returns its input unchanged, so a dialect could declare a
+    // guard, inherit the default, and emit bare non-idempotent DDL that reads as
+    // protected — which is what SQL Server and Oracle did until a live MySQL run
+    // exposed the shape. Documentation of a mechanism is not the mechanism.
+    for (kind, idempotence) in [
+        (crate::ObjectKind::Table, dialect.table_idempotence()),
+        (crate::ObjectKind::Index, dialect.index_idempotence()),
+    ] {
+        if idempotence == crate::Idempotence::Guard {
+            let bare = "CREATE SOMETHING x";
+            assert_ne!(
+                dialect.guard(kind, "x", bare),
+                bare,
+                "{name}: declares Guard for {kind:?} but guard() does not wrap"
+            );
+        }
+    }
+
+    // Every append-only table must be enforced in the schema. A guarantee kept
+    // only in application code ends the first time somebody opens a SQL console,
+    // and every engine this crate targets has triggers.
+    for table in crate::TABLES.iter().filter(|t| t.append_only) {
+        assert!(
+            !dialect.append_only_sql(table).is_empty(),
+            "{name}: {} is append-only but the dialect enforces nothing",
+            table.name
+        );
+    }
+
+    // Indexes must reach the script one way or the other. Inline or separate is
+    // the dialect's choice; absent is not.
+    let script_all = crate::ddl_script(dialect);
+    for table in crate::TABLES {
+        for index in table.indexes {
+            assert!(
+                script_all.contains(&dialect.quote(index.name)),
+                "{name}: index {} never reaches the DDL",
+                index.name
+            );
+        }
+    }
+
+    let script = crate::ddl_script(dialect);
+    for table in crate::TABLES {
+        assert!(
+            script.contains(&dialect.quote(table.name)),
+            "{name}: {} is missing from the DDL",
+            table.name
+        );
+        for column in table.columns {
+            assert!(
+                script.contains(&dialect.quote(column.name)),
+                "{name}: {}.{} is missing",
+                table.name,
+                column.name
+            );
+        }
+    }
+
+    // Every logical type must map to something non-empty, and a `_text` instant
+    // must not map to the same type as its derived partner — if they did, the
+    // dialect has collapsed the distinction the schema exists to keep.
+    for ty in [
+        crate::ColTy::Id(255),
+        crate::ColTy::Text(255),
+        crate::ColTy::LongText,
+        crate::ColTy::Json,
+        crate::ColTy::Instant,
+        crate::ColTy::InstantUtc,
+        crate::ColTy::Int,
+        crate::ColTy::Bool,
+    ] {
+        assert!(
+            !dialect.col_sql(ty).is_empty(),
+            "{name}: {ty:?} maps to nothing"
+        );
+    }
+    assert_ne!(
+        dialect.col_sql(crate::ColTy::Instant),
+        dialect.col_sql(crate::ColTy::InstantUtc),
+        "{name}: the authoritative and derived instant columns have the same type, \
+         so the lexical form is not being preserved (D3.10)"
+    );
+}
+
+/// Asserts that no two dialects emit the same DDL.
+///
+/// This is finding **F-08** of the sibling FHIR monorepo, made impossible: that
+/// port's Oracle DDL emitter silently emitted `MySQL` types for as long as the
+/// fork existed, because nothing compared them.
+///
+/// # Panics
+///
+/// Panics naming the two dialects that agree.
+pub fn dialects_are_distinct(dialects: &[&dyn Dialect]) {
+    for (i, a) in dialects.iter().enumerate() {
+        for b in dialects.iter().skip(i + 1) {
+            assert_ne!(
+                crate::ddl_script(*a),
+                crate::ddl_script(*b),
+                "{} and {} emit identical DDL — one of them is not its own engine",
+                a.name(),
+                b.name()
+            );
+        }
+    }
+}
