@@ -1,6 +1,10 @@
 //! openEHR persistence for **`SQLite` 3**, with a complete embedded store.
 //!
-//! # Conformance level: **Store**
+//! # Conformance level: **Verified**
+//!
+//! Store level, re-checked in CI on every commit. `SQLite` is bundled and
+//! compiled in, so the engine cannot be absent and the job cannot silently
+//! skip — which is what the level requires (`C0.8`).
 //!
 //! Unlike the other five engine crates, this one contains a working
 //! [`SqliteStore`] and runs [`openehr_store::conformance::run`] against a real

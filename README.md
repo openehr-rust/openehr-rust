@@ -35,7 +35,7 @@ assert_eq!(back, composition);
 | --- | --- | --- |
 | [`openehr`](openehr) | Reference Model types, validation, openEHR paths, AQL parsing, change-control security | library |
 | [`openehr-store`](openehr-store) | Engine-agnostic persistence: storage model, projection onto rows, commit rules, conformance suite | library |
-| [`openehr-sqlite`](openehr-sqlite) | SQLite dialect **and a complete embedded store** | **Store** |
+| [`openehr-sqlite`](openehr-sqlite) | SQLite dialect **and a complete embedded store** | **Verified** |
 | [`openehr-postgresql`](openehr-postgresql) | PostgreSQL 18 dialect | **Schema** |
 | [`openehr-mysql`](openehr-mysql) | MySQL 8.4 dialect | **Schema** |
 | [`openehr-mariadb`](openehr-mariadb) | MariaDB 11.4 dialect | **Schema** |
@@ -50,9 +50,8 @@ written:
   tables were observed refusing `UPDATE` and `DELETE` with a row present.
 - **Store** — implements the full `Store` trait against a real database, with the
   shared conformance suite passing.
-- **Verified** — Store, re-checked in CI on every commit. **Nothing is here yet**:
-  CI was added on 2026-08-01 but has not run, and a committed workflow is not a
-  working one.
+- **Verified** — Store, re-checked in CI on every commit. `openehr-sqlite` is
+  here; it is the only crate at Store level and so the only one eligible.
 
 Full definitions in [`spec/index.md`](spec/index.md); current status in
 [`openehr-store/spec/conformance.md`](openehr-store/spec/conformance.md).
@@ -361,8 +360,7 @@ Three rules carry most of the weight:
 
 Recorded rather than implied — see [`spec/audit.md`](spec/audit.md):
 
-- **No CI.** Every Schema-level claim rests on a local run. Nothing is at
-  **Verified**.
+- **SQL Server and Oracle DDL is unparsed.** See below; both stay at **Dialect**.
 - **`spec/databases/` was rewritten from an imported FHIR specification** on
   2026-08-01. It now describes this system, but the requirements were derived by
   reading the code rather than the openEHR sources, so some are descriptions

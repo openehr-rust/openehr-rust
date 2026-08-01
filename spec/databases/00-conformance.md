@@ -85,9 +85,10 @@ and what a claim made in it means.
   reason. A check whose subject is absent reports the silence as success.
 - **C0.13** A level is a claim about the present, not about an afternoon in the
   past. A level whose evidence is a one-off local run MUST say so, and MUST NOT be
-  worded to imply continuous verification. No crate here is at **Verified**: CI
-  was added on 2026-08-01 and has not yet run, and a committed workflow is not a
-  working one ([`spec/audit.md`](../audit.md) **W-02**).
+  worded to imply continuous verification. A crate reaches **Verified** only once
+  CI has run green on `main`; a committed workflow is not a working one. As of
+  green run 30713623082, 2026-08-01, `openehr-sqlite` is at Verified and no other crate is
+  eligible ([`spec/audit.md`](../audit.md) **W-02**).
 
 ## Departures
 

@@ -31,16 +31,17 @@ evidence (`W0.3`).
 
 | Crate | Level | Evidence |
 | --- | --- | --- |
-| `openehr-sqlite` | **Store** | `conformance::run` against a real in-process database |
-| `openehr-postgresql` | **Schema** | DDL executed against PostgreSQL 18, 2026-08-01 |
-| `openehr-mysql` | **Schema** | DDL executed against MySQL 8.4, 2026-08-01 |
-| `openehr-mariadb` | **Schema** | DDL executed against MariaDB 11.4, 2026-08-01 |
+| `openehr-sqlite` | **Verified** | `conformance::run` against a real in-process database, in CI on every push |
+| `openehr-postgresql` | **Schema** | DDL executed against PostgreSQL 18, in CI on every push |
+| `openehr-mysql` | **Schema** | DDL executed against MySQL 8.4, in CI on every push |
+| `openehr-mariadb` | **Schema** | DDL executed against MariaDB 11.4, in CI on every push |
 | `openehr-mssql` | **Dialect** | golden tests only; no server has parsed it |
 | `openehr-oracle` | **Dialect** | golden tests only; no server has parsed it |
 
-**No crate is at Verified.** CI was added 2026-08-01 and has not yet run; the
-three Schema claims rest on hand-runs of `verify-schema.sh` on that date
-([`spec/audit.md`](../audit.md) **W-02**).
+**`openehr-sqlite` is at Verified** as of green run 30713623082, 2026-08-01. The three Schema
+claims are checked by CI on every push rather than attested once; `openehr-mssql`
+and `openehr-oracle` stay at Dialect because no reachable server will parse their
+DDL ([`spec/audit.md`](../audit.md) **W-02**).
 
 ## Per-engine requirements
 

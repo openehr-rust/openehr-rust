@@ -17,13 +17,9 @@ can be provisioned locally actually provisioned and the DDL run against them;
 crates.io queried for what is already published.
 
 Seven findings: three High (**W-01**, **W-02**, **W-04**), three Medium
-(**W-03**, **W-05**, **W-06**), one Low (**W-07**). **Five are fixed** — W-01,
-W-04, W-05, W-06, and W-07.
-
-**W-02** has its fix committed but not yet demonstrated, which is deliberately
-not the same as fixed: the workflow cannot run until it is pushed, and recording
-it as closed would be the very error the finding is about. **W-03** is fixed
-going forward only — the published 0.1.0 is immutable.
+(**W-03**, **W-05**, **W-06**), one Low (**W-07**). **Six are fixed** — W-01,
+W-02, W-04, W-05, W-06, and W-07. **W-03** is fixed going forward only: the
+published `openehr` 0.1.0 is immutable and keeps its wrong `repository` field.
 
 W-04's fix opened four persistence-local findings, `db:D-01`–`db:D-04`, which is
 the usual pattern: rewriting a specification against the code is what makes the
@@ -97,7 +93,7 @@ Schema, not Verified, and **W-02** applies to it as to the others.
 
 ---
 
-## W-02 — The repository claims CI it does not have — **High, fix committed, not yet demonstrated**
+## W-02 — The repository claims CI it does not have — **High, fixed**
 
 **Claimed.** `openehr-store/spec/conformance.md`:
 
@@ -139,22 +135,33 @@ parallel implementation in YAML. There is deliberately **no** schema job for SQL
 Server or Oracle: no server has parsed their DDL, and a job that skipped would
 convert an honest gap into a false green.
 
-**Not yet demonstrated, and this is the point of the finding.** The workflow has
-never run — it cannot, until it is pushed to GitHub. Committing a workflow and
-recording the finding as closed would be the same error the finding is *about*:
-asserting continuity that has not been observed. So:
+**Demonstrated 2026-08-01**, which is what closed this rather than the commit
+that added the file. run [30713623082](https://github.com/openehr-rust/openehr-rust/actions/runs/30713623082) on `main` (`127b4df`) is green across all
+nineteen jobs: eight `test`, `examples`, `claims`, three `schema`, and six
+`fuzz`. The claim of continuity is now a fact about an observed run.
 
-- The finding stays open until the workflow has run green on `main` at least
-  once, and this entry is updated with that run.
-- **No crate may be moved to level Verified before then** (`C0.13`), including
-  `openehr-sqlite`, which is at Store and is the only crate eligible to be
-  promoted by CI existing.
-- The YAML parses and the two `claims` checks were run locally and pass; the
-  `schema` jobs run a script already verified against all three engines on
-  2026-08-01. That is evidence the workflow is plausible, not evidence it works.
+Getting there took three attempts at one job, and the two failed ones are worth
+recording because both were **guesses**:
 
-**Residual.** Even once green, `openehr-mssql` and `openehr-oracle` remain at
-**Dialect** — CI cannot verify what no reachable server will parse.
+1. `schema / mysql` failed under docker. Diagnosed as a readiness race —
+   correct as a defect, and not what was failing.
+2. It failed again under podman at the 180s budget. Diagnosed as slowness —
+   also wrong.
+3. Only after the harness was made to dump the engine's own log did the cause
+   appear: MySQL was ready, and the probe was connecting to nothing, because the
+   runner's server served `/var/lib/mysql/mysql.sock` while the client defaulted
+   to `/var/run/mysqld/mysqld.sock`. All connections moved to TCP, which is also
+   immune to the temporary-init-server race that (1) aimed at and missed.
+
+The lesson is this register's own, turned on the tooling: a check that cannot
+report its evidence forces the next step to be a guess.
+
+**Consequence.** `openehr-sqlite` moves to **Verified**: it is at Store level
+and its conformance suite runs in CI on every commit against a bundled engine
+that cannot be absent. It is the only crate eligible, and now the only one there.
+
+**Residual.** `openehr-mssql` and `openehr-oracle` remain at **Dialect** — CI
+cannot verify what no reachable server will parse.
 
 ---
 

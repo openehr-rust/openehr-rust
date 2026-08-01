@@ -19,7 +19,7 @@ cargo from inside a crate directory.
 | --- | --- | --- |
 | `openehr` | RM types, validation, paths, AQL, security | library |
 | `openehr-store` | schema, projection, commit rules, conformance suite | library |
-| `openehr-sqlite` | SQLite dialect **and a store** | **Store** |
+| `openehr-sqlite` | SQLite dialect **and a store** | **Verified** |
 | `openehr-postgresql` | PostgreSQL 18 dialect | **Schema** |
 | `openehr-mysql` | MySQL 8.4 dialect | **Schema** |
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
@@ -74,11 +74,10 @@ warnings — keep it there.**
 - **`openehr` is already on crates.io at 0.1.0**, published with a wrong
   `repository` field that is now immutable. Local versions are 0.1.1. Read
   [`AGENTS/publishing.md`](AGENTS/publishing.md) before any publish.
-- **CI exists but has never run.** `.github/workflows/ci.yml` was added on
-  2026-08-01 and cannot run until pushed, so nothing is at conformance level
-  **Verified** yet, and a committed workflow is not a working one. Do not write
-  text implying continuous verification; a specification here already did, naming
-  a workflow file that never existed.
+- **CI is green and `openehr-sqlite` is at Verified.** Every other crate is at
+  Schema or Dialect and must not be promoted without evidence. Do not write text
+  implying more continuity than a job actually provides; a specification here
+  once claimed a workflow file that never existed.
 - **`ColTy` is deliberately not `#[non_exhaustive]`.** Adding a variant *should*
   break all six dialects at compile time. Do not add a `_` arm to silence it —
   that is how one engine silently acquires another's types.

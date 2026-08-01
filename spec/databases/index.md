@@ -153,13 +153,13 @@ what it meant (`C0.6`).
 
 | Crate | Engine | Level |
 | --- | --- | --- |
-| [`openehr-sqlite`](../../openehr-sqlite) | SQLite 3 | **Store** |
+| [`openehr-sqlite`](../../openehr-sqlite) | SQLite 3 | **Verified** |
 | [`openehr-postgresql`](../../openehr-postgresql) | PostgreSQL 18 | **Schema** |
 | [`openehr-mysql`](../../openehr-mysql) | MySQL 8.4 | **Schema** |
 | [`openehr-mariadb`](../../openehr-mariadb) | MariaDB 11.4 | **Schema** |
 | [`openehr-mssql`](../../openehr-mssql) | SQL Server | **Dialect** |
 | [`openehr-oracle`](../../openehr-oracle) | Oracle Database | **Dialect** |
 
-Levels are defined in [§0](00-conformance.md). No crate is at **Verified**: CI
-was added on 2026-08-01 and has not yet run ([`spec/audit.md`](../audit.md)
-**W-02**).
+Levels are defined in [§0](00-conformance.md). `openehr-sqlite` is at
+**Verified** as of green run 30713623082, 2026-08-01; the three Schema claims are now checked on
+every push rather than attested once ([`spec/audit.md`](../audit.md) **W-02**).

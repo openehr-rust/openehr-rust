@@ -107,8 +107,8 @@ its five examples, so those citations resolve. `openehr-store` cites
 - **The conformance level in the README and crate docs is the earned one.** Not
   the neighbouring crate's. This is what `openehr-mariadb` got wrong, and
   publishing it then would have put a false claim on crates.io permanently.
-- **No crate claims CI results it does not have.** `.github/workflows/ci.yml`
-  exists but has not yet run; nothing may claim **Verified**.
+- **No crate claims CI results it does not have.** CI is green as of
+  2026-08-01; only `openehr-sqlite` may claim **Verified**.
 - **Version numbers agree** between a crate's `version` and the `version` its
   siblings depend on. A mismatch resolves to a published crate rather than the
   local path, which is how a workspace silently tests something other than what

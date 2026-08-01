@@ -13,9 +13,9 @@ row present and intact afterwards.
 ../openehr-store/scripts/verify-schema.sh mariadb
 ```
 
-That was a local run. CI now runs the same script, but has not yet executed, so
-the level is Schema and not Verified. See [`spec/audit.md`](../spec/audit.md)
-**W-02**.
+CI runs the same script on every push. The level is Schema rather than Verified
+because this crate has no `Store`, not because the check is unverified. See
+[`spec/audit.md`](../spec/audit.md) **W-02**.
 
 **It does not contain a store.** There is no driver dependency, no connection
 handling, and no implementation of `Store`. Schema level means the database

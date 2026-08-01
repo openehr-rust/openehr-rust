@@ -22,7 +22,7 @@ engine-agnostic persistence library, and six SQL engine crates.
 | --- | --- | --- |
 | `openehr` | RM types, validation, paths, AQL, security | library |
 | `openehr-store` | schema, projection, commit rules, conformance suite | library |
-| `openehr-sqlite` | SQLite dialect **and a store** | **Store** |
+| `openehr-sqlite` | SQLite dialect **and a store** | **Verified** |
 | `openehr-postgresql` | PostgreSQL 18 dialect | **Schema** |
 | `openehr-mysql` | MySQL 8.4 dialect | **Schema** |
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
@@ -108,10 +108,10 @@ invoke the same script you run locally rather than a parallel implementation in
 YAML — two ways of doing one check drift, and the one that drifts is always the
 one nobody runs.
 
-**It has not run yet.** It was added 2026-08-01 and cannot execute until pushed,
-so no crate has been promoted to **Verified**, and none may be until a green run
-on `main`. Treating a committed workflow as a working one is the same error the
-finding it closes was about ([`spec/audit.md`](spec/audit.md) **W-02**).
+It first ran green on 2026-08-01, [run 30713623082](https://github.com/openehr-rust/openehr-rust/actions/runs/30713623082), across all nineteen jobs — which
+is what closed **W-02**, rather than the commit that added the file.
+`openehr-sqlite` is now at **Verified**; no other crate is eligible, having no
+`Store` ([`spec/audit.md`](spec/audit.md) **W-02**).
 
 ### Fuzzing
 

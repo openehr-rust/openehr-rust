@@ -24,7 +24,7 @@ register.
 
 A level is a claim about the present, not about an afternoon in the past — and
 until 2026-08-01 **every Schema claim here was exactly such an afternoon**, with
-no CI at all.
+no continuous verification behind it.
 
 This paragraph previously asserted that a `schema` job in
 `.github/workflows/openehr.yml` ran the script on every change, so that the
@@ -41,12 +41,14 @@ nobody runs. The sibling monorepo carries **F-06** for two ports whose database
 jobs invoked a test target that did not exist, so they could not have passed and
 did not say so.
 
-**That workflow has not yet run.** It cannot until it is pushed, so no crate is
-promoted to **Verified** on the strength of its existence, and the three Schema
-levels below still rest on the hand-run of 2026-08-01. Treating a committed
-workflow as a working one would repeat the error this passage records. Tracked as
-[`spec/audit.md`](../../spec/audit.md) **W-02**, which stays open until a green
-run on `main`.
+**That workflow first ran green on 2026-08-01**, across all nineteen jobs, and
+that run — not the commit that added the file — is what closed
+[`spec/audit.md`](../../spec/audit.md) **W-02**. Treating a committed workflow as
+a working one would have repeated the error this passage records; it took three
+attempts to get the MySQL job passing, and the two failed ones were guesses.
+
+`openehr-sqlite` is therefore at **Verified**. It is the only crate at Store
+level and so the only one eligible.
 
 The "with a row present" clause is not pedantry. The first enforcement run
 looked like a pass and proved nothing: the `DELETE` matched zero rows, and a
@@ -59,7 +61,7 @@ reports the silence as success.
 
 | Crate | Level | What is verified | What is not |
 | --- | --- | --- | --- |
-| `openehr-sqlite` | **Store** | The full suite against a real in-process database: every commit rule, every read, the archetype index, the append-only triggers, DDL idempotence. | Nothing runs in CI, so the level is Store and not Verified. Nothing exercises concurrent writers. |
+| `openehr-sqlite` | **Verified** | The full suite against a real in-process database, run in CI on every push: every commit rule, every read, the archetype index, the append-only triggers, DDL idempotence. | Nothing exercises concurrent writers. |
 | `openehr-postgresql` | **Schema** | DDL executed against **PostgreSQL 18**: 5 tables, 7 indexes, idempotent across repeated runs, foreign keys enforced, and both append-only tables refused `UPDATE` and `DELETE` with the row surviving unmodified. | No driver and no `Store`. |
 | `openehr-mysql` | **Schema** | The same, against **MySQL 8.4**. | as above |
 | `openehr-mariadb` | **Schema** | The same, against **MariaDB 11.4**. | as above. This crate was a name-substituted copy of `openehr-mysql` until 2026-08-01, claiming Schema against a "MariaDB 8.4" that does not exist; see [`spec/audit.md`](../../spec/audit.md) **W-01**. The current claim was earned by an actual run. |

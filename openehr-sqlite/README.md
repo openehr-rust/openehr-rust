@@ -2,7 +2,7 @@
 
 openEHR persistence for **SQLite 3** — a complete embedded store.
 
-## Conformance level: Store
+## Conformance level: Verified
 
 Unlike the four dialect-only crates, this one contains a working `SqliteStore`
 and runs the shared conformance suite against a **real database** in its own

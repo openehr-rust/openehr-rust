@@ -16,15 +16,16 @@ Not normative. `C0.8`–`C0.13` in
 
 | Crate | Level | Why not higher |
 | --- | --- | --- |
-| `openehr-sqlite` | **Store** | No CI. |
+| `openehr-sqlite` | **Verified** | — |
 | `openehr-postgresql` | **Schema** | No driver, no `Store`. |
 | `openehr-mysql` | **Schema** | as above |
 | `openehr-mariadb` | **Schema** | as above |
 | `openehr-mssql` | **Dialect** | No server has parsed it — SQL Server 2022 segfaults under qemu on arm64. |
 | `openehr-oracle` | **Dialect** | No server has parsed it — the images need registry authentication. |
 
-**Nothing is at Verified.** CI was added on 2026-08-01 and has not yet run; a
-committed workflow is not a working one. Any text implying
+**`openehr-sqlite` is at Verified** as of the green run on 2026-08-01. A
+committed workflow is not a working one — the level followed the run, not the
+commit. Any text implying
 continuous verification is a defect; `openehr-store/spec/conformance.md` carried
 exactly such a claim, naming a workflow file that never existed
 ([`spec/audit.md`](../spec/audit.md) **W-02**).

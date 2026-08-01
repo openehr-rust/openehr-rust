@@ -84,10 +84,14 @@ than either alone.
 - **W0.10** A level is a claim about the present, not about an afternoon in the
   past. A level whose evidence is a one-off local run MUST say so rather than
   imply continuous verification.
-- **W0.11** No crate in this repository is at **Verified**. CI was added on
-  2026-08-01 and has not yet run; a committed workflow is not a working one, and
-  a crate MUST NOT be promoted on the strength of one existing. Any text
-  asserting otherwise is a defect; see [`audit.md`](audit.md) **W-02**.
+- **W0.11** A crate is at **Verified** only once CI has actually run green on
+  `main`. A committed workflow is not a working one, and a crate MUST NOT be
+  promoted on the strength of one existing.
+
+  As of green run 30713623082, 2026-08-01, `openehr-sqlite` is at **Verified** — the only crate
+  eligible, being the only one at Store level. See [`audit.md`](audit.md)
+  **W-02**, which was closed by the run rather than by the commit that added the
+  workflow.
 - **W0.12** The "with a row present" clause in **Schema** is not pedantry. A
   `FOR EACH ROW` trigger on an empty table never fires, so a `DELETE` matching
   zero rows reports refusal it never performed. A check whose subject is absent
@@ -101,7 +105,7 @@ Eight crates, each its own Cargo workspace.
 | --- | --- | --- |
 | [`openehr`](../openehr) | the Reference Model, validation, paths, AQL, security | library — n/a |
 | [`openehr-store`](../openehr-store) | engine-agnostic persistence: schema, projection, commit rules, conformance suite | library — n/a |
-| [`openehr-sqlite`](../openehr-sqlite) | SQLite dialect **and a complete store** | **Store** |
+| [`openehr-sqlite`](../openehr-sqlite) | SQLite dialect **and a complete store** | **Verified** |
 | [`openehr-postgresql`](../openehr-postgresql) | PostgreSQL 18 dialect | **Schema** |
 | [`openehr-mysql`](../openehr-mysql) | MySQL 8.4 dialect | **Schema** |
 | [`openehr-mariadb`](../openehr-mariadb) | MariaDB 11.4 dialect | **Schema** |

@@ -86,16 +86,16 @@ each engine crate stands, under the ladder set out in
 
 | Crate | Level |
 | --- | --- |
-| `openehr-sqlite` | **Store** — the full suite against a real in-process database |
+| `openehr-sqlite` | **Verified** — the full suite against a real in-process database, in CI on every push |
 | `openehr-postgresql` | **Schema** — DDL executed against PostgreSQL 18 |
 | `openehr-mysql` | **Schema** — DDL executed against MySQL 8.4 |
 | `openehr-mariadb` | **Schema** — DDL executed against MariaDB 11.4 |
 | `openehr-mssql` | **Dialect** — no server has parsed it |
 | `openehr-oracle` | **Dialect** — no server has parsed it |
 
-No crate is at **Verified**. CI was added on 2026-08-01 but has not yet run, so
-every Schema claim above still rests on `scripts/verify-schema.sh` being run by
-hand on that date. See [`spec/audit.md`](../spec/audit.md) **W-02**.
+`openehr-sqlite` reached **Verified** on 2026-08-01: [run 30713623082](https://github.com/openehr-rust/openehr-rust/actions/runs/30713623082) is green across
+all nineteen jobs. The three Schema claims are now checked by CI on every push
+rather than attested once. See [`spec/audit.md`](../spec/audit.md) **W-02**.
 
 ## Licence
 
