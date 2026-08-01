@@ -28,7 +28,36 @@ PASS="openehr_Passw0rd"
 cleanup() { $CONTAINER rm -f "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
-fail() { printf '\n  FAIL: %s\n' "$1" >&2; exit 1; }
+# Every failure dumps the engine's own log. Without this the script reports
+# *that* it failed and not *why*, which on a machine you cannot log into means
+# the next step is a guess. Two CI failures were diagnosed by guessing before
+# this was added; the second guess was wrong.
+fail() {
+    printf '\n  FAIL: %s\n' "$1" >&2
+    printf '  --- last 40 lines of the %s container log ---\n' "$ENGINE" >&2
+    $CONTAINER logs --tail 40 "$NAME" 2>&1 | sed 's/^/  | /' >&2 || true
+    printf '  --- container state ---\n' >&2
+    $CONTAINER ps -a --filter "name=$NAME" 2>&1 | sed 's/^/  | /' >&2 || true
+    exit 1
+}
+
+# Waits for a command to succeed, then returns. Fails with the engine's log
+# attached rather than a bare timeout.
+#
+# The budget is generous on purpose: a first-boot MySQL initializes far more
+# slowly than MariaDB or PostgreSQL, and slowly again on a cold runner. A
+# too-short wait and a genuinely broken engine look identical from here, so the
+# wait is long enough that a timeout means something is actually wrong.
+await() {
+    what="$1"
+    shift
+    i=0
+    until "$@" >/dev/null 2>&1; do
+        i=$((i + 1))
+        [ "$i" -gt 150 ] && fail "$what did not become ready within 300s"
+        sleep 2
+    done
+}
 
 sql=$(mktemp) || exit 1
 cargo run -q --manifest-path "$ROOT/openehr-$ENGINE/Cargo.toml" --example ddl >"$sql"
@@ -45,13 +74,7 @@ postgresql)
   # is absent is the same defect the schema check itself guards against
   # (`C0.12`), and it is what made the MySQL job fail in CI while passing
   # locally: the DDL ran against a database that did not exist yet.
-  i=0
-  while ! $CONTAINER exec "$NAME" psql -U postgres -d openehr -c 'SELECT 1' \
-      >/dev/null 2>&1; do
-    i=$((i + 1))
-    [ "$i" -gt 90 ] && fail "PostgreSQL did not become ready"
-    sleep 2
-  done
+  await PostgreSQL $CONTAINER exec "$NAME" psql -U postgres -d openehr -c 'SELECT 1'
   apply() {
     $CONTAINER exec -i "$NAME" psql -U postgres -d openehr -v ON_ERROR_STOP=1 -f - <"$sql" 2>&1 |
       grep -E '^(psql:.*)?ERROR' || true
@@ -80,13 +103,7 @@ mysql)
   # entrypoint starts a temporary server to run initialization, and ping answers
   # for it while MYSQL_DATABASE does not yet exist. This loop waits for a real
   # query against the real database.
-  i=0
-  while ! $CONTAINER exec "$NAME" mysql -uroot -p"$PASS" openehr \
-      -e 'SELECT 1' >/dev/null 2>&1; do
-    i=$((i + 1))
-    [ "$i" -gt 90 ] && fail "MySQL did not become ready"
-    sleep 2
-  done
+  await MySQL $CONTAINER exec "$NAME" mysql -uroot -p"$PASS" openehr -e 'SELECT 1'
   # `|| true` because grep exits 1 when it filters every line, and a bare
   # `seed` call under `set -e` would then abort the script before `fail` could
   # report why — which is how this script first appeared to fail with no message.
@@ -116,13 +133,7 @@ mariadb)
   # A real query against the real database, not `mariadb-admin ping`: see the
   # note in the postgresql branch. This branch happened to pass in CI, which is
   # luck rather than a difference — the same race is present.
-  i=0
-  while ! $CONTAINER exec "$NAME" mariadb -uroot -p"$PASS" openehr \
-      -e 'SELECT 1' >/dev/null 2>&1; do
-    i=$((i + 1))
-    [ "$i" -gt 90 ] && fail "MariaDB did not become ready"
-    sleep 2
-  done
+  await MariaDB $CONTAINER exec "$NAME" mariadb -uroot -p"$PASS" openehr -e 'SELECT 1'
   # The client is `mariadb`, not `mysql`: MariaDB 11 renamed every binary and
   # the compatibility symlinks are deprecated. Using `mysql` here would work
   # today and break on the release that drops them, which is the sort of
