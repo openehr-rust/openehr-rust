@@ -54,7 +54,15 @@ await() {
     i=0
     until "$@" >/dev/null 2>&1; do
         i=$((i + 1))
-        [ "$i" -gt 150 ] && fail "$what did not become ready within 300s"
+        if [ "$i" -gt 150 ]; then
+            # Run the probe once more with its output kept. Without this the
+            # timeout says only that the probe never succeeded, never why --
+            # and "why" was, twice, something no amount of staring at the
+            # script would have revealed.
+            printf '\n  the last probe said:\n' >&2
+            "$@" 2>&1 | sed 's/^/  | /' >&2 || true
+            fail "$what did not become ready within 300s"
+        fi
         sleep 2
     done
 }
@@ -74,15 +82,28 @@ postgresql)
   # is absent is the same defect the schema check itself guards against
   # (`C0.12`), and it is what made the MySQL job fail in CI while passing
   # locally: the DDL ran against a database that did not exist yet.
-  await PostgreSQL $CONTAINER exec "$NAME" psql -U postgres -d openehr -c 'SELECT 1'
+  # Every connection is TCP, never the local socket. Two reasons, both learned
+  # the hard way in CI:
+  #
+  #   * The socket path is not stable across images. The runner's MySQL served
+  #     `/var/lib/mysql/mysql.sock` while the client defaulted elsewhere, so the
+  #     probe never connected and the job burned its whole budget.
+  #   * These images run a *temporary* server during initialization, and it is
+  #     started with networking disabled. A socket probe can therefore answer
+  #     from the temp server; a TCP probe cannot. That is the readiness race
+  #     stated exactly (`C0.12`).
+  pg() { $CONTAINER exec -e PGPASSWORD="$PASS" "$NAME" psql -h 127.0.0.1 -U postgres -d openehr "$@"; }
+  await PostgreSQL pg -c 'SELECT 1'
   apply() {
-    $CONTAINER exec -i "$NAME" psql -U postgres -d openehr -v ON_ERROR_STOP=1 -f - <"$sql" 2>&1 |
+    $CONTAINER exec -i -e PGPASSWORD="$PASS" "$NAME" \
+      psql -h 127.0.0.1 -U postgres -d openehr -v ON_ERROR_STOP=1 -f - <"$sql" 2>&1 |
       grep -E '^(psql:.*)?ERROR' || true
   }
   # A row must exist before the mutations: a FOR EACH ROW trigger on zero rows
   # never fires, so an empty table reports refusal it never performed.
   seed() {
-    $CONTAINER exec -i "$NAME" psql -U postgres -d openehr -q >/dev/null 2>&1 <<'SEED'
+    $CONTAINER exec -i -e PGPASSWORD="$PASS" "$NAME" \
+      psql -h 127.0.0.1 -U postgres -d openehr -q >/dev/null 2>&1 <<'SEED'
 INSERT INTO openehr_ehr VALUES ('e1','sys','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','st1','ac1');
 INSERT INTO openehr_versioned_object VALUES ('vo1','e1','VERSIONED_COMPOSITION','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
 INSERT INTO openehr_contribution VALUES ('c1','e1','249','sys','Committer','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
@@ -92,8 +113,8 @@ INSERT INTO openehr_version (uid, versioned_object_uid, creating_system_id, trun
 VALUES ('vo1::sys::1','vo1','sys',1,'532',false,'c1','sys','249','2026-01-01T00:00:00Z');
 SEED
   }
-  rows() { $CONTAINER exec "$NAME" psql -U postgres -d openehr -Atc "SELECT count(*) FROM openehr_version"; }
-  refuse() { $CONTAINER exec "$NAME" psql -U postgres -d openehr -c "$1" 2>&1 | grep -c 'append-only' || true; }
+  rows() { pg -Atc "SELECT count(*) FROM openehr_version"; }
+  refuse() { pg -c "$1" 2>&1 | grep -c 'append-only' || true; }
   ;;
 mysql)
   IMAGE=docker.io/library/mysql:8.4
@@ -103,12 +124,16 @@ mysql)
   # entrypoint starts a temporary server to run initialization, and ping answers
   # for it while MYSQL_DATABASE does not yet exist. This loop waits for a real
   # query against the real database.
-  await MySQL $CONTAINER exec "$NAME" mysql -uroot -p"$PASS" openehr -e 'SELECT 1'
+  # TCP, not the socket: see the note in the postgresql branch. This is the
+  # difference that made this job, and only this job, fail in CI.
+  await MySQL $CONTAINER exec "$NAME" \
+    mysql -h 127.0.0.1 --protocol=TCP -uroot -p"$PASS" openehr -e 'SELECT 1'
   # `|| true` because grep exits 1 when it filters every line, and a bare
   # `seed` call under `set -e` would then abort the script before `fail` could
   # report why — which is how this script first appeared to fail with no message.
   my() {
-    $CONTAINER exec -i "$NAME" mysql -uroot -p"$PASS" openehr "$@" 2>&1 |
+    $CONTAINER exec -i "$NAME" \
+      mysql -h 127.0.0.1 --protocol=TCP -uroot -p"$PASS" openehr "$@" 2>&1 |
       { grep -v 'Using a password' || true; }
   }
   apply() { my <"$sql" | grep -E '^ERROR' || true; }
@@ -133,13 +158,16 @@ mariadb)
   # A real query against the real database, not `mariadb-admin ping`: see the
   # note in the postgresql branch. This branch happened to pass in CI, which is
   # luck rather than a difference — the same race is present.
-  await MariaDB $CONTAINER exec "$NAME" mariadb -uroot -p"$PASS" openehr -e 'SELECT 1'
+  # TCP, not the socket: see the note in the postgresql branch.
+  await MariaDB $CONTAINER exec "$NAME" \
+    mariadb -h 127.0.0.1 --protocol=TCP -uroot -p"$PASS" openehr -e 'SELECT 1'
   # The client is `mariadb`, not `mysql`: MariaDB 11 renamed every binary and
   # the compatibility symlinks are deprecated. Using `mysql` here would work
   # today and break on the release that drops them, which is the sort of
   # difference this branch exists to keep visible.
   my() {
-    $CONTAINER exec -i "$NAME" mariadb -uroot -p"$PASS" openehr "$@" 2>&1 |
+    $CONTAINER exec -i "$NAME" \
+      mariadb -h 127.0.0.1 --protocol=TCP -uroot -p"$PASS" openehr "$@" 2>&1 |
       { grep -v 'Using a password' || true; }
   }
   apply() { my <"$sql" | grep -E '^ERROR' || true; }
