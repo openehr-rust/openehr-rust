@@ -81,7 +81,9 @@ rather than in `ddl.rs`. This section is that conclusion made normative.
 
 - **U4** The checksum MUST be computed in Rust, over the same canonical bytes
   the rest of the project uses (`X15.2`), and MUST NOT be computed by a SQL
-  function.
+  function. It MUST be SHA-256, stored as 32 raw bytes in a binary column and
+  never as hexadecimal text — see `M3.39`–`M3.42`, which fix the algorithm and
+  the representation for every digest in the project rather than per use.
 
   This is `L1`'s argument in a second place: two implementations of "the same
   string" — one in SQL, one in Rust — must agree for every codepoint in Unicode

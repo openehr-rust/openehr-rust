@@ -25,6 +25,17 @@ precisely this compared five dialects while that one was the sixth. Both are
 fixed; the lesson kept is that a guard is only as wide as its input list. See
 [`spec/audit.md`](../spec/audit.md) **W-01**.
 
+## Install
+
+```toml
+[dependencies]
+openehr-store = "0.1"
+openehr = "0.1"
+```
+
+Requires Rust 1.90+ (edition 2024). This crate emits DDL and defines the traits;
+it opens no connections and depends on no driver.
+
 ## The storage model
 
 openEHR is archetype-driven: a `COMPOSITION` contains whatever its archetype
@@ -96,6 +107,14 @@ each engine crate stands, under the ladder set out in
 `openehr-sqlite` reached **Verified** on 2026-08-01: [run 30713623082](https://github.com/openehr-rust/openehr-rust/actions/runs/30713623082) is green across
 all nineteen jobs. The three Schema claims are now checked by CI on every push
 rather than attested once. See [`spec/audit.md`](../spec/audit.md) **W-02**.
+
+## Specification
+
+- [`spec/databases/`](../spec/databases/index.md) — the normative core: storage
+  model (`M3.x`), dialect boundary (`X15.x`), commit rules (`H5.x`)
+- [`spec/databases/conformance-matrix.md`](../spec/databases/conformance-matrix.md)
+  — per-engine status
+- [`spec/audit.md`](../spec/audit.md) — known gaps
 
 ## Licence
 

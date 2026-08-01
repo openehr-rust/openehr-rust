@@ -188,6 +188,9 @@ read the reason, so the reason is here rather than in a commit message.
   drop — and `security::to_canonical_string` provides the canonical form a chain
   would commit to, which the store already uses for `data_json`.
 
+  Were it wired up, the chain's digests would be governed by `M3.39`–`M3.42`:
+  SHA-256, stored as 32 raw bytes.
+
   So the capability is built and unused. This requirement is recorded as
   **unimplemented** rather than deleted, because deleting it would erase a
   designed-for property the library is already carrying the cost of. A store MUST
@@ -201,6 +204,73 @@ read the reason, so the reason is here rather than in a commit message.
   deployment needing one MUST NOT achieve it by disabling the append-only
   triggers, because that removes the guarantee for every other row at the same
   time.
+
+## Digests
+
+Wherever this project computes a digest — the tamper-evidence chain (`M3.16`), a
+checksum adjunct for equality over a column an engine cannot compare (`U4`), or
+anything added later — the algorithm and the stored representation are fixed
+here rather than per use.
+
+- **M3.39** A digest MUST be **SHA-256**.
+
+  openEHR's own terminology names two integrity-check algorithms, SHA-1 and
+  SHA-256. SHA-1 has practical collision attacks and MUST NOT be emitted; the
+  `openehr` crate already refuses to. Naming one algorithm here, rather than
+  leaving it to each use, is what makes a digest written by one part of the
+  system verifiable by another.
+
+- **M3.40** A stored digest MUST be **32 raw bytes in a binary column**. It MUST
+  NOT be stored as hexadecimal text, base64, or any other textual encoding.
+
+  Four reasons, in order of how much trouble each causes:
+
+  1. **Hex text reintroduces string identity.** A 64-character hex string has a
+     case (`ff` versus `FF`) and a collation, so equality depends on which
+     collation the column happens to have — and this project already spends a
+     whole document (`P6.6`) on the cost of two definitions of "the same
+     string". A binary column compares as bytes, and bytes have no collation,
+     no case, and no locale.
+  2. **It doubles the column and the index.** 64 bytes against 32, on a column
+     whose entire purpose is to be indexed and compared.
+  3. **It invites a partial comparison.** Hex is human-readable, so it gets
+     truncated in logs, compared with `LIKE`, and prefix-matched. A digest
+     compared on a prefix is not a digest.
+  4. **It is not the form the algorithm produces.** Encoding on write and
+     decoding on read is two conversions that can disagree; the raw output has
+     no such step.
+
+  Hex remains correct for *display* — an error message, a CLI, a log line that
+  has already established the value is not PHI. The requirement is about
+  storage.
+
+- **M3.41** A digest column MUST be fixed-width at exactly 32 bytes where the
+  engine can express that, so a wrong-length value is rejected by the column
+  rather than discovered during comparison.
+
+- **M3.42** Comparing digests MUST be a byte-equality test on the full 32 bytes.
+  A digest match alone MUST NOT be treated as proof the underlying values are
+  equal: it is one collision away from returning another patient's record, and
+  the comparison MUST be confirmed against the source value (`U6`).
+
+### Engine bindings
+
+Non-normative; the annexes govern (`X15.6`).
+
+| Engine | 32-byte binary column |
+| --- | --- |
+| PostgreSQL | `bytea` |
+| SQLite | `BLOB` |
+| MySQL, MariaDB | `BINARY(32)` |
+| SQL Server | `binary(32)` |
+| Oracle | `RAW(32)` |
+
+**Not implemented.** No digest is stored anywhere in this schema today: the
+chain of `M3.16` does not exist, and the checksum adjunct belongs to a
+text-search feature this layer does not have. Implementing either requires a new
+`ColTy` variant, which by design will fail to compile in all six dialects until
+each one states its own spelling (`M3.30`) — that break is the mechanism, not an
+obstacle.
 
 ## Errors
 

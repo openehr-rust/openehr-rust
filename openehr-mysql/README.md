@@ -34,6 +34,16 @@ use openehr_store::ddl_script;
 println!("{}", ddl_script(&MysqlDialect));
 ```
 
+## Install
+
+```toml
+[dependencies]
+openehr-mysql = "0.1"
+openehr-store = "0.1"
+```
+
+Requires Rust 1.90+ (edition 2024).
+
 ## What this crate owns
 
 Four things: type spellings, identifier quoting, placeholder style, and how the
@@ -79,7 +89,35 @@ cargo test
 The tests are golden: they assert the SQL this crate emits, including
 assertions that it is *not* another engine's SQL.
 
+## What is not here
+
+| Not here | Why |
+| --- | --- |
+| A `Store` | This crate is a dialect. Level **Schema** means the schema is emitted and the engine has executed it, not that this crate can talk to a database. |
+| A driver dependency | A dependency implies a capability, and readers reasonably infer one (`W16.4`). |
+| Archetype or template validation | Not implemented anywhere in this project (`lib:S1.4`). |
+| AQL execution | Parsed and statically checked by `openehr`, never executed (`S1.6`). |
+
+## Fuzzing
+
+Identifier quoting is fuzzed by
+[`openehr-mysql-fuzz`](../openehr-mysql-fuzz), because an identifier that
+escapes its own delimiter is SQL injection and archetype ids reach a `WHERE`
+clause from caller input. Run in CI on every push.
+
+## Specification
+
+This crate implements the shared persistence specification; it defines nothing
+of its own beyond its dialect.
+
+- [`spec/databases/`](../spec/databases/index.md) — the storage model, the
+  dialect boundary, the conformance ladder
+- [`spec/databases/conformance-matrix.md`](../spec/databases/conformance-matrix.md)
+  — what is verified for **this** engine today
+- [`spec/audit.md`](../spec/audit.md) — known gaps
+
 ## Licence
+
 
 Any of these, at your option — MIT, Apache-2.0, BSD-3-Clause, GPL-2.0-only, or
 GPL-3.0-only. See [`LICENSE.md`](LICENSE.md).

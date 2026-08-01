@@ -114,6 +114,7 @@ silence (`W0.4`).
 | --- | --- | --- |
 | `M3.16` | tamper-evident hash chain | the `openehr` crate has the primitives; the store does not use them and the schema has no hash columns |
 | `M3.18` | GDPR Art. 17 erasure | no erasure operation |
+| `M3.39`–`M3.42` | digest algorithm and storage | SHA-256, 32 raw bytes, binary column — no digest is stored anywhere yet, and adding one needs a new `ColTy` variant |
 | `PR12.5`, `PR12.6` | read auditing | only writes are recorded; an access investigation asks about reads |
 | `O10.14` | schema migration | no migration mechanism and no applied-version metadata |
 | `T11.6` | adversarial concurrency tests | nothing exercises concurrent access |

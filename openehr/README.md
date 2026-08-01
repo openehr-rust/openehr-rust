@@ -15,6 +15,15 @@ own idea of what a health record is.
 openehr = "0.1"
 ```
 
+## Install
+
+```toml
+[dependencies]
+openehr = "0.1"
+```
+
+Requires Rust 1.90+ (edition 2024).
+
 ## What it does
 
 ```rust

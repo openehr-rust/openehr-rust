@@ -2,9 +2,21 @@
 
 openEHR persistence for **SQLite 3** — a complete embedded store.
 
+## Install
+
+```toml
+[dependencies]
+openehr-sqlite = "0.1"
+openehr-store = "0.1"
+openehr = "0.1"
+```
+
+Requires Rust 1.90+ (edition 2024). SQLite itself is compiled in — no system
+library is needed, and none is used.
+
 ## Conformance level: Verified
 
-Unlike the four dialect-only crates, this one contains a working `SqliteStore`
+Unlike the five dialect-only crates, this one contains a working `SqliteStore`
 and runs the shared conformance suite against a **real database** in its own
 tests: every commit rule, every read, the archetype index, the append-only
 triggers, and DDL idempotence.
@@ -29,6 +41,24 @@ store.commit_composition(ehr.ehr_id(), &version, uid)?;
 // The record as it stood at a moment in time.
 let then = store.version_at_time(&container, &at)?;
 ```
+
+**Verified** rather than Store because the suite runs in CI on every push
+against a bundled engine that cannot be absent, so the job cannot silently skip.
+It is the only crate at this level, being the only one with a `Store`.
+
+## The API
+
+| Operation | Does |
+| --- | --- |
+| `SqliteStore::in_memory()` / `::open(path)` | open a store; `from_connection` adopts an existing `rusqlite::Connection` |
+| `install()` | create the schema, idempotently |
+| `create_ehr` / `get_ehr` | one health record |
+| `create_contribution` | one change set |
+| `commit_composition` | one version, with every commit rule enforced |
+| `get_version` / `latest_version` | read by identifier, or the head of a container |
+| `version_at_time` | the version current at an instant |
+| `all_versions` | a container's history, **oldest first** (`H5.12`) |
+| `find_compositions_by_archetype` | the query the index exists for |
 
 ## What it guarantees
 
@@ -73,6 +103,30 @@ So each time occupies `…_text` (authoritative, exact) and `…_utc` (derived,
 nullable, for ordering). The derived column is `NULL` whenever the instant is
 not established, and `version_at_time` skips those rows rather than guessing at
 a time zone — exactly as the library does.
+
+## What is not here
+
+| Not here | Why |
+| --- | --- |
+| AQL execution | Needs archetype path resolution; `openehr` parses and statically checks AQL and returns no rows (`S1.6`). |
+| Archetype or template validation | Validation is Reference-Model-level only (`V9.9`, `lib:S1.4`). |
+| A tamper-evidence chain | `openehr` has the primitives; this store does not use them and the schema has no digest columns (`M3.16`). Append-only is a **weaker** guarantee and must not be described as tamper evidence (`PR12.11`). |
+| Read auditing | Only writes are recorded (`PR12.5`). |
+| Schema migration | No migration mechanism and no applied-version metadata (`O10.14`). |
+| Concurrency guarantees | The commit rules and the unique index are in place, but **nothing tests concurrent access** (`db:D-02`). |
+
+## Fuzzing
+
+The dialect's identifier quoting is fuzzed by
+[`openehr-sqlite-fuzz`](../openehr-sqlite-fuzz), run in CI on every push.
+
+## Specification
+
+- [`spec/databases/`](../spec/databases/index.md) — storage model, commit rules,
+  conformance ladder
+- [`spec/databases/conformance-matrix.md`](../spec/databases/conformance-matrix.md)
+  — what is verified today, including the two store requirements that are **not**
+- [`spec/audit.md`](../spec/audit.md) — known gaps
 
 ## Testing
 
