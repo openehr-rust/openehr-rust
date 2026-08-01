@@ -1,0 +1,28 @@
+[workspace]
+
+[package]
+name = "openehr-postgresql"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT OR Apache-2.0"
+description = "openEHR persistence for PostgreSQL: schema dialect and DDL"
+keywords = ["openehr", "ehr", "postgresql", "healthcare", "sql"]
+categories = ["database"]
+repository = "https://github.com/joelparkerhenderson/fhir-databases"
+readme = "README.md"
+
+[dependencies]
+openehr = { path = "../openehr", version = "0.1.0" }
+openehr-store = { path = "../openehr-store", version = "0.1.0" }
+serde_json = { version = "1", features = ["preserve_order"] }
+
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
