@@ -21,7 +21,7 @@ Not normative. `C0.8`–`C0.13` in
 | `openehr-mysql` | **Schema** | as above |
 | `openehr-mariadb` | **Schema** | as above |
 | `openehr-mssql` | **Dialect** | No server has parsed it — SQL Server 2022 segfaults under qemu on arm64. |
-| `openehr-oracle` | **Dialect** | No server has parsed it — the images need registry authentication. |
+| `openehr-oracle` | **Dialect** | No server has parsed it — the images need registry authentication (`M14.7`). |
 
 **`openehr-sqlite` is at Verified** as of the green run on 2026-08-01. A
 committed workflow is not a working one — the level followed the run, not the

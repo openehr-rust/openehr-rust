@@ -130,10 +130,11 @@ Requirement prefix: `X15`.
 - **X15.9** An annex MUST carry a status — **proposed** or **ratified** — and a
   proposed annex MUST NOT be cited as evidence for a conformance level (`C0.9`).
 
-  **None of the six crates has an annex.** All six `spec/` directories are empty.
-  That is a standing violation of `X15.6`, recorded here rather than left to be
-  discovered per crate, and it is why several dialect decisions are currently
-  documented only in rustdoc.
+  **All six crates now have an annex**, written 2026-08-01 (`db:D-01`). All six
+  are **proposed**; none is ratified, so none may be cited as evidence for a
+  level. Writing them turned four previously undeclared departures into numbered
+  `M14.x` requirements, which is what `C0.16` means by the difference between a
+  declaration and a defect.
 
 ## Cross-engine agreement
 

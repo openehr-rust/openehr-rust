@@ -64,7 +64,7 @@ resolving.
 
 ## Open findings
 
-### D-01 — No engine crate has a dialect annex — **Medium, open**
+### D-01 — No engine crate has a dialect annex — **Medium, fixed**
 
 **Required.** `X15.6` requires every engine crate to carry
 `spec/14-<engine>-dialect.md`, addressing nine subjects explicitly and by name,
@@ -81,8 +81,27 @@ diff against the core and where a departure cannot be declared as a numbered
 bytes before Oracle 12.2 and 128 after, so the schema's names are only safe on
 12.2+ and nothing says so.
 
-**Disposition.** Open. Six annexes to write; `X15.6` lists what each must
-contain.
+**Fixed 2026-08-01.** All six annexes written, each addressing the nine
+subjects `X15.6` names, and each carrying status **proposed** (`X15.9`) — so
+none may be cited as evidence for a conformance level.
+
+Writing them surfaced things that had not been written down anywhere:
+
+- **Oracle's engine floor is 12.2**, and now for a stated reason. Identifiers
+  were 30 bytes before 12.2 and 128 after; several generated names here exceed
+  30, so the schema is not installable below it. That closes the open row in §1.
+- **Four departures** now exist as numbered `M14.x` requirements where before
+  they were undeclared: PostgreSQL and SQLite discard the `Id`/`Text` length
+  bound (`M14.1`, `M14.5`); MySQL's drop-then-create trigger leaves a window
+  (`M14.3`); Oracle cannot `=`-compare a `CLOB` and would need
+  `DBMS_LOB.COMPARE` to satisfy `M3.42` (`M14.8`). `C0.16` calls an undeclared
+  departure a defect; these are now declarations.
+- **SQL Server's and Oracle's missing live runs** are recorded as `M14.6` and
+  `M14.7` rather than left as an absence.
+
+**Residual.** All six are **proposed**, not ratified. `X15.9` requires a
+ratified annex before it counts as evidence, and ratification for the two
+Dialect-level crates needs a live run that no available machine can provide.
 
 ### D-02 — Two store requirements are unverifiable as written — **Medium, open**
 

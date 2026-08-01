@@ -47,7 +47,7 @@ name = "openehr-<engine>"
 version = "0.1.1"
 edition = "2024"
 rust-version = "1.90"
-license = "MIT OR Apache-2.0"
+license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
 description = "openEHR persistence for <Engine>: schema dialect and DDL"
 keywords = ["openehr", "ehr", "<engine>", "healthcare", "sql"]
 categories = ["database"]
@@ -145,12 +145,15 @@ say so (`C0.9`).
 
 ### 7. Write the dialect annex
 
-`X15.6` requires `spec/14-<engine>-dialect.md` in the crate, addressing the
-engine floor, the `ColTy` bindings, install idempotence, append-only enforcement,
-placeholders, and every unmet core requirement as a numbered departure.
+`X15.6` requires `spec/14-<engine>-dialect.md` in the crate, addressing nine
+subjects by name: engine floor, `ColTy` bindings, the two instant columns,
+idempotence, append-only enforcement, placeholder syntax, identifier quoting, the
+difference from the nearest neighbouring dialect, and every unmet core
+requirement as a numbered `M14.x` departure.
 
-None of the six crates has one. Do not make it seven without at least recording
-the gap.
+All six existing crates have one — read `openehr-mariadb`'s first, which explains
+what happens when a dialect is a copy. Mark yours **proposed** (`X15.9`) until a
+live run backs it.
 
 ## Checklist
 
@@ -163,4 +166,8 @@ the gap.
 - [ ] Golden tests, including what distinguishes this engine.
 - [ ] `verify-schema.sh` branch, run, and passing — or the level says **Dialect**.
 - [ ] README states the level in the first screenful.
+- [ ] `spec/14-<engine>-dialect.md` written, marked **proposed** (`X15.6`).
+- [ ] `openehr-<engine>-fuzz` crate with `quote` and `col_sql` targets, seeded,
+      wired into CI, and `publish = false`.
+- [ ] `LICENSE.md` present; licence expression matches the other seven (`W0.22`).
 - [ ] `cargo clippy --all-targets` clean at pedantic.

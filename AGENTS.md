@@ -149,8 +149,9 @@ version:
    the `ENGINE_CRATES` count — and to that crate's dev-dependencies.
 4. Add a branch to `verify-schema.sh` and run it. Until you have, the crate is at
    **Dialect** and its documentation must say so.
-5. Write the dialect annex (`X15.6`). None of the six has one yet; do not make it
-   seven.
+5. Write the dialect annex (`X15.6`) — `spec/14-<engine>-dialect.md`, covering
+   the nine subjects it names. All six existing crates have one; do not be the
+   exception.
 
 ## Documentation rules
 

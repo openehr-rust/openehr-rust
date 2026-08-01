@@ -62,8 +62,8 @@ Columns: **pg** PostgreSQL, **lt** SQLite, **my** MySQL, **ma** MariaDB,
 | `M3.37` no drop-then-create trigger window | • | • | ✗ | • | ? | ? | MySQL must drop first; MariaDB uses `CREATE OR REPLACE` |
 | `X15.18` differs from nearest neighbour, tested | • | • | • | • | • | • | mariadb's is the newest and the reason `X15.18` exists |
 | `T11.2` DDL executed against a real server | • | • | • | • | ✗ | ✗ | |
-| `S1.4` engine floor declared | ~ | • | ~ | ~ | ~ | ✗ | declared in rustdoc, not in an annex; Oracle's is unstated |
-| `X15.6` dialect annex exists | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **all six `spec/` directories are empty** |
+| `S1.4` engine floor declared | • | • | • | • | • | • | each stated in its annex, with the dialect fact that sets it |
+| `X15.6` dialect annex exists | ~ | ~ | ~ | ~ | ~ | ~ | all six written; all six **proposed**, not ratified (`X15.9`) |
 
 ## Store-level requirements
 

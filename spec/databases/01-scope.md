@@ -83,12 +83,14 @@ Non-normative summary; each crate's annex is authoritative for its own row.
 | `openehr-mysql` | MySQL | 8.4 | **Schema** |
 | `openehr-mariadb` | MariaDB | 11.4 | **Schema** |
 | `openehr-mssql` | SQL Server | 2019+ | **Dialect** |
-| `openehr-oracle` | Oracle Database | 12.2+, undeclared | **Dialect** |
+| `openehr-oracle` | Oracle Database | 12.2+ | **Dialect** |
 
-Two rows are open. Oracle's floor has not been written into an annex —
-identifiers were 30 bytes before 12.2 and 128 after, so the generator's naming is
-only safe on 12.2+. And **no crate has a dialect annex at all**: all six
-`spec/` directories are empty, which `X15.6` requires them not to be.
+Oracle's floor is now stated, in that crate's annex, with the fact that sets
+it: identifiers were 30 bytes before 12.2 and 128 after, and several generated
+names here exceed 30, so the schema is not installable below 12.2.
+
+All six crates now have a dialect annex (`X15.6`). Every one is **proposed**
+rather than ratified (`X15.9`), so none counts as evidence for a level.
 
 - **S1.13** `openehr-sqlite` pins its engine rather than discovering it: the
   `bundled` feature compiles a known SQLite instead of linking whatever the host
