@@ -130,19 +130,24 @@ jobs:
         with:
           workspaces: openehr-${{ matrix.engine }}
 
-      # Fail rather than skip if there is no container runtime. A schema job
-      # that quietly does nothing reports the same green as one that verified
-      # the DDL, which is the precise failure `C0.13` forbids.
-      - name: Require a container runtime
+      # podman, not docker: it is what a contributor runs locally, and the
+      # script defaults to it. Running a different runtime here than the one the
+      # script was developed against is a divergence with no upside — the first
+      # CI run failed on `schema / mysql` alone, and chasing an environment
+      # difference is exactly the cost that divergence buys.
+      #
+      # Fail rather than skip if it is absent. A schema job that quietly does
+      # nothing reports the same green as one that verified the DDL, which is
+      # the precise failure `C0.13` forbids.
+      - name: Require podman
         run: |
-          command -v docker >/dev/null || {
-            echo "::error::no container runtime; this job must fail, not skip"
+          command -v podman >/dev/null || {
+            echo "::error::podman absent; this job must fail, not skip"
             exit 1
           }
+          podman --version
 
       - name: Verify generated DDL against a real ${{ matrix.engine }} server
-        env:
-          CONTAINER: docker
         run: sh openehr-store/scripts/verify-schema.sh ${{ matrix.engine }}
 
   # SQL Server and Oracle deliberately have no schema job: no server has ever

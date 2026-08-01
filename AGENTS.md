@@ -80,7 +80,8 @@ sh openehr-store/scripts/verify-schema.sh mysql        # MySQL 8.4
 sh openehr-store/scripts/verify-schema.sh mariadb      # MariaDB 11.4
 ```
 
-Requires `podman` (or `docker` via `$CONTAINER`). It provisions the engine, runs
+Requires `podman` (or `docker` via `$CONTAINER`), which is also what CI uses. It
+provisions the engine, runs
 the generated DDL, runs it **again** to prove idempotence, seeds a row, and then
 checks the append-only tables refuse `UPDATE` and `DELETE` **with that row
 present**. The row matters: a `FOR EACH ROW` trigger on an empty table never

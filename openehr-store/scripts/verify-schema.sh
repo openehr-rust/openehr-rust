@@ -38,11 +38,19 @@ postgresql)
   IMAGE=docker.io/library/postgres:18-alpine
   $CONTAINER run -d --rm --name "$NAME" -e POSTGRES_PASSWORD="$PASS" \
     -e POSTGRES_DB=openehr "$IMAGE" >/dev/null
+  # Readiness is a successful query against the *target database*, not
+  # `pg_isready`. The official images run a temporary server during
+  # initialization, and a liveness probe answers for it — before the real server
+  # is up and before POSTGRES_DB exists. A probe that can pass while its subject
+  # is absent is the same defect the schema check itself guards against
+  # (`C0.12`), and it is what made the MySQL job fail in CI while passing
+  # locally: the DDL ran against a database that did not exist yet.
   i=0
-  while ! $CONTAINER exec "$NAME" pg_isready -U postgres >/dev/null 2>&1; do
+  while ! $CONTAINER exec "$NAME" psql -U postgres -d openehr -c 'SELECT 1' \
+      >/dev/null 2>&1; do
     i=$((i + 1))
-    [ "$i" -gt 60 ] && fail "PostgreSQL did not start"
-    sleep 1
+    [ "$i" -gt 90 ] && fail "PostgreSQL did not become ready"
+    sleep 2
   done
   apply() {
     $CONTAINER exec -i "$NAME" psql -U postgres -d openehr -v ON_ERROR_STOP=1 -f - <"$sql" 2>&1 |
@@ -68,10 +76,15 @@ mysql)
   IMAGE=docker.io/library/mysql:8.4
   $CONTAINER run -d --rm --name "$NAME" -e MYSQL_ROOT_PASSWORD="$PASS" \
     -e MYSQL_DATABASE=openehr "$IMAGE" >/dev/null
+  # Not `mysqladmin ping`: see the note in the postgresql branch. MySQL's
+  # entrypoint starts a temporary server to run initialization, and ping answers
+  # for it while MYSQL_DATABASE does not yet exist. This loop waits for a real
+  # query against the real database.
   i=0
-  while ! $CONTAINER exec "$NAME" mysqladmin ping -uroot -p"$PASS" >/dev/null 2>&1; do
+  while ! $CONTAINER exec "$NAME" mysql -uroot -p"$PASS" openehr \
+      -e 'SELECT 1' >/dev/null 2>&1; do
     i=$((i + 1))
-    [ "$i" -gt 90 ] && fail "MySQL did not start"
+    [ "$i" -gt 90 ] && fail "MySQL did not become ready"
     sleep 2
   done
   # `|| true` because grep exits 1 when it filters every line, and a bare
@@ -100,10 +113,14 @@ mariadb)
   IMAGE=docker.io/library/mariadb:11.4
   $CONTAINER run -d --rm --name "$NAME" -e MARIADB_ROOT_PASSWORD="$PASS" \
     -e MARIADB_DATABASE=openehr "$IMAGE" >/dev/null
+  # A real query against the real database, not `mariadb-admin ping`: see the
+  # note in the postgresql branch. This branch happened to pass in CI, which is
+  # luck rather than a difference — the same race is present.
   i=0
-  while ! $CONTAINER exec "$NAME" mariadb-admin ping -uroot -p"$PASS" >/dev/null 2>&1; do
+  while ! $CONTAINER exec "$NAME" mariadb -uroot -p"$PASS" openehr \
+      -e 'SELECT 1' >/dev/null 2>&1; do
     i=$((i + 1))
-    [ "$i" -gt 90 ] && fail "MariaDB did not start"
+    [ "$i" -gt 90 ] && fail "MariaDB did not become ready"
     sleep 2
   done
   # The client is `mariadb`, not `mysql`: MariaDB 11 renamed every binary and
