@@ -113,6 +113,30 @@ so no crate has been promoted to **Verified**, and none may be until a green run
 on `main`. Treating a committed workflow as a working one is the same error the
 finding it closes was about ([`spec/audit.md`](spec/audit.md) **W-02**).
 
+### Fuzzing
+
+Six `openehr-<engine>-fuzz` crates, one per dialect. They need nightly and
+`cargo-fuzz`, and run from the engine crate with `--fuzz-dir`:
+
+```sh
+cargo install cargo-fuzz
+cd openehr-postgresql
+cargo +nightly fuzz run --fuzz-dir ../openehr-postgresql-fuzz quote -- -max_total_time=60
+```
+
+Targets: `quote` (an identifier must not be able to escape its own quoting --
+the property with a security consequence) and `col_sql` (every logical type maps
+to something usable).
+
+The **properties live in `openehr_store::conformance`**, shared by all six; a
+fuzz target is a thin call. Six copies of one assertion is the arrangement that
+produced W-01. Seed corpora are committed; inputs the fuzzer discovers are not.
+
+CI runs every target on every push, because a committed fuzz target nobody
+executes is a claim rather than a check (`T11.9`).
+
+None of these crates is published (`publish = false`).
+
 ## Adding an engine crate
 
 Read [`AGENTS/adding-an-engine.md`](AGENTS/adding-an-engine.md) first. The short

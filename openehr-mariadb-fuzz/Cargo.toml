@@ -1,0 +1,39 @@
+# Fuzz targets for the mariadb dialect.
+#
+# Not published (`publish = false`): this is a test harness, and a crates.io
+# release of it would claim to be part of the library's surface.
+#
+# The properties themselves live in `openehr_store::conformance`, shared by all
+# six fuzz crates. Six copies of one assertion is the arrangement that produced
+# **W-01**; a fuzz target here is a thin call and nothing more.
+[package]
+name = "openehr-mariadb-fuzz"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.90"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+openehr-store = { path = "../openehr-store" }
+openehr-mariadb = { path = "../openehr-mariadb" }
+
+[[bin]]
+name = "quote"
+path = "fuzz_targets/quote.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "col_sql"
+path = "fuzz_targets/col_sql.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

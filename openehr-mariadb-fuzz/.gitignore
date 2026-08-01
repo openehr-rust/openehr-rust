@@ -1,0 +1,6 @@
+# Build output and crash artifacts. The *seed* corpus is committed (T11.9);
+# inputs the fuzzer discovers are not — they are machine-specific, they grow
+# without bound, and a corpus nobody curated is noise in every future diff.
+target/
+artifacts/
+coverage/

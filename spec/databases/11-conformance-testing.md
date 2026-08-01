@@ -61,16 +61,27 @@ Listed as requirements rather than omitted, so the gap is visible (`C0.20`).
 
   Nothing in this repository exercises concurrent access to a store.
 
-- **T11.9** *(amended — **not implemented**)* Every parser that accepts documents
-  from outside the process MUST be fuzzed, with the fuzz targets **run, not
-  merely committed**, on a bounded time budget with a committed seed corpus. A
-  crash, panic, abort, or stack overflow MUST fail the build.
+- **T11.9** *(amended — **partially implemented**)* Every parser and every
+  function that accepts untrusted input MUST be fuzzed, with the fuzz targets
+  **run, not merely committed**, on a bounded time budget with a committed seed
+  corpus. A crash, panic, abort, or stack overflow MUST fail the build.
 
   A stack overflow is not unwindable: `catch_unwind` does not catch it, a worker
   thread cannot contain it, and the process ends. For a component holding
   clinical data, one document ending the process is a denial of service that
-  requires no cleverness. Nothing here is fuzzed; the `openehr` crate's own
-  register carries this as `A-09`.
+  requires no cleverness.
+
+  **Implemented for the dialects.** Six `openehr-<engine>-fuzz` crates drive two
+  properties per engine — `check_quote` and `check_col_sql` — with a committed
+  seed corpus, and CI runs each for a bounded time on every push. The properties
+  live in `openehr_store::conformance`, shared by all six, because six copies of
+  one assertion is the arrangement that produced **W-01**.
+
+  **Not implemented for the `openehr` crate**, which is where the parsers
+  actually are: ISO 8601, `OBJECT_ID`, openEHR paths, AQL, and canonical-JSON
+  deserialization all accept documents from outside the process and none is
+  fuzzed. That is the larger half of this requirement and it remains open as
+  `lib:A-09`.
 
 - **T11.7** *(amended — **not implemented**)* A redaction test MUST assert that
   no log line emitted during a full write-and-read cycle over a record containing

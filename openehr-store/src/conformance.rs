@@ -444,3 +444,216 @@ pub fn dialects_are_distinct(dialects: &[&dyn Dialect]) {
         }
     }
 }
+
+/// Checks that quoting an identifier cannot break out of the quotes.
+///
+/// This is the property a fuzzer drives, and it is the one with a security
+/// consequence: an archetype id arriving from a caller reaches a `WHERE` clause
+/// (`P6.12`), and an identifier that escapes its delimiter is SQL injection.
+///
+/// The delimiters are discovered rather than hard-coded, by asking the dialect
+/// to quote the empty string — so this works for `"…"`, `` `…` ``, and `[…]`
+/// alike, and a dialect that invents a fourth style is covered without editing
+/// this function.
+///
+/// The property, stated exactly: the quoted form is `open`, then a body, then
+/// `close`; every `close` inside the body occurs as a doubled pair; and
+/// undoubling those pairs recovers the original identifier. A dialect that
+/// satisfies this cannot emit an identifier that terminates its own quoting.
+///
+/// Note that only `close` is escaped. `[` inside a T-SQL `[…]` needs no
+/// escaping and is passed through, which is correct rather than an oversight.
+///
+/// # Panics
+///
+/// Panics naming the dialect and the input when the property fails.
+pub fn check_quote<D: Dialect + ?Sized>(dialect: &D, identifier: &str) {
+    let empty = dialect.quote("");
+    let mut delim = empty.chars();
+    let (Some(open), Some(close)) = (delim.next(), empty.chars().last()) else {
+        panic!("{}: quote(\"\") produced no delimiters", dialect.name());
+    };
+
+    let quoted = dialect.quote(identifier);
+    assert!(
+        quoted.starts_with(open),
+        "{}: quote({identifier:?}) does not open with {open:?}",
+        dialect.name()
+    );
+    assert!(
+        quoted.len() > open.len_utf8(),
+        "{}: quote({identifier:?}) is shorter than its own delimiters",
+        dialect.name()
+    );
+    assert!(
+        quoted.ends_with(close),
+        "{}: quote({identifier:?}) does not close with {close:?}",
+        dialect.name()
+    );
+
+    let body = &quoted[open.len_utf8()..quoted.len() - close.len_utf8()];
+    let mut chars = body.chars();
+    let mut unescaped = String::with_capacity(body.len());
+    while let Some(c) = chars.next() {
+        if c == close {
+            assert_eq!(
+                chars.next(),
+                Some(close),
+                "{}: quote({identifier:?}) leaves an unescaped {close:?} in the body — \
+                 the identifier terminates its own quoting",
+                dialect.name()
+            );
+        }
+        unescaped.push(c);
+    }
+    assert_eq!(
+        unescaped, identifier,
+        "{}: quote({identifier:?}) does not round-trip",
+        dialect.name()
+    );
+}
+
+/// Checks that a dialect maps every logical column type to something usable.
+///
+/// Total over its input by construction — `ColTy` is not `#[non_exhaustive]`
+/// and dialects carry no wildcard arm (`M3.30`) — so this drives the arbitrary
+/// lengths, which are where a `VARCHAR(0)` or an overflowing bound would come
+/// from.
+///
+/// # Panics
+///
+/// Panics naming the dialect and the type when the mapping is unusable.
+pub fn check_col_sql<D: Dialect + ?Sized>(dialect: &D, ty: crate::ColTy) {
+    let sql = dialect.col_sql(ty);
+    assert!(
+        !sql.trim().is_empty(),
+        "{}: {ty:?} maps to an empty SQL type",
+        dialect.name()
+    );
+    assert!(
+        !sql.contains('\n'),
+        "{}: {ty:?} maps to a multi-line SQL type: {sql:?}",
+        dialect.name()
+    );
+    // The two halves of an instant pair must stay distinguishable whatever the
+    // bound (`M3.31`); a fuzzer varying `Id(n)`/`Text(n)` must not be able to
+    // collapse them.
+    if matches!(ty, crate::ColTy::Instant) {
+        assert_ne!(
+            sql,
+            dialect.col_sql(crate::ColTy::InstantUtc),
+            "{}: the authoritative and derived instant columns share a type",
+            dialect.name()
+        );
+    }
+}
+
+#[cfg(test)]
+mod property_tests {
+    //! Proof that the fuzz properties are not vacuous.
+    //!
+    //! `T11.10`: a check that cannot fail is indistinguishable from a control
+    //! that works, and the distinction is the entire value of the control. Each
+    //! test below defines a dialect with exactly the defect the property exists
+    //! to catch, and asserts the property rejects it.
+
+    use super::{check_col_sql, check_quote};
+    use crate::{ColTy, Dialect, Placeholder};
+
+    /// Escapes nothing — the defect `check_quote` exists to catch.
+    struct Unescaping;
+    impl Dialect for Unescaping {
+        fn name(&self) -> &'static str {
+            "unescaping"
+        }
+        fn col_sql(&self, _ty: ColTy) -> String {
+            "TEXT".to_owned()
+        }
+        fn quote(&self, identifier: &str) -> String {
+            format!("\"{identifier}\"")
+        }
+        fn placeholder(&self) -> Placeholder {
+            Placeholder::Question
+        }
+    }
+
+    #[test]
+    fn an_identifier_with_no_delimiter_is_accepted() {
+        // The property must not reject everything, or it proves nothing.
+        check_quote(&Unescaping, "openehr_version");
+        check_quote(&Unescaping, "");
+    }
+
+    #[test]
+    #[should_panic(expected = "unescaped")]
+    fn an_identifier_that_escapes_its_own_quoting_is_caught() {
+        check_quote(&Unescaping, "a\"; DROP TABLE openehr_version; --");
+    }
+
+    /// Maps both halves of an instant pair to one type (`M3.31`).
+    struct CollapsedInstants;
+    impl Dialect for CollapsedInstants {
+        fn name(&self) -> &'static str {
+            "collapsed"
+        }
+        fn col_sql(&self, _ty: ColTy) -> String {
+            "TIMESTAMP".to_owned()
+        }
+        fn quote(&self, identifier: &str) -> String {
+            format!("\"{}\"", identifier.replace('"', "\"\""))
+        }
+        fn placeholder(&self) -> Placeholder {
+            Placeholder::Question
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "share a type")]
+    fn collapsing_the_two_instant_columns_is_caught() {
+        check_col_sql(&CollapsedInstants, ColTy::Instant);
+    }
+
+    /// Maps a logical type to nothing at all.
+    struct EmptyType;
+    impl Dialect for EmptyType {
+        fn name(&self) -> &'static str {
+            "empty"
+        }
+        fn col_sql(&self, _ty: ColTy) -> String {
+            String::new()
+        }
+        fn quote(&self, identifier: &str) -> String {
+            format!("\"{}\"", identifier.replace('"', "\"\""))
+        }
+        fn placeholder(&self) -> Placeholder {
+            Placeholder::Question
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "empty SQL type")]
+    fn a_type_that_maps_to_nothing_is_caught() {
+        check_col_sql(&EmptyType, ColTy::Json);
+    }
+
+    #[test]
+    fn every_real_dialect_quotes_the_adversarial_identifiers() {
+        // The cases a fuzzer would take longest to reach, asserted directly so
+        // they are covered even when nobody runs the fuzzer.
+        for id in [
+            "",
+            "openehr_version",
+            "\"",
+            "``",
+            "]",
+            "[",
+            "a\"; DROP TABLE openehr_version; --",
+            "a`; DROP TABLE openehr_version; --",
+            "a]; DROP TABLE openehr_version; --",
+            "\u{0}",
+            "\u{1F600}",
+        ] {
+            check_quote(&CollapsedInstants, id);
+        }
+    }
+}

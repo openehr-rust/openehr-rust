@@ -150,6 +150,64 @@ jobs:
       - name: Verify generated DDL against a real ${{ matrix.engine }} server
         run: sh openehr-store/scripts/verify-schema.sh ${{ matrix.engine }}
 
+  # T11.9: fuzz targets must be RUN, not merely committed. A committed target
+  # nobody executes is a claim, and this repository's whole audit register is
+  # about the difference between a claim and a check.
+  #
+  # A crash, panic, abort, or stack overflow fails the build. The budget is
+  # deliberately small per target -- this is a regression gate on every push,
+  # not a fuzzing campaign; long campaigns belong on a schedule or a fuzzing
+  # service, and neither exists here yet.
+  fuzz:
+    name: fuzz / ${{ matrix.engine }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [postgresql, sqlite, mysql, mariadb, mssql, oracle]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nightly Rust
+        run: |
+          rustup toolchain install nightly --profile minimal
+          rustup default nightly
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: openehr-${{ matrix.engine }}-fuzz
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      # Build separately from run, so a compile break is distinguishable from a
+      # crash the fuzzer found. They are different failures with different fixes.
+      - name: Build fuzz targets
+        working-directory: openehr-${{ matrix.engine }}
+        run: cargo fuzz build --fuzz-dir ../openehr-${{ matrix.engine }}-fuzz
+
+      - name: Fuzz quote (identifier quoting cannot be escaped)
+        working-directory: openehr-${{ matrix.engine }}
+        run: >
+          cargo fuzz run --fuzz-dir ../openehr-${{ matrix.engine }}-fuzz
+          quote -- -max_total_time=60
+
+      - name: Fuzz col_sql (every logical type maps to something usable)
+        working-directory: openehr-${{ matrix.engine }}
+        run: >
+          cargo fuzz run --fuzz-dir ../openehr-${{ matrix.engine }}-fuzz
+          col_sql -- -max_total_time=60
+
+      # A crash leaves an artifact. Upload it, because a fuzz failure whose
+      # input is lost is a failure nobody can reproduce.
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-${{ matrix.engine }}
+          path: openehr-${{ matrix.engine }}-fuzz/artifacts/
+          if-no-files-found: ignore
+
   # SQL Server and Oracle deliberately have no schema job: no server has ever
   # parsed their DDL, so both crates are at level Dialect and their
   # documentation says so. Adding a job that skipped would convert an honest
