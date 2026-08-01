@@ -214,11 +214,25 @@ here rather than per use.
 
 - **M3.39** A digest MUST be **SHA-256**.
 
-  openEHR's own terminology names two integrity-check algorithms, SHA-1 and
-  SHA-256. SHA-1 has practical collision attacks and MUST NOT be emitted; the
-  `openehr` crate already refuses to. Naming one algorithm here, rather than
-  leaving it to each use, is what makes a digest written by one part of the
-  system verifiable by another.
+  openEHR's `integrity_check_algorithms` group names **seven**: SHA-1, SHA-224,
+  SHA-256, SHA-384, SHA-512, SHA-512/224, and SHA-512/256. This specification
+  picks one of them and requires it everywhere.
+
+  SHA-256 rather than another: SHA-1 has practical collision attacks and MUST
+  NOT be emitted — the `openehr` crate reads it and refuses to write it — and
+  the wider members buy no security this use needs while doubling the stored
+  width. Requiring **one** algorithm, rather than letting each use choose from
+  seven, is what makes a digest written by one part of the system verifiable by
+  another; a chain nobody else can reproduce is not evidence.
+
+  A stored digest MUST NOT record which algorithm produced it, because there is
+  only one. If that ever changes, the algorithm becomes part of the stored form
+  and this requirement is amended rather than reinterpreted.
+
+  *This paragraph previously said openEHR names "two" algorithms, SHA-1 and
+  SHA-256. It was written from the `openehr` crate's own prose rather than from
+  the terminology, and that prose was wrong in two places. The crate's data was
+  right all along. See [`spec/audit.md`](../audit.md) **W-08**.*
 
 - **M3.40** A stored digest MUST be **32 raw bytes in a binary column**. It MUST
   NOT be stored as hexadecimal text, base64, or any other textual encoding.

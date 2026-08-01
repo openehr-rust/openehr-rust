@@ -16,10 +16,15 @@ generated DDL of all six dialects compared byte for byte; the three engines that
 can be provisioned locally actually provisioned and the DDL run against them;
 crates.io queried for what is already published.
 
-Seven findings: three High (**W-01**, **W-02**, **W-04**), three Medium
-(**W-03**, **W-05**, **W-06**), one Low (**W-07**). **Six are fixed** — W-01,
-W-02, W-04, W-05, W-06, and W-07. **W-03** is fixed going forward only: the
-published `openehr` 0.1.0 is immutable and keeps its wrong `repository` field.
+Eight findings: three High (**W-01**, **W-02**, **W-04**), three Medium
+(**W-03**, **W-05**, **W-06**), two Low (**W-07**, **W-08**). **Seven are
+fixed** — W-01, W-02, W-04, W-05, W-06, W-07, and W-08. **W-03** is fixed going
+forward only: the published `openehr` 0.1.0 is immutable and keeps its wrong
+`repository` field.
+
+**W-08** was found by reviewing a requirement against the openEHR terminology
+rather than against the code that inspired it, and is the smallest finding here
+with the largest lesson attached.
 
 W-04's fix opened four persistence-local findings, `db:D-01`–`db:D-04`, which is
 the usual pattern: rewriting a specification against the code is what makes the
@@ -305,6 +310,57 @@ message or a test name resolved to two different requirements.
 qualified forms `lib:` and `db:`. Existing unqualified citations inside a domain's
 own directory stay valid and are deliberately **not** rewritten: a citation's
 value is that it does not change.
+
+---
+
+## W-08 — "openEHR names two integrity-check algorithms" — **Low, fixed**
+
+Found by the primary-source review that `db:D-05` called for, and it is the
+finding that review existed to produce.
+
+**Claimed.** Three places said openEHR's terminology names *two* integrity-check
+algorithms, SHA-1 and SHA-256:
+
+> `openehr/Cargo.toml` — "SHA-256 is one of the two integrity-check algorithms
+> the openEHR terminology names (the other is SHA-1 …)"
+>
+> `openehr/src/security/audit_chain.rs` — "openEHR's terminology names **both**
+> as integrity check algorithms."
+>
+> `spec/databases/03-storage-model.md` `M3.39` — "openEHR's own terminology names
+> two integrity-check algorithms, SHA-1 and SHA-256."
+
+**Found.** The `integrity_check_algorithms` group in
+`openEHR/specifications-TERM` names **seven**: SHA-1, SHA-224, SHA-256, SHA-384,
+SHA-512, SHA-512/224, SHA-512/256.
+
+**The crate's own data was right the whole time.**
+`openehr/src/terminology.rs` defines all seven, correctly, and a test exercises
+them. Only the prose was wrong — in the manifest comment, in the module header,
+and then in a specification requirement I wrote *from that prose*.
+
+**Consequence.** Nil for behaviour: no code branches on the count, `SHA-256` is
+still the right choice, and `M3.39` still requires it. The damage is to the
+argument. "One of two" reads as *there was little to choose from*; "one of seven"
+requires saying why this one, which the requirement now does — SHA-1 is broken,
+the wider members buy nothing this use needs and double the stored width.
+
+**Fixed** in all three places, with `M3.39` carrying a note about what it used to
+say.
+
+**Why it is worth a finding at all.** This is `db:D-05` made concrete. That
+residual says the persistence specification was rewritten by reading the code
+rather than the openEHR sources, so some requirements are descriptions wearing
+the clothes of decisions. Here a *comment* became a *requirement's rationale*
+without anyone rechecking the source, and the library's own register already
+warned this would happen: it records four findings closed by reading a primary
+source, and **all four times the source contradicted what had been implemented**.
+
+Four of four, now five of five.
+
+**Residual.** One requirement was checked this way. The rest of
+`spec/databases/` has still not been re-derived from openEHR, so `db:D-05`
+stays open with its scope narrowed rather than closed.
 
 ---
 

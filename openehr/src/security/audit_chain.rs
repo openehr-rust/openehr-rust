@@ -43,10 +43,12 @@
 //!   entries: a chain begins where it begins, and
 //!   [`Chain::genesis_after`] records that it began late rather than pretending
 //!   otherwise.
-//! - **SHA-256, not SHA-1.** openEHR's terminology names both as integrity
-//!   check algorithms. A clinical record may be retained for decades, longer
-//!   than anyone can promise a construction will stand, and SHA-1 has already
-//!   been outlived.
+//! - **SHA-256, not SHA-1.** openEHR's `integrity_check_algorithms` group names
+//!   seven — SHA-1, SHA-224, SHA-256, SHA-384, SHA-512, SHA-512/224, and
+//!   SHA-512/256 — and this crate emits exactly one of them. SHA-1 is read,
+//!   because openEHR lists it and data exists that names it, and never written:
+//!   a clinical record may be retained for decades, longer than anyone can
+//!   promise a construction will stand, and SHA-1 has already been outlived.
 
 use crate::security::canonical::to_canonical_bytes;
 use core::fmt;

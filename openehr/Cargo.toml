@@ -28,9 +28,9 @@ serde_json = { version = "1", features = ["preserve_order"] }
 # Library errors are enumerable and matched on by callers; `anyhow` would erase
 # the discrimination between "malformed identifier" and "broken invariant".
 thiserror = "2"
-# The audit chain. SHA-256 is one of the two integrity-check algorithms the
-# openEHR terminology names (the other is SHA-1, which this crate refuses to
-# emit — see security/audit_chain.rs).
+# The audit chain. openEHR's `integrity_check_algorithms` group names seven —
+# SHA-1 through SHA-512/256 — and this crate emits exactly one of them, SHA-256.
+# SHA-1 is read and never written; see security/audit_chain.rs.
 sha2 = "0.10"
 # Keyed tags. An unkeyed digest over a published pre-image is reproducible by
 # anyone who can write the rows it covers.
