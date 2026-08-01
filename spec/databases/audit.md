@@ -103,7 +103,7 @@ Writing them surfaced things that had not been written down anywhere:
 ratified annex before it counts as evidence, and ratification for the two
 Dialect-level crates needs a live run that no available machine can provide.
 
-### D-02 — Two store requirements are unverifiable as written — **Medium, open**
+### D-02 — Two store requirements were unverifiable as written — **Medium, fixed**
 
 **Required.** `R4.5` (a multi-row read sees one snapshot) and `H5.4` (concurrent
 commits produce one winner).
@@ -115,7 +115,55 @@ No test in this repository runs two threads against one store.
 Both are recorded as `?` in the [conformance matrix](conformance-matrix.md)
 rather than `•`, which is the correct handling (`C0.20`) and not a fix.
 
-**Disposition.** Open. `T11.6` states the test that would close it.
+**Fixed 2026-08-01.** `openehr-sqlite/tests/concurrency.rs` drives both, with a
+**file** database and a connection per thread — an in-memory database is private
+to its connection, so a concurrent test against `in_memory()` would run N
+independent databases and pass without testing anything.
+
+- `R4.5` — a reader loops against a writer committing 24 versions and asserts
+  every version it can see has its index row visible too. **Passed first time**;
+  the commit transaction of `R4.4` was already doing its job.
+- `H5.4` — eight writers race for one position in a version tree. Exactly one
+  wins. **This one failed**, and is recorded as `D-06`.
+
+### D-06 — A concurrent commit refusal was reported as an engine error — **Medium, fixed**
+
+Found by the test that closed `D-02`, which is the point of writing it.
+
+**Found.** Eight writers racing for one position in a version tree produced
+exactly one winner — so the guarantee held, enforced by the unique index of
+`H5.10`. The seven losers received:
+
+```
+StoreError::Engine("SQLite: UNIQUE constraint failed: openehr_version.uid")
+```
+
+**Why that is a defect and not cosmetic.** `H5.9` requires the commit refusals
+to be **distinguishable by the caller**. A caller told `Commit` knows another
+writer took the position and can re-read the head and retry. A caller told
+"UNIQUE constraint failed" knows only that something went wrong — and cannot
+tell it from a corrupt schema, a disk error, or a bug. A version tree is
+precisely where guessing is not allowed.
+
+It is only reachable under concurrency: the single-threaded path checks the
+commit rules before inserting, so both writers pass the check, and only the
+database catches the second. Every existing test drove one store from one
+thread, which cannot distinguish "the rules hold" from "the rules hold when
+nothing else is happening".
+
+**Fixed.** The SQLite store now translates a uniqueness violation into the
+refusal it is, and the two indexes mean different things:
+
+| Index | Means | Maps to |
+| --- | --- | --- |
+| `openehr_version.uid` | the same version identity committed twice | `CommitError::DuplicateVersion` |
+| `ix_version_container_trunk` | a *different* identity took that position | `CommitError::NotLatest` |
+
+**Residual.** Only SQLite is fixed and only SQLite is tested — it is the only
+crate with a `Store`. The other five engines will need the same translation when
+they gain one, and their drivers report constraint violations differently. The
+requirement is `H5.9`; the shared conformance suite cannot check it until a
+second store exists.
 
 ### D-03 — Tamper evidence is specified, built, and unused — **Low, open**
 

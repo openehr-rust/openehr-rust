@@ -78,14 +78,14 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `R4.13` validate before writing | • | |
 | `R4.2` lossless round-trip incl. lexical instants | • | |
 | `R4.4` commit is one transaction | • | |
-| `R4.5` snapshot reads | ? | reads run in a transaction; **no concurrent reader test** |
+| `R4.5` snapshot reads | • | a reader looping against a writer never sees a version without its index row |
 | `H5.1` commit appends, never modifies | • | |
 | `H5.8` commit rules refuse mis-parented / duplicate / stale | • | |
 | `H5.10` unique index makes a duplicate fail in the database | • | |
 | `H5.2` deletion is a new version | • | |
 | `H5.12` `all_versions` oldest first | • | |
 | `H5.13` `version_at_time` skips unestablished instants | • | |
-| `H5.4` concurrent commits produce one winner | ? | index exists; **no concurrency test** |
+| `H5.4` concurrent commits produce one winner | • | 8 racing writers, one winner, losers refused by the commit rules (`D-06`) |
 | `P6.12` archetype lookup served by an index | • | |
 | `P6.8` values bound as parameters | • | |
 | `M3.33` projection refuses a non-archetype-root | • | |
@@ -118,7 +118,7 @@ silence (`W0.4`).
 | `M3.39`–`M3.42` | digest algorithm and storage | SHA-256, 32 raw bytes, binary column — no digest is stored anywhere yet, and adding one needs a new `ColTy` variant |
 | `PR12.5`, `PR12.6` | read auditing | only writes are recorded; an access investigation asks about reads |
 | `O10.14` | schema migration | no migration mechanism and no applied-version metadata |
-| `T11.6` | adversarial concurrency tests | nothing exercises concurrent access |
+
 
 | `T11.7` | redaction test over emitted logs | |
 | `X15.10` | cross-engine logical agreement | untestable: only one store exists |

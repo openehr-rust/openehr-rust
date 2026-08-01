@@ -54,12 +54,20 @@ Requirement prefix: `T11`.
 
 Listed as requirements rather than omitted, so the gap is visible (`C0.20`).
 
-- **T11.6** *(amended — **not implemented**)* Concurrency MUST be tested
+- **T11.6** *(amended — **implemented for SQLite**)* Concurrency MUST be tested
   adversarially, not assumed: a reader looping against a writer MUST never
   observe a torn read (`R4.5`), and N racing commits to one container MUST
   produce one success and N−1 refusals, with the version tree intact (`H5.4`).
 
-  Nothing in this repository exercises concurrent access to a store.
+  A concurrency test MUST use a database the threads genuinely share. An
+  in-memory SQLite database is private to its connection, so a test against one
+  runs N independent databases and passes without testing anything — the same
+  shape as a guard whose input list is incomplete (`T11.20`).
+
+  Implemented in `openehr-sqlite/tests/concurrency.rs`. The `H5.4` half failed on
+  first run and produced `D-06`: the guarantee held, but the refusal was reported
+  as an engine error rather than a commit refusal, which `H5.9` forbids. Only
+  SQLite has a `Store`, so only SQLite is covered.
 
 - **T11.9** *(amended — **implemented**)* Every parser and every function that
   accepts untrusted input MUST be fuzzed, with the fuzz targets **run, not merely

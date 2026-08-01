@@ -97,8 +97,48 @@ impl SqliteStore {
         audit_time_committed_utc, data_json";
 }
 
+/// Translates a uniqueness violation on the version table into the commit
+/// refusal it actually is.
+///
+/// The single-threaded path checks the commit rules before inserting, so this
+/// only fires under **concurrency**: two writers both read the same head, both
+/// pass the check, and the database refuses the second. That is the unique
+/// index of `db:H5.10` doing its job — the rule holds in the database and not
+/// only in the library.
+///
+/// Reporting it as `Engine` would satisfy the guarantee and fail the caller.
+/// `db:H5.9` requires refusals to be **distinguishable**: a caller told
+/// `Commit` knows another writer won and can re-read the head and retry, while
+/// a caller told "UNIQUE constraint failed" knows only that something went
+/// wrong — and a version tree is precisely where guessing is not allowed.
+///
+/// The two indexes mean different things and map differently:
+///
+/// - `openehr_version.uid` — the same version identity was committed twice.
+/// - `ix_version_container_trunk` — a *different* identity took that position
+///   in the tree, which is a concurrent modification rather than a duplicate.
+fn commit_conflict(error: &rusqlite::Error) -> Option<StoreError> {
+    use rusqlite::ErrorCode::ConstraintViolation;
+    let rusqlite::Error::SqliteFailure(code, Some(message)) = error else {
+        return None;
+    };
+    if code.code != ConstraintViolation {
+        return None;
+    }
+    if message.contains("openehr_version.uid") {
+        Some(StoreError::Commit(CommitError::DuplicateVersion))
+    } else if message.contains("ix_version_container_trunk") {
+        Some(StoreError::Commit(CommitError::NotLatest))
+    } else {
+        None
+    }
+}
+
 /// Wraps a driver error without letting row data into the message.
 fn engine(error: &rusqlite::Error) -> StoreError {
+    if let Some(conflict) = commit_conflict(error) {
+        return conflict;
+    }
     StoreError::Engine {
         engine: ENGINE,
         // `to_string` on a rusqlite error gives the SQLite message, which names
