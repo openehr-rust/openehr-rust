@@ -165,6 +165,69 @@ they gain one, and their drivers report constraint violations differently. The
 requirement is `H5.9`; the shared conformance suite cannot check it until a
 second store exists.
 
+### D-07 — The store silently drops four VERSION attributes — **High, open**
+
+Found by reading the openEHR **BMM** for RM 1.1.0 rather than the code, which is
+what `D-05` asked for. The rendered specification pages omit every class table —
+they `include::` them from a UML export — so
+`specifications-ITS-BMM/components/RM/json/openehr_rm_1.1.0.bmm.json` is the
+machine-readable source of record.
+
+**Found.** RM 1.1.0 gives `VERSION`, `ORIGINAL_VERSION`, and `AUDIT_DETAILS`
+attributes the `openehr` crate models as struct fields and the store persists
+**nowhere**:
+
+| Attribute | RM type | Modelled at | In the schema? |
+| --- | --- | --- | --- |
+| `AUDIT_DETAILS.description` | `DV_TEXT` | `common.rs:955` | no |
+| `ORIGINAL_VERSION.other_input_version_uids` | `OBJECT_VERSION_ID` | `common.rs:1348` | no |
+| `ORIGINAL_VERSION.attestations` | `ATTESTATION` | `common.rs:1353` | no |
+| `VERSION.signature` | `String` | `common.rs:1453` | no |
+
+All four are optional in the BMM. **Optional is not droppable.**
+
+`data_json` holds the version's *content* — the `COMPOSITION` — not the `VERSION`
+envelope, which is decomposed into columns (`M3.19`, `R4.8`). So an attribute
+without a column has nowhere to go, and `commit_composition` returns `Ok`.
+
+**Why this is High.** Two of the four are legally meaningful. An `ATTESTATION` is
+a clinician asserting that content is what they signed off; `VERSION.signature`
+is the signature over the version. A store that accepts an attested version,
+returns success, and cannot give the attestation back has lost the part of the
+record that made it evidence — silently, with no error and no documentation
+saying so.
+
+`AUDIT_DETAILS.description` is the free-text reason for a change: "corrected
+after telephone call with the lab". It is often the only thing that explains why
+a correction exists.
+
+**What it does and does not violate.** `R4.2` requires an openEHR object written
+and read back to equal the original. The `Store` trait does not offer read-back
+as a `Version<T>` at all — `get_version` returns a `VersionRow` — so the store
+never *claims* the round-trip for the envelope. The defect is therefore not a
+broken promise so much as an **accepted input that can never be returned**,
+undocumented, and reported as success. `S1.11` says an operation this layer does
+not implement must refuse rather than return a silent success; that is the rule
+being broken.
+
+**Two remedies, and the choice is not mine to make quietly.**
+
+1. **Refuse.** `VersionRow::project` rejects a version carrying any of the four,
+   with `StoreError::Unsupported`. No schema change, no migration, and silent
+   loss becomes an explicit refusal. It is a **behaviour change on published
+   crates**: commits that succeed today would start failing.
+2. **Persist.** Four columns, an `Attestation` needs its own table or a JSON
+   column, and there is no migration mechanism (`O10.14`) for the eight crates
+   already on crates.io at 0.1.1.
+
+Recorded rather than fixed, because both remedies change something already
+published and the tree's own rule is that such a change is stated before it is
+made (`W0.19`).
+
+**Residual until then:** anyone committing an attested or signed version through
+this store loses that attribute. The crate documentation does not say so, and
+should, whichever remedy is taken.
+
 ### D-03 — Tamper evidence is specified, built, and unused — **Low, open**
 
 **Found.** `M3.16` requires a tamper-evident chain over committed versions. The
@@ -203,6 +266,24 @@ layer.
 ## Closed
 
 ### D-05 — The specification required the architecture the code rejects — **High, fixed**
+
+**Residual narrowed twice.** The rewrite was derived from the code rather than
+from openEHR. Two reviews against primary sources have since run:
+
+- **Terminology**, against `specifications-TERM`: five groups checked code for
+  code — `audit_change_type`, `version_lifecycle_state`, `event_math_function`,
+  `composition_category`, `setting` — all exact. One prose error found and fixed
+  (`W-08`).
+- **The Reference Model**, against the RM 1.1.0 BMM: `VERSION`,
+  `ORIGINAL_VERSION`, `CONTRIBUTION`, and `AUDIT_DETAILS` attribute lists
+  checked. RM 1.1.0 confirmed as the current release, so `S1.2` is correct. One
+  **High** finding: `D-07`.
+
+What remains unreviewed is the rest of the RM — the data types, data structures,
+and EHR packages — and every *invariant*, which the BMM names (`Owner_id_valid`,
+`Preceding_version_uid_validity`, `Change_type_valid`, …) without stating. Those
+need the published PDF, and they are where the library's own four
+primary-source findings came from.
 
 **Found.** Every numbered section in this directory was imported from a FHIR
 specification and text-substituted, and §2 and §3 therefore required a **shredded

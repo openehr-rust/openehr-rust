@@ -76,7 +76,7 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `R4.11` canonicalized in Rust, not by the engine | • | shared `to_canonical_string` |
 | `R4.12` reads reconstruct from JSON, not index columns | • | |
 | `R4.13` validate before writing | • | |
-| `R4.2` lossless round-trip incl. lexical instants | • | |
+| `R4.2` lossless round-trip incl. lexical instants | ~ | the **composition** round-trips; four `VERSION`/`AUDIT_DETAILS` attributes are accepted and silently dropped — `D-07` |
 | `R4.4` commit is one transaction | • | |
 | `R4.5` snapshot reads | • | a reader looping against a writer never sees a version without its index row |
 | `H5.1` commit appends, never modifies | • | |
