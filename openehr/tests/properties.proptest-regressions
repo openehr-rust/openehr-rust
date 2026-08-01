@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc d1f3465581225d2e389ed1991f6f3c74b471830111ae852cf69e14f6d7e1ca61 # shrinks to (a, b) = (DateTime { date: Date { year: 2023, month: None, day: None, text: "2023" }, time: None, text: "2023" }, DateTime { date: Date { year: 2023, month: Some(1), day: None, text: "2023-01" }, time: None, text: "2023-01" })
+cc 0c9a36dfbff23ad5adc56fc9edaf1a666f6d295e53bf88887ce3c5c99905855c # shrinks to s = "¡+𐀀"

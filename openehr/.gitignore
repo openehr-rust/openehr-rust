@@ -1,0 +1,6 @@
+/target
+
+# `Cargo.lock` is committed, matching the other workspaces in this repository.
+# A library normally would not, but every crate here is developed and tested as
+# an application would be — the lock file is what makes "the tests passed" and
+# "the audit was run against these versions" mean the same thing twice.

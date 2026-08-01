@@ -1,0 +1,63 @@
+# `openehr` is its own workspace. It shares no code with the six FHIR ports —
+# openEHR and FHIR are different information models with different identity,
+# versioning, and archetype semantics — so folding it into one of their
+# workspaces would imply a code-sharing relationship that does not exist.
+[workspace]
+
+[package]
+name = "openehr"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT OR Apache-2.0"
+description = "openEHR Reference Model types, validation, paths, AQL parsing, and change-control security primitives"
+keywords = ["openehr", "ehr", "healthcare", "archetype", "aql"]
+categories = ["data-structures", "science", "encoding"]
+repository = "https://github.com/joelparkerhenderson/fhir-databases"
+readme = "README.md"
+
+[dependencies]
+# Canonical openEHR JSON (ITS-JSON) is the interchange format every openEHR
+# implementation speaks, so serialization is not optional infrastructure here —
+# it is half the specification surface. `derive` because the RM is ~90 structs.
+serde = { version = "1", features = ["derive"] }
+# `preserve_order` so that `other_details` and any archetyped ITEM_STRUCTURE
+# passthrough keeps its authored key order: canonical-JSON digests over a
+# BTreeMap-reordered object would not match the sender's.
+serde_json = { version = "1", features = ["preserve_order"] }
+# Library errors are enumerable and matched on by callers; `anyhow` would erase
+# the discrimination between "malformed identifier" and "broken invariant".
+thiserror = "2"
+# The audit chain. SHA-256 is one of the two integrity-check algorithms the
+# openEHR terminology names (the other is SHA-1, which this crate refuses to
+# emit — see security/audit_chain.rs).
+sha2 = "0.10"
+# Keyed tags. An unkeyed digest over a published pre-image is reproducible by
+# anyone who can write the rows it covers.
+hmac = "0.12"
+# Constant-time tag comparison. A timing oracle recovers a valid tag byte by
+# byte, which is exactly the capability the tag exists to deny.
+subtle = "2"
+# Chain keys are scrubbed on drop; freed memory is not, and a key otherwise
+# lingers in the heap and in any core dump.
+zeroize = { version = "1", features = ["zeroize_derive"] }
+
+[dev-dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }
+# Property tests (`A-09`). The example suites check the cases someone thought
+# of; the laws in tests/properties.rs check claims over generated input —
+# parser totality, `D3.10` lexical fidelity, and the partial-order axioms,
+# which is where a hand-written `partial_cmp` goes wrong.
+proptest = "1"
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Every fallible function documents its errors, and every panicking one its
+# panics: this is a clinical-data library, and a caller who does not know a
+# function can panic will not guard it.
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
