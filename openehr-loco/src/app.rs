@@ -95,6 +95,7 @@ impl Hooks for App {
         AppRoutes::empty()
             .add_route(controllers_routes::metadata())
             .add_route(controllers_routes::ehr())
+            .add_route(controllers_routes::contribution())
             .add_route(controllers_routes::composition())
     }
 
@@ -147,5 +148,8 @@ mod controllers_routes {
     }
     pub fn composition() -> Routes {
         crate::controllers::composition::routes()
+    }
+    pub fn contribution() -> Routes {
+        crate::controllers::contribution::routes()
     }
 }

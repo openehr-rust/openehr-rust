@@ -29,7 +29,7 @@ use openehr::{
     base::{HierObjectId, ObjectId, ObjectRef, ObjectVersionId},
     rm::{
         common::{AuditDetails, OriginalVersion, PartyIdentified, Version},
-        data_types::DvDateTime,
+        data_types::{DvDateTime, DvIdentifier},
         ehr::Composition,
     },
     terminology::{audit_change_type, version_lifecycle_state},
@@ -59,8 +59,37 @@ const ABSENT: &str = "6BA7B810-9DAD-11D1-80B4-00C04FD430C8";
 const SYSTEM: &str = "ehr1.example.org";
 const CONTRIBUTION: &str = "9E107D9D-3722-4EA4-A8DB-0F79A9B4E5D2";
 
+/// A committer carrying an identifier, which `db:PR12.19` requires of anything
+/// written through this service.
+fn committer(subject: &str) -> openehr::rm::common::PartyProxy {
+    PartyIdentified::new(
+        Some("Dr A Nurse".to_owned()),
+        vec![DvIdentifier::new(subject).expect("literal")],
+        None,
+    )
+    .expect("literal")
+    .into()
+}
+
 /// Builds one version of a composition in a named container.
 fn version(container: &str, n: u32, preceding: Option<u32>, deleted: bool) -> Version<Composition> {
+    version_by(
+        container,
+        n,
+        preceding,
+        deleted,
+        committer("clinician-4417"),
+    )
+}
+
+/// The same, committed by a named party.
+fn version_by(
+    container: &str,
+    n: u32,
+    preceding: Option<u32>,
+    deleted: bool,
+    by: openehr::rm::common::PartyProxy,
+) -> Version<Composition> {
     let id = |v: u32| -> ObjectVersionId {
         format!("{container}::{SYSTEM}::{v}")
             .parse()
@@ -82,9 +111,7 @@ fn version(container: &str, n: u32, preceding: Option<u32>, deleted: bool) -> Ve
         } else {
             audit_change_type::AMENDMENT
         },
-        PartyIdentified::named("Dr A Nurse")
-            .expect("literal")
-            .into(),
+        by,
     )
     .expect("literal");
     OriginalVersion::new(
@@ -522,4 +549,222 @@ async fn a_service_without_its_store_reports_503_and_not_404() {
         .expect("infallible");
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+// --- writing, and who is allowed to say they wrote it ---------------------
+
+/// A container nothing has been committed to yet.
+const FRESH: &str = "3F2504E0-4F89-11D3-9A0C-0305E82C3301";
+
+impl Served {
+    async fn send_json(
+        &self,
+        method: &str,
+        path: &str,
+        body: &Version<Composition>,
+        extra: Option<(&str, &str)>,
+    ) -> (StatusCode, String, Option<String>) {
+        let mut builder = Request::builder()
+            .method(method)
+            .uri(path)
+            .header(header::AUTHORIZATION, &self.authorization)
+            .header(header::CONTENT_TYPE, "application/json");
+        if let Some((name, value)) = extra {
+            builder = builder.header(name, value);
+        }
+        self.send(
+            builder
+                .body(Body::from(serde_json::to_vec(body).expect("json")))
+                .expect("request"),
+        )
+        .await
+    }
+
+    fn compositions(&self) -> String {
+        format!(
+            "/openehr/v1/ehr/{}/composition?contribution={CONTRIBUTION}",
+            self.ehr_id
+        )
+    }
+}
+
+#[tokio::test]
+async fn a_composition_can_be_committed_and_read_back() {
+    let served = Served::new();
+    let (status, body, etag) = served
+        .send_json(
+            "POST",
+            &served.compositions(),
+            &version(FRESH, 1, None, false),
+            None,
+        )
+        .await;
+
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(
+        etag.as_deref(),
+        Some(format!("W/\"{FRESH}::{SYSTEM}::1\"").as_str())
+    );
+
+    let (read, _, _) = served.get(&served.composition(FRESH)).await;
+    assert_eq!(
+        read,
+        StatusCode::OK,
+        "the commit must be readable immediately"
+    );
+}
+
+#[tokio::test]
+async fn committing_under_another_clinicians_name_is_refused() {
+    let served = Served::new();
+    // Everything else about this request is valid, and the caller is exactly
+    // who they say they are. They are just not this person.
+    let impostor = version_by(FRESH, 1, None, false, committer("clinician-9999"));
+
+    let (status, body, _) = served
+        .send_json("POST", &served.compositions(), &impostor, None)
+        .await;
+
+    // 403, not 401: authentication succeeded. What failed is the claim about
+    // who did the work (PR12.19).
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert!(body.contains("PR12.19"), "{body}");
+
+    // And nothing was written.
+    let (after, _, _) = served.get(&served.composition(FRESH)).await;
+    assert_eq!(after, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn an_unattributable_committer_is_refused_differently() {
+    let served = Served::new();
+    // A name and nothing else. Legitimate openEHR, and unattributable.
+    let anonymous = version_by(
+        FRESH,
+        1,
+        None,
+        false,
+        PartyIdentified::named("Dr A Nurse")
+            .expect("literal")
+            .into(),
+    );
+
+    let (status, body, _) = served
+        .send_json("POST", &served.compositions(), &anonymous, None)
+        .await;
+
+    // 422, not 403. The caller has not tried to impersonate anyone; they have
+    // sent valid openEHR this service cannot attribute, and the message has to
+    // say what would fix it.
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert!(body.contains("DV_IDENTIFIER"), "{body}");
+}
+
+#[tokio::test]
+async fn an_update_without_if_match_is_refused() {
+    let served = Served::new();
+    let (status, body, _) = served
+        .send_json(
+            "PUT",
+            &format!(
+                "/openehr/v1/ehr/{}/composition/{LIVE}?contribution={CONTRIBUTION}",
+                served.ehr_id
+            ),
+            &version(LIVE, 2, Some(1), false),
+            None,
+        )
+        .await;
+
+    assert_eq!(status, StatusCode::PRECONDITION_REQUIRED, "{body}");
+    assert!(body.contains("If-Match"), "{body}");
+}
+
+#[tokio::test]
+async fn an_update_naming_a_stale_version_is_refused() {
+    let served = Served::new();
+    let (status, body, _) = served
+        .send_json(
+            "PUT",
+            &format!(
+                "/openehr/v1/ehr/{}/composition/{GONE}?contribution={CONTRIBUTION}",
+                served.ehr_id
+            ),
+            &version(GONE, 3, Some(2), false),
+            // The GONE container is at version 2. Naming version 1 is what a
+            // second clinician sends after opening the record before the first
+            // one saved.
+            Some(("if-match", &format!("W/\"{GONE}::{SYSTEM}::1\""))),
+        )
+        .await;
+
+    // 412, not 409: the precondition the caller stated is false. A 409 would
+    // say the store refused the commit, and the caller would retry the wrong
+    // thing.
+    assert_eq!(status, StatusCode::PRECONDITION_FAILED, "{body}");
+}
+
+#[tokio::test]
+async fn an_update_naming_the_current_version_succeeds_in_either_spelling() {
+    // `W/"uid"` is what this service emits; the bare uid is what the openEHR
+    // REST API specifies. Both are accepted, or a client written against
+    // openEHR could not talk to this service (`db:H5.15`).
+    for (n, if_match) in [
+        (2u32, format!("W/\"{LIVE}::{SYSTEM}::1\"")),
+        (3, format!("{LIVE}::{SYSTEM}::2")),
+    ] {
+        let served = Served::new();
+        // Rebuild the history up to n-1 on a fresh service for the second case.
+        for step in 2..n {
+            let (status, body, _) = served
+                .send_json(
+                    "PUT",
+                    &format!(
+                        "/openehr/v1/ehr/{}/composition/{LIVE}?contribution={CONTRIBUTION}",
+                        served.ehr_id
+                    ),
+                    &version(LIVE, step, Some(step - 1), false),
+                    Some(("if-match", &format!("W/\"{LIVE}::{SYSTEM}::{}\"", step - 1))),
+                )
+                .await;
+            assert_eq!(status, StatusCode::OK, "{body}");
+        }
+
+        let (status, body, etag) = served
+            .send_json(
+                "PUT",
+                &format!(
+                    "/openehr/v1/ehr/{}/composition/{LIVE}?contribution={CONTRIBUTION}",
+                    served.ehr_id
+                ),
+                &version(LIVE, n, Some(n - 1), false),
+                Some(("if-match", &if_match)),
+            )
+            .await;
+
+        assert_eq!(status, StatusCode::OK, "{if_match}: {body}");
+        assert_eq!(
+            etag.as_deref(),
+            Some(format!("W/\"{LIVE}::{SYSTEM}::{n}\"").as_str())
+        );
+    }
+}
+
+#[tokio::test]
+async fn if_match_star_is_refused_because_it_names_nothing() {
+    let served = Served::new();
+    let (status, body, _) = served
+        .send_json(
+            "PUT",
+            &format!(
+                "/openehr/v1/ehr/{}/composition/{LIVE}?contribution={CONTRIBUTION}",
+                served.ehr_id
+            ),
+            &version(LIVE, 2, Some(1), false),
+            Some(("if-match", "*")),
+        )
+        .await;
+
+    // `*` is satisfied by any current representation, which would let a caller
+    // overwrite a version they have never seen.
+    assert_eq!(status, StatusCode::PRECONDITION_REQUIRED, "{body}");
 }

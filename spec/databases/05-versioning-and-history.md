@@ -109,6 +109,40 @@ Requirement prefix: `H5`.
   database has not been demonstrated, and is recorded as unverified rather than
   assumed (`C0.20`, `T11`).
 
+## Preconditions on a write
+
+Added 2026-08-02, when `openehr-loco` gained an update endpoint. These bind a
+**service**; the core has no notion of a request.
+
+- **H5.15** A service offering an update MUST require a precondition naming the
+  version being replaced, and MUST refuse the write when it does not name the
+  current one. It MUST answer `412 Precondition Failed` — not `409` — because
+  the two are different instructions to the caller: `412` says *the statement
+  you made about the world is false, re-read and decide*, and `409` says *the
+  store refused this commit*. A caller that conflates them retries the wrong
+  one.
+
+  `If-Match: *` MUST be refused. It is satisfied by any current representation,
+  so it would let a caller overwrite a version they have never seen — the exact
+  loss the precondition exists to prevent.
+
+  **A declared departure from RFC 9110** (`C0.16`). §13.1.1 requires *strong*
+  comparison for `If-Match`, under which a weak entity tag never matches
+  anything, so a service emitting `W/"…"` and honouring it is not conforming.
+  This departs deliberately: the tag names a **version**, and "is the head
+  still version N" is exactly the question optimistic concurrency asks. Strong
+  comparison would fail on two byte-different serialisations of one version,
+  which are the same clinical fact — rejecting correct requests to protect
+  against nothing.
+
+- **H5.16** A service MUST accept the precondition both as `W/"<version-uid>"`
+  and as the bare `<version-uid>`.
+
+  The first is what an HTTP client round-trips from the `ETag` it was given.
+  The second is what the openEHR REST API specifies, and refusing it would mean
+  a client written against openEHR could not talk to the service. Accepting
+  both costs one `strip_prefix`.
+
 ## Withdrawn
 
 Withdrawn 2026-08-01. Numbers are retained and MUST NOT be reused (`C0.5`).

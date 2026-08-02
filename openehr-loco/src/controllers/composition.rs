@@ -4,15 +4,17 @@ use axum::{
     Json,
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode, header},
-    routing::{delete, get},
+    routing::{delete, get, post, put},
 };
 use loco_rs::{app::AppContext, controller::Routes};
 use openehr::base::HierObjectId;
+use openehr::rm::common::Version;
+use openehr::rm::ehr::Composition;
 use openehr_store::{Store as _, record::VersionRow};
 use serde::Deserialize;
 
 use crate::auth::Principal;
-use crate::controllers::{status_for, store};
+use crate::controllers::{check_attribution, status_for, store};
 use crate::views::{Page, VersionView};
 
 type Reply<T> = Result<(StatusCode, HeaderMap, Json<T>), (StatusCode, String)>;
@@ -86,12 +88,12 @@ fn view(row: &VersionRow) -> VersionView {
     }
 }
 
-fn parse_id(raw: &str) -> Result<HierObjectId, (StatusCode, String)> {
+pub(crate) fn parse_id(raw: &str) -> Result<HierObjectId, (StatusCode, String)> {
     raw.parse()
         .map_err(|_| (StatusCode::BAD_REQUEST, "malformed identifier".to_owned()))
 }
 
-fn lock<T>(
+pub(crate) fn lock<T>(
     handle: &std::sync::Mutex<T>,
 ) -> Result<std::sync::MutexGuard<'_, T>, (StatusCode, String)> {
     handle.lock().map_err(|_| {
@@ -225,6 +227,151 @@ pub struct Search {
     archetype_id: String,
 }
 
+/// Which change set a commit belongs to.
+#[derive(Debug, Deserialize)]
+pub struct Commit {
+    contribution: String,
+}
+
+/// `POST /openehr/v1/ehr/{ehr_id}/composition?contribution=…`
+///
+/// The body is a whole `VERSION`, not a bare `COMPOSITION`.
+///
+/// The alternative would have this service mint the version identifier, the
+/// commit time, and the `AUDIT_DETAILS` around a composition it was handed —
+/// inventing the record of who did what, when, and why. That is clinical
+/// behaviour and belongs to the caller (`db:S1.19`, `db:PR12.9`). What this
+/// endpoint does is check the caller may make the commit they are describing,
+/// and hand it to the store.
+async fn create(
+    State(ctx): State<AppContext>,
+    principal: Principal,
+    Path(ehr_id): Path<String>,
+    Query(commit): Query<Commit>,
+    Json(version): Json<Version<Composition>>,
+) -> Reply<VersionView> {
+    check_attribution(&version, &principal)?;
+    if version.preceding_version_uid().is_some() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "this version names a predecessor, so it is an update: PUT it at its \
+             container's address with If-Match"
+                .to_owned(),
+        ));
+    }
+
+    let handle = store(&ctx)?;
+    let mut guard = lock(&handle)?;
+    let outcome = guard
+        .commit_composition(&parse_id(&ehr_id)?, &version, &commit.contribution)
+        .map_err(|e| status_for(&e))?;
+    let row = guard
+        .get_version(&outcome.version_uid)
+        .map_err(|e| status_for(&e))?;
+    let head = headers(&row.uid);
+    Ok((StatusCode::CREATED, head, Json(view(&row))))
+}
+
+/// `PUT /openehr/v1/ehr/{ehr_id}/composition/{uid}?contribution=…`
+///
+/// Requires `If-Match` naming the version being replaced.
+///
+/// # Why `If-Match` is required rather than optional
+///
+/// Without it, two clinicians who opened the same composition both commit and
+/// the second silently supersedes the first. The store would refuse a stale
+/// predecessor (`db:H5.9`), so nothing is lost — but a caller who never sent a
+/// precondition learns that only from a `409` they did not ask for. Requiring
+/// the header makes the concurrency contract explicit at the point of use.
+async fn update(
+    State(ctx): State<AppContext>,
+    principal: Principal,
+    Path((ehr_id, uid)): Path<(String, String)>,
+    Query(commit): Query<Commit>,
+    request_headers: HeaderMap,
+    Json(version): Json<Version<Composition>>,
+) -> Reply<VersionView> {
+    check_attribution(&version, &principal)?;
+    let expected = if_match(&request_headers)?;
+
+    let handle = store(&ctx)?;
+    let mut guard = lock(&handle)?;
+    let container = parse_id(&uid)?;
+    let current = guard
+        .latest_version(&container)
+        .map_err(|e| status_for(&e))?;
+
+    if current.uid != expected {
+        // 412, not 409. The distinction is worth keeping: `412` says the
+        // precondition you stated is false, so re-read and decide; `409` says
+        // the store refused the commit itself. A caller that conflates them
+        // retries the wrong one.
+        return Err((
+            StatusCode::PRECONDITION_FAILED,
+            format!(
+                "If-Match named {expected}, and the current version is {}",
+                current.uid
+            ),
+        ));
+    }
+
+    let outcome = guard
+        .commit_composition(&parse_id(&ehr_id)?, &version, &commit.contribution)
+        .map_err(|e| status_for(&e))?;
+    let row = guard
+        .get_version(&outcome.version_uid)
+        .map_err(|e| status_for(&e))?;
+    let head = headers(&row.uid);
+    Ok((StatusCode::OK, head, Json(view(&row))))
+}
+
+/// The version named by `If-Match`.
+///
+/// # Two forms are accepted, deliberately
+///
+/// `W/"<version-uid>"` is what this service emits, and the bare
+/// `<version-uid>` is what the openEHR REST API specifies. Refusing the second
+/// would mean a client written against openEHR could not talk to this service.
+///
+/// # A declared departure from RFC 9110
+///
+/// RFC 9110 §13.1.1 requires **strong** comparison for `If-Match`, under which
+/// a weak tag never matches anything. This service compares weakly, and
+/// `db:H5.15` records why: the tag names a *version*, and "is the head still
+/// version N" is precisely the question optimistic concurrency asks. A strong
+/// tag would fail on two byte-different serialisations of one version, which
+/// are the same clinical fact — so strong comparison here would reject correct
+/// requests to protect against nothing.
+fn if_match(headers: &HeaderMap) -> Result<String, (StatusCode, String)> {
+    let raw = headers
+        .get(header::IF_MATCH)
+        .ok_or((
+            StatusCode::PRECONDITION_REQUIRED,
+            "If-Match is required on an update: name the version you are replacing, \
+             as W/\"<version-uid>\" or as the bare version uid"
+                .to_owned(),
+        ))?
+        .to_str()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "malformed If-Match".to_owned()))?
+        .trim();
+
+    if raw == "*" {
+        // `*` means "any current representation". On a container that exists it
+        // is satisfied by anything, which is the opposite of what an update to
+        // a versioned record needs: it would let a caller overwrite a version
+        // they have never seen.
+        return Err((
+            StatusCode::PRECONDITION_REQUIRED,
+            "If-Match: * is not accepted here; name the version you are replacing".to_owned(),
+        ));
+    }
+    Ok(raw
+        .strip_prefix("W/")
+        .unwrap_or(raw)
+        .trim_matches('"')
+        .to_owned())
+}
+
 /// `DELETE /openehr/v1/ehr/{ehr_id}/composition/{uid}`
 ///
 /// Not implemented, and it returns `501` rather than pretending.
@@ -267,7 +414,9 @@ pub fn routes() -> Routes {
     Routes::new()
         .prefix("/openehr/v1/ehr/{ehr_id}/composition")
         .add("/", get(search))
+        .add("/", post(create))
         .add("/{uid}", get(read))
+        .add("/{uid}", put(update))
         .add("/{uid}", delete(remove))
         .add("/{uid}/_history", get(history))
         .add("/{uid}/version/{version_uid}", get(vread))

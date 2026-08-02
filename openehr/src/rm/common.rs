@@ -721,6 +721,24 @@ impl PartyProxy {
         }
     }
 
+    /// The party's formal identifiers, if this form carries any.
+    ///
+    /// Empty for a `PARTY_SELF`, which is anonymous by design and legitimately
+    /// so (`M5.16`) — not missing data.
+    ///
+    /// Beside [`PartyProxy::external_ref`] and [`PartyProxy::name`] because a
+    /// caller asking "which party is this?" should not have to match on the
+    /// variant to find out. A caller that did would answer the question three
+    /// ways, and the one that drifted would be the one nobody re-read.
+    #[must_use]
+    pub fn identifiers(&self) -> &[DvIdentifier] {
+        match self {
+            Self::SelfParty(_) => &[],
+            Self::Identified(p) => p.identifiers(),
+            Self::Related(p) => p.as_identified().identifiers(),
+        }
+    }
+
     /// The party's name, if this form carries one.
     #[must_use]
     pub fn name(&self) -> Option<&str> {

@@ -6,14 +6,18 @@
 //! what a caller is told, and the decision that matters is the one below.
 
 pub mod composition;
+pub mod contribution;
 pub mod ehr;
 pub mod metadata;
 
 use axum::http::StatusCode;
 use loco_rs::app::AppContext;
+use openehr::rm::common::{PartyProxy, Version};
+use openehr::rm::ehr::Composition;
 use openehr_store::StoreError;
 
 use crate::app::SharedOpenehrStore;
+use crate::auth::Principal;
 
 /// Borrows the store from the shared state.
 ///
@@ -81,4 +85,98 @@ pub fn status_for(error: &StoreError) -> (StatusCode, String) {
     // (`db:M3.38`), so it is safe to return. That is a property of the store's
     // errors, not of this function, and it is why this can forward them at all.
     (code, error.to_string())
+}
+
+/// Whether the committer a request supplies is the caller who sent it.
+///
+/// # The check `db:PR12.19` asks for
+///
+/// A verified subject MUST NOT silently replace the committer in the body, and
+/// a body naming somebody else MUST NOT be written. Preferring the token would
+/// overwrite the caller's stated intent without trace; preferring the body
+/// would let a verified caller commit under another clinician's name — which
+/// is the forgery `db:PR12.15` is built to prevent, arriving through the front
+/// door instead.
+///
+/// So neither wins. They must agree, or nothing is written.
+///
+/// # Why this rule may live at the HTTP edge
+///
+/// `db:S1.19` forbids a service enforcing clinical behaviour, on the grounds
+/// that a rule at the edge stops applying the moment somebody uses the store
+/// directly. This is not one of those: it is a rule about the relationship
+/// between a **caller** and a record, and there is no caller when the store is
+/// used directly. It cannot live lower down because nothing lower down has a
+/// token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Attribution {
+    /// An identifier on the committer equals the verified subject.
+    Agrees,
+    /// The committer is identified, and as somebody else.
+    Disagrees,
+    /// The committer carries no identifier to compare.
+    ///
+    /// Not the same as disagreeing, and answered differently: the caller has
+    /// not tried to impersonate anyone, they have sent something this service
+    /// cannot attribute.
+    Unidentified,
+}
+
+/// Compares a committer against the verified subject.
+///
+/// Matches on `external_ref.id` or on any `DV_IDENTIFIER.id`, never on the
+/// **name**. A name is a display string — two clinicians share one, one
+/// clinician changes theirs — and an audit trail keyed on it is one that stops
+/// being able to answer who acted the day somebody marries.
+#[must_use]
+pub fn attribution(committer: &PartyProxy, subject: &str) -> Attribution {
+    let external = committer
+        .external_ref()
+        .map(|reference| reference.id().to_string());
+    let mut candidates = committer
+        .identifiers()
+        .iter()
+        .map(|identifier| identifier.id().to_owned())
+        .chain(external)
+        .peekable();
+
+    if candidates.peek().is_none() {
+        return Attribution::Unidentified;
+    }
+    if candidates.any(|candidate| candidate == subject) {
+        Attribution::Agrees
+    } else {
+        Attribution::Disagrees
+    }
+}
+
+/// Refuses a commit whose committer is not the caller.
+///
+/// # Errors
+///
+/// `403` when the body names somebody else — the caller is who they say they
+/// are and may not act as another; `422` when the committer carries no
+/// identifier, because the request is well-formed openEHR that this service
+/// cannot attribute.
+pub fn check_attribution(
+    version: &Version<Composition>,
+    principal: &Principal,
+) -> Result<(), (StatusCode, String)> {
+    match attribution(version.commit_audit().committer(), &principal.subject) {
+        Attribution::Agrees => Ok(()),
+        Attribution::Disagrees => Err((
+            StatusCode::FORBIDDEN,
+            "the committer in AUDIT_DETAILS is not the verified caller; this service \
+             will not commit under another party's identity, and will not silently \
+             replace the one you sent (PR12.19)"
+                .to_owned(),
+        )),
+        Attribution::Unidentified => Err((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "the committer in AUDIT_DETAILS carries no identifier, so it cannot be \
+             checked against the verified caller. Give the committer an external_ref \
+             or a DV_IDENTIFIER whose id is the token subject (PR12.19)"
+                .to_owned(),
+        )),
+    }
 }

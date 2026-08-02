@@ -13,8 +13,10 @@
 //! without a token with a body that does not reveal whether the record exists,
 //! no identity header standing in for a token, the weak `ETag`, paging and its
 //! cap, `501` on `DELETE`, and `503` rather than `404` when the store is
-//! absent. The `410`, the auth gate, and the header prohibition were each
-//! mutation-checked. [`auth`] is covered separately, and `tests/tasks.rs`
+//! absent, and the write path: a committer who is not the caller, one who
+//! cannot be identified, and `If-Match` required, stale, starred, and in both
+//! spellings. The `410`, the auth gate, the header prohibition, the committer
+//! check, and the `If-Match` comparison were each mutation-checked. [`auth`] is covered separately, and `tests/tasks.rs`
 //! executes the built binary so that [`tasks`] cannot quietly become the empty
 //! body it used to be.
 //!

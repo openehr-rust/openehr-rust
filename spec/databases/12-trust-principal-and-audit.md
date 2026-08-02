@@ -128,8 +128,25 @@ of this.
   Preferring the token would let a caller's stated intent be overwritten
   without trace; preferring the body would let a verified caller commit under
   someone else's name, which is precisely the forgery `PR12.15` is built to
-  prevent, arriving through the front door instead. Binding on the first write
-  endpoint that carries an audit; no such endpoint exists yet.
+  prevent, arriving through the front door instead.
+
+  *(2026-08-02 — **implemented**.)* `openehr-loco` refuses both, and refuses
+  them differently, because they are different mistakes. A committer naming
+  somebody else is `403`: authentication succeeded and the claim about who did
+  the work did not. A committer carrying **no identifier** is `422`: the caller
+  has not tried to impersonate anyone, they have sent valid openEHR this
+  service cannot attribute, and the response says what would fix it.
+
+  Comparison is on `external_ref.id` or on any `DV_IDENTIFIER.id`, and **never
+  on the name**. A name is a display string — two clinicians share one, one
+  clinician changes theirs — and an audit trail keyed on it stops being able to
+  answer who acted on the day somebody marries.
+
+  This rule may live at the HTTP edge without breaching `S1.19`, which forbids
+  a service enforcing *clinical* behaviour on the grounds that such a rule stops
+  applying when the store is used directly. This is a rule about the
+  relationship between a **caller** and a record. There is no caller when the
+  store is used directly, and nothing below this layer holds a token.
 
 - **PR12.21** The principal MUST come from the verified token and from nothing
   else. A service MUST NOT read identity, provenance, or authority from any

@@ -7,12 +7,15 @@ Not published, and it sits **outside the conformance ladder** — every rung the
 is defined by DDL, a `Store` implementation, or a database server, and this
 crate is none of those. So it states evidence instead of a level (`W0.32`).
 
-**Demonstrated.** 35 tests. `tests/http.rs` serves real requests through Loco's
+**Demonstrated.** 42 tests. `tests/http.rs` serves real requests through Loco's
 own router: `410` for a deleted composition against `404` for one that never
 existed, the history still readable behind that `410`, `401` on every clinical
 route without a token and an identical body whether or not the record exists,
 the weak `ETag`, `_count`/`_offset`/`total` and the paging cap, `501` on
-`DELETE`, and `503` rather than `404` when the store is missing. Both of the
+`DELETE`, `503` rather than `404` when the store is missing, a commit read back
+immediately, `403` for a committer who is not the caller against `422` for one
+who cannot be identified, and `If-Match` required, stale, starred, and in both
+spellings. Both of the
 first two were mutation-checked — the branch was disabled and the test went red.
 `src/auth.rs` covers key rotation, expiry, audience binding, the implicit
 assertion, a token naming nobody, a `v4.local` token offered as `v4.public`,
@@ -62,6 +65,9 @@ found" stops looking (`S1.20`).
 | `GET` | `/openehr/v1/metadata` | what this is, and what it does **not** do |
 | `POST` | `/openehr/v1/ehr` | create a record |
 | `GET` | `/openehr/v1/ehr/{ehr_id}` | read one |
+| `POST` | `/openehr/v1/ehr/{ehr_id}/contribution` | declare a change set |
+| `POST` | `…/composition?contribution=…` | commit a first version |
+| `PUT` | `…/composition/{uid}?contribution=…` | commit a successor — **`If-Match` required** |
 | `GET` | `/openehr/v1/ehr/{ehr_id}/composition?archetype_id=…` | search the index |
 | `GET` | `…/composition/{uid}` | latest version — **`410` if deleted** |
 | `GET` | `…/composition/{uid}/_history` | every version, oldest first |
@@ -80,6 +86,37 @@ the end of the results.
 `ETag` is **weak** (`W/"…"`). A strong tag asserts byte-for-byte equality of the
 representation; this asserts only that the version is the same version, which is
 the claim the service can actually keep.
+
+### Writing
+
+The body of a write is a whole `VERSION`, not a bare `COMPOSITION`. The
+alternative would have this service mint the version identifier, the commit
+time, and the `AUDIT_DETAILS` around a composition it was handed — inventing the
+record of who did what, when, and why, which belongs to the caller (`S1.19`,
+`PR12.9`). A `CONTRIBUTION` is declared first for the same reason: it is a
+change set with its own audit (`PR12.10`), and minting one per commit would mean
+inventing the act.
+
+**The committer must be the caller** (`PR12.19`). A body naming somebody else is
+`403` — authentication succeeded, the claim about who did the work did not. A
+committer carrying no identifier is `422`, because that caller has not tried to
+impersonate anyone; they have sent valid openEHR this service cannot attribute.
+Comparison is on `external_ref.id` or any `DV_IDENTIFIER.id`, **never on the
+name**: two clinicians share a name, and one clinician changes theirs.
+
+`If-Match` is **required** on `PUT`, accepted as either `W/"<version-uid>"` or
+the bare `<version-uid>` — the first is what a client round-trips from the
+`ETag`, the second is what the openEHR REST API specifies. A stale one is `412`,
+not `409`: *the statement you made about the world is false* and *the store
+refused this commit* are different instructions, and a caller that conflates
+them retries the wrong one. `If-Match: *` is refused, since it would let a
+caller overwrite a version they have never seen.
+
+This departs from RFC 9110 §13.1.1, which requires strong comparison for
+`If-Match` — under which a weak tag never matches. Declared rather than hidden
+(`H5.15`): the tag names a *version*, which is precisely what optimistic
+concurrency asks about, and strong comparison would reject two byte-different
+serialisations of one version, which are the same clinical fact.
 
 ### `DELETE` returns 501, deliberately
 
