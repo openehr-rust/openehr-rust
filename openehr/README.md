@@ -132,7 +132,7 @@ let element: Element = serde_json::from_str(
         "null_flavour":{"value":"unknown","defining_code":
           {"terminology_id":{"value":"openehr"},"code_string":"253"}}}"#,
 )?;
-assert_eq!(element.validate().violations()[0].invariant, "Null_flavour_indicated");
+assert_eq!(element.validate().violations()[0].invariant, "Inv_null_flavour_indicated");
 ```
 
 ## Security

@@ -298,7 +298,7 @@ impl DvText {
     pub fn new(value: impl Into<String>) -> Result<Self, ParseError> {
         let value = value.into();
         if value.is_empty() {
-            return Err(ParseError::invariant("DV_TEXT", "Value_valid"));
+            return Err(ParseError::invariant("DV_TEXT", "Valid_value"));
         }
         Ok(Self {
             value,
@@ -797,7 +797,15 @@ mod tests {
         let e = DvText::new("").unwrap_err();
         assert_eq!(e.input, "");
         // And the invariant name is the one openEHR uses, so a reader can find
-        // it in the class definition.
-        assert_eq!(e.reason, "Value_valid");
+        // it in the class definition (`L10.4`).
+        //
+        // This asserted `Value_valid` until 2026-08-02, while its own comment
+        // claimed the name came from openEHR. `DV_TEXT`'s invariant is
+        // `Valid_value` — the words the other way round. A test can state a
+        // requirement and enforce its opposite, and this one did for as long as
+        // it existed; nothing compared the string against the specification
+        // until `assets/invariant-coverage.md` started doing it every run
+        // (`A-20`).
+        assert_eq!(e.reason, "Valid_value");
     }
 }

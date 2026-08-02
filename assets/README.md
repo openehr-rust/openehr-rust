@@ -39,6 +39,18 @@ type spelling, which is legal and documented — they are separated by index
 idempotence and trigger syntax, not by types — but it should be a *deliberate*
 agreement a reader can see, not a surprise.
 
+## The divergence table is now a short list of *additions*
+
+Fifteen citations named an invariant openEHR does not have and were renamed to
+its own (`lib:A-20`). What is left are rules the crate **adds** where openEHR
+states none for that class — `DV_PROPORTION.Parts_finite`,
+`INTERVAL_EVENT.Width_non_negative`, and eleven others. Those are strengthenings,
+not defects, and they need a name openEHR has not taken.
+
+The distinction is the whole value of the table: without it, a rename and an
+addition look identical, and the earlier by-hand sweep treated both as
+divergences.
+
 ## A caution about `invariant-coverage.md`
 
 **Naming an invariant is not enforcing it.** That report is a grep, and it says

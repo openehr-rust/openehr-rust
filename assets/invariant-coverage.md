@@ -25,8 +25,8 @@ merely names — see `rm-1.1.0-invariants.json`.
 | | Count |
 | --- | --- |
 | Invariants in RM 1.1.0 | 155 |
-| Named in the crate's source | 60 |
-| Not named | 95 |
+| Named in the crate's source | 74 |
+| Not named | 81 |
 
 Not-named includes invariants that are **out of scope** by a declared exclusion (EHR Extract, `lib:S1.6`; the Archetype Model, `lib:S1.4`), invariants that are **vacuous in Rust** (`X /= Void implies not X.is_empty` — an empty `Vec` is the absent case), and invariants that are genuinely unenforced. Distinguishing those three needs a human, and this file does not attempt it.
 
@@ -38,27 +38,19 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 
 | Class | Crate reports | openEHR declares |
 | --- | --- | --- |
+| `ARCHETYPED` | `Archetype_id_rm_entity_matches` | `Rm_version_valid` |
 | `COMPOSITION` | `Is_persistent_validity` | `Category_validity`, `Content_valid`, `Is_archetype_root`, `Language_valid`, `Territory_valid` |
 | `CONTACT` | `Addresses_valid` | `Purpose_valid` |
 | `DV_AMOUNT` | `Accuracy_finite` | `Accuracy_is_percent_validity`, `Accuracy_validity` |
 | `DV_PARSABLE` | `Value_valid` | `Formalism_valid`, `Size_valid` |
-| `DV_PROPORTION` | `Denominator_valid` | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
-| `DV_PROPORTION` | `Is_percent_validity` | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
-| `DV_PROPORTION` | `Is_unitary_validity` | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
 | `DV_PROPORTION` | `Parts_finite` | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
-| `DV_PROPORTION` | `Precision_valid` | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
-| `DV_TEXT` | `Value_valid` | `Encoding_valid`, `Formatting_valid`, `Language_valid`, `Mappings_valid`, `Valid_value` |
-| `ELEMENT` | `Null_flavour_valid` | `Inv_is_null_valid`, `Inv_null_flavour_indicated`, `Inv_null_flavour_valid`, `Inv_null_reason_valid` |
-| `ELEMENT` | `Null_reason_valid` | `Inv_is_null_valid`, `Inv_null_flavour_indicated`, `Inv_null_flavour_valid`, `Inv_null_reason_valid` |
+| `EVENT` | `Time_after_origin` | `Offset_validity1` |
 | `EVENT_CONTEXT` | `End_time_valid` | `Participations_validity`, `Setting_valid`, `location_valid` |
-| `HISTORY` | `Events_exists` | `Events_valid`, `Period_consistency`, `Periodic_validity` |
-| `INSTRUCTION_DETAILS` | `Activity_id_valid` | `Activity_path_valid` |
-| `INTERVAL_EVENT` | `Math_function_valid` | `Interval_start_time_valid`, `Math_function_validity` |
+| `INSTRUCTION` | `Narrative_valid` | `Activities_valid` |
 | `INTERVAL_EVENT` | `Width_non_negative` | `Interval_start_time_valid`, `Math_function_validity` |
+| `ITEM_TABLE` | `Rows_regular` | `Valid_structure` |
 | `ORIGINAL_VERSION` | `Data_valid` | `Attestations_valid`, `Is_merged_validity`, `Other_input_version_uids_valid` |
 | `ORIGINAL_VERSION` | `Lifecycle_state_valid` | `Attestations_valid`, `Is_merged_validity`, `Other_input_version_uids_valid` |
-| `PARTY` | `Uid_valid` | `Contacts_valid`, `Identities_valid`, `Is_archetype_root`, `Relationships_validity`, `Reverse_relationships_validity`, `Type_valid`, `Uid_mandatory` |
-| `REVISION_HISTORY_ITEM` | `Audits_valid` | `Audit_valid` |
 
 ## Not named in the crate's source
 
@@ -80,20 +72,14 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | `DV_INTERVAL` | `Limits_consistent` |
 | `DV_MULTIMEDIA` | `Compression_algorithm_validity` |
 | `DV_MULTIMEDIA` | `Integrity_check_algorithm_validity` |
-| `DV_MULTIMEDIA` | `Integrity_check_validity` |
 | `DV_MULTIMEDIA` | `Media_type_valid` |
-| `DV_MULTIMEDIA` | `Not_empty` |
 | `DV_MULTIMEDIA` | `Size_valid` |
 | `DV_ORDERED` | `Is_simple_validity` |
 | `DV_ORDERED` | `Other_reference_ranges_validity` |
 | `DV_PARSABLE` | `Size_valid` |
-| `DV_PROPORTION` | `Percent_validity` |
-| `DV_PROPORTION` | `Unitary_validity` |
-| `DV_PROPORTION` | `Valid_denominator` |
 | `DV_TEXT` | `Encoding_valid` |
 | `DV_TEXT` | `Language_valid` |
 | `DV_TEXT` | `Mappings_valid` |
-| `DV_TEXT` | `Valid_value` |
 | `EHR` | `Compositions_valid` |
 | `EHR` | `Contributions_valid` |
 | `EHR` | `Directory_valid` |
@@ -101,9 +87,6 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | `EHR` | `Ehr_status_valid` |
 | `EHR` | `Folders_valid` |
 | `ELEMENT` | `Inv_is_null_valid` |
-| `ELEMENT` | `Inv_null_flavour_indicated` |
-| `ELEMENT` | `Inv_null_flavour_valid` |
-| `ELEMENT` | `Inv_null_reason_valid` |
 | `ENTRY` | `Encoding_valid` |
 | `ENTRY` | `Language_valid` |
 | `ENTRY` | `Other_participations_valid` |
@@ -116,10 +99,7 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | `EXTRACT_UPDATE_SPEC` | `Send_changes_only_validity` |
 | `EXTRACT_UPDATE_SPEC` | `Trigger_events_validity` |
 | `EXTRACT_VERSION_SPEC` | `Includes_revision_history_valid` |
-| `HISTORY` | `Events_valid` |
-| `INSTRUCTION_DETAILS` | `Activity_path_valid` |
 | `INTERVAL_EVENT` | `Interval_start_time_valid` |
-| `INTERVAL_EVENT` | `Math_function_validity` |
 | `ITEM_LIST` | `Valid_structure` |
 | `ITEM_TABLE` | `Valid_structure` |
 | `ITEM_TAG` | `Inv_key_valid` |
@@ -132,7 +112,6 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | `PARTY` | `Contacts_valid` |
 | `PARTY` | `Relationships_validity` |
 | `PARTY` | `Reverse_relationships_validity` |
-| `PARTY` | `Uid_mandatory` |
 | `PARTY_IDENTIFIED` | `Identifiers_valid` |
 | `PARTY_IDENTITY` | `Purpose_valid` |
 | `PARTY_RELATIONSHIP` | `Source_valid` |
@@ -147,7 +126,6 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | `RESOURCE_DESCRIPTION_ITEM` | `Use_valid` |
 | `RESOURCE_DESCRIPTION_ITEM` | `copyright_valid` |
 | `RESOURCE_DESCRIPTION_ITEM` | `misuse_valid` |
-| `REVISION_HISTORY_ITEM` | `Audit_valid` |
 | `ROLE` | `Capabilities_valid` |
 | `TERM_MAPPING` | `Purpose_valid` |
 | `TRANSLATION_DETAILS` | `Language_valid` |

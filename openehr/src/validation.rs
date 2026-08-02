@@ -46,7 +46,7 @@
 //! let element: Element = serde_json::from_str(json).unwrap();
 //! let report = element.validate();
 //! assert!(!report.is_empty());
-//! assert_eq!(report.violations()[0].invariant, "Null_flavour_indicated");
+//! assert_eq!(report.violations()[0].invariant, "Inv_null_flavour_indicated");
 //! ```
 
 use crate::error::{ValidationReport, Violation};
@@ -134,7 +134,7 @@ fn check_locatable<L: crate::rm::common::Locatable>(node: &L, ctx: &mut Context)
     // would send a reader to the wrong class definition (`L10.4`).
     if node.name().value().is_empty() {
         ctx.nested("/name".to_owned(), |c| {
-            c.violation("DV_TEXT", "Value_valid", "value is empty");
+            c.violation("DV_TEXT", "Valid_value", "value is empty");
         });
     }
     // An archetype root whose archetype id constrains a different RM class is
@@ -321,7 +321,7 @@ impl Validate for DataValue {
             }
             Self::Proportion(p) => {
                 if p.denominator() == 0.0 {
-                    ctx.violation("DV_PROPORTION", "Denominator_valid", "denominator is zero");
+                    ctx.violation("DV_PROPORTION", "Valid_denominator", "denominator is zero");
                 }
                 if p.kind().requires_integral() && !p.is_integral() {
                     ctx.violation(
@@ -345,20 +345,20 @@ impl Validate for DataValue {
                 if !m.has_content() {
                     ctx.violation(
                         "DV_MULTIMEDIA",
-                        "Data_or_uri_valid",
+                        "Not_empty",
                         "neither inline data nor a uri is present",
                     );
                 }
                 if m.verify_integrity() == crate::rm::data_types::IntegrityCheck::Failed {
                     ctx.violation(
                         "DV_MULTIMEDIA",
-                        "Integrity_check_valid",
+                        "Integrity_check_validity",
                         "the recorded digest does not match the inline data",
                     );
                 }
             }
             Self::Text(t) if t.value().is_empty() => {
-                ctx.violation("DV_TEXT", "Value_valid", "value is empty");
+                ctx.violation("DV_TEXT", "Valid_value", "value is empty");
             }
             _ => {}
         }
@@ -374,12 +374,12 @@ impl Validate for Element {
         match (self.value().is_some(), self.null_flavour().is_some()) {
             (true, true) => ctx.violation(
                 "ELEMENT",
-                "Null_flavour_indicated",
+                "Inv_null_flavour_indicated",
                 "an element has both a value and a null_flavour",
             ),
             (false, false) => ctx.violation(
                 "ELEMENT",
-                "Null_flavour_indicated",
+                "Inv_null_flavour_indicated",
                 "an element has neither a value nor a null_flavour",
             ),
             _ => {}
@@ -387,7 +387,7 @@ impl Validate for Element {
         if self.null_reason().is_some() && self.value().is_some() {
             ctx.violation(
                 "ELEMENT",
-                "Null_reason_valid",
+                "Inv_null_reason_valid",
                 "a reason for absence is recorded on an element that has a value",
             );
         }
@@ -398,7 +398,7 @@ impl Validate for Element {
             {
                 ctx.violation(
                     "ELEMENT",
-                    "Null_flavour_valid",
+                    "Inv_null_flavour_valid",
                     "null_flavour is not one of the four openEHR null flavours",
                 );
             }
@@ -502,7 +502,7 @@ impl Validate for History {
         if self.events().is_empty() && self.summary().is_none() {
             ctx.violation(
                 "HISTORY",
-                "Events_exists",
+                "Events_valid",
                 "a history has neither events nor a summary",
             );
         }
@@ -851,7 +851,7 @@ mod tests {
         let element: Element = serde_json::from_str(json).unwrap();
         let report = element.validate();
         assert_eq!(report.len(), 1);
-        assert_eq!(report.violations()[0].invariant, "Null_flavour_indicated");
+        assert_eq!(report.violations()[0].invariant, "Inv_null_flavour_indicated");
     }
 
     #[test]

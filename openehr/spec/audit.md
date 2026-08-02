@@ -89,7 +89,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-10 | Low | `X11.24` fail-closed has no provokable error path | open |
 | A-18 | Medium | `ORIGINAL_VERSION` cannot carry a `signature`; openEHR puts it on `VERSION` | **fixed** — field, builder, accessor, round-trip test |
 | A-19 | Medium | `COMPOSITION.Territory_valid` and `Language_valid` are neither enforced nor declared | **declared** as `S1.18`; enforcement open |
-| A-20 | Medium | `L10.4` requires openEHR's own invariant names; 11 citations diverge and nothing checked | **now checked** by `assets/invariant-coverage.md`; the renames themselves are open |
+| A-20 | Medium | `L10.4` requires openEHR's own invariant names; citations diverged and nothing checked | **fixed** — 15 renamed to openEHR's names; the check runs every build. 13 remaining are crate *additions*, not renames |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
 | A-13 | Medium | One `IF NOT EXISTS` flag covered two statements MySQL treats differently | **fixed**, verified on MySQL 8.4 |

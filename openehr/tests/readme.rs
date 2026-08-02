@@ -118,7 +118,7 @@ fn two_gates_not_one() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     assert_eq!(
         element.validate().violations()[0].invariant,
-        "Null_flavour_indicated"
+        "Inv_null_flavour_indicated"
     );
     Ok(())
 }

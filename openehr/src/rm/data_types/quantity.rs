@@ -832,7 +832,7 @@ impl DvProportion {
             return Err(ParseError::invariant("DV_PROPORTION", "Parts_finite"));
         }
         if denominator == 0.0 {
-            return Err(ParseError::invariant("DV_PROPORTION", "Denominator_valid"));
+            return Err(ParseError::invariant("DV_PROPORTION", "Valid_denominator"));
         }
         // Exact float comparison, deliberately: openEHR's rule is that a
         // unitary proportion's denominator *is* 1 and a percentage's *is* 100,
@@ -844,13 +844,13 @@ impl DvProportion {
             ProportionKind::Unitary if denominator != 1.0 => {
                 return Err(ParseError::invariant(
                     "DV_PROPORTION",
-                    "Is_unitary_validity",
+                    "Unitary_validity",
                 ));
             }
             ProportionKind::Percent if denominator != 100.0 => {
                 return Err(ParseError::invariant(
                     "DV_PROPORTION",
-                    "Is_percent_validity",
+                    "Percent_validity",
                 ));
             }
             k if k.requires_integral()
@@ -915,7 +915,7 @@ impl DvProportion {
     /// numbers really are whole.
     pub fn with_precision(mut self, precision: i32) -> Result<Self, ParseError> {
         if precision < DvQuantity::UNLIMITED_PRECISION {
-            return Err(ParseError::invariant("DV_PROPORTION", "Precision_valid"));
+            return Err(ParseError::invariant("DV_PROPORTION", "Precision_validity"));
         }
         if precision == 0 && !self.is_integral() {
             return Err(ParseError::invariant("DV_PROPORTION", "Precision_validity"));

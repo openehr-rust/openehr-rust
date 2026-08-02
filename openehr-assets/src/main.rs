@@ -174,8 +174,16 @@ fn build(root: &Path) -> Vec<Asset> {
 /// dependency to a repository tool to match one literal would be the wrong
 /// trade.
 fn regex_citations(source: &str) -> Vec<(String, String)> {
+    // Two reporting forms, and missing one of them makes the report lie by
+    // omission. `ParseError::invariant` is the construction path;
+    // `ctx.violation` is the validation path, which is where most invariants
+    // are actually reported. Scanning only the first hid every divergence in
+    // `validation.rs` until a test failure surfaced it.
     let mut out = Vec::new();
-    for (index, _) in source.match_indices("ParseError::invariant(") {
+    let sites = source
+        .match_indices("ParseError::invariant(")
+        .chain(source.match_indices(".violation("));
+    for (index, _) in sites {
         let tail = &source[index..];
         let quoted: Vec<&str> = tail
             .split('"')

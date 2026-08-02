@@ -1162,7 +1162,7 @@ impl RevisionHistoryItem {
         if audits.is_empty() {
             return Err(ParseError::invariant(
                 "REVISION_HISTORY_ITEM",
-                "Audits_valid",
+                "Audit_valid",
             ));
         }
         Ok(Self { version_id, audits })

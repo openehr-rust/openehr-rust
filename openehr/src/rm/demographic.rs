@@ -314,7 +314,7 @@ impl PartyAttrs {
             reverse_relationships: Vec::new(),
         };
         if !attrs.locatable.has_uid() {
-            return Err(ParseError::invariant("PARTY", "Uid_valid"));
+            return Err(ParseError::invariant("PARTY", "Uid_mandatory"));
         }
         Ok(attrs)
     }

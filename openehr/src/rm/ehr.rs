@@ -1378,7 +1378,7 @@ impl InstructionDetails {
         if activity_id.is_empty() {
             return Err(ParseError::invariant(
                 "INSTRUCTION_DETAILS",
-                "Activity_id_valid",
+                "Activity_path_valid",
             ));
         }
         Ok(Self {

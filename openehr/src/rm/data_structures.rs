@@ -111,7 +111,7 @@ impl Element {
     ) -> Result<Self, ParseError> {
         let null_flavour = terminology::null_flavour::GROUP
             .coded_text(null_flavour_code)
-            .ok_or_else(|| ParseError::invariant("ELEMENT", "Null_flavour_valid"))?;
+            .ok_or_else(|| ParseError::invariant("ELEMENT", "Inv_null_flavour_valid"))?;
         Ok(Self {
             locatable,
             value: None,
@@ -129,7 +129,7 @@ impl Element {
     /// contradiction, and the value is the part a reader will act on.
     pub fn with_null_reason(mut self, reason: Text) -> Result<Self, ParseError> {
         if self.value.is_some() {
-            return Err(ParseError::invariant("ELEMENT", "Null_reason_valid"));
+            return Err(ParseError::invariant("ELEMENT", "Inv_null_reason_valid"));
         }
         self.null_reason = Some(reason);
         Ok(self)
@@ -675,7 +675,7 @@ impl IntervalEvent {
         }
         let math_function = terminology::event_math_function::GROUP
             .coded_text(math_function_code)
-            .ok_or_else(|| ParseError::invariant("INTERVAL_EVENT", "Math_function_valid"))?;
+            .ok_or_else(|| ParseError::invariant("INTERVAL_EVENT", "Math_function_validity"))?;
         Ok(Self {
             locatable,
             time,
@@ -953,7 +953,7 @@ impl History {
         summary: Option<ItemStructure>,
     ) -> Result<Self, ParseError> {
         if events.is_empty() && summary.is_none() {
-            return Err(ParseError::invariant("HISTORY", "Events_exists"));
+            return Err(ParseError::invariant("HISTORY", "Events_valid"));
         }
         Ok(Self {
             rm_type: HistoryTag,

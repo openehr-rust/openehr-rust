@@ -1215,15 +1215,15 @@ fn every_validation_check_fires_on_a_document_that_breaks_it() {
         // `name /= Void`. Attributing it to the wrong class would send a reader
         // to the wrong definition (`L10.4`).
         (
-            "Value_valid",
+            "Valid_value",
             r#"{"name":{"value":""},"archetype_node_id":"at0001","value":{"_type":"DV_COUNT","magnitude":1}}"#,
         ),
         (
-            "Null_flavour_indicated",
+            "Inv_null_flavour_indicated",
             r#"{"name":{"value":"x"},"archetype_node_id":"at0001"}"#,
         ),
         (
-            "Null_flavour_valid",
+            "Inv_null_flavour_valid",
             r#"{"name":{"value":"x"},"archetype_node_id":"at0001","null_flavour":{"value":"invented","defining_code":{"terminology_id":{"value":"openehr"},"code_string":"9999"}}}"#,
         ),
         (
@@ -1235,7 +1235,7 @@ fn every_validation_check_fires_on_a_document_that_breaks_it() {
             r#"{"name":{"value":"x"},"archetype_node_id":"at0001","value":{"_type":"DV_QUANTITY","magnitude":1.0,"units":"mg","precision":-7}}"#,
         ),
         (
-            "Denominator_valid",
+            "Valid_denominator",
             r#"{"name":{"value":"x"},"archetype_node_id":"at0001","value":{"_type":"DV_PROPORTION","numerator":1.0,"denominator":0.0,"type":0}}"#,
         ),
         (
@@ -1251,11 +1251,13 @@ fn every_validation_check_fires_on_a_document_that_breaks_it() {
             r#"{"name":{"value":"x"},"archetype_node_id":"at0001","value":{"_type":"DV_CODED_TEXT","value":"deletion","defining_code":{"terminology_id":{"value":"openehr"},"code_string":"249"}}}"#,
         ),
         (
-            "Data_or_uri_valid",
+            "Not_empty",
             r#"{"name":{"value":"x"},"archetype_node_id":"at0001","value":{"_type":"DV_MULTIMEDIA","media_type":{"terminology_id":{"value":"IANA_media-types"},"code_string":"image/png"}}}"#,
         ),
         (
-            "Value_valid",
+            // openEHR's name for it: `DV_TEXT.Valid_value`, not `Value_valid`
+            // (`L10.4`, `A-20`).
+            "Valid_value",
             r#"{"name":{"value":"x"},"archetype_node_id":"at0001","value":{"_type":"DV_TEXT","value":""}}"#,
         ),
     ];
