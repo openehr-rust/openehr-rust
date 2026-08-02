@@ -1,0 +1,496 @@
+[
+  {
+    "name": "openehr_ehr",
+    "note": "One row per EHR. Holds only what the EHR class itself fixes; everything else is a reference, as in the model (E6.1).",
+    "columns": [
+      {
+        "name": "ehr_id",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "HIER_OBJECT_ID of the record"
+      },
+      {
+        "name": "system_id",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "the system managing it"
+      },
+      {
+        "name": "time_created_text",
+        "ty": "Instant",
+        "nullable": false,
+        "note": "authoritative: the exact ISO 8601 form"
+      },
+      {
+        "name": "time_created_utc",
+        "ty": "InstantUtc",
+        "nullable": true,
+        "note": "derived for ordering; NULL when the instant is not established"
+      },
+      {
+        "name": "ehr_status_uid",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "versioned object holding EHR_STATUS"
+      },
+      {
+        "name": "ehr_access_uid",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "versioned object holding EHR_ACCESS"
+      }
+    ],
+    "primary_key": [
+      "ehr_id"
+    ],
+    "foreign_keys": [],
+    "indexes": [],
+    "append_only": false
+  },
+  {
+    "name": "openehr_versioned_object",
+    "note": "One row per VERSIONED_OBJECT. `rm_type` says what the versions contain — COMPOSITION, EHR_STATUS, FOLDER — because openEHR versions all of them the same way.",
+    "columns": [
+      {
+        "name": "uid",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "HIER_OBJECT_ID of the container"
+      },
+      {
+        "name": "ehr_id",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "owning record"
+      },
+      {
+        "name": "rm_type",
+        "ty": {
+          "Id": 64
+        },
+        "nullable": false,
+        "note": "COMPOSITION | EHR_STATUS | EHR_ACCESS | FOLDER"
+      },
+      {
+        "name": "time_created_text",
+        "ty": "Instant",
+        "nullable": false,
+        "note": "authoritative lexical form"
+      },
+      {
+        "name": "time_created_utc",
+        "ty": "InstantUtc",
+        "nullable": true,
+        "note": "derived"
+      }
+    ],
+    "primary_key": [
+      "uid"
+    ],
+    "foreign_keys": [
+      {
+        "column": "ehr_id",
+        "table": "openehr_ehr",
+        "references": "ehr_id"
+      }
+    ],
+    "indexes": [
+      {
+        "name": "ix_versioned_object_ehr",
+        "columns": [
+          "ehr_id",
+          "rm_type"
+        ],
+        "unique": false,
+        "note": "list a record's compositions without scanning every version"
+      }
+    ],
+    "append_only": false
+  },
+  {
+    "name": "openehr_version",
+    "note": "One row per VERSION. Append-only: a correction is a new row, and the row it corrects stays (V8.10). The version identity is stored decomposed because the commit rules are checked on its parts (V8.1).",
+    "columns": [
+      {
+        "name": "uid",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "full OBJECT_VERSION_ID, object::system::tree"
+      },
+      {
+        "name": "versioned_object_uid",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "container"
+      },
+      {
+        "name": "creating_system_id",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "the middle part of the version id — what keeps two offline systems' version 2 distinct"
+      },
+      {
+        "name": "trunk_version",
+        "ty": "Int",
+        "nullable": false,
+        "note": "version tree trunk number"
+      },
+      {
+        "name": "branch_number",
+        "ty": "Int",
+        "nullable": true,
+        "note": "NULL on the trunk"
+      },
+      {
+        "name": "branch_version",
+        "ty": "Int",
+        "nullable": true,
+        "note": "NULL on the trunk"
+      },
+      {
+        "name": "preceding_version_uid",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": true,
+        "note": "NULL only for the first version (V8.3)"
+      },
+      {
+        "name": "lifecycle_state_code",
+        "ty": {
+          "Id": 16
+        },
+        "nullable": false,
+        "note": "openEHR version_lifecycle_state code"
+      },
+      {
+        "name": "is_deleted",
+        "ty": "Bool",
+        "nullable": false,
+        "note": "derived from lifecycle_state; indexed so 'current content' does not need a code comparison"
+      },
+      {
+        "name": "contribution_uid",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "the change set"
+      },
+      {
+        "name": "audit_system_id",
+        "ty": {
+          "Text": 255
+        },
+        "nullable": false,
+        "note": "AUDIT_DETAILS.system_id"
+      },
+      {
+        "name": "audit_change_type_code",
+        "ty": {
+          "Id": 16
+        },
+        "nullable": false,
+        "note": "openEHR audit_change_type code"
+      },
+      {
+        "name": "audit_committer_name",
+        "ty": {
+          "Text": 255
+        },
+        "nullable": true,
+        "note": "NULL for an anonymous PARTY_SELF committer — which is legitimate (M5.16), not missing data"
+      },
+      {
+        "name": "audit_time_committed_text",
+        "ty": "Instant",
+        "nullable": false,
+        "note": "authoritative lexical form"
+      },
+      {
+        "name": "audit_time_committed_utc",
+        "ty": "InstantUtc",
+        "nullable": true,
+        "note": "derived; NULL when the commit time carries no UTC offset"
+      },
+      {
+        "name": "data_json",
+        "ty": "Json",
+        "nullable": true,
+        "note": "canonical JSON of the version's content; NULL only when the version is a logical deletion (V8.9)"
+      }
+    ],
+    "primary_key": [
+      "uid"
+    ],
+    "foreign_keys": [
+      {
+        "column": "versioned_object_uid",
+        "table": "openehr_versioned_object",
+        "references": "uid"
+      }
+    ],
+    "indexes": [
+      {
+        "name": "ix_version_container_trunk",
+        "columns": [
+          "versioned_object_uid",
+          "trunk_version",
+          "branch_number",
+          "branch_version"
+        ],
+        "unique": true,
+        "note": "one row per position in a version tree; also the uniqueness that makes a duplicate commit fail in the database and not only in the library (V8.2)"
+      },
+      {
+        "name": "ix_version_time",
+        "columns": [
+          "versioned_object_uid",
+          "audit_time_committed_utc"
+        ],
+        "unique": false,
+        "note": "version_at_time without scanning a container's whole history (V8.6)"
+      },
+      {
+        "name": "ix_version_preceding",
+        "columns": [
+          "preceding_version_uid"
+        ],
+        "unique": false,
+        "note": "walk a version tree forwards"
+      }
+    ],
+    "append_only": true
+  },
+  {
+    "name": "openehr_contribution",
+    "note": "One row per CONTRIBUTION — the unit a user recognises as 'I saved the consultation', which is one change set over several versions.",
+    "columns": [
+      {
+        "name": "uid",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "HIER_OBJECT_ID"
+      },
+      {
+        "name": "ehr_id",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "owning record"
+      },
+      {
+        "name": "audit_change_type_code",
+        "ty": {
+          "Id": 16
+        },
+        "nullable": false,
+        "note": "restricted to creation | amendment | deleted (V8.15)"
+      },
+      {
+        "name": "audit_system_id",
+        "ty": {
+          "Text": 255
+        },
+        "nullable": false,
+        "note": ""
+      },
+      {
+        "name": "audit_committer_name",
+        "ty": {
+          "Text": 255
+        },
+        "nullable": true,
+        "note": ""
+      },
+      {
+        "name": "audit_time_committed_text",
+        "ty": "Instant",
+        "nullable": false,
+        "note": "authoritative"
+      },
+      {
+        "name": "audit_time_committed_utc",
+        "ty": "InstantUtc",
+        "nullable": true,
+        "note": "derived"
+      }
+    ],
+    "primary_key": [
+      "uid"
+    ],
+    "foreign_keys": [
+      {
+        "column": "ehr_id",
+        "table": "openehr_ehr",
+        "references": "ehr_id"
+      }
+    ],
+    "indexes": [
+      {
+        "name": "ix_contribution_ehr_time",
+        "columns": [
+          "ehr_id",
+          "audit_time_committed_utc"
+        ],
+        "unique": false,
+        "note": "a record's change history in commit order"
+      }
+    ],
+    "append_only": true
+  },
+  {
+    "name": "openehr_composition_index",
+    "note": "The RM-level projection of a COMPOSITION version. Every column here is an attribute the Reference Model fixes, so it can be indexed without an archetype (see the module header). Anything archetype-defined stays in the JSON.",
+    "columns": [
+      {
+        "name": "version_uid",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "the version indexed"
+      },
+      {
+        "name": "ehr_id",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "owning record"
+      },
+      {
+        "name": "archetype_id",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "COMPOSITION.archetype_details.archetype_id — the commonest AQL predicate there is"
+      },
+      {
+        "name": "template_id",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": true,
+        "note": "if a template was used"
+      },
+      {
+        "name": "category_code",
+        "ty": {
+          "Id": 16
+        },
+        "nullable": false,
+        "note": "persistent | event | episodic | report"
+      },
+      {
+        "name": "composer_name",
+        "ty": {
+          "Text": 255
+        },
+        "nullable": true,
+        "note": "NULL when anonymous"
+      },
+      {
+        "name": "language_code",
+        "ty": {
+          "Id": 32
+        },
+        "nullable": false,
+        "note": "ISO 639-1"
+      },
+      {
+        "name": "territory_code",
+        "ty": {
+          "Id": 32
+        },
+        "nullable": false,
+        "note": "ISO 3166-1"
+      },
+      {
+        "name": "setting_code",
+        "ty": {
+          "Id": 16
+        },
+        "nullable": true,
+        "note": "EVENT_CONTEXT.setting"
+      },
+      {
+        "name": "context_start_text",
+        "ty": "Instant",
+        "nullable": true,
+        "note": "authoritative lexical form"
+      },
+      {
+        "name": "context_start_utc",
+        "ty": "InstantUtc",
+        "nullable": true,
+        "note": "derived"
+      },
+      {
+        "name": "context_end_text",
+        "ty": "Instant",
+        "nullable": true,
+        "note": "authoritative"
+      },
+      {
+        "name": "context_end_utc",
+        "ty": "InstantUtc",
+        "nullable": true,
+        "note": "derived"
+      }
+    ],
+    "primary_key": [
+      "version_uid"
+    ],
+    "foreign_keys": [
+      {
+        "column": "version_uid",
+        "table": "openehr_version",
+        "references": "uid"
+      }
+    ],
+    "indexes": [
+      {
+        "name": "ix_composition_archetype",
+        "columns": [
+          "ehr_id",
+          "archetype_id"
+        ],
+        "unique": false,
+        "note": "AQL's `CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.x.v1]`"
+      },
+      {
+        "name": "ix_composition_context_start",
+        "columns": [
+          "ehr_id",
+          "context_start_utc"
+        ],
+        "unique": false,
+        "note": "encounters in a date range — the second commonest AQL filter"
+      }
+    ],
+    "append_only": false
+  }
+]

@@ -1303,6 +1303,46 @@ impl<T> Version<T> {
         }
     }
 
+    /// Attestations attached to this version.
+    ///
+    /// Empty for an imported version: an `IMPORTED_VERSION` wraps the item it
+    /// received, and an attestation made elsewhere travels inside that item
+    /// rather than being re-asserted here.
+    #[must_use]
+    pub fn attestations(&self) -> &[Attestation] {
+        match self {
+            Self::Original(v) => &v.attestations,
+            Self::Imported(v) => &v.item.attestations,
+        }
+    }
+
+    /// The versions merged into this one, empty when it is not a merge.
+    #[must_use]
+    pub fn other_input_version_uids(&self) -> &[ObjectVersionId] {
+        match self {
+            Self::Original(v) => &v.other_input_version_uids,
+            Self::Imported(v) => &v.item.other_input_version_uids,
+        }
+    }
+
+    /// The signature over this version, where one was supplied.
+    ///
+    /// Carried opaquely: this crate does not verify it (`S1.11`), because doing
+    /// so needs key management that belongs to the deployment.
+    ///
+    /// **Always `None` for an original version.** openEHR puts `signature` on
+    /// `VERSION`, so `ORIGINAL_VERSION` inherits it — and this crate models it
+    /// only on `IMPORTED_VERSION`. That is a gap in the model, recorded as
+    /// `A-18`, not a property of the data: a locally created version can be
+    /// signed and this crate cannot hold the signature.
+    #[must_use]
+    pub fn signature(&self) -> Option<&str> {
+        match self {
+            Self::Original(_) => None,
+            Self::Imported(v) => v.signature.as_deref(),
+        }
+    }
+
     /// The version's content, absent for a logically deleted version.
     #[must_use]
     pub fn data(&self) -> Option<&T> {

@@ -1,0 +1,33 @@
+# Regenerates the committed artifacts under `assets/`.
+#
+# Not published: a repository tool, not part of the library's surface.
+#
+# `G2.1` — generate DDL from specification packages into `assets/` — was
+# withdrawn because openEHR has nothing to generate a schema *from* (`S1.5`).
+# This tool does the opposite job: it **renders** the schema that is already
+# declared in code, so a change to it appears as a reviewable diff instead of
+# only as a change in behaviour.
+[package]
+name = "openehr-assets"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.90"
+publish = false
+
+[dependencies]
+openehr-store = { path = "../openehr-store" }
+openehr-postgresql = { path = "../openehr-postgresql" }
+openehr-sqlite = { path = "../openehr-sqlite" }
+openehr-mysql = { path = "../openehr-mysql" }
+openehr-mariadb = { path = "../openehr-mariadb" }
+openehr-mssql = { path = "../openehr-mssql" }
+openehr-oracle = { path = "../openehr-oracle" }
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+
+[workspace]

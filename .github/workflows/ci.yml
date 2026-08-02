@@ -215,6 +215,23 @@ jobs:
           path: ${{ matrix.crate }}-fuzz/artifacts/
           if-no-files-found: ignore
 
+  # Generated artifacts under assets/ must match what the code renders. A
+  # regeneration step nobody verifies is one that stops happening, and a stale
+  # committed artifact is a lie that reviews are read against.
+  assets:
+    name: assets are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: openehr-assets
+      - name: Check
+        working-directory: openehr-assets
+        run: cargo run -- check
+
   # SQL Server and Oracle deliberately have no schema job: no server has ever
   # parsed their DDL, so both crates are at level Dialect and their
   # documentation says so. Adding a job that skipped would convert an honest

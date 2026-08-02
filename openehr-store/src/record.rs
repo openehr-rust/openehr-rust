@@ -87,8 +87,11 @@ impl VersionRow {
     /// # Errors
     ///
     /// Returns [`crate::StoreError::Json`] if the content cannot be
-    /// canonicalised.
+    /// canonicalised, or [`crate::StoreError::Unsupported`] if the version
+    /// carries an attribute this schema has no column for — see
+    /// [`refuse_unpersistable`].
     pub fn project<T: Serialize>(version: &Version<T>, contribution_uid: &str) -> Result<Self> {
+        refuse_unpersistable(version)?;
         let uid = version.uid();
         let audit = version.commit_audit();
         let data_json = version
@@ -113,6 +116,53 @@ impl VersionRow {
             data_json,
         })
     }
+}
+
+/// Refuses a version carrying an attribute this schema cannot store.
+///
+/// The schema decomposes the `VERSION` envelope into columns and stores only
+/// the *content* as canonical JSON (`M3.19`, `R4.8`). An attribute with no
+/// column therefore has nowhere to go — and until this check existed, a commit
+/// carrying one returned `Ok` and dropped it.
+///
+/// Three attributes are affected, all optional in openEHR RM 1.1.0 and none
+/// droppable:
+///
+/// - `AUDIT_DETAILS.description` — the free-text reason for a change, often the
+///   only record of *why* a correction exists.
+/// - `ORIGINAL_VERSION.attestations` — a clinician asserting that content is
+///   what they signed off. Losing it loses the thing that made the record
+///   evidence.
+/// - `ORIGINAL_VERSION.other_input_version_uids` — the versions a merge
+///   combined, without which the merge cannot be explained.
+///
+/// Refusing is the smaller of two evils, not a good outcome. `S1.11` requires
+/// an operation this layer does not implement to say so rather than return a
+/// silent success, and a caller told `Unsupported` can act, while a caller
+/// whose attestation vanished cannot. Persisting them properly needs columns
+/// this schema does not have; see `spec/databases/audit.md` **D-07**.
+///
+/// # Errors
+///
+/// Returns [`crate::StoreError::Unsupported`] naming the attribute.
+fn refuse_unpersistable<T>(version: &Version<T>) -> Result<()> {
+    let unsupported = |what: &'static str| crate::StoreError::Unsupported {
+        engine: "openehr-store",
+        what,
+        spec_ref: "spec/databases/audit.md D-07",
+    };
+    if version.commit_audit().description().is_some() {
+        return Err(unsupported("AUDIT_DETAILS.description has no column"));
+    }
+    if !version.attestations().is_empty() {
+        return Err(unsupported("ORIGINAL_VERSION.attestations has no column"));
+    }
+    if !version.other_input_version_uids().is_empty() {
+        return Err(unsupported(
+            "ORIGINAL_VERSION.other_input_version_uids has no column",
+        ));
+    }
+    Ok(())
 }
 
 /// A committer's or composer's name, where the party form carries one.
@@ -188,5 +238,62 @@ impl CompositionIndexRow {
                 .and_then(|c| c.end_time())
                 .map(|t| StoredInstant::from_date_time(t.value())),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::VersionRow;
+    use openehr::rm::common::{AuditDetails, OriginalVersion, PartyIdentified};
+    use openehr::rm::data_types::Text;
+    use openehr::rm::data_types::DvDateTime;
+    use openehr::rm::ehr::Composition;
+    use openehr::terminology::{audit_change_type, version_lifecycle_state};
+
+    /// `D-07`: a version carrying an attribute with no column is refused, not
+    /// silently stripped.
+    ///
+    /// Written after the fact, from the openEHR RM 1.1.0 BMM rather than from
+    /// the code — which is how the gap was found at all.
+    #[test]
+    fn an_audit_description_is_refused_rather_than_dropped() {
+        let audit = AuditDetails::new(
+            "ehr1.example.org",
+            DvDateTime::new("2026-08-01T09:00:00Z").expect("literal"),
+            audit_change_type::AMENDMENT,
+            PartyIdentified::named("Dr A Nurse").expect("literal").into(),
+        )
+        .expect("literal")
+        .with_description(Text::plain("corrected after telephone call with the lab").expect("literal"));
+
+        let owner = crate::conformance::sample_ehr().ehr_status().clone();
+        let version: openehr::rm::common::Version<Composition> = OriginalVersion::new(
+            format!("{}::ehr1.example.org::1", crate::conformance::RECORD)
+                .parse()
+                .expect("literal"),
+            None,
+            version_lifecycle_state::COMPLETE,
+            Some(crate::conformance::sample_composition("Encounter")),
+            audit,
+            owner,
+        )
+        .expect("literal")
+        .into();
+
+        let error = VersionRow::project(&version, "c1")
+            .expect_err("a description with no column must be refused");
+        assert!(
+            matches!(error, crate::StoreError::Unsupported { .. }),
+            "must be Unsupported, not a silent success or an engine error: {error}"
+        );
+    }
+
+    /// The control: the same version without the description projects cleanly.
+    /// A refusal that rejected everything would be indistinguishable from a
+    /// broken projection.
+    #[test]
+    fn a_version_with_no_unpersistable_attribute_projects() {
+        let version = crate::conformance::sample_version(1, None, 0);
+        VersionRow::project(&version, "c1").expect("must project");
     }
 }

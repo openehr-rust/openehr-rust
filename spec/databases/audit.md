@@ -165,7 +165,7 @@ they gain one, and their drivers report constraint violations differently. The
 requirement is `H5.9`; the shared conformance suite cannot check it until a
 second store exists.
 
-### D-07 — The store silently drops four VERSION attributes — **High, open**
+### D-07 — The store silently dropped three VERSION attributes — **High, fixed**
 
 Found by reading the openEHR **BMM** for RM 1.1.0 rather than the code, which is
 what `D-05` asked for. The rendered specification pages omit every class table —
@@ -177,14 +177,21 @@ machine-readable source of record.
 attributes the `openehr` crate models as struct fields and the store persists
 **nowhere**:
 
-| Attribute | RM type | Modelled at | In the schema? |
+| Attribute | RM type | Modelled? | In the schema? |
 | --- | --- | --- | --- |
-| `AUDIT_DETAILS.description` | `DV_TEXT` | `common.rs:955` | no |
-| `ORIGINAL_VERSION.other_input_version_uids` | `OBJECT_VERSION_ID` | `common.rs:1348` | no |
-| `ORIGINAL_VERSION.attestations` | `ATTESTATION` | `common.rs:1353` | no |
-| `VERSION.signature` | `String` | `common.rs:1453` | no |
+| `AUDIT_DETAILS.description` | `DV_TEXT` | yes | no |
+| `ORIGINAL_VERSION.other_input_version_uids` | `OBJECT_VERSION_ID` | yes | no |
+| `ORIGINAL_VERSION.attestations` | `ATTESTATION` | yes | no |
+| `VERSION.signature` | `String` | **only on `IMPORTED_VERSION`** | no |
 
-All four are optional in the BMM. **Optional is not droppable.**
+All are optional in the BMM. **Optional is not droppable.**
+
+The fourth row is a different defect and belongs to the library, not the store.
+A first pass of this finding recorded `VERSION.signature` as modelled and
+dropped; checking the field's owner before writing the fix showed it sits on
+`ImportedVersion` alone, while the BMM puts `signature` on `VERSION`, which
+`ORIGINAL_VERSION` inherits. So a locally created version cannot be signed at
+all. Split out as `lib:A-18`.
 
 `data_json` holds the version's *content* — the `COMPOSITION` — not the `VERSION`
 envelope, which is decomposed into columns (`M3.19`, `R4.8`). So an attribute
@@ -220,13 +227,24 @@ being broken.
    column, and there is no migration mechanism (`O10.14`) for the eight crates
    already on crates.io at 0.1.1.
 
-Recorded rather than fixed, because both remedies change something already
-published and the tree's own rule is that such a change is stated before it is
-made (`W0.19`).
+**Fixed by remedy 1.** `VersionRow::project` now refuses a version carrying any
+of the three, with `StoreError::Unsupported` naming the attribute and citing this
+finding. It sits in the **shared** projection, so all six engines inherit it
+rather than each needing the same check (`M3.35`).
 
-**Residual until then:** anyone committing an attested or signed version through
-this store loses that attribute. The crate documentation does not say so, and
-should, whichever remedy is taken.
+Two tests: one asserting an audit description is refused, and a control
+asserting a version without one still projects — because a refusal that rejected
+everything would be indistinguishable from a broken projection (`T11.10`).
+
+**This is a behaviour change on published crates.** Commits that succeeded at
+0.1.1 and silently lost an attestation will now fail. That is the intended
+direction: a caller told `Unsupported` can act, and a caller whose attestation
+vanished cannot.
+
+**Residual.** Refusing is the smaller evil, not a good outcome. openEHR permits
+these attributes and this store still cannot hold them; remedy 2 — columns, and
+a table or JSON column for attestations — remains the real fix, and needs a
+migration mechanism this project does not have (`O10.14`).
 
 ### D-03 — Tamper evidence is specified, built, and unused — **Low, open**
 
