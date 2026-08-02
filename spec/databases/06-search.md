@@ -53,6 +53,40 @@ Requirement prefix: `P6`.
   established. Ordering on the lexical form sorts
   `2026-07-31T09:00:00+02:00` after `2026-07-31T08:30:00Z`.
 
+## Search targets and adjuncts
+
+Added 2026-08-02. `D-08` changed a premise this section was rewritten under.
+
+- **P6.16** Every column a query filters, orders, joins, or groups on is a
+  **search target**, and MUST declare the kind of search it serves — identity,
+  prefix, range, membership, or containment. See
+  [`search-adjuncts.md`](search-adjuncts.md) `AD1`–`AD2`.
+
+  `P6.13` requires an index to record the query it exists for. This is the same
+  obligation one level down, and it exists because the remedy for a column an
+  engine cannot search depends entirely on *which* search: the two adjuncts
+  answer different questions and neither answers both.
+
+- **P6.17** Where an engine cannot serve a search target's declared kind on the
+  column's own type, that dialect MUST emit the adjuncts
+  [`search-adjuncts.md`](search-adjuncts.md) specifies, and MUST NOT answer the
+  search from an adjunct alone (`AD11`, `AD12`).
+
+- **P6.18** **No search target requires an adjunct today.** Every indexed column
+  in the schema is `Id(n)`, `Int`, or `InstantUtc`, and all six engines index
+  and compare those. `P6.16`–`P6.17` bind the first target that is not, and are
+  written in advance because one is now foreseeable rather than hypothetical.
+
+- **P6.19** The canonical JSON column MUST NOT be given a structural or
+  path index (`AD18`). Content inside a stored document is not queryable here
+  (`P6.10`), and a path index requires the engine to parse and reinterpret the
+  column — which `M3.43` forbids, because the bytes it then returns are not the
+  bytes the content digest was taken over (`M3.16d`).
+
+  This is the requirement most likely to be proposed as an optimisation by
+  somebody who has read `P6.10` and concluded that indexing content is merely
+  unimplemented rather than excluded.
+
 ## Query construction
 
 - **P6.8** Every predicate MUST bind user-supplied values as **parameters**,
@@ -84,15 +118,30 @@ Withdrawn 2026-08-01. Numbers are retained and MUST NOT be reused (`C0.5`).
 | `P6.1` | compile all standard `SearchParameter`s of each version | a FHIR construct; there are no search parameters (`P6.10`) |
 | `P6.2` | case-insensitive prefix match with `:exact`/`:contains` | no text search |
 | `P6.3` | `_count`, opaque paging cursors, `_include`/`_revinclude` | FHIR REST result parameters; §7 is retired (`C0.6`) |
-| `P6.4a` | fallback where an engine cannot index a bound text column | no unbounded searchable text columns exist |
+| `P6.4a` | fallback where an engine cannot index a bound text column | no unbounded searchable text columns existed; the obligation returns as `P6.17` — see the note below |
 | `P6.5` | unsupported search parameters return a warning and are ignored | no search parameters; an unsupported operation refuses (`S1.11`) |
 | `P6.6`, `P6.6a` | Unicode case/accent fold; prefix search as a range predicate | no text search and no fold |
-| `P6.9` | unbounded text columns need a bounded adjunct and a checksum adjunct | same; the cross-cutting file specifying this is withdrawn with it |
+| `P6.9` | unbounded text columns need a bounded adjunct and a checksum adjunct | same; superseded by `P6.17` and `AD1`–`AD20` — see the note below |
 
-The two cross-cutting documents that supported these — `locale-accent-folding.md`
-and `unbounded-string-search-must-have-bounded-adjunct-and-checksum-adjunct.md` —
-are withdrawn for the same reason. They specify machinery for a text-search
-feature this layer does not have.
+The two cross-cutting documents that supported these —
+[`locale-accent-folding.md`](locale-accent-folding.md) and
+[`unbounded-string-search-must-have-bounded-adjunct-and-checksum-adjunct.md`](unbounded-string-search-must-have-bounded-adjunct-and-checksum-adjunct.md)
+— stay withdrawn. They specify machinery for case- and accent-insensitive text
+search, which this layer still does not have.
+
+**One half of that reasoning stopped being true.** These were withdrawn partly
+because no unbounded searchable column existed. `D-08` moved canonical JSON off
+`jsonb` and MySQL's `JSON` onto a byte-preserving text type (`M3.43`), and on
+Oracle that is a `CLOB` — a column that engine can neither index nor `=`
+compare. The largest column in the schema is now the one fewest engines can
+search.
+
+So the adjunct obligation returns, under new numbers, in
+[`search-adjuncts.md`](search-adjuncts.md). The **fold** does not: `AD8`
+requires a binary collation precisely so that no second definition of string
+identity is introduced. Numbers are not reused (`C0.5`) — `P6.4a`, `P6.6`,
+`P6.6a`, `P6.9` and `U1`–`U10` remain withdrawn, and the successors supersede
+rather than revive them.
 
 ---
 

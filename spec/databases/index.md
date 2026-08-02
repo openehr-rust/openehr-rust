@@ -61,8 +61,9 @@ resolves to the same subject, or to an explicit withdrawal.
 | [13. Compliance mapping](13-compliance-mapping.md) | **Rewritten** |
 | [15. Portability and dialects](15-portability-and-dialects.md) | **Rewritten** |
 | [16. Repository and release](16-repository-and-release.md) | **Rewritten** |
+| [search-adjuncts](search-adjuncts.md) | `AD1`–`AD20`: what a search target is, and the adjuncts a column needs where an engine cannot index or compare it. **Nothing emits one today** (`P6.18`) |
 | [locale-accent-folding](locale-accent-folding.md) | **Withdrawn** — nothing here does text search (`P6.6`) |
-| [unbounded-string-search…](unbounded-string-search-must-have-bounded-adjunct-and-checksum-adjunct.md) | **Withdrawn** — same reason (`P6.9`) |
+| [unbounded-string-search…](unbounded-string-search-must-have-bounded-adjunct-and-checksum-adjunct.md) | **Withdrawn** — superseded by [search-adjuncts](search-adjuncts.md); `U1`–`U10` are not reused (`C0.5`) |
 
 The rewrite was done by reading **the code**, not by re-deriving requirements
 from the openEHR specifications. Where a requirement here is now a description of

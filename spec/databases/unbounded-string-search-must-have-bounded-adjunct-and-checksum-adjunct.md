@@ -8,9 +8,19 @@
 > searchable columns (`P6.10`). The requirements it supported — `P6.4a`, `P6.6`,
 > `P6.6a`, `P6.9`, and `X15.4` — are withdrawn.
 >
-> It is retained, not deleted, because its reasoning is sound and would apply
-> directly if a text-search capability is ever added. Nothing here is normative.
-> See [`06-search.md`](06-search.md) and [`spec/audit.md`](../audit.md) **W-04**.
+> It is retained, not deleted, because its reasoning is sound. Nothing here is
+> normative. See [`06-search.md`](06-search.md) and
+> [`spec/audit.md`](../audit.md) **W-04**.
+>
+> **Superseded 2026-08-02 by [`search-adjuncts.md`](search-adjuncts.md).** Half
+> the reason for withdrawing this was that no unbounded searchable column
+> existed. `D-08` moved canonical JSON off `jsonb` and MySQL's `JSON` onto a
+> byte-preserving text type (`M3.43`), which on Oracle is a `CLOB` — neither
+> indexable nor `=` comparable. The adjunct obligation therefore returns, under
+> `AD1`–`AD20` and **not** under `U1`–`U10`, which stay withdrawn and are never
+> reused (`C0.5`). The successor also drops the case- and accent-folding this
+> document assumed: `AD8` requires a binary collation, so no second definition
+> of string identity is introduced.
 
 
 Normative rules for making an unbounded text column searchable on an engine that
