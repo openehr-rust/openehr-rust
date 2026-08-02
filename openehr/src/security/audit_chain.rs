@@ -52,7 +52,9 @@
 
 use crate::security::canonical::to_canonical_bytes;
 use core::fmt;
-use hmac::{Hmac, Mac};
+// The trait is imported anonymously so its name does not collide with this
+// module's `Mac` type, which is the tag itself rather than the algorithm.
+use hmac::{Hmac, Mac as _};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
@@ -193,11 +195,73 @@ impl ChainKey {
         &self.id
     }
 
-    fn tag(&self, pre_image: &[u8]) -> Vec<u8> {
+    fn tag(&self, pre_image: &[u8]) -> Mac {
         let mut mac =
             HmacSha256::new_from_slice(&self.material).expect("HMAC accepts a key of any length");
         mac.update(pre_image);
-        mac.finalize().into_bytes().to_vec()
+        Mac(mac.finalize().into_bytes().into())
+    }
+}
+
+/// An HMAC-SHA-256 tag, comparable **only** in constant time.
+///
+/// # Why this is a type and not a `Vec<u8>`
+///
+/// `X11.12` requires tag comparison to be constant-time, because a byte-by-byte
+/// early return is a timing oracle: an attacker with write access recovers a
+/// valid tag one byte at a time, and then their forgery verifies.
+///
+/// This deliberately implements **neither `PartialEq` nor `Eq`**, so
+/// `expected == tag.mac` does not compile. The rule was previously kept by one
+/// `ct_eq` call and the discipline not to replace it — and `==` is what anyone
+/// simplifying this code would reach for first, would find compiles, and would
+/// find passes every test.
+///
+/// It is the same trade as `db:ColTy` not being `#[non_exhaustive]` and as
+/// PASETO over JWT (`db:PR12.14`): prefer the design where the dangerous thing
+/// cannot be *expressed* over the one where it can be expressed and must be
+/// caught.
+///
+/// It is not absolute, and the limit is worth stating. Nothing stops a
+/// determined caller comparing `as_bytes()` directly, and **no test proves the
+/// absence of `PartialEq`**: a `compile_fail` doctest was written for it and
+/// then deleted, because `ChainKey::tag` is private, so the block failed to
+/// compile whether or not `Mac` derived `PartialEq`. It passed for the wrong
+/// reason, which a mutation check caught by adding the derive and watching the
+/// doctest stay green.
+///
+/// What is left is a type-level property with one enforcing reader: the only
+/// comparison in this crate is [`Mac::matches`], and `==` beside it does not
+/// compile. That is why `X11.12` stays **?** in the conformance matrix.
+pub struct Mac([u8; 32]);
+
+impl Mac {
+    /// The tag's bytes, for storage.
+    ///
+    /// A store persists these (`db:M3.16`) and reads them back into
+    /// [`Tag::from_stored`]. Comparison MUST NOT go through here — use
+    /// [`Mac::matches`].
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// Whether a candidate tag is this one, compared in constant time.
+    ///
+    /// A candidate of the wrong length answers `false`; a tag's length is not
+    /// secret, so returning early on it leaks nothing.
+    #[must_use]
+    pub fn matches(&self, candidate: &[u8]) -> bool {
+        self.0.as_slice().ct_eq(candidate).unwrap_u8() == 1
+    }
+}
+
+impl fmt::Debug for Mac {
+    /// Prints the length and not the tag. A tag in a log is one an attacker no
+    /// longer has to forge, and `{:?}` on a struct holding one is the usual way
+    /// it escapes — the same reasoning as [`ChainKey`]'s own `Debug`.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Mac").field("bytes", &self.0.len()).finish()
     }
 }
 
@@ -556,7 +620,7 @@ impl Chain {
         if let Some(key) = key {
             entry.tag = Some(Tag {
                 key_id: key.id().to_owned(),
-                mac: key.tag(&pre_image),
+                mac: key.tag(&pre_image).as_bytes().to_vec(),
             });
         }
         let digest = entry.digest;
@@ -602,7 +666,8 @@ impl Chain {
                 let expected = key.tag(&pre_image);
                 // Constant time: a byte-by-byte early return here is a timing
                 // oracle that hands an attacker with write access a valid tag.
-                if expected.ct_eq(&tag.mac).unwrap_u8() != 1 {
+                // Constant time, and `==` on a `Mac` does not compile.
+                if !expected.matches(&tag.mac) {
                     return ChainStatus::Broken {
                         at: i,
                         reason: BreakReason::TagMismatch,

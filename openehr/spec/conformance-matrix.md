@@ -330,7 +330,7 @@ Process requirements; they govern this specification rather than the code.
 | X11.9 | • | `audit_chain::tests::removing_an_entry_from_the_middle_breaks_the_link` |
 | X11.10 | doc | `audit_chain` module header |
 | X11.11 | • | `audit_chain::tests::a_clean_chain_verifies_and_an_edited_one_does_not` |
-| X11.12 | ? | `subtle::ConstantTimeEq`; timing is not measured |
+| X11.12 | ? | `Mac` implements neither `PartialEq` nor `Eq`, so `==` beside the one comparison does not compile; `guarantees::a_forged_tag_is_refused` pins the behaviour. Timing is still not measured, and the absence of the derive is not itself tested — see `Mac`'s documentation for why a `compile_fail` for it passed for the wrong reason |
 | X11.13 | • | `audit_chain::tests::an_unheld_key_is_reported_as_such_and_not_as_forgery`, `…::a_forged_tag_under_a_held_key_is_a_finding`, `…::an_unkeyed_chain_does_not_claim_full_verification` |
 | X11.14 | • | `audit_chain::tests::key_rotation_is_additive` |
 | X11.15 | • | `invariants::a_chain_begins_where_it_begins_and_says_when_it_began_late` |

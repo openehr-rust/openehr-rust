@@ -433,3 +433,41 @@ fn no_document_this_crate_can_build_carries_a_non_finite_float() {
     );
 }
 
+/// `X11.12`: tag comparison is constant-time, and the *natural* wrong way to
+/// write it does not compile.
+///
+/// Timing is not measured — a timing assertion in a unit test is a flake
+/// generator, and the matrix records `X11.12` as **?** for that reason. The
+/// The structural half is not pinned by a test either, and `Mac`'s own
+/// documentation says why: a `compile_fail` doctest for it passes whether or
+/// not the derive is there, because the constructor it would need is private.
+/// What this test pins is the behaviour that matters — a tag from the wrong
+/// key is refused, and refused *as a tag mismatch* rather than as a missing or
+/// unknown key (`X11.13`).
+///
+/// The rule was previously kept by one `ct_eq` call and the discipline not to
+/// replace it, and `==` is what anyone simplifying that line would reach for.
+#[test]
+fn a_forged_tag_is_refused() {
+    let key = ChainKey::new("k1", vec![7u8; 32]).unwrap();
+    let other = ChainKey::new("k1", vec![9u8; 32]).unwrap();
+
+    let mut chain = openehr::security::Chain::new();
+    chain.append("v1", &"content", Some(&key)).unwrap();
+    assert!(matches!(
+        chain.verify(&[&key]),
+        openehr::security::ChainStatus::Verified
+    ));
+
+    // A key with the same id and different material is the forgery this is
+    // for: the entry names `k1`, so verification finds a key and the tag has
+    // to do the work.
+    assert!(matches!(
+        chain.verify(&[&other]),
+        openehr::security::ChainStatus::Broken {
+            reason: openehr::security::BreakReason::TagMismatch,
+            ..
+        }
+    ));
+}
+
