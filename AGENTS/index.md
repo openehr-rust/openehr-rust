@@ -30,7 +30,7 @@ four things: type spellings, identifier quoting, placeholder style, and
 append-only enforcement. Only `openehr-sqlite` also has a `Store`. Seven fuzz harnesses drive the properties — six over the dialects and
 `openehr-fuzz` over the Reference Model parsers; all are `publish = false`.
 
-The eight publishable crates are live on crates.io at **0.1.1**. Each engine
+The eight publishable crates are live on crates.io at **0.2.0**. Each engine
 crate carries a dialect annex at `spec/14-<engine>-dialect.md`.
 
 ## The failure this architecture is shaped by

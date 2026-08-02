@@ -60,11 +60,11 @@ Full definitions in [`spec/index.md`](spec/index.md); current status in
 
 ```toml
 [dependencies]
-openehr = "0.1"
+openehr = "0.2"
 
 # and, if you want persistence:
-openehr-store = "0.1"
-openehr-sqlite = "0.1"
+openehr-store = "0.2"
+openehr-sqlite = "0.2"
 ```
 
 Requires Rust 1.90+ (edition 2024).

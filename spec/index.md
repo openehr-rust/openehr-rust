@@ -118,7 +118,7 @@ seven fuzz harnesses that are not.
 The [conformance matrix](databases/conformance-matrix.md) is the detailed
 version of that last column and is the one to trust.
 
-All eight are on crates.io at **0.1.1**.
+All eight are on crates.io at **0.2.0**.
 
 ### The fuzz crates
 

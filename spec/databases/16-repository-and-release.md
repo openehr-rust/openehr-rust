@@ -81,7 +81,20 @@ Requirement prefix: `W16`.
 ## Versioning and publishing
 
 - **W16.11** *(amended)* Crates MAY version independently. They currently share
-  `0.1.1`, which is a fact about their history rather than a rule.
+  `0.2.0`, which is a fact about their history rather than a rule.
+- **W16.20** A release that changes behaviour a caller can observe MUST bump the
+  version cargo treats as **incompatible**, not the one it treats as a patch.
+  Below `1.0` that means `0.1.x` → `0.2.0`, never `0.1.1` → `0.1.2`.
+
+  Cargo resolves `openehr-store = "0.1"` to any `0.1.x`, so a behaviour change
+  shipped as a patch reaches every existing caller on a routine `cargo update`,
+  unasked. That is the same failure this repository spends its audit register on,
+  moved from documentation into version numbers.
+
+  0.2.0 was published for exactly this reason: `commit_composition` began
+  refusing versions carrying an attestation, an audit description, merge inputs,
+  or a signature (`D-07`), and invariant names in error text changed (`lib:A-20`).
+  Both are improvements; neither should arrive without being asked for.
 - **W16.17** A crate's declared dependency version on a sibling MUST match that
   sibling's actual version.
 

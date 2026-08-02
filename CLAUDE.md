@@ -13,7 +13,7 @@ plus the things that specifically trip up automated work here.
 ## Layout
 
 Fifteen crates, **each its own Cargo workspace**. There is no root workspace —
-run cargo from inside a crate directory. Eight are published at 0.1.1; the seven
+run cargo from inside a crate directory. Eight are published at 0.2.0; the seven
 fuzz harnesses (`openehr-fuzz` and six `openehr-<engine>-fuzz`) are
 `publish = false`.
 
@@ -76,7 +76,7 @@ warnings — keep it there.**
   Model) and `db:S1.4` (declare an engine floor) are different requirements.
   Qualify citations with `lib:` or `db:` (`W0.5`).
 - **`openehr` is already on crates.io at 0.1.0**, published with a wrong
-  `repository` field that is now immutable. Local versions are 0.1.1. Read
+  `repository` field that is now immutable. Local versions are 0.2.0. Read
   [`AGENTS/publishing.md`](AGENTS/publishing.md) before any publish.
 - **CI is green and `openehr-sqlite` is at Verified.** Every other crate is at
   Schema or Dialect and must not be promoted without evidence. Do not write text
