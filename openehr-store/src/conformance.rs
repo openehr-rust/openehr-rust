@@ -315,6 +315,74 @@ pub fn run<S: Store>(store: &mut S) -> Result<()> {
         "{engine}: archetype index matched the wrong archetype"
     );
 
+    // --- the tamper-evidence chain (M3.16) -----------------------------------
+    //
+    // Here rather than in one engine's own tests. These assertions were written
+    // against SQLite first and left there, which would have let a second engine
+    // pass `run` while chaining nothing at all — the failure this module's
+    // header is about, in the module itself.
+    let chained = store.all_versions(&container)?;
+    assert!(
+        chained.len() >= 2,
+        "{engine}: the chain assertions need at least two versions"
+    );
+    assert_eq!(
+        chained[0].chain.previous, [0u8; 32],
+        "{engine}: the first version must link to the genesis digest"
+    );
+    for pair in chained.windows(2) {
+        assert_eq!(
+            pair[1].chain.previous, pair[0].chain.digest,
+            "{engine}: version {} does not link to {}",
+            pair[1].uid, pair[0].uid
+        );
+    }
+    for row in &chained {
+        assert_ne!(
+            row.chain.digest, [0u8; 32],
+            "{engine}: a version has no chain digest"
+        );
+        assert_ne!(
+            row.chain.content, row.chain.digest,
+            "{engine}: the content digest and the entry digest must differ"
+        );
+    }
+
+    // --- the checkpoint (M3.16c) ---------------------------------------------
+    let checkpoint = store.chain_checkpoint(&container)?;
+    assert!(
+        checkpoint.starts_with(&format!("entries={} ", chained.len())),
+        "{engine}: the checkpoint must count the versions it covers: {checkpoint}"
+    );
+    assert!(
+        !checkpoint.contains("Encounter"),
+        "{engine}: a checkpoint must carry no clinical content: {checkpoint}"
+    );
+
+    // --- the attributes that used to be dropped (D-07) -----------------------
+    //
+    // The sample carries none of them, so what is asserted is that the columns
+    // read back as absent rather than as something invented. A store that
+    // returned `Some("")` here would be losing the distinction between "no
+    // description" and "an empty one".
+    let head = store.latest_version(&container)?;
+    assert!(
+        head.audit_description.is_none(),
+        "{engine}: an absent audit description must read back absent"
+    );
+    assert!(
+        head.signature.is_none(),
+        "{engine}: an absent signature must read back absent"
+    );
+    assert!(
+        head.attestations_json.is_none(),
+        "{engine}: no attestations must be NULL, not an empty array"
+    );
+    assert!(
+        head.other_input_version_uids_json.is_none(),
+        "{engine}: a non-merge must be NULL, not an empty array"
+    );
+
     // --- missing things ------------------------------------------------------
     let absent = HierObjectId::from_uid_str("99999999-9999-4999-8999-999999999999")?;
     assert!(matches!(
