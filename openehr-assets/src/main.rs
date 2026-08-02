@@ -222,6 +222,499 @@ fn regex_citations(source: &str) -> Vec<(String, String)> {
 /// The invariants come from `assets/rm-1.1.0-invariants.json`, distilled from
 /// the openEHR BMM. The BMM carries the **expressions**, not merely the names,
 /// which is what made this checkable at all.
+/// How an invariant the crate does not **name** is accounted for.
+///
+/// The coverage report used to end at "not named" and say that telling these
+/// apart "needs a human". That sentence was true for as long as nobody did it,
+/// and while it stood, a genuine gap was indistinguishable from a class this
+/// crate deliberately does not model. Starting the work found `lib:A-23` within
+/// the hour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Disposition {
+    /// The class is outside the crate's declared scope.
+    Excluded,
+    /// The invariant cannot fail in Rust: an empty `Vec` *is* openEHR's absent
+    /// case, or the predicate is derived from the field it constrains.
+    Vacuous,
+    /// Enforced, under a name openEHR does not use. An `lib:L10.4` defect: the
+    /// rule holds and a reader cannot find it from the class definition.
+    Renamed,
+    /// Genuinely not enforced.
+    Unenforced,
+}
+
+impl Disposition {
+    const fn heading(self) -> &'static str {
+        match self {
+            Self::Excluded => "Out of scope",
+            Self::Vacuous => "Cannot fail in Rust",
+            Self::Renamed => "Enforced under another name (`lib:L10.4`)",
+            Self::Unenforced => "**Not enforced**",
+        }
+    }
+}
+
+/// Why each unnamed invariant is not named.
+///
+/// Every invariant the grep does not find MUST appear here, or the build fails.
+/// That is the point: a new RM release, or a rename, cannot quietly add an
+/// unexamined rule to a list nobody reads to the bottom of.
+const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
+    // --- out of scope: the Archetype Model and authored resources (lib:S1.4) --
+    (
+        "AUTHORED_RESOURCE",
+        "Current_revision_valid",
+        Disposition::Excluded,
+        "no archetype or template is modelled",
+    ),
+    (
+        "AUTHORED_RESOURCE",
+        "Description_valid",
+        Disposition::Excluded,
+        "no archetype or template is modelled",
+    ),
+    (
+        "AUTHORED_RESOURCE",
+        "Languages_available_valid",
+        Disposition::Excluded,
+        "no archetype or template is modelled",
+    ),
+    (
+        "AUTHORED_RESOURCE",
+        "Original_language_valid",
+        Disposition::Excluded,
+        "no archetype or template is modelled",
+    ),
+    (
+        "AUTHORED_RESOURCE",
+        "Revision_history_valid",
+        Disposition::Excluded,
+        "no archetype or template is modelled",
+    ),
+    (
+        "AUTHORED_RESOURCE",
+        "Translations_valid",
+        Disposition::Excluded,
+        "no archetype or template is modelled",
+    ),
+    (
+        "RESOURCE_DESCRIPTION",
+        "Details_valid",
+        Disposition::Excluded,
+        "describes an authored resource",
+    ),
+    (
+        "RESOURCE_DESCRIPTION",
+        "Language_valid",
+        Disposition::Excluded,
+        "describes an authored resource",
+    ),
+    (
+        "RESOURCE_DESCRIPTION",
+        "Original_author_valid",
+        Disposition::Excluded,
+        "describes an authored resource",
+    ),
+    (
+        "RESOURCE_DESCRIPTION",
+        "Parent_resource_valid",
+        Disposition::Excluded,
+        "describes an authored resource",
+    ),
+    (
+        "RESOURCE_DESCRIPTION_ITEM",
+        "Language_valid",
+        Disposition::Excluded,
+        "describes an authored resource",
+    ),
+    (
+        "RESOURCE_DESCRIPTION_ITEM",
+        "Purpose_valid",
+        Disposition::Excluded,
+        "describes an authored resource",
+    ),
+    (
+        "RESOURCE_DESCRIPTION_ITEM",
+        "Use_valid",
+        Disposition::Excluded,
+        "describes an authored resource",
+    ),
+    (
+        "RESOURCE_DESCRIPTION_ITEM",
+        "copyright_valid",
+        Disposition::Excluded,
+        "describes an authored resource",
+    ),
+    (
+        "RESOURCE_DESCRIPTION_ITEM",
+        "misuse_valid",
+        Disposition::Excluded,
+        "describes an authored resource",
+    ),
+    (
+        "TRANSLATION_DETAILS",
+        "Language_valid",
+        Disposition::Excluded,
+        "describes an authored resource",
+    ),
+    // --- out of scope: EHR Extract (lib:S1.6) -------------------------------
+    (
+        "EXTRACT",
+        "Sequence_nr_valid",
+        Disposition::Excluded,
+        "EHR Extract is not modelled",
+    ),
+    (
+        "EXTRACT_CONTENT_ITEM",
+        "Item_validity",
+        Disposition::Excluded,
+        "EHR Extract is not modelled",
+    ),
+    (
+        "EXTRACT_UPDATE_SPEC",
+        "Overall_validity",
+        Disposition::Excluded,
+        "EHR Extract is not modelled",
+    ),
+    (
+        "EXTRACT_UPDATE_SPEC",
+        "Send_changes_only_validity",
+        Disposition::Excluded,
+        "EHR Extract is not modelled",
+    ),
+    (
+        "EXTRACT_UPDATE_SPEC",
+        "Trigger_events_validity",
+        Disposition::Excluded,
+        "EHR Extract is not modelled",
+    ),
+    (
+        "EXTRACT_VERSION_SPEC",
+        "Includes_revision_history_valid",
+        Disposition::Excluded,
+        "EHR Extract is not modelled",
+    ),
+    // --- out of scope: classes this crate does not carry ---------------------
+    (
+        "ITEM_TAG",
+        "Inv_key_valid",
+        Disposition::Excluded,
+        "ITEM_TAG is an RM 1.1.0 addition this crate does not model",
+    ),
+    (
+        "ITEM_TAG",
+        "Inv_value_valid",
+        Disposition::Excluded,
+        "ITEM_TAG is an RM 1.1.0 addition this crate does not model",
+    ),
+    (
+        "VERSIONED_COMPOSITION",
+        "Persistent_validity",
+        Disposition::Excluded,
+        "VERSIONED_OBJECT is generic here; no COMPOSITION-specific subtype exists",
+    ),
+    // --- out of scope: demographics are values, not a navigable repository ---
+    //
+    // These four constrain a *graph*: that a relationship's source is the party
+    // holding it, and that the demographic repository can be asked for the
+    // reverse. The crate models demographics as values with no back-references
+    // and no repository to consult, so there is nothing to check against.
+    // Recorded as an exclusion that is **not yet declared** in the library
+    // specification — see `lib:A-24`.
+    (
+        "PARTY",
+        "Relationships_validity",
+        Disposition::Excluded,
+        "no demographic repository is modelled (undeclared: lib:A-24)",
+    ),
+    (
+        "PARTY",
+        "Reverse_relationships_validity",
+        Disposition::Excluded,
+        "no demographic repository is modelled (undeclared: lib:A-24)",
+    ),
+    (
+        "PARTY_RELATIONSHIP",
+        "Source_valid",
+        Disposition::Excluded,
+        "no demographic repository is modelled (undeclared: lib:A-24)",
+    ),
+    (
+        "PARTY_RELATIONSHIP",
+        "Target_valid",
+        Disposition::Excluded,
+        "no demographic repository is modelled (undeclared: lib:A-24)",
+    ),
+    // --- cannot fail: an empty Vec is openEHR's absent case ------------------
+    (
+        "ACTOR",
+        "Roles_valid",
+        Disposition::Vacuous,
+        "roles is a Vec",
+    ),
+    (
+        "COMPOSITION",
+        "Content_valid",
+        Disposition::Vacuous,
+        "content is a Vec",
+    ),
+    (
+        "DV_ORDERED",
+        "Other_reference_ranges_validity",
+        Disposition::Vacuous,
+        "other_reference_ranges is a Vec",
+    ),
+    (
+        "DV_TEXT",
+        "Mappings_valid",
+        Disposition::Vacuous,
+        "mappings is a Vec",
+    ),
+    (
+        "ENTRY",
+        "Other_participations_valid",
+        Disposition::Vacuous,
+        "other_participations is a Vec",
+    ),
+    (
+        "EVENT_CONTEXT",
+        "Participations_validity",
+        Disposition::Vacuous,
+        "participations is a Vec",
+    ),
+    (
+        "LOCATABLE",
+        "Links_valid",
+        Disposition::Vacuous,
+        "links is a Vec",
+    ),
+    (
+        "PARTY",
+        "Contacts_valid",
+        Disposition::Vacuous,
+        "contacts is a Vec",
+    ),
+    (
+        "PARTY_IDENTIFIED",
+        "Identifiers_valid",
+        Disposition::Vacuous,
+        "identifiers is a Vec",
+    ),
+    (
+        "ROLE",
+        "Capabilities_valid",
+        Disposition::Vacuous,
+        "capabilities is a Vec",
+    ),
+    // --- cannot fail: the predicate is derived from what it constrains -------
+    (
+        "ELEMENT",
+        "Inv_is_null_valid",
+        Disposition::Vacuous,
+        "is_null() returns value.is_none()",
+    ),
+    (
+        "LOCATABLE",
+        "Archetyped_valid",
+        Disposition::Vacuous,
+        "is_archetype_root() returns archetype_details.is_some()",
+    ),
+    (
+        "ORIGINAL_VERSION",
+        "Is_merged_validity",
+        Disposition::Vacuous,
+        "is_merged() returns !other_input_version_uids.is_empty()",
+    ),
+    (
+        "VERSIONED_OBJECT",
+        "All_version_ids_valid",
+        Disposition::Vacuous,
+        "the count is the Vec's length",
+    ),
+    (
+        "VERSIONED_OBJECT",
+        "All_versions_valid",
+        Disposition::Vacuous,
+        "the count is the Vec's length",
+    ),
+    (
+        "VERSIONED_OBJECT",
+        "Version_count_valid",
+        Disposition::Vacuous,
+        "the count is a usize",
+    ),
+    (
+        "ITEM_LIST",
+        "Valid_structure",
+        Disposition::Vacuous,
+        "items is a Vec<Element>, so the element type is the constraint",
+    ),
+    // --- enforced, under a name openEHR does not use (lib:L10.4) -------------
+    (
+        "DV_INTERVAL",
+        "Limits_consistent",
+        Disposition::Renamed,
+        "Interval::new refuses lower > upper, reporting INTERVAL rather than Limits_consistent",
+    ),
+    // --- not enforced: needs a code set the crate does not carry (lib:S1.18) -
+    (
+        "COMPOSITION",
+        "Language_valid",
+        Disposition::Unenforced,
+        "ISO 639 is not carried (lib:A-19)",
+    ),
+    (
+        "COMPOSITION",
+        "Territory_valid",
+        Disposition::Unenforced,
+        "ISO 3166 is not carried (lib:A-19)",
+    ),
+    (
+        "DV_ENCAPSULATED",
+        "Charset_valid",
+        Disposition::Unenforced,
+        "IANA character sets are not carried",
+    ),
+    (
+        "DV_ENCAPSULATED",
+        "Language_valid",
+        Disposition::Unenforced,
+        "ISO 639 is not carried",
+    ),
+    (
+        "DV_TEXT",
+        "Encoding_valid",
+        Disposition::Unenforced,
+        "IANA character sets are not carried",
+    ),
+    (
+        "DV_TEXT",
+        "Language_valid",
+        Disposition::Unenforced,
+        "ISO 639 is not carried",
+    ),
+    (
+        "ENTRY",
+        "Encoding_valid",
+        Disposition::Unenforced,
+        "IANA character sets are not carried",
+    ),
+    (
+        "ENTRY",
+        "Language_valid",
+        Disposition::Unenforced,
+        "ISO 639 is not carried",
+    ),
+    (
+        "DV_MULTIMEDIA",
+        "Media_type_valid",
+        Disposition::Unenforced,
+        "IANA media types are not carried",
+    ),
+    // --- not enforced, and the crate has what it would need ------------------
+    (
+        "TERM_MAPPING",
+        "Purpose_valid",
+        Disposition::Unenforced,
+        "the term_mapping_purpose group ships and nothing checks against it (lib:A-24)",
+    ),
+    (
+        "EHR",
+        "Compositions_valid",
+        Disposition::Unenforced,
+        "the reference type is unchecked, as Ehr_status_valid was before lib:A-21",
+    ),
+    (
+        "EHR",
+        "Contributions_valid",
+        Disposition::Unenforced,
+        "the reference type is unchecked",
+    ),
+    (
+        "EHR",
+        "Directory_valid",
+        Disposition::Unenforced,
+        "the reference type is unchecked",
+    ),
+    (
+        "EHR",
+        "Folders_valid",
+        Disposition::Unenforced,
+        "the reference type is unchecked",
+    ),
+    (
+        "VERSION",
+        "Owner_id_valid",
+        Disposition::Unenforced,
+        "owner_id is not modelled on a version at all (lib:A-24)",
+    ),
+    (
+        "VERSIONED_OBJECT",
+        "Latest_version_valid",
+        Disposition::Unenforced,
+        "not checked",
+    ),
+    (
+        "VERSIONED_OBJECT",
+        "Uid_validity",
+        Disposition::Unenforced,
+        "the uid extension is not required to be empty",
+    ),
+    (
+        "DV_ORDERED",
+        "Is_simple_validity",
+        Disposition::Unenforced,
+        "not checked",
+    ),
+    (
+        "ENTRY",
+        "Subject_validity",
+        Disposition::Unenforced,
+        "subject_is_self is not checked against the subject's type",
+    ),
+    (
+        "EVENT",
+        "Offset_validity1",
+        Disposition::Unenforced,
+        "needs the parent HISTORY's origin, which an EVENT does not hold",
+    ),
+    (
+        "INTERVAL_EVENT",
+        "Interval_start_time_valid",
+        Disposition::Unenforced,
+        "needs time arithmetic against width",
+    ),
+    (
+        "ITEM_TABLE",
+        "Valid_structure",
+        Disposition::Unenforced,
+        "rows are Clusters whose items are not constrained to ELEMENT",
+    ),
+    (
+        "REFERENCE_RANGE",
+        "Range_is_simple",
+        Disposition::Unenforced,
+        "not checked",
+    ),
+    (
+        "CONTACT",
+        "Purpose_valid",
+        Disposition::Unenforced,
+        "purpose = name is not asserted",
+    ),
+    (
+        "PARTY_IDENTITY",
+        "Purpose_valid",
+        Disposition::Unenforced,
+        "purpose = name is not asserted",
+    ),
+];
+
+// One narrative: read the source, decide what is named, account for what is
+// not, then write it out. Splitting it would put the accounting in one place and
+// the report of the accounting in another, and the report is the only reason the
+// accounting exists.
+#[allow(clippy::too_many_lines)]
 fn invariant_coverage(root: &Path) -> Asset {
     let raw = std::fs::read_to_string(root.join("assets/rm-1.1.0-invariants.json"))
         .expect("assets/rm-1.1.0-invariants.json is committed");
@@ -282,6 +775,42 @@ fn invariant_coverage(root: &Path) -> Asset {
     }
     let total = named + unnamed.len();
 
+    // Every unnamed invariant must be accounted for, and every disposition must
+    // still be needed. Both directions fail the build.
+    //
+    // The second direction matters as much as the first: a disposition left
+    // behind after its invariant *is* named would keep asserting a reason that
+    // no longer applies, which is how a register comes to describe a codebase
+    // that has moved on (`db:C0.20`).
+    let dispositioned: BTreeMap<(&str, &str), (Disposition, &str)> = DISPOSITIONS
+        .iter()
+        .map(|(class, name, kind, why)| ((*class, *name), (*kind, *why)))
+        .collect();
+    let missing: Vec<String> = unnamed
+        .iter()
+        .filter(|(c, n)| !dispositioned.contains_key(&(c.as_str(), n.as_str())))
+        .map(|(c, n)| format!("{c}.{n}"))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "invariants named nowhere and dispositioned nowhere: {}\n\
+         Add each to DISPOSITIONS in openehr-assets, with a reason. \
+         An invariant nobody has looked at must not sit in a list that reads as \
+         a pass (`W0.4`).",
+        missing.join(", ")
+    );
+    let stale: Vec<String> = dispositioned
+        .keys()
+        .filter(|(c, n)| !unnamed.iter().any(|(uc, un)| uc == c && un == n))
+        .map(|(c, n)| format!("{c}.{n}"))
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "dispositions for invariants the crate now names: {}\n\
+         Remove them: the reason recorded no longer applies.",
+        stale.join(", ")
+    );
+
     let mut body = String::new();
     body.push_str(
         "# RM invariant coverage\n\n\
@@ -306,25 +835,55 @@ fn invariant_coverage(root: &Path) -> Asset {
     let _ = writeln!(body, "| Invariants in RM 1.1.0 | {total} |");
     let _ = writeln!(body, "| Named in the crate's source | {named} |");
     let _ = writeln!(body, "| Not named | {} |", unnamed.len());
+    let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+    for (class, name) in &unnamed {
+        let (kind, _) = dispositioned[&(class.as_str(), name.as_str())];
+        *counts.entry(kind.heading()).or_default() += 1;
+    }
     let _ = writeln!(
         body,
-        "\nNot-named includes invariants that are **out of scope** by a declared \
-         exclusion (EHR Extract, `lib:S1.6`; the Archetype Model, `lib:S1.4`), \
-         invariants that are **vacuous in Rust** (`X /= Void implies not \
-         X.is_empty` — an empty `Vec` is the absent case), and invariants that \
-         are genuinely unenforced. Distinguishing those three needs a human, and \
-         this file does not attempt it.\n"
+        "\nEvery not-named invariant is accounted for below, and the build fails \
+         if one is not (`W0.4`). This file used to say that telling them apart \
+         \"needs a human\" — which was true only for as long as nobody did it, \
+         and while it stood a genuine gap was indistinguishable from a class \
+         this crate deliberately does not model.\n"
     );
+    for (heading, count) in &counts {
+        let _ = writeln!(body, "- {heading}: **{count}**");
+    }
+    let _ = writeln!(body);
     // An addition is only legitimate once declared (`lib:L10.9`). Reading the
     // register out of the spec means the report cannot drift from it.
     let declared =
         std::fs::read_to_string(root.join("openehr/spec/10-validation.md")).unwrap_or_default();
     write_divergences(&mut body, &divergent, &declared);
     let _ = writeln!(body, "## Not named in the crate's source\n");
-    let _ = writeln!(body, "| Class | Invariant |");
-    let _ = writeln!(body, "| --- | --- |");
-    for (class, name) in &unnamed {
-        let _ = writeln!(body, "| `{class}` | `{name}` |");
+    let _ = writeln!(
+        body,
+        "Grouped by why. **Not enforced** is the only group that is a gap; the \
+         others are answers.\n"
+    );
+    for kind in [
+        Disposition::Unenforced,
+        Disposition::Renamed,
+        Disposition::Vacuous,
+        Disposition::Excluded,
+    ] {
+        let rows: Vec<_> = unnamed
+            .iter()
+            .filter(|(c, n)| dispositioned[&(c.as_str(), n.as_str())].0 == kind)
+            .collect();
+        if rows.is_empty() {
+            continue;
+        }
+        let _ = writeln!(body, "### {} — {}\n", kind.heading(), rows.len());
+        let _ = writeln!(body, "| Class | Invariant | Why |");
+        let _ = writeln!(body, "| --- | --- | --- |");
+        for (class, name) in rows {
+            let why = dispositioned[&(class.as_str(), name.as_str())].1;
+            let _ = writeln!(body, "| `{class}` | `{name}` | {why} |");
+        }
+        let _ = writeln!(body);
     }
     Asset {
         path: root.join("assets/invariant-coverage.md"),

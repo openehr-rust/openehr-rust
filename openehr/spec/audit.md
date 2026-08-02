@@ -93,6 +93,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-21 | Medium | `EHR.Ehr_status_valid` and `Ehr_access_valid` unenforced; the shared fixture violated both | **fixed** — `Ehr::new` checks, fixture corrected, round-trip assertion strengthened |
 | A-22 | Medium | `DV_MULTIMEDIA`: `Integrity_check_validity` reported for the wrong rule; three checkable invariants unenforced despite the crate shipping their code sets | **fixed** — four checks added, the addition renamed and declared |
 | A-23 | High | A `VERSION`'s invariants were checked by `OriginalVersion::new` and by nothing else — deserialization bypassed them and no `Validate` impl existed, so the path an HTTP service takes was unchecked | **fixed** — `Validate for Version`, the store validates the envelope, and `Preceding_version_uid_validity` enforced for the first time |
+| A-24 | Medium | The 75 unnamed RM invariants were undifferentiated, so a real gap was indistinguishable from a class deliberately not modelled | **classified** — 29 out of scope, 17 vacuous, 1 renamed, **25 genuinely unenforced**; the build now fails on an unclassified one. Three sub-findings open |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
 | A-13 | Medium | One `IF NOT EXISTS` flag covered two statements MySQL treats differently | **fixed**, verified on MySQL 8.4 |
@@ -707,6 +708,78 @@ reader finds the reason rather than concluding they were missed.
 
 **Residual.** The other 74 unnamed invariants are still unclassified. This one
 was found by starting that work, which suggests the rest is worth finishing.
+
+
+## A-24 — seventy-five invariants nobody had looked at
+
+**Severity:** Medium. **Requirement:** `L10.4`, `L10.9`, `W0.4`. **Status:
+classified; three sub-findings open.**
+
+**Found.** `assets/invariant-coverage.md` reported 75 of RM 1.1.0's 155
+invariants as "not named in the crate's source", and said in its own header that
+telling out-of-scope from vacuous from unenforced "needs a human, and this file
+does not attempt it".
+
+That sentence was true for as long as nobody did it. While it stood, a genuine
+gap and a class this crate deliberately does not model looked identical, which
+is `W0.4` exactly: a gap not written down reads as a pass. `A-23` was found in
+the first hour of doing the work.
+
+**Classified.** Every one is now dispositioned in `openehr-assets`, and the
+build fails if an invariant is named nowhere and dispositioned nowhere — or if a
+disposition outlives the invariant it explains.
+
+| | Count |
+| --- | --- |
+| Out of scope | 29 |
+| Cannot fail in Rust | 17 |
+| Enforced under another name | 1 |
+| **Not enforced** | **25** |
+
+"Cannot fail in Rust" is the largest honest answer and the least obvious one.
+Most are `X /= Void implies not X.is_empty`, and a `Vec` has no way to be
+present and empty — openEHR's absent case *is* the empty collection. The rest
+are predicates derived from the field they constrain: `is_null()` returns
+`value.is_none()`, `is_archetype_root()` returns `archetype_details.is_some()`,
+`is_merged()` returns `!other_input_version_uids.is_empty()`. Each is true by
+construction, and each would have read as a missing check forever.
+
+**Three sub-findings, open:**
+
+- **`DV_INTERVAL.Limits_consistent` is enforced under the wrong name.**
+  `Interval::new` refuses `lower > upper` and reports `INTERVAL` with prose,
+  not `Limits_consistent`. `L10.4` requires openEHR's own name so a reader can
+  find the rule in the class definition — this is the same defect `A-20` fixed
+  fifteen times, surviving because the grep that found those looks for names
+  that *are* used and this one is not.
+
+- **`TERM_MAPPING.Purpose_valid` is unenforced although the crate ships the code
+  set.** `term_mapping_purpose::GROUP` exists and is registered; nothing checks
+  a mapping's purpose against it. Same shape as `A-22`, which found three
+  `DV_MULTIMEDIA` invariants unenforced "despite the crate shipping their code
+  sets".
+
+- **`VERSION.owner_id` is not modelled at all.** RM 1.1.0 declares
+  `Owner_id_valid: owner_id.value.is_equal (uid.object_id.value)` on `VERSION`,
+  and the expression only typechecks there — `uid.object_id` requires an
+  `OBJECT_VERSION_ID`, which is `VERSION`'s uid type and not
+  `VERSIONED_OBJECT`'s. `OriginalVersion` has no such field. This is the shape
+  of `A-18`, where `VERSION.signature` was likewise declared by openEHR and
+  absent here. **Not fixed, and not asserted either:** confirming it needs the
+  BMM's attribute lists read rather than its invariant expressions inferred
+  from, and this register does not guess (`W0.3`).
+
+**Also recorded rather than fixed:** the four `PARTY`/`PARTY_RELATIONSHIP` graph
+invariants need a demographic *repository* — an object store that can be asked
+for the reverse of a relationship. The crate models demographics as values with
+no back-references. That is a legitimate exclusion and it is **not declared
+anywhere**, which `C0.16` calls a defect in its own right. It needs a numbered
+requirement beside `S1.4` and `S1.6`.
+
+**Residual.** Twenty-five unenforced invariants remain unenforced. Nine of them
+need external code sets the crate does not carry (ISO 639, ISO 3166, IANA
+character sets and media types) and are the same decision as `A-19`; the other
+sixteen are checkable with what is already here.
 
 ## Closed findings
 

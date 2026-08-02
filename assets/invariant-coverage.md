@@ -28,7 +28,12 @@ merely names — see `rm-1.1.0-invariants.json`.
 | Named in the crate's source | 83 |
 | Not named | 72 |
 
-Not-named includes invariants that are **out of scope** by a declared exclusion (EHR Extract, `lib:S1.6`; the Archetype Model, `lib:S1.4`), invariants that are **vacuous in Rust** (`X /= Void implies not X.is_empty` — an empty `Vec` is the absent case), and invariants that are genuinely unenforced. Distinguishing those three needs a human, and this file does not attempt it.
+Every not-named invariant is accounted for below, and the build fails if one is not (`W0.4`). This file used to say that telling them apart "needs a human" — which was true only for as long as nobody did it, and while it stood a genuine gap was indistinguishable from a class this crate deliberately does not model.
+
+- **Not enforced**: **25**
+- Cannot fail in Rust: **17**
+- Enforced under another name (`lib:L10.4`): **1**
+- Out of scope: **29**
 
 ## Invariant names that diverge from openEHR (`lib:L10.4`)
 
@@ -55,77 +60,97 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 
 ## Not named in the crate's source
 
-| Class | Invariant |
-| --- | --- |
-| `ACTOR` | `Roles_valid` |
-| `AUTHORED_RESOURCE` | `Current_revision_valid` |
-| `AUTHORED_RESOURCE` | `Description_valid` |
-| `AUTHORED_RESOURCE` | `Languages_available_valid` |
-| `AUTHORED_RESOURCE` | `Original_language_valid` |
-| `AUTHORED_RESOURCE` | `Revision_history_valid` |
-| `AUTHORED_RESOURCE` | `Translations_valid` |
-| `COMPOSITION` | `Content_valid` |
-| `COMPOSITION` | `Language_valid` |
-| `COMPOSITION` | `Territory_valid` |
-| `CONTACT` | `Purpose_valid` |
-| `DV_ENCAPSULATED` | `Charset_valid` |
-| `DV_ENCAPSULATED` | `Language_valid` |
-| `DV_INTERVAL` | `Limits_consistent` |
-| `DV_MULTIMEDIA` | `Media_type_valid` |
-| `DV_ORDERED` | `Is_simple_validity` |
-| `DV_ORDERED` | `Other_reference_ranges_validity` |
-| `DV_TEXT` | `Encoding_valid` |
-| `DV_TEXT` | `Language_valid` |
-| `DV_TEXT` | `Mappings_valid` |
-| `EHR` | `Compositions_valid` |
-| `EHR` | `Contributions_valid` |
-| `EHR` | `Directory_valid` |
-| `EHR` | `Folders_valid` |
-| `ELEMENT` | `Inv_is_null_valid` |
-| `ENTRY` | `Encoding_valid` |
-| `ENTRY` | `Language_valid` |
-| `ENTRY` | `Other_participations_valid` |
-| `ENTRY` | `Subject_validity` |
-| `EVENT` | `Offset_validity1` |
-| `EVENT_CONTEXT` | `Participations_validity` |
-| `EXTRACT` | `Sequence_nr_valid` |
-| `EXTRACT_CONTENT_ITEM` | `Item_validity` |
-| `EXTRACT_UPDATE_SPEC` | `Overall_validity` |
-| `EXTRACT_UPDATE_SPEC` | `Send_changes_only_validity` |
-| `EXTRACT_UPDATE_SPEC` | `Trigger_events_validity` |
-| `EXTRACT_VERSION_SPEC` | `Includes_revision_history_valid` |
-| `INTERVAL_EVENT` | `Interval_start_time_valid` |
-| `ITEM_LIST` | `Valid_structure` |
-| `ITEM_TABLE` | `Valid_structure` |
-| `ITEM_TAG` | `Inv_key_valid` |
-| `ITEM_TAG` | `Inv_value_valid` |
-| `LOCATABLE` | `Archetyped_valid` |
-| `LOCATABLE` | `Links_valid` |
-| `ORIGINAL_VERSION` | `Is_merged_validity` |
-| `PARTY` | `Contacts_valid` |
-| `PARTY` | `Relationships_validity` |
-| `PARTY` | `Reverse_relationships_validity` |
-| `PARTY_IDENTIFIED` | `Identifiers_valid` |
-| `PARTY_IDENTITY` | `Purpose_valid` |
-| `PARTY_RELATIONSHIP` | `Source_valid` |
-| `PARTY_RELATIONSHIP` | `Target_valid` |
-| `REFERENCE_RANGE` | `Range_is_simple` |
-| `RESOURCE_DESCRIPTION` | `Details_valid` |
-| `RESOURCE_DESCRIPTION` | `Language_valid` |
-| `RESOURCE_DESCRIPTION` | `Original_author_valid` |
-| `RESOURCE_DESCRIPTION` | `Parent_resource_valid` |
-| `RESOURCE_DESCRIPTION_ITEM` | `Language_valid` |
-| `RESOURCE_DESCRIPTION_ITEM` | `Purpose_valid` |
-| `RESOURCE_DESCRIPTION_ITEM` | `Use_valid` |
-| `RESOURCE_DESCRIPTION_ITEM` | `copyright_valid` |
-| `RESOURCE_DESCRIPTION_ITEM` | `misuse_valid` |
-| `ROLE` | `Capabilities_valid` |
-| `TERM_MAPPING` | `Purpose_valid` |
-| `TRANSLATION_DETAILS` | `Language_valid` |
-| `VERSION` | `Owner_id_valid` |
-| `VERSIONED_COMPOSITION` | `Persistent_validity` |
-| `VERSIONED_OBJECT` | `All_version_ids_valid` |
-| `VERSIONED_OBJECT` | `All_versions_valid` |
-| `VERSIONED_OBJECT` | `Latest_version_valid` |
-| `VERSIONED_OBJECT` | `Uid_validity` |
-| `VERSIONED_OBJECT` | `Version_count_valid` |
+Grouped by why. **Not enforced** is the only group that is a gap; the others are answers.
+
+### **Not enforced** — 25
+
+| Class | Invariant | Why |
+| --- | --- | --- |
+| `COMPOSITION` | `Language_valid` | ISO 639 is not carried (lib:A-19) |
+| `COMPOSITION` | `Territory_valid` | ISO 3166 is not carried (lib:A-19) |
+| `CONTACT` | `Purpose_valid` | purpose = name is not asserted |
+| `DV_ENCAPSULATED` | `Charset_valid` | IANA character sets are not carried |
+| `DV_ENCAPSULATED` | `Language_valid` | ISO 639 is not carried |
+| `DV_MULTIMEDIA` | `Media_type_valid` | IANA media types are not carried |
+| `DV_ORDERED` | `Is_simple_validity` | not checked |
+| `DV_TEXT` | `Encoding_valid` | IANA character sets are not carried |
+| `DV_TEXT` | `Language_valid` | ISO 639 is not carried |
+| `EHR` | `Compositions_valid` | the reference type is unchecked, as Ehr_status_valid was before lib:A-21 |
+| `EHR` | `Contributions_valid` | the reference type is unchecked |
+| `EHR` | `Directory_valid` | the reference type is unchecked |
+| `EHR` | `Folders_valid` | the reference type is unchecked |
+| `ENTRY` | `Encoding_valid` | IANA character sets are not carried |
+| `ENTRY` | `Language_valid` | ISO 639 is not carried |
+| `ENTRY` | `Subject_validity` | subject_is_self is not checked against the subject's type |
+| `EVENT` | `Offset_validity1` | needs the parent HISTORY's origin, which an EVENT does not hold |
+| `INTERVAL_EVENT` | `Interval_start_time_valid` | needs time arithmetic against width |
+| `ITEM_TABLE` | `Valid_structure` | rows are Clusters whose items are not constrained to ELEMENT |
+| `PARTY_IDENTITY` | `Purpose_valid` | purpose = name is not asserted |
+| `REFERENCE_RANGE` | `Range_is_simple` | not checked |
+| `TERM_MAPPING` | `Purpose_valid` | the term_mapping_purpose group ships and nothing checks against it (lib:A-24) |
+| `VERSION` | `Owner_id_valid` | owner_id is not modelled on a version at all (lib:A-24) |
+| `VERSIONED_OBJECT` | `Latest_version_valid` | not checked |
+| `VERSIONED_OBJECT` | `Uid_validity` | the uid extension is not required to be empty |
+
+### Enforced under another name (`lib:L10.4`) — 1
+
+| Class | Invariant | Why |
+| --- | --- | --- |
+| `DV_INTERVAL` | `Limits_consistent` | Interval::new refuses lower > upper, reporting INTERVAL rather than Limits_consistent |
+
+### Cannot fail in Rust — 17
+
+| Class | Invariant | Why |
+| --- | --- | --- |
+| `ACTOR` | `Roles_valid` | roles is a Vec |
+| `COMPOSITION` | `Content_valid` | content is a Vec |
+| `DV_ORDERED` | `Other_reference_ranges_validity` | other_reference_ranges is a Vec |
+| `DV_TEXT` | `Mappings_valid` | mappings is a Vec |
+| `ELEMENT` | `Inv_is_null_valid` | is_null() returns value.is_none() |
+| `ENTRY` | `Other_participations_valid` | other_participations is a Vec |
+| `EVENT_CONTEXT` | `Participations_validity` | participations is a Vec |
+| `ITEM_LIST` | `Valid_structure` | items is a Vec<Element>, so the element type is the constraint |
+| `LOCATABLE` | `Archetyped_valid` | is_archetype_root() returns archetype_details.is_some() |
+| `LOCATABLE` | `Links_valid` | links is a Vec |
+| `ORIGINAL_VERSION` | `Is_merged_validity` | is_merged() returns !other_input_version_uids.is_empty() |
+| `PARTY` | `Contacts_valid` | contacts is a Vec |
+| `PARTY_IDENTIFIED` | `Identifiers_valid` | identifiers is a Vec |
+| `ROLE` | `Capabilities_valid` | capabilities is a Vec |
+| `VERSIONED_OBJECT` | `All_version_ids_valid` | the count is the Vec's length |
+| `VERSIONED_OBJECT` | `All_versions_valid` | the count is the Vec's length |
+| `VERSIONED_OBJECT` | `Version_count_valid` | the count is a usize |
+
+### Out of scope — 29
+
+| Class | Invariant | Why |
+| --- | --- | --- |
+| `AUTHORED_RESOURCE` | `Current_revision_valid` | no archetype or template is modelled |
+| `AUTHORED_RESOURCE` | `Description_valid` | no archetype or template is modelled |
+| `AUTHORED_RESOURCE` | `Languages_available_valid` | no archetype or template is modelled |
+| `AUTHORED_RESOURCE` | `Original_language_valid` | no archetype or template is modelled |
+| `AUTHORED_RESOURCE` | `Revision_history_valid` | no archetype or template is modelled |
+| `AUTHORED_RESOURCE` | `Translations_valid` | no archetype or template is modelled |
+| `EXTRACT` | `Sequence_nr_valid` | EHR Extract is not modelled |
+| `EXTRACT_CONTENT_ITEM` | `Item_validity` | EHR Extract is not modelled |
+| `EXTRACT_UPDATE_SPEC` | `Overall_validity` | EHR Extract is not modelled |
+| `EXTRACT_UPDATE_SPEC` | `Send_changes_only_validity` | EHR Extract is not modelled |
+| `EXTRACT_UPDATE_SPEC` | `Trigger_events_validity` | EHR Extract is not modelled |
+| `EXTRACT_VERSION_SPEC` | `Includes_revision_history_valid` | EHR Extract is not modelled |
+| `ITEM_TAG` | `Inv_key_valid` | ITEM_TAG is an RM 1.1.0 addition this crate does not model |
+| `ITEM_TAG` | `Inv_value_valid` | ITEM_TAG is an RM 1.1.0 addition this crate does not model |
+| `PARTY` | `Relationships_validity` | no demographic repository is modelled (undeclared: lib:A-24) |
+| `PARTY` | `Reverse_relationships_validity` | no demographic repository is modelled (undeclared: lib:A-24) |
+| `PARTY_RELATIONSHIP` | `Source_valid` | no demographic repository is modelled (undeclared: lib:A-24) |
+| `PARTY_RELATIONSHIP` | `Target_valid` | no demographic repository is modelled (undeclared: lib:A-24) |
+| `RESOURCE_DESCRIPTION` | `Details_valid` | describes an authored resource |
+| `RESOURCE_DESCRIPTION` | `Language_valid` | describes an authored resource |
+| `RESOURCE_DESCRIPTION` | `Original_author_valid` | describes an authored resource |
+| `RESOURCE_DESCRIPTION` | `Parent_resource_valid` | describes an authored resource |
+| `RESOURCE_DESCRIPTION_ITEM` | `Language_valid` | describes an authored resource |
+| `RESOURCE_DESCRIPTION_ITEM` | `Purpose_valid` | describes an authored resource |
+| `RESOURCE_DESCRIPTION_ITEM` | `Use_valid` | describes an authored resource |
+| `RESOURCE_DESCRIPTION_ITEM` | `copyright_valid` | describes an authored resource |
+| `RESOURCE_DESCRIPTION_ITEM` | `misuse_valid` | describes an authored resource |
+| `TRANSLATION_DETAILS` | `Language_valid` | describes an authored resource |
+| `VERSIONED_COMPOSITION` | `Persistent_validity` | VERSIONED_OBJECT is generic here; no COMPOSITION-specific subtype exists |
+
