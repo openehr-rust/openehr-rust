@@ -721,20 +721,14 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
     (
         "VERSIONED_OBJECT",
         "Latest_version_valid",
-        Disposition::Unenforced,
-        "not checked",
+        Disposition::Vacuous,
+        "latest_version() returns versions.last(); a derived function (BMM)",
     ),
     (
         "DV_ORDERED",
         "Is_simple_validity",
         Disposition::Vacuous,
         "is_simple is derived as `no reference ranges`; the rule restates it (BMM)",
-    ),
-    (
-        "ENTRY",
-        "Subject_validity",
-        Disposition::Unenforced,
-        "subject_is_self is not checked against the subject's type",
     ),
     (
         "EVENT",
@@ -878,12 +872,6 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
         "Scheme_valid",
         Disposition::Unenforced,
         "not checked",
-    ),
-    (
-        "ENTRY",
-        "Is_archetype_root",
-        Disposition::Unenforced,
-        "checked for COMPOSITION and EHR_STATUS, not here",
     ),
     (
         "PARTY",

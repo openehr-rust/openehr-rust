@@ -630,6 +630,30 @@ impl Validate for Entry {
     fn visit(&self, ctx: &mut Context) {
         check_locatable_entry(self, ctx);
         check_party(self.subject(), "ENTRY", "Subject_valid", ctx);
+        // `Is_archetype_root`: openEHR states it as a bare assertion — every
+        // ENTRY *is* the root of an entry archetype. One without
+        // `archetype_details` cannot say which archetype shaped it, and nothing
+        // downstream can validate it against one. Already checked for
+        // COMPOSITION and EHR_STATUS; this is the third class that asserts it
+        // and the one carrying the clinical statement.
+        // `Subject_validity`: `subject_is_self implies subject.generating_type
+        // = "PARTY_SELF"`. The BMM documents `subject_is_self` as *"True if
+        // this Entry is about the subject of the EHR, in which case the subject
+        // attribute is of type PARTY_SELF"* — so in openEHR the implication
+        // holds by construction.
+        //
+        // It does not hold here. `PartyProxy::is_subject` answers true for a
+        // `PARTY_RELATED` whose relationship is `self`, which is a legitimate
+        // way to say "the patient" and is **not** a `PARTY_SELF`. So an entry
+        // can claim to be about the record subject while naming a related
+        // party, and the two readings of "who is this about" diverge silently.
+        if self.subject().is_subject() && self.subject().type_name() != "PARTY_SELF" {
+            ctx.violation(
+                "ENTRY",
+                "Subject_validity",
+                "the subject is about the record subject but is not a PARTY_SELF",
+            );
+        }
         if let Some(provider) = self.entry_attrs().provider() {
             check_party(provider, "ENTRY", "Provider_valid", ctx);
         }
@@ -692,12 +716,43 @@ impl Validate for Entry {
 }
 
 fn check_locatable_entry(entry: &Entry, ctx: &mut Context) {
+    // `ENTRY.Is_archetype_root` is checked here rather than beside the other
+    // `ENTRY` rules, because `Locatable` is in scope only once the variant is
+    // known. openEHR states it as a bare assertion — every ENTRY *is* the root
+    // of an entry archetype — and one without `archetype_details` cannot say
+    // which archetype shaped it, so nothing downstream can validate it against
+    // one. Already checked for COMPOSITION and EHR_STATUS; this is the class
+    // carrying the clinical statement.
+    let root = |e: &dyn Fn() -> bool, ctx: &mut Context| {
+        if !e() {
+            ctx.violation(
+                "ENTRY",
+                "Is_archetype_root",
+                "an entry has no archetype_details, so it is not an archetype root",
+            );
+        }
+    };
     match entry {
-        Entry::Observation(e) => check_locatable(e, ctx),
-        Entry::Evaluation(e) => check_locatable(e, ctx),
-        Entry::Instruction(e) => check_locatable(e, ctx),
-        Entry::Action(e) => check_locatable(e, ctx),
-        Entry::AdminEntry(e) => check_locatable(e, ctx),
+        Entry::Observation(e) => {
+            check_locatable(e, ctx);
+            root(&|| e.is_archetype_root(), ctx);
+        }
+        Entry::Evaluation(e) => {
+            check_locatable(e, ctx);
+            root(&|| e.is_archetype_root(), ctx);
+        }
+        Entry::Instruction(e) => {
+            check_locatable(e, ctx);
+            root(&|| e.is_archetype_root(), ctx);
+        }
+        Entry::Action(e) => {
+            check_locatable(e, ctx);
+            root(&|| e.is_archetype_root(), ctx);
+        }
+        Entry::AdminEntry(e) => {
+            check_locatable(e, ctx);
+            root(&|| e.is_archetype_root(), ctx);
+        }
     }
 }
 
@@ -1101,7 +1156,14 @@ mod tests {
     #[test]
     fn a_well_formed_composition_has_no_violations() {
         let c = composition().with_content(
-            Evaluation::new(attrs("Problem", "at0000"), entry_attrs(), structure()).into(),
+            Evaluation::new(
+                attrs("Problem", "openEHR-EHR-EVALUATION.problem.v1").with_archetype_details(
+                    Archetyped::new("openEHR-EHR-EVALUATION.problem.v1", "1.1.0").unwrap(),
+                ),
+                entry_attrs(),
+                structure(),
+            )
+            .into(),
         );
         let report = c.validate();
         assert!(report.is_empty(), "{report}");
@@ -1194,7 +1256,13 @@ mod tests {
             None,
         )
         .unwrap();
-        let observation = Observation::new(attrs("Obs", "at0000"), entry_attrs(), history);
+        let observation = Observation::new(
+            attrs("Obs", "openEHR-EHR-OBSERVATION.blood_pressure.v2").with_archetype_details(
+                Archetyped::new("openEHR-EHR-OBSERVATION.blood_pressure.v2", "1.1.0").unwrap(),
+            ),
+            entry_attrs(),
+            history,
+        );
         let report = Entry::from(observation).validate();
         assert_eq!(report.len(), 1);
         assert_eq!(report.violations()[0].invariant, "Time_after_origin");
@@ -1483,6 +1551,77 @@ mod tests {
                 .violations()
                 .iter()
                 .any(|v| v.invariant == "Uid_validity"),
+            "{report:?}"
+        );
+    }
+
+    #[test]
+    fn an_entry_that_is_not_an_archetype_root_is_reported() {
+        // openEHR states `ENTRY.Is_archetype_root` as a bare assertion: an
+        // ENTRY *is* the root of an entry archetype. Enforcing it found seven
+        // fixtures that were not, including the README's example of "a
+        // composition another implementation wrote" — the `A-21` shape again.
+        let entry = Entry::from(Evaluation::new(
+            attrs("Problem", "at0000"),
+            entry_attrs(),
+            structure(),
+        ));
+        let report = entry.validate();
+        assert!(
+            report
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Is_archetype_root"),
+            "{report:?}"
+        );
+    }
+
+    #[test]
+    fn an_entry_about_the_record_subject_must_name_a_party_self() {
+        use crate::rm::common::{PartyRelated, PartySelf};
+
+        let rooted = || {
+            attrs("Problem", "openEHR-EHR-EVALUATION.problem.v1").with_archetype_details(
+                Archetyped::new("openEHR-EHR-EVALUATION.problem.v1", "1.1.0").unwrap(),
+            )
+        };
+        let about = |subject: crate::rm::common::PartyProxy| {
+            Entry::from(Evaluation::new(
+                rooted(),
+                crate::rm::ehr::EntryAttrs::about(
+                    CodePhrase::new("ISO_639-1", "en").unwrap(),
+                    CodePhrase::new("IANA_character-sets", "UTF-8").unwrap(),
+                    subject,
+                ),
+                structure(),
+            ))
+        };
+
+        // A PARTY_SELF subject is the ordinary case and says nothing.
+        assert!(
+            !about(PartySelf::anonymous().into())
+                .validate()
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Subject_validity")
+        );
+
+        // `PARTY_RELATED` with a `self` relationship answers true to
+        // `is_subject` and is not a `PARTY_SELF`. openEHR's BMM documents
+        // `subject_is_self` as implying the type, so in openEHR the two agree
+        // by construction; here they can diverge, and an entry can claim to be
+        // about the patient while naming a related party.
+        let related = PartyRelated::new(
+            PartyIdentified::named("The patient").unwrap(),
+            crate::terminology::subject_relationship::SELF,
+        )
+        .unwrap();
+        let report = about(related.into()).validate();
+        assert!(
+            report
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Subject_validity"),
             "{report:?}"
         );
     }

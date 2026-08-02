@@ -8,6 +8,13 @@
 //! `T13.8` states the rule this file enforces: a documented example that does
 //! not compile is worse than none, because it costs the reader the time to find
 //! out.
+//!
+//! The JSON below carries `archetype_details` on its OBSERVATION as well as its
+//! COMPOSITION. It did not until `ENTRY.Is_archetype_root` was enforced, and an
+//! example of "a composition another implementation wrote" that would be
+//! rejected by this crate's own validator is worse than no example at all —
+//! `LOCATABLE.Archetyped_valid` makes `is_archetype_root` and having
+//! `archetype_details` the same statement.
 
 use openehr::base::iso8601::Date;
 use openehr::path::Pathable;
@@ -38,6 +45,10 @@ const JSON: &str = r#"{
     "_type": "OBSERVATION",
     "name": {"value": "Blood pressure"},
     "archetype_node_id": "openEHR-EHR-OBSERVATION.blood_pressure.v2",
+    "archetype_details": {
+      "archetype_id": {"value": "openEHR-EHR-OBSERVATION.blood_pressure.v2"},
+      "rm_version": "1.1.0"
+    },
     "language": {"terminology_id": {"value": "ISO_639-1"}, "code_string": "en"},
     "encoding": {"terminology_id": {"value": "IANA_character-sets"}, "code_string": "UTF-8"},
     "subject": {"_type": "PARTY_SELF"},

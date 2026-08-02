@@ -41,7 +41,13 @@ fn composition_containing(marker: &str) -> Composition {
         ],
     );
     let evaluation = Evaluation::new(
-        at("Problem", "at0000"),
+        // An ENTRY is the root of an entry archetype (`ENTRY.Is_archetype_root`),
+        // and this fixture said `at0000` — an interior node id — until that rule
+        // was enforced.
+        at("Problem", "openEHR-EHR-EVALUATION.problem.v1").with_archetype_details(
+            openehr::rm::common::Archetyped::new("openEHR-EHR-EVALUATION.problem.v1", "1.1.0")
+                .unwrap(),
+        ),
         EntryAttrs::about_subject(
             CodePhrase::new("ISO_639-1", "en").unwrap(),
             CodePhrase::new("IANA_character-sets", "UTF-8").unwrap(),

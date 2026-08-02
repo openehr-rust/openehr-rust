@@ -234,7 +234,10 @@ fn kitchen_sink() -> Composition {
     // A family-history EVALUATION: the subject is somebody else, and the model
     // has to say so.
     let family_history = Evaluation::new(
-        at("Family history", "openEHR-EHR-EVALUATION.family_history.v1"),
+        at("Family history", "openEHR-EHR-EVALUATION.family_history.v1")
+            .with_archetype_details(
+                Archetyped::new("openEHR-EHR-EVALUATION.family_history.v1", "1.1.0").unwrap(),
+            ),
         EntryAttrs::about(
             en(),
             utf8(),
@@ -260,6 +263,9 @@ fn kitchen_sink() -> Composition {
         at(
             "Medication order",
             "openEHR-EHR-INSTRUCTION.medication_order.v3",
+        )
+        .with_archetype_details(
+            Archetyped::new("openEHR-EHR-INSTRUCTION.medication_order.v3", "1.1.0").unwrap(),
         ),
         entry_attrs(),
         Text::plain("Amoxicillin 500 mg three times daily for seven days").unwrap(),
@@ -285,7 +291,9 @@ fn kitchen_sink() -> Composition {
     .with_expiry_time(DvDateTime::new("2026-08-07T09:00:00Z").unwrap());
 
     let action = Action::new(
-        at("Medication given", "openEHR-EHR-ACTION.medication.v1"),
+        at("Medication given", "openEHR-EHR-ACTION.medication.v1").with_archetype_details(
+            Archetyped::new("openEHR-EHR-ACTION.medication.v1", "1.1.0").unwrap(),
+        ),
         entry_attrs(),
         DvDateTime::new("2026-07-31T09:30:00Z").unwrap(),
         ItemSingle::new(
@@ -305,7 +313,9 @@ fn kitchen_sink() -> Composition {
     );
 
     let admin = AdminEntry::new(
-        at("Admission", "openEHR-EHR-ADMIN_ENTRY.admission.v1"),
+        at("Admission", "openEHR-EHR-ADMIN_ENTRY.admission.v1").with_archetype_details(
+            Archetyped::new("openEHR-EHR-ADMIN_ENTRY.admission.v1", "1.1.0").unwrap(),
+        ),
         entry_attrs(),
         ItemSingle::new(
             at("data", "at0001"),

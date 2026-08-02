@@ -809,13 +809,34 @@ composition from one to a contribution, so the type name is the only thing that
 can — which is why the rules exist and why nothing else would have caught a
 `compositions` list naming a `CONTRIBUTION`.
 
-**Residual.** Eighteen unenforced invariants remain. Nine need external code sets
+**Since.** `ENTRY.Is_archetype_root` and `ENTRY.Subject_validity` are now
+enforced, and `VERSIONED_OBJECT.Latest_version_valid` joined its two siblings as
+definitional — `latest_version()` returns `versions.last()`.
+
+Enforcing `Is_archetype_root` found **seven fixtures that violated it**,
+including the README's own example of "a composition another openEHR
+implementation wrote". Every one carried the archetype id as its
+`archetype_node_id` and no `archetype_details`, which `LOCATABLE.Archetyped_valid`
+makes the same statement as not being an archetype root. That is `A-21`'s shape
+for the third time: the fixtures were built from what an entry looks like rather
+than from what the model requires, and nothing compared the two.
+
+`Subject_validity` is the more interesting of the pair, because openEHR gets it
+free and this crate does not. The BMM documents `subject_is_self` as *"True if
+this Entry is about the subject of the EHR, in which case the subject attribute
+is of type PARTY_SELF"* — an implication that holds by construction there.
+Here `PartyProxy::is_subject` also answers true for a `PARTY_RELATED` whose
+relationship is `self`, so an entry could claim to be about the patient while
+naming a related party, and the two readings of "who is this about" diverged in
+silence.
+
+**Residual.** Fifteen unenforced invariants remain. Nine need external code sets
 the crate does not carry (ISO 639, ISO 3166, IANA character sets and media types)
-and are the same decision as `A-19`; the other nine are checkable with what is
-already here — the three `Is_archetype_root` assertions on `EHR_ACCESS`, `ENTRY`
-and `PARTY`, `ENTRY.Subject_validity`, `REFERENCE_RANGE.Range_is_simple`,
-`ITEM_TABLE.Valid_structure`, `EHR_ACCESS.Scheme_valid`, and the two `EVENT`
-timing rules that need a parent's origin.
+and are the same decision as `A-19`; the other six are checkable with what is
+already here — `Is_archetype_root` on `EHR_ACCESS` and `PARTY`,
+`EHR_ACCESS.Scheme_valid`, `REFERENCE_RANGE.Range_is_simple`, and the two
+`EVENT` timing rules, which need a parent `HISTORY`'s origin that an event does
+not hold.
 
 
 ## A-25 — the measurement was wrong, and wrong in the flattering direction

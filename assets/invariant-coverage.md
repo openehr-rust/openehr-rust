@@ -25,13 +25,13 @@ merely names — see `rm-1.1.0-invariants.json`.
 | | Count |
 | --- | --- |
 | Invariants in RM 1.1.0 | 155 |
-| Named in the crate's source | 69 |
-| Not named | 86 |
+| Named in the crate's source | 71 |
+| Not named | 84 |
 
 Every not-named invariant is accounted for below, and the build fails if one is not (`W0.4`). This file used to say that telling them apart "needs a human" — which was true only for as long as nobody did it, and while it stood a genuine gap was indistinguishable from a class this crate deliberately does not model.
 
-- **Not enforced**: **18**
-- Cannot fail in Rust: **29**
+- **Not enforced**: **15**
+- Cannot fail in Rust: **30**
 - Enforced under another name (`lib:L10.4`): **6**
 - Out of scope: **33**
 
@@ -80,7 +80,7 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 
 Grouped by why. **Not enforced** is the only group that is a gap; the others are answers.
 
-### **Not enforced** — 18
+### **Not enforced** — 15
 
 | Class | Invariant | Why |
 | --- | --- | --- |
@@ -94,14 +94,11 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `EHR_ACCESS` | `Is_archetype_root` | checked for COMPOSITION and EHR_STATUS, not here |
 | `EHR_ACCESS` | `Scheme_valid` | not checked |
 | `ENTRY` | `Encoding_valid` | IANA character sets are not carried |
-| `ENTRY` | `Is_archetype_root` | checked for COMPOSITION and EHR_STATUS, not here |
 | `ENTRY` | `Language_valid` | ISO 639 is not carried |
-| `ENTRY` | `Subject_validity` | subject_is_self is not checked against the subject's type |
 | `EVENT` | `Offset_validity1` | needs the parent HISTORY's origin, which an EVENT does not hold |
 | `INTERVAL_EVENT` | `Interval_start_time_valid` | needs time arithmetic against width |
 | `PARTY` | `Is_archetype_root` | checked for COMPOSITION and EHR_STATUS, not here |
 | `REFERENCE_RANGE` | `Range_is_simple` | not checked |
-| `VERSIONED_OBJECT` | `Latest_version_valid` | not checked |
 
 ### Enforced under another name (`lib:L10.4`) — 6
 
@@ -114,7 +111,7 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `DV_URI` | `Value_valid` | the URI parser refuses invalid text and reports itself |
 | `VERSION` | `Lifecycle_state_ valid` | checked and cited as ORIGINAL_VERSION; openEHR declares it on VERSION |
 
-### Cannot fail in Rust — 29
+### Cannot fail in Rust — 30
 
 | Class | Invariant | Why |
 | --- | --- | --- |
@@ -146,6 +143,7 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `VERSION` | `Owner_id_valid` | owner_id is a derived function, extracted from uid.object_id (BMM) |
 | `VERSIONED_OBJECT` | `All_version_ids_valid` | the count is the Vec's length |
 | `VERSIONED_OBJECT` | `All_versions_valid` | the count is the Vec's length |
+| `VERSIONED_OBJECT` | `Latest_version_valid` | latest_version() returns versions.last(); a derived function (BMM) |
 | `VERSIONED_OBJECT` | `Version_count_valid` | the count is a usize |
 
 ### Out of scope — 33
