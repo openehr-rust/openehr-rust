@@ -1,0 +1,1358 @@
+{
+ "source": "openEHR/specifications-ITS-BMM components/RM/json/openehr_rm_1.1.0.bmm.json",
+ "fetched": "2026-08-02",
+ "rm_release": "1.1.0",
+ "note": "Which attributes each class declares as a stored property and which as a derived function. An invariant constraining a derived function is definitional and cannot fail \u2014 see lib:A-24 and assets/invariant-coverage.md.",
+ "classes": {
+  "ACCESS_CONTROL_SETTINGS": {
+   "properties": [],
+   "functions": []
+  },
+  "ACTION": {
+   "properties": [
+    "description",
+    "instruction_details",
+    "ism_transition",
+    "time"
+   ],
+   "functions": []
+  },
+  "ACTIVITY": {
+   "properties": [
+    "action_archetype_id",
+    "description",
+    "timing"
+   ],
+   "functions": []
+  },
+  "ACTOR": {
+   "properties": [
+    "languages",
+    "roles"
+   ],
+   "functions": []
+  },
+  "ADDRESS": {
+   "properties": [
+    "details"
+   ],
+   "functions": [
+    "type"
+   ]
+  },
+  "ADDRESSED_MESSAGE": {
+   "properties": [
+    "addressees",
+    "message",
+    "sender",
+    "sender_reference",
+    "urgency"
+   ],
+   "functions": []
+  },
+  "ADMIN_ENTRY": {
+   "properties": [
+    "data"
+   ],
+   "functions": []
+  },
+  "AGENT": {
+   "properties": [],
+   "functions": []
+  },
+  "ARCHETYPED": {
+   "properties": [
+    "archetype_id",
+    "rm_version",
+    "template_id"
+   ],
+   "functions": []
+  },
+  "ATTESTATION": {
+   "properties": [
+    "attested_view",
+    "is_pending",
+    "items",
+    "proof",
+    "reason"
+   ],
+   "functions": []
+  },
+  "AUDIT_DETAILS": {
+   "properties": [
+    "change_type",
+    "committer",
+    "description",
+    "system_id",
+    "time_committed"
+   ],
+   "functions": []
+  },
+  "AUTHORED_RESOURCE": {
+   "properties": [
+    "description",
+    "is_controlled",
+    "original_language",
+    "revision_history",
+    "translations"
+   ],
+   "functions": [
+    "current_revision",
+    "languages_available"
+   ]
+  },
+  "CAPABILITY": {
+   "properties": [
+    "credentials",
+    "time_validity"
+   ],
+   "functions": []
+  },
+  "CARE_ENTRY": {
+   "properties": [
+    "guideline_id",
+    "protocol"
+   ],
+   "functions": []
+  },
+  "CITATION": {
+   "properties": [
+    "resolved",
+    "source_parent_ref",
+    "source_ref",
+    "source_type"
+   ],
+   "functions": []
+  },
+  "CLUSTER": {
+   "properties": [
+    "items"
+   ],
+   "functions": []
+  },
+  "CODE_PHRASE": {
+   "properties": [
+    "code_string",
+    "preferred_term",
+    "terminology_id"
+   ],
+   "functions": []
+  },
+  "CODE_SET_ACCESS": {
+   "properties": [],
+   "functions": [
+    "all_codes",
+    "has_code",
+    "has_lang",
+    "id"
+   ]
+  },
+  "COMPOSITION": {
+   "properties": [
+    "category",
+    "composer",
+    "content",
+    "context",
+    "language",
+    "territory"
+   ],
+   "functions": [
+    "is_persistent"
+   ]
+  },
+  "CONSUMABLE_USE": {
+   "properties": [
+    "amount"
+   ],
+   "functions": []
+  },
+  "CONTACT": {
+   "properties": [
+    "addresses",
+    "time_validity"
+   ],
+   "functions": [
+    "purpose"
+   ]
+  },
+  "CONTENT_ITEM": {
+   "properties": [],
+   "functions": []
+  },
+  "CONTRIBUTION": {
+   "properties": [
+    "audit",
+    "uid",
+    "versions"
+   ],
+   "functions": []
+  },
+  "DATA_STRUCTURE": {
+   "properties": [],
+   "functions": [
+    "as_hierarchy"
+   ]
+  },
+  "DATA_VALUE": {
+   "properties": [],
+   "functions": []
+  },
+  "DV_ABSOLUTE_QUANTITY": {
+   "properties": [
+    "accuracy"
+   ],
+   "functions": [
+    "add",
+    "diff",
+    "subtract"
+   ]
+  },
+  "DV_AMOUNT": {
+   "properties": [
+    "accuracy",
+    "accuracy_is_percent"
+   ],
+   "functions": [
+    "add",
+    "is_equal",
+    "less_than",
+    "multiply",
+    "negative",
+    "subtract",
+    "valid_percentage"
+   ]
+  },
+  "DV_BOOLEAN": {
+   "properties": [
+    "value"
+   ],
+   "functions": []
+  },
+  "DV_CODED_TEXT": {
+   "properties": [
+    "defining_code"
+   ],
+   "functions": []
+  },
+  "DV_COUNT": {
+   "properties": [
+    "magnitude",
+    "normal_range",
+    "other_reference_ranges"
+   ],
+   "functions": [
+    "add",
+    "is_strictly_comparable_to",
+    "less_than",
+    "multiply",
+    "subtract"
+   ]
+  },
+  "DV_DATE": {
+   "properties": [
+    "value"
+   ],
+   "functions": [
+    "add",
+    "diff",
+    "is_equal",
+    "is_strictly_comparable_to",
+    "less_than",
+    "magnitude",
+    "subtract"
+   ]
+  },
+  "DV_DATE_TIME": {
+   "properties": [
+    "value"
+   ],
+   "functions": [
+    "add",
+    "diff",
+    "is_strictly_comparable_to",
+    "less_than",
+    "magnitude",
+    "subtract"
+   ]
+  },
+  "DV_DURATION": {
+   "properties": [
+    "value"
+   ],
+   "functions": [
+    "add",
+    "is_strictly_comparable_to",
+    "less_than",
+    "magnitude",
+    "multiply",
+    "negative",
+    "subtract"
+   ]
+  },
+  "DV_EHR_URI": {
+   "properties": [],
+   "functions": []
+  },
+  "DV_ENCAPSULATED": {
+   "properties": [
+    "charset",
+    "language"
+   ],
+   "functions": []
+  },
+  "DV_GENERAL_TIME_SPECIFICATION": {
+   "properties": [],
+   "functions": [
+    "calendar_alignment",
+    "event_alignment",
+    "institution_specified"
+   ]
+  },
+  "DV_IDENTIFIER": {
+   "properties": [
+    "assigner",
+    "id",
+    "issuer",
+    "type"
+   ],
+   "functions": []
+  },
+  "DV_INTERVAL": {
+   "properties": [],
+   "functions": []
+  },
+  "DV_MULTIMEDIA": {
+   "properties": [
+    "alternate_text",
+    "compression_algorithm",
+    "data",
+    "integrity_check",
+    "integrity_check_algorithm",
+    "media_type",
+    "size",
+    "thumbnail",
+    "uri"
+   ],
+   "functions": [
+    "has_integrity_check",
+    "is_compressed",
+    "is_external",
+    "is_inline"
+   ]
+  },
+  "DV_ORDERED": {
+   "properties": [
+    "normal_range",
+    "normal_status",
+    "other_reference_ranges"
+   ],
+   "functions": [
+    "is_normal",
+    "is_simple",
+    "is_strictly_comparable_to",
+    "less_than"
+   ]
+  },
+  "DV_ORDINAL": {
+   "properties": [
+    "symbol",
+    "value"
+   ],
+   "functions": [
+    "is_strictly_comparable_to",
+    "less_than"
+   ]
+  },
+  "DV_PARAGRAPH": {
+   "properties": [
+    "items"
+   ],
+   "functions": []
+  },
+  "DV_PARSABLE": {
+   "properties": [
+    "formalism",
+    "value"
+   ],
+   "functions": [
+    "size"
+   ]
+  },
+  "DV_PERIODIC_TIME_SPECIFICATION": {
+   "properties": [],
+   "functions": [
+    "calendar_alignment",
+    "event_alignment",
+    "institution_specified",
+    "period"
+   ]
+  },
+  "DV_PROPORTION": {
+   "properties": [
+    "denominator",
+    "normal_range",
+    "numerator",
+    "other_reference_ranges",
+    "precision",
+    "type"
+   ],
+   "functions": [
+    "add",
+    "is_equal",
+    "is_integral",
+    "is_strictly_comparable_to",
+    "less_than",
+    "magnitude",
+    "multiply",
+    "subtract"
+   ]
+  },
+  "DV_QUANTIFIED": {
+   "properties": [
+    "accuracy",
+    "magnitude_status"
+   ],
+   "functions": [
+    "accuracy_unknown",
+    "is_equal",
+    "less_than",
+    "magnitude",
+    "valid_magnitude_status"
+   ]
+  },
+  "DV_QUANTITY": {
+   "properties": [
+    "magnitude",
+    "normal_range",
+    "other_reference_ranges",
+    "precision",
+    "units",
+    "units_display_name",
+    "units_system"
+   ],
+   "functions": [
+    "add",
+    "is_integral",
+    "is_strictly_comparable_to",
+    "less_than",
+    "multiply",
+    "subtract"
+   ]
+  },
+  "DV_SCALE": {
+   "properties": [
+    "symbol",
+    "value"
+   ],
+   "functions": [
+    "is_strictly_comparable_to",
+    "less_than"
+   ]
+  },
+  "DV_STATE": {
+   "properties": [
+    "is_terminal",
+    "value"
+   ],
+   "functions": []
+  },
+  "DV_TEMPORAL": {
+   "properties": [
+    "accuracy"
+   ],
+   "functions": [
+    "add",
+    "diff",
+    "subtract"
+   ]
+  },
+  "DV_TEXT": {
+   "properties": [
+    "encoding",
+    "formatting",
+    "hyperlink",
+    "language",
+    "mappings",
+    "value"
+   ],
+   "functions": []
+  },
+  "DV_TIME": {
+   "properties": [
+    "value"
+   ],
+   "functions": [
+    "add",
+    "diff",
+    "is_strictly_comparable_to",
+    "less_than",
+    "magnitude",
+    "subtract"
+   ]
+  },
+  "DV_TIME_SPECIFICATION": {
+   "properties": [
+    "value"
+   ],
+   "functions": [
+    "calendar_alignment",
+    "event_alignment",
+    "institution_specified"
+   ]
+  },
+  "DV_URI": {
+   "properties": [
+    "value"
+   ],
+   "functions": [
+    "fragment_id",
+    "path",
+    "query",
+    "scheme"
+   ]
+  },
+  "EHR": {
+   "properties": [
+    "compositions",
+    "contributions",
+    "directory",
+    "ehr_access",
+    "ehr_id",
+    "ehr_status",
+    "folders",
+    "system_id",
+    "time_created"
+   ],
+   "functions": []
+  },
+  "EHR_ACCESS": {
+   "properties": [
+    "settings"
+   ],
+   "functions": [
+    "scheme"
+   ]
+  },
+  "EHR_STATUS": {
+   "properties": [
+    "is_modifiable",
+    "is_queryable",
+    "other_details",
+    "subject"
+   ],
+   "functions": []
+  },
+  "ELEMENT": {
+   "properties": [
+    "null_flavour",
+    "null_reason",
+    "value"
+   ],
+   "functions": [
+    "is_null"
+   ]
+  },
+  "ENTRY": {
+   "properties": [
+    "encoding",
+    "language",
+    "other_participations",
+    "provider",
+    "subject",
+    "workflow_id"
+   ],
+   "functions": [
+    "subject_is_self"
+   ]
+  },
+  "EVALUATION": {
+   "properties": [
+    "data"
+   ],
+   "functions": []
+  },
+  "EVENT": {
+   "properties": [
+    "data",
+    "state",
+    "time"
+   ],
+   "functions": [
+    "offset"
+   ]
+  },
+  "EVENT_CONTEXT": {
+   "properties": [
+    "end_time",
+    "health_care_facility",
+    "location",
+    "other_context",
+    "participations",
+    "setting",
+    "start_time"
+   ],
+   "functions": []
+  },
+  "EXTERNAL_ENVIRONMENT_ACCESS": {
+   "properties": [],
+   "functions": []
+  },
+  "EXTRACT": {
+   "properties": [
+    "chapters",
+    "participations",
+    "request_id",
+    "sequence_nr",
+    "specification",
+    "system_id",
+    "time_created"
+   ],
+   "functions": []
+  },
+  "EXTRACT_ACTION_REQUEST": {
+   "properties": [
+    "action",
+    "request_id",
+    "uid"
+   ],
+   "functions": []
+  },
+  "EXTRACT_CHAPTER": {
+   "properties": [
+    "items"
+   ],
+   "functions": []
+  },
+  "EXTRACT_CONTENT_ITEM": {
+   "properties": [
+    "is_changed",
+    "is_masked",
+    "is_primary",
+    "item"
+   ],
+   "functions": []
+  },
+  "EXTRACT_ENTITY_CHAPTER": {
+   "properties": [
+    "extract_id_key"
+   ],
+   "functions": []
+  },
+  "EXTRACT_ENTITY_MANIFEST": {
+   "properties": [
+    "ehr_id",
+    "extract_id_key",
+    "item_list",
+    "other_ids",
+    "subject_id"
+   ],
+   "functions": []
+  },
+  "EXTRACT_ERROR": {
+   "properties": [
+    "reason",
+    "request_id"
+   ],
+   "functions": []
+  },
+  "EXTRACT_FOLDER": {
+   "properties": [
+    "items"
+   ],
+   "functions": []
+  },
+  "EXTRACT_ITEM": {
+   "properties": [],
+   "functions": []
+  },
+  "EXTRACT_MANIFEST": {
+   "properties": [
+    "entities"
+   ],
+   "functions": []
+  },
+  "EXTRACT_PARTICIPATION": {
+   "properties": [
+    "function",
+    "mode",
+    "performer",
+    "time"
+   ],
+   "functions": []
+  },
+  "EXTRACT_REQUEST": {
+   "properties": [
+    "extract_spec",
+    "uid",
+    "update_spec"
+   ],
+   "functions": []
+  },
+  "EXTRACT_SPEC": {
+   "properties": [
+    "criteria",
+    "extract_type",
+    "include_multimedia",
+    "link_depth",
+    "manifest",
+    "other_details",
+    "priority",
+    "version_spec"
+   ],
+   "functions": []
+  },
+  "EXTRACT_UPDATE_SPEC": {
+   "properties": [
+    "persist_in_server",
+    "repeat_period",
+    "trigger_events",
+    "update_method"
+   ],
+   "functions": []
+  },
+  "EXTRACT_VERSION_SPEC": {
+   "properties": [
+    "commit_time_interval",
+    "include_all_versions",
+    "include_data",
+    "include_revision_history"
+   ],
+   "functions": []
+  },
+  "FEEDER_AUDIT": {
+   "properties": [
+    "feeder_system_audit",
+    "feeder_system_item_ids",
+    "original_content",
+    "originating_system_audit",
+    "originating_system_item_ids"
+   ],
+   "functions": []
+  },
+  "FEEDER_AUDIT_DETAILS": {
+   "properties": [
+    "location",
+    "other_details",
+    "provider",
+    "subject",
+    "system_id",
+    "time",
+    "version_id"
+   ],
+   "functions": []
+  },
+  "FOLDER": {
+   "properties": [
+    "details",
+    "folders",
+    "items"
+   ],
+   "functions": []
+  },
+  "GENERIC_CONTENT_ITEM": {
+   "properties": [
+    "author",
+    "authorisation_time",
+    "authoriser",
+    "creation_time",
+    "item",
+    "item_status",
+    "item_type",
+    "item_type_version",
+    "other_details",
+    "system_id",
+    "version_id",
+    "version_set_id"
+   ],
+   "functions": []
+  },
+  "GENERIC_ENTRY": {
+   "properties": [
+    "data"
+   ],
+   "functions": []
+  },
+  "GROUP": {
+   "properties": [],
+   "functions": []
+  },
+  "HISTORY": {
+   "properties": [
+    "duration",
+    "events",
+    "origin",
+    "period",
+    "summary"
+   ],
+   "functions": [
+    "is_periodic"
+   ]
+  },
+  "IMPORTED_VERSION": {
+   "properties": [
+    "item"
+   ],
+   "functions": [
+    "data",
+    "lifecycle_state",
+    "preceding_version_uid",
+    "uid"
+   ]
+  },
+  "INSTRUCTION": {
+   "properties": [
+    "activities",
+    "expiry_time",
+    "narrative",
+    "wf_definition"
+   ],
+   "functions": []
+  },
+  "INSTRUCTION_DETAILS": {
+   "properties": [
+    "activity_id",
+    "instruction_id",
+    "wf_details"
+   ],
+   "functions": []
+  },
+  "INTERVAL_EVENT": {
+   "properties": [
+    "math_function",
+    "sample_count",
+    "width"
+   ],
+   "functions": [
+    "interval_start_time"
+   ]
+  },
+  "ISM_TRANSITION": {
+   "properties": [
+    "careflow_step",
+    "current_state",
+    "reason",
+    "transition"
+   ],
+   "functions": []
+  },
+  "ITEM": {
+   "properties": [],
+   "functions": []
+  },
+  "ITEM_LIST": {
+   "properties": [
+    "items"
+   ],
+   "functions": [
+    "as_hierarchy",
+    "item_count",
+    "ith_item",
+    "named_item",
+    "names"
+   ]
+  },
+  "ITEM_SINGLE": {
+   "properties": [
+    "item"
+   ],
+   "functions": [
+    "as_hierarchy"
+   ]
+  },
+  "ITEM_STRUCTURE": {
+   "properties": [],
+   "functions": []
+  },
+  "ITEM_TABLE": {
+   "properties": [
+    "rows"
+   ],
+   "functions": [
+    "as_hierarchy",
+    "column_count",
+    "column_names",
+    "element_at_cell_ij",
+    "has_column_with_name",
+    "has_row_with_key",
+    "has_row_with_name",
+    "ith_row",
+    "named_row",
+    "row_count",
+    "row_names",
+    "row_with_key"
+   ]
+  },
+  "ITEM_TAG": {
+   "properties": [
+    "key",
+    "owner_id",
+    "target",
+    "target_path",
+    "value"
+   ],
+   "functions": []
+  },
+  "ITEM_TREE": {
+   "properties": [
+    "items"
+   ],
+   "functions": [
+    "as_hierarchy",
+    "element_at_path",
+    "has_element_path"
+   ]
+  },
+  "LINK": {
+   "properties": [
+    "meaning",
+    "target",
+    "type"
+   ],
+   "functions": []
+  },
+  "LOCATABLE": {
+   "properties": [
+    "archetype_details",
+    "archetype_node_id",
+    "feeder_audit",
+    "links",
+    "name",
+    "uid"
+   ],
+   "functions": [
+    "concept",
+    "is_archetype_root"
+   ]
+  },
+  "MEASUREMENT_SERVICE": {
+   "properties": [],
+   "functions": [
+    "is_valid_units_string",
+    "units_equivalent"
+   ]
+  },
+  "MESSAGE": {
+   "properties": [
+    "audit",
+    "author",
+    "content",
+    "signature"
+   ],
+   "functions": []
+  },
+  "MESSAGE_CONTENT": {
+   "properties": [],
+   "functions": []
+  },
+  "OBSERVATION": {
+   "properties": [
+    "data",
+    "state"
+   ],
+   "functions": []
+  },
+  "OPENEHR_CODE_SET_IDENTIFIERS": {
+   "properties": [],
+   "functions": [
+    "valid_code_set_id"
+   ]
+  },
+  "OPENEHR_CONTENT_ITEM": {
+   "properties": [
+    "item"
+   ],
+   "functions": []
+  },
+  "OPENEHR_TERMINOLOGY_GROUP_IDENTIFIERS": {
+   "properties": [],
+   "functions": [
+    "valid_terminology_group_id"
+   ]
+  },
+  "ORGANISATION": {
+   "properties": [],
+   "functions": []
+  },
+  "ORIGINAL_VERSION": {
+   "properties": [
+    "attestations",
+    "data",
+    "lifecycle_state",
+    "other_input_version_uids",
+    "preceding_version_uid",
+    "uid"
+   ],
+   "functions": [
+    "is_merged"
+   ]
+  },
+  "PARTICIPATION": {
+   "properties": [
+    "function",
+    "mode",
+    "performer",
+    "time"
+   ],
+   "functions": []
+  },
+  "PARTY": {
+   "properties": [
+    "contacts",
+    "details",
+    "identities",
+    "relationships",
+    "reverse_relationships"
+   ],
+   "functions": [
+    "type"
+   ]
+  },
+  "PARTY_IDENTIFIED": {
+   "properties": [
+    "identifiers",
+    "name"
+   ],
+   "functions": []
+  },
+  "PARTY_IDENTITY": {
+   "properties": [
+    "details"
+   ],
+   "functions": [
+    "purpose"
+   ]
+  },
+  "PARTY_PROXY": {
+   "properties": [
+    "external_ref"
+   ],
+   "functions": []
+  },
+  "PARTY_RELATED": {
+   "properties": [
+    "relationship"
+   ],
+   "functions": []
+  },
+  "PARTY_RELATIONSHIP": {
+   "properties": [
+    "details",
+    "source",
+    "target",
+    "time_validity"
+   ],
+   "functions": [
+    "type"
+   ]
+  },
+  "PARTY_SELF": {
+   "properties": [],
+   "functions": []
+  },
+  "PATHABLE": {
+   "properties": [],
+   "functions": [
+    "item_at_path",
+    "items_at_path",
+    "parent",
+    "path_exists",
+    "path_of_item",
+    "path_unique"
+   ]
+  },
+  "PERSON": {
+   "properties": [],
+   "functions": []
+  },
+  "POINT_EVENT": {
+   "properties": [],
+   "functions": []
+  },
+  "PROPORTION_KIND": {
+   "properties": [],
+   "functions": [
+    "valid_proportion_kind"
+   ]
+  },
+  "REFERENCE_RANGE": {
+   "properties": [
+    "meaning",
+    "range"
+   ],
+   "functions": [
+    "is_in_range"
+   ]
+  },
+  "RESOURCE_DESCRIPTION": {
+   "properties": [
+    "details",
+    "lifecycle_state",
+    "original_author",
+    "other_contributors",
+    "other_details",
+    "parent_resource",
+    "resource_package_uri"
+   ],
+   "functions": []
+  },
+  "RESOURCE_DESCRIPTION_ITEM": {
+   "properties": [
+    "copyright",
+    "keywords",
+    "language",
+    "misuse",
+    "original_resource_uri",
+    "other_details",
+    "purpose",
+    "use"
+   ],
+   "functions": []
+  },
+  "RESOURCE_USAGE": {
+   "properties": [
+    "actual",
+    "description",
+    "prospective",
+    "reference",
+    "type"
+   ],
+   "functions": []
+  },
+  "RESOURCE_USE": {
+   "properties": [
+    "cost_data"
+   ],
+   "functions": []
+  },
+  "REVISION_HISTORY": {
+   "properties": [
+    "items"
+   ],
+   "functions": [
+    "most_recent_version",
+    "most_recent_version_time_committed"
+   ]
+  },
+  "REVISION_HISTORY_ITEM": {
+   "properties": [
+    "audits",
+    "version_id"
+   ],
+   "functions": []
+  },
+  "ROLE": {
+   "properties": [
+    "capabilities",
+    "performer",
+    "time_validity"
+   ],
+   "functions": []
+  },
+  "SECTION": {
+   "properties": [
+    "items"
+   ],
+   "functions": []
+  },
+  "SERVICE_USE": {
+   "properties": [
+    "duration",
+    "identifier",
+    "start_time"
+   ],
+   "functions": []
+  },
+  "SYNC_EXTRACT": {
+   "properties": [
+    "items",
+    "specification"
+   ],
+   "functions": []
+  },
+  "SYNC_EXTRACT_REQUEST": {
+   "properties": [
+    "specification"
+   ],
+   "functions": []
+  },
+  "SYNC_EXTRACT_SPEC": {
+   "properties": [
+    "all_contributions",
+    "contribution_list",
+    "contributions_since",
+    "includes_versions"
+   ],
+   "functions": []
+  },
+  "TERMINOLOGY_ACCESS": {
+   "properties": [],
+   "functions": [
+    "all_codes",
+    "codes_for_group_id",
+    "codes_for_group_name",
+    "has_code_for_group_id",
+    "id",
+    "rubric_for_code"
+   ]
+  },
+  "TERMINOLOGY_SERVICE": {
+   "properties": [],
+   "functions": [
+    "code_set",
+    "code_set_for_id",
+    "code_set_identifiers",
+    "has_code_set",
+    "has_terminology",
+    "openehr_code_sets",
+    "terminology",
+    "terminology_identifiers"
+   ]
+  },
+  "TERM_MAPPING": {
+   "properties": [
+    "match",
+    "purpose",
+    "target"
+   ],
+   "functions": [
+    "broader",
+    "equivalent",
+    "is_valid_match_code",
+    "narrower",
+    "unknown"
+   ]
+  },
+  "TRANSLATION_DETAILS": {
+   "properties": [
+    "accreditaton",
+    "author",
+    "language",
+    "other_details"
+   ],
+   "functions": []
+  },
+  "VERSION": {
+   "properties": [
+    "commit_audit",
+    "contribution",
+    "signature"
+   ],
+   "functions": [
+    "canonical_form",
+    "data",
+    "is_branch",
+    "lifecycle_state",
+    "owner_id",
+    "preceding_version_uid",
+    "uid"
+   ]
+  },
+  "VERSIONED_COMPOSITION": {
+   "properties": [],
+   "functions": [
+    "is_persistent"
+   ]
+  },
+  "VERSIONED_EHR_ACCESS": {
+   "properties": [],
+   "functions": []
+  },
+  "VERSIONED_EHR_STATUS": {
+   "properties": [],
+   "functions": []
+  },
+  "VERSIONED_FOLDER": {
+   "properties": [],
+   "functions": []
+  },
+  "VERSIONED_OBJECT": {
+   "properties": [
+    "owner_id",
+    "time_created",
+    "uid"
+   ],
+   "functions": [
+    "all_version_ids",
+    "all_versions",
+    "commit_attestation",
+    "commit_imported_version",
+    "commit_original_merged_version",
+    "commit_original_version",
+    "has_version_at_time",
+    "has_version_id",
+    "is_original_version",
+    "latest_trunk_version",
+    "latest_version",
+    "revision_history",
+    "trunk_lifecycle_state",
+    "version_at_time",
+    "version_count",
+    "version_with_id"
+   ]
+  },
+  "VERSIONED_PARTY": {
+   "properties": [],
+   "functions": []
+  },
+  "VIEW_ENTRY": {
+   "properties": [],
+   "functions": []
+  },
+  "VIEW_ITEM": {
+   "properties": [
+    "meta_data"
+   ],
+   "functions": []
+  },
+  "VIEW_SECTION": {
+   "properties": [
+    "items"
+   ],
+   "functions": []
+  },
+  "VIEW_STATUS": {
+   "properties": [],
+   "functions": []
+  },
+  "X_CONTRIBUTION": {
+   "properties": [
+    "audit",
+    "uid",
+    "versions"
+   ],
+   "functions": []
+  },
+  "X_VERSIONED_COMPOSITION": {
+   "properties": [],
+   "functions": []
+  },
+  "X_VERSIONED_EHR_ACCESS": {
+   "properties": [],
+   "functions": []
+  },
+  "X_VERSIONED_EHR_STATUS": {
+   "properties": [],
+   "functions": []
+  },
+  "X_VERSIONED_FOLDER": {
+   "properties": [],
+   "functions": []
+  },
+  "X_VERSIONED_OBJECT": {
+   "properties": [
+    "extract_version_count",
+    "owner_id",
+    "revision_history",
+    "time_created",
+    "total_version_count",
+    "uid",
+    "versions"
+   ],
+   "functions": []
+  },
+  "X_VERSIONED_PARTY": {
+   "properties": [],
+   "functions": []
+  }
+ }
+}

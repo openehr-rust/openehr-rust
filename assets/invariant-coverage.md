@@ -30,8 +30,8 @@ merely names — see `rm-1.1.0-invariants.json`.
 
 Every not-named invariant is accounted for below, and the build fails if one is not (`W0.4`). This file used to say that telling them apart "needs a human" — which was true only for as long as nobody did it, and while it stood a genuine gap was indistinguishable from a class this crate deliberately does not model.
 
-- **Not enforced**: **25**
-- Cannot fail in Rust: **22**
+- **Not enforced**: **18**
+- Cannot fail in Rust: **29**
 - Enforced under another name (`lib:L10.4`): **6**
 - Out of scope: **33**
 
@@ -80,18 +80,15 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 
 Grouped by why. **Not enforced** is the only group that is a gap; the others are answers.
 
-### **Not enforced** — 25
+### **Not enforced** — 18
 
 | Class | Invariant | Why |
 | --- | --- | --- |
-| `ADDRESS` | `Type_valid` | type = name is not asserted |
 | `COMPOSITION` | `Language_valid` | ISO 639 is not carried (lib:A-19) |
 | `COMPOSITION` | `Territory_valid` | ISO 3166 is not carried (lib:A-19) |
-| `CONTACT` | `Purpose_valid` | purpose = name is not asserted |
 | `DV_ENCAPSULATED` | `Charset_valid` | IANA character sets are not carried |
 | `DV_ENCAPSULATED` | `Language_valid` | ISO 639 is not carried |
 | `DV_MULTIMEDIA` | `Media_type_valid` | IANA media types are not carried |
-| `DV_ORDERED` | `Is_simple_validity` | not checked |
 | `DV_TEXT` | `Encoding_valid` | IANA character sets are not carried |
 | `DV_TEXT` | `Language_valid` | ISO 639 is not carried |
 | `EHR_ACCESS` | `Is_archetype_root` | checked for COMPOSITION and EHR_STATUS, not here |
@@ -103,11 +100,7 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `EVENT` | `Offset_validity1` | needs the parent HISTORY's origin, which an EVENT does not hold |
 | `INTERVAL_EVENT` | `Interval_start_time_valid` | needs time arithmetic against width |
 | `PARTY` | `Is_archetype_root` | checked for COMPOSITION and EHR_STATUS, not here |
-| `PARTY` | `Type_valid` | not checked |
-| `PARTY_IDENTITY` | `Purpose_valid` | purpose = name is not asserted |
-| `PARTY_RELATIONSHIP` | `Type_validity` | not checked |
 | `REFERENCE_RANGE` | `Range_is_simple` | not checked |
-| `VERSION` | `Owner_id_valid` | owner_id is not modelled on a version at all (lib:A-24) |
 | `VERSIONED_OBJECT` | `Latest_version_valid` | not checked |
 
 ### Enforced under another name (`lib:L10.4`) — 6
@@ -121,13 +114,16 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `DV_URI` | `Value_valid` | the URI parser refuses invalid text and reports itself |
 | `VERSION` | `Lifecycle_state_ valid` | checked and cited as ORIGINAL_VERSION; openEHR declares it on VERSION |
 
-### Cannot fail in Rust — 22
+### Cannot fail in Rust — 29
 
 | Class | Invariant | Why |
 | --- | --- | --- |
 | `ACTOR` | `Roles_valid` | roles is a Vec |
+| `ADDRESS` | `Type_valid` | type is derived from the inherited name (BMM) |
 | `ATTESTATION` | `Items_valid` | items is a Vec |
 | `COMPOSITION` | `Content_valid` | content is a Vec |
+| `CONTACT` | `Purpose_valid` | purpose is derived from the inherited name (BMM) |
+| `DV_ORDERED` | `Is_simple_validity` | is_simple is derived as `no reference ranges`; the rule restates it (BMM) |
 | `DV_ORDERED` | `Other_reference_ranges_validity` | other_reference_ranges is a Vec |
 | `DV_PARSABLE` | `Size_valid` | size is not stored, so it cannot disagree with the value's length |
 | `DV_TEXT` | `Mappings_valid` | mappings is a Vec |
@@ -141,9 +137,13 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `ORIGINAL_VERSION` | `Is_merged_validity` | is_merged() returns !other_input_version_uids.is_empty() |
 | `ORIGINAL_VERSION` | `Other_input_version_uids_valid` | other_input_version_uids is a Vec |
 | `PARTY` | `Contacts_valid` | contacts is a Vec |
+| `PARTY` | `Type_valid` | type is a derived function (BMM) |
 | `PARTY_IDENTIFIED` | `Identifiers_valid` | identifiers is a Vec |
+| `PARTY_IDENTITY` | `Purpose_valid` | purpose is derived from the inherited name (BMM) |
+| `PARTY_RELATIONSHIP` | `Type_validity` | type is a derived function (BMM) |
 | `ROLE` | `Capabilities_valid` | capabilities is a Vec |
 | `SECTION` | `Items_valid` | items is a Vec |
+| `VERSION` | `Owner_id_valid` | owner_id is a derived function, extracted from uid.object_id (BMM) |
 | `VERSIONED_OBJECT` | `All_version_ids_valid` | the count is the Vec's length |
 | `VERSIONED_OBJECT` | `All_versions_valid` | the count is the Vec's length |
 | `VERSIONED_OBJECT` | `Version_count_valid` | the count is a usize |

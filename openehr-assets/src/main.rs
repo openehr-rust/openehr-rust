@@ -715,8 +715,8 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
     (
         "VERSION",
         "Owner_id_valid",
-        Disposition::Unenforced,
-        "owner_id is not modelled on a version at all (lib:A-24)",
+        Disposition::Vacuous,
+        "owner_id is a derived function, extracted from uid.object_id (BMM)",
     ),
     (
         "VERSIONED_OBJECT",
@@ -727,8 +727,8 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
     (
         "DV_ORDERED",
         "Is_simple_validity",
-        Disposition::Unenforced,
-        "not checked",
+        Disposition::Vacuous,
+        "is_simple is derived as `no reference ranges`; the rule restates it (BMM)",
     ),
     (
         "ENTRY",
@@ -757,14 +757,14 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
     (
         "CONTACT",
         "Purpose_valid",
-        Disposition::Unenforced,
-        "purpose = name is not asserted",
+        Disposition::Vacuous,
+        "purpose is derived from the inherited name (BMM)",
     ),
     (
         "PARTY_IDENTITY",
         "Purpose_valid",
-        Disposition::Unenforced,
-        "purpose = name is not asserted",
+        Disposition::Vacuous,
+        "purpose is derived from the inherited name (BMM)",
     ),
     // --- revealed once the count became class-aware (lib:A-25) ---------------
     //
@@ -864,8 +864,8 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
     (
         "ADDRESS",
         "Type_valid",
-        Disposition::Unenforced,
-        "type = name is not asserted",
+        Disposition::Vacuous,
+        "type is derived from the inherited name (BMM)",
     ),
     (
         "EHR_ACCESS",
@@ -894,14 +894,14 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
     (
         "PARTY",
         "Type_valid",
-        Disposition::Unenforced,
-        "not checked",
+        Disposition::Vacuous,
+        "type is a derived function (BMM)",
     ),
     (
         "PARTY_RELATIONSHIP",
         "Type_validity",
-        Disposition::Unenforced,
-        "not checked",
+        Disposition::Vacuous,
+        "type is a derived function (BMM)",
     ),
 ];
 

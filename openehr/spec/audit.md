@@ -760,15 +760,29 @@ construction, and each would have read as a missing check forever.
   `DV_MULTIMEDIA` invariants unenforced "despite the crate shipping their code
   sets".
 
-- **`VERSION.owner_id` is not modelled at all.** RM 1.1.0 declares
-  `Owner_id_valid: owner_id.value.is_equal (uid.object_id.value)` on `VERSION`,
-  and the expression only typechecks there — `uid.object_id` requires an
-  `OBJECT_VERSION_ID`, which is `VERSION`'s uid type and not
-  `VERSIONED_OBJECT`'s. `OriginalVersion` has no such field. This is the shape
-  of `A-18`, where `VERSION.signature` was likewise declared by openEHR and
-  absent here. **Not fixed, and not asserted either:** confirming it needs the
-  BMM's attribute lists read rather than its invariant expressions inferred
-  from, and this register does not guess (`W0.3`).
+- ~~**`VERSION.owner_id` is not modelled at all.**~~ **Resolved 2026-08-02, and
+  the suspicion was wrong.** This said confirming it needed the BMM's attribute
+  lists read rather than inferred from, and that the register does not guess
+  (`W0.3`). The BMM was then read.
+
+  `VERSION` declares three **properties** — `contribution`, `signature`,
+  `commit_audit` — and `owner_id` is not among them. It is a **function**, whose
+  documentation says: *"Copy of the owning `VERSIONED_OBJECT._uid_` value;
+  extracted from the local `_uid_` property's `_object_id_`."* So
+  `Owner_id_valid` constrains a derived value against the thing it is derived
+  from, and cannot fail. The crate is right not to store it.
+
+  Reading the BMM for that one question answered six more. `is_simple`,
+  `purpose`, `type` on `PARTY`, `ADDRESS`, `CONTACT`, `PARTY_IDENTITY` and
+  `PARTY_RELATIONSHIP` are all derived functions — `purpose` and `type` are
+  documented as *"taken from the value of the inherited `name` attribute"* —
+  so `Is_simple_validity`, `Purpose_valid`, `Type_valid` and `Type_validity`
+  are definitional too. **Unenforced fell from 25 to 18.**
+
+  The distinction the register had been missing is now vendored as
+  `assets/rm-1.1.0-attributes.json`, so the next classification does not have
+  to re-derive it: an invariant constraining a *property* is a rule, and one
+  constraining a *function* is usually a definition.
 
 **Also recorded rather than fixed:** the four `PARTY`/`PARTY_RELATIONSHIP` graph
 invariants need a demographic *repository* — an object store that can be asked
@@ -795,10 +809,13 @@ composition from one to a contribution, so the type name is the only thing that
 can — which is why the rules exist and why nothing else would have caught a
 `compositions` list naming a `CONTRIBUTION`.
 
-**Residual.** Twenty-one unenforced invariants remain. Nine need external code
-sets the crate does not carry (ISO 639, ISO 3166, IANA character sets and media
-types) and are the same decision as `A-19`; the other twelve are checkable with
-what is already here.
+**Residual.** Eighteen unenforced invariants remain. Nine need external code sets
+the crate does not carry (ISO 639, ISO 3166, IANA character sets and media types)
+and are the same decision as `A-19`; the other nine are checkable with what is
+already here — the three `Is_archetype_root` assertions on `EHR_ACCESS`, `ENTRY`
+and `PARTY`, `ENTRY.Subject_validity`, `REFERENCE_RANGE.Range_is_simple`,
+`ITEM_TABLE.Valid_structure`, `EHR_ACCESS.Scheme_valid`, and the two `EVENT`
+timing rules that need a parent's origin.
 
 
 ## A-25 — the measurement was wrong, and wrong in the flattering direction

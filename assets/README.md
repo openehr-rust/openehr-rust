@@ -1,6 +1,11 @@
 # assets
 
-**Generated. Do not edit by hand.**
+**Nine of these files are generated. Do not edit those by hand.**
+
+Two are **vendored inputs** the generator reads rather than writes —
+`rm-1.1.0-invariants.json` and `rm-1.1.0-attributes.json`, both distilled from
+the openEHR BMM. They change only when the RM release does, and `cargo run --
+check` does not police them because nothing here derives them.
 
 ```sh
 cd openehr-assets
@@ -17,6 +22,7 @@ regenerate fails the build rather than leaving a stale file in the tree.
 | `ddl/<engine>.sql` | the DDL each dialect emits, one file per engine |
 | `column-type-matrix.md` | every logical column type as all six engines spell it, side by side |
 | `rm-1.1.0-invariants.json` | all 155 openEHR RM 1.1.0 invariants, distilled from the BMM — **expressions**, not just names |
+| `rm-1.1.0-attributes.json` | which attributes each class declares as a stored **property** and which as a derived **function** — an invariant over a derived function is definitional and cannot fail (`lib:A-24`) |
 | `invariant-coverage.md` | which of those the crate names, **and which names diverge from openEHR's** (`lib:L10.4`) |
 
 ## Why these are committed
