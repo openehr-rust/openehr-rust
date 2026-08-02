@@ -252,3 +252,65 @@ fn the_chain_links_versions_and_notices_a_rewrite() {
          the chain would be evidence of nothing"
     );
 }
+
+/// `O10.14`: a database installed under a different schema version is refused,
+/// not half-upgraded.
+///
+/// There is deliberately no migration path before 1.0 — the schema is expected
+/// to change, and building an upgrade route for a shape that is still moving
+/// would be machinery maintained against a moving target. What a deployment is
+/// owed in the meantime is to be **told**, at `install()`, rather than to
+/// discover it when the first commit fails on a column that is not there.
+#[test]
+fn a_database_from_another_schema_version_is_refused() {
+    use openehr_store::StoreError;
+
+    let mut store = SqliteStore::in_memory().expect("open");
+    store.install().expect("fresh install");
+    // Idempotent: installing again over our own version is fine.
+    store.install().expect("re-install is a no-op");
+
+    // Pretend this database was written by a different build.
+    store
+        .connection()
+        .execute("UPDATE openehr_schema_version SET version = 99", [])
+        .expect("rewrite version");
+
+    match store.install() {
+        Err(StoreError::SchemaVersionMismatch { found, expected }) => {
+            assert_eq!(found, 99);
+            assert_eq!(expected, openehr_store::SCHEMA_VERSION);
+        }
+        other => panic!("expected a version mismatch, got {other:?}"),
+    }
+}
+
+/// A database predating the version table is refused too.
+///
+/// The absence of a version row is ambiguous — it means "fresh" or "older than
+/// versioning" — and the two are told apart by whether the database holds data.
+/// Guessing "fresh" would run the DDL over an unknown shape.
+#[test]
+fn a_database_predating_the_version_table_is_refused() {
+    use openehr_store::StoreError;
+
+    let mut store = SqliteStore::in_memory().expect("open");
+    store.install().expect("install");
+    let ehr = conformance::sample_ehr();
+    store.create_ehr(&ehr).expect("ehr");
+
+    // Erase the version row, leaving data behind: exactly what an older
+    // database looks like.
+    store
+        .connection()
+        .execute("DELETE FROM openehr_schema_version", [])
+        .expect("clear version");
+
+    assert!(
+        matches!(
+            store.install(),
+            Err(StoreError::SchemaVersionMismatch { found: 0, .. })
+        ),
+        "a populated database with no recorded version must be refused"
+    );
+}

@@ -42,5 +42,5 @@ pub mod store;
 pub use dialect::{Dialect, Idempotence, ObjectKind, Placeholder, ddl_script};
 pub use error::{Result, StoreError};
 pub use record::{CompositionIndexRow, StoredInstant, VersionRow};
-pub use schema::{ColTy, Column, Index, TABLES, Table};
+pub use schema::{ColTy, Column, Index, SCHEMA_VERSION, SCHEMA_VERSION_TABLE, TABLES, Table};
 pub use store::{CommitOutcome, Store};

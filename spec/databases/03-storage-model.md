@@ -31,7 +31,9 @@ Requirement prefix: `M3`.
   Indexing the envelope is not a compromise. Those are exactly the attributes an
   AQL `FROM` clause filters on before it reaches into content.
 
-- **M3.21** Five tables, and no more without an amendment:
+- **M3.21** *(amended)* Five tables of openEHR data, and no more without an
+  amendment — plus one table of schema metadata, which holds no clinical data
+  and exists so a mismatched build refuses rather than half-works (`O10.15`):
 
   | Table | Holds | Append-only |
   | --- | --- | --- |

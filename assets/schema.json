@@ -1,5 +1,35 @@
 [
   {
+    "name": "openehr_schema_version",
+    "note": "One row. The schema version this database was installed under, so a mismatched binary refuses rather than half-working.",
+    "columns": [
+      {
+        "name": "version",
+        "ty": "Int",
+        "nullable": false,
+        "note": "matches SCHEMA_VERSION"
+      },
+      {
+        "name": "applied_text",
+        "ty": "Instant",
+        "nullable": false,
+        "note": "authoritative: when this version was applied"
+      },
+      {
+        "name": "applied_utc",
+        "ty": "InstantUtc",
+        "nullable": true,
+        "note": "derived"
+      }
+    ],
+    "primary_key": [
+      "version"
+    ],
+    "foreign_keys": [],
+    "indexes": [],
+    "append_only": false
+  },
+  {
     "name": "openehr_ehr",
     "note": "One row per EHR. Holds only what the EHR class itself fixes; everything else is a reference, as in the model (E6.1).",
     "columns": [

@@ -501,9 +501,47 @@ pub const COMPOSITION_INDEX: Table = Table {
     append_only: false,
 };
 
+/// The schema version this build of the crate writes and expects.
+///
+/// Bumped whenever `TABLES` changes in a way an existing database cannot serve:
+/// a new column, a changed type, a new constraint. Not bumped for a comment.
+///
+/// It exists because `install()` is `CREATE TABLE IF NOT EXISTS`. Against a
+/// database built by an older version, every statement no-ops, `install()`
+/// returns `Ok`, and the first commit fails on a column that is not there —
+/// success followed by an unexplained failure, which is the shape this project
+/// refuses everywhere else.
+pub const SCHEMA_VERSION: i64 = 3;
+
+/// The `schema_version` table: what shape this database is in.
+///
+/// The sixth table, and not an openEHR class. `M3.21` fixes five tables because
+/// each corresponds to a Reference Model class; this one holds no clinical data
+/// and exists so a deployment can be told its database is the wrong shape
+/// instead of discovering it mid-commit (`O10.14`).
+pub const SCHEMA_VERSION_TABLE: Table = Table {
+    name: "openehr_schema_version",
+    note: "One row. The schema version this database was installed under, so a \
+           mismatched binary refuses rather than half-working.",
+    columns: &[
+        Column::required("version", ColTy::Int, "matches SCHEMA_VERSION"),
+        Column::required(
+            "applied_text",
+            ColTy::Instant,
+            "authoritative: when this version was applied",
+        ),
+        Column::optional("applied_utc", ColTy::InstantUtc, "derived"),
+    ],
+    primary_key: &["version"],
+    foreign_keys: &[],
+    indexes: &[],
+    append_only: false,
+};
+
 /// Every table, in dependency order: a table's foreign keys always point at a
 /// table earlier in this list, so emitting them in order needs no deferral.
 pub const TABLES: &[Table] = &[
+    SCHEMA_VERSION_TABLE,
     EHR,
     VERSIONED_OBJECT,
     VERSION,

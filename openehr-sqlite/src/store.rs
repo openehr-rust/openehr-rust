@@ -135,6 +135,70 @@ impl SqliteStore {
         attestations_json, other_input_version_uids_json, chain_previous, \
         chain_content, chain_digest, chain_tag_key_id, chain_tag_mac";
 
+    /// Refuses a database installed under a different schema version.
+    ///
+    /// Three states, and the third is the one that matters:
+    ///
+    /// - **No version table** and **no data** — a fresh database. Proceed.
+    /// - **No version table** but `openehr_ehr` has rows — a database from
+    ///   before versioning existed. Refuse: its shape is unknown and its columns
+    ///   are certainly not these.
+    /// - **A version that is not ours** — refuse, naming both.
+    fn check_schema_version(&self) -> Result<()> {
+        let recorded: Option<i64> = self
+            .connection
+            .query_row(
+                "SELECT version FROM openehr_schema_version LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .unwrap_or(None);
+
+        if let Some(found) = recorded {
+            if found != openehr_store::SCHEMA_VERSION {
+                return Err(StoreError::SchemaVersionMismatch {
+                    found,
+                    expected: openehr_store::SCHEMA_VERSION,
+                });
+            }
+            return Ok(());
+        }
+
+        // No version recorded. Either fresh, or older than versioning itself.
+        let legacy: Option<i64> = self
+            .connection
+            .query_row("SELECT count(*) FROM openehr_ehr", [], |row| row.get(0))
+            .optional()
+            .unwrap_or(None);
+        if legacy.is_some_and(|n| n > 0) {
+            return Err(StoreError::SchemaVersionMismatch {
+                found: 0,
+                expected: openehr_store::SCHEMA_VERSION,
+            });
+        }
+        Ok(())
+    }
+
+    /// Records the schema version, once.
+    fn record_schema_version(&self) -> Result<()> {
+        let now = StoredInstant::from_date_time(
+            &"1970-01-01T00:00:00Z".parse().expect("literal"),
+        );
+        self.connection
+            .execute(
+                "INSERT OR IGNORE INTO openehr_schema_version (version, applied_text, applied_utc) \
+                 VALUES (?1, ?2, ?3)",
+                params![
+                    openehr_store::SCHEMA_VERSION,
+                    now.text,
+                    now.utc_seconds
+                ],
+            )
+            .map(|_| ())
+            .map_err(|e| engine(&e))
+    }
+
     /// The chain digest of one version, for linking the next.
     fn chain_digest_of(&self, uid: &str) -> Result<[u8; 32]> {
         let raw: Vec<u8> = self
@@ -210,9 +274,14 @@ impl Store for SqliteStore {
     }
 
     fn install(&mut self) -> Result<()> {
+        // Check *before* creating anything. Running the DDL first would create
+        // the version table on an old database and make the mismatch look like
+        // a fresh install.
+        self.check_schema_version()?;
         self.connection
             .execute_batch(&ddl_script(&SqliteDialect))
-            .map_err(|e| engine(&e))
+            .map_err(|e| engine(&e))?;
+        self.record_schema_version()
     }
 
     fn create_ehr(&mut self, ehr: &Ehr) -> Result<()> {

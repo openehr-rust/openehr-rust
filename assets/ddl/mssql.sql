@@ -7,6 +7,14 @@
 -- as a diff at review time, and so that two dialects becoming the same
 -- thing shows up as two identical files (spec/audit.md W-01).
 
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_schema_version' AND type = 'U')
+  EXEC('CREATE TABLE [openehr_schema_version] (
+  [version] bigint NOT NULL,
+  [applied_text] nvarchar(64) NOT NULL,
+  [applied_utc] datetimeoffset(7),
+  PRIMARY KEY ([version])
+)');
+
 IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_ehr' AND type = 'U')
   EXEC('CREATE TABLE [openehr_ehr] (
   [ehr_id] nvarchar(255) NOT NULL,

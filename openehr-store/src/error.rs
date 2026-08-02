@@ -66,6 +66,27 @@ pub enum StoreError {
         message: String,
     },
 
+    /// The database was installed under a different schema version.
+    ///
+    /// Refusing is the whole point. `install()` is `CREATE TABLE IF NOT EXISTS`,
+    /// so against an older database every statement no-ops and the *first
+    /// commit* fails on a column that is not there. A store that returned `Ok`
+    /// here would report success and then fail inexplicably later, which is
+    /// worse than not starting.
+    ///
+    /// There is no migration mechanism (`O10.14`); a deployment holding data
+    /// under `found` must export, recreate, and reload.
+    #[error(
+        "database is at schema version {found}, this build writes {expected}; \
+         there is no migration path (see spec/databases/10-operations.md O10.14)"
+    )]
+    SchemaVersionMismatch {
+        /// The version recorded in the database.
+        found: i64,
+        /// The version this build writes.
+        expected: i64,
+    },
+
     /// The operation is defined by this crate and not implemented by this
     /// engine.
     ///

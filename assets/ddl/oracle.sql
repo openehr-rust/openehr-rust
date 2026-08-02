@@ -8,6 +8,18 @@
 -- thing shows up as two identical files (spec/audit.md W-01).
 
 BEGIN
+  EXECUTE IMMEDIATE 'CREATE TABLE "openehr_schema_version" (
+  "version" NUMBER(19) NOT NULL,
+  "applied_text" VARCHAR2(64 CHAR) NOT NULL,
+  "applied_utc" TIMESTAMP WITH TIME ZONE,
+  PRIMARY KEY ("version")
+)';
+EXCEPTION WHEN OTHERS THEN
+  IF SQLCODE != -955 THEN RAISE; END IF;
+END;
+/
+
+BEGIN
   EXECUTE IMMEDIATE 'CREATE TABLE "openehr_ehr" (
   "ehr_id" VARCHAR2(255 CHAR) NOT NULL,
   "system_id" VARCHAR2(255 CHAR) NOT NULL,

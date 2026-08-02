@@ -32,14 +32,34 @@ Requirement prefix: `O10`.
 - **O10.4** *(amended)* `install()` MUST be idempotent (`G2.13`). A deployment
   that runs it twice, or retries after a partial failure, MUST NOT get a hard
   error the second time.
-- **O10.14** There is **no migration mechanism**, and no metadata table recording
-  an applied schema version. The schema is five tables declared as constants
-  (`G2.7`); changing it is a source change, and a deployment holding data under
-  an older shape has no supported upgrade path today.
+- **O10.14** *(amended)* There is **no migration mechanism before 1.0**, and
+  this is a decision rather than a gap. The schema is expected to change while
+  the model is still settling — it has changed twice already — and an upgrade
+  route maintained against a moving shape is machinery that is wrong more often
+  than it is right. A deployment before 1.0 exports, recreates, and reloads.
 
-  Stated as a requirement rather than omitted, because a store whose schema can
-  change and whose data cannot migrate is a known limitation that a deployment
-  must plan around, not a detail.
+- **O10.15** A store MUST record the schema version its database was installed
+  under, and `install()` MUST **refuse** a database recorded under a different
+  one.
+
+  This is the obligation that survives dropping migrations. `install()` is
+  `CREATE TABLE IF NOT EXISTS`: run against an older database every statement
+  no-ops, `install()` returns `Ok`, and the *first commit* fails on a column
+  that is not there. Success followed by an unexplained failure is worse than
+  refusing to start, and it is the pattern this specification rejects everywhere
+  else (`S1.11`).
+
+- **O10.16** A database holding data but recording **no** version MUST be
+  refused, not treated as fresh. The absence is ambiguous — it means "new" or
+  "older than versioning" — and the two are distinguished by whether the
+  database holds anything. Guessing "new" runs the DDL over an unknown shape.
+
+- **O10.17** The version MUST be bumped whenever the schema changes in a way an
+  existing database cannot serve: a new column, a changed type, a new
+  constraint. Not for a comment.
+
+  It follows that the version is **not** the crate version. A release that
+  changes no table leaves it alone, and two crate versions may share a schema.
 
 - **O10.4a** *(amended — **not applicable**)* A migration changing stored derived
   values would need a recompute path. The one derived value here is the `…_utc`
@@ -56,7 +76,7 @@ Requirement prefix: `O10`.
   because it binds any caller of any store. `openehr-sqlite` is exempt only
   because it is in-process: there is no connection.
 
-- **O10.15** An engine crate that opens a connection MUST document how TLS is
+- **O10.18** An engine crate that opens a connection MUST document how TLS is
   configured for its driver, and MUST NOT default to an unverified connection. No
   crate here opens a network connection yet, so this requirement binds the first
   one that does.
@@ -71,7 +91,7 @@ Requirement prefix: `O10`.
   and already tests. A bespoke one is a second thing to get right, and it will be
   discovered to be wrong at the worst moment.
 
-- **O10.16** Because `openehr_version` and `openehr_contribution` are append-only
+- **O10.19** Because `openehr_version` and `openehr_contribution` are append-only
   (`M3.17`), a restore to a point in time cannot lose a committed version without
   losing the rows after it. That is a property worth relying on and worth stating:
   the history is not rewritten in place, so a backup is a prefix rather than a

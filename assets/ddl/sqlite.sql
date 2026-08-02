@@ -7,6 +7,13 @@
 -- as a diff at review time, and so that two dialects becoming the same
 -- thing shows up as two identical files (spec/audit.md W-01).
 
+CREATE TABLE IF NOT EXISTS "openehr_schema_version" (
+  "version" INTEGER NOT NULL,
+  "applied_text" TEXT NOT NULL,
+  "applied_utc" INTEGER,
+  PRIMARY KEY ("version")
+);
+
 CREATE TABLE IF NOT EXISTS "openehr_ehr" (
   "ehr_id" TEXT NOT NULL,
   "system_id" TEXT NOT NULL,
