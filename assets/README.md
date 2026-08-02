@@ -17,7 +17,7 @@ regenerate fails the build rather than leaving a stale file in the tree.
 | `ddl/<engine>.sql` | the DDL each dialect emits, one file per engine |
 | `column-type-matrix.md` | every logical column type as all six engines spell it, side by side |
 | `rm-1.1.0-invariants.json` | all 155 openEHR RM 1.1.0 invariants, distilled from the BMM — **expressions**, not just names |
-| `invariant-coverage.md` | which of those the `openehr` crate names in its source |
+| `invariant-coverage.md` | which of those the crate names, **and which names diverge from openEHR's** (`lib:L10.4`) |
 
 ## Why these are committed
 

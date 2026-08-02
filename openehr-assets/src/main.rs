@@ -168,6 +168,38 @@ fn build(root: &Path) -> Vec<Asset> {
     assets
 }
 
+/// Every `(class, invariant)` pair the crate reports in a `ParseError`.
+///
+/// Hand-rolled rather than a regex crate: the shape is fixed and adding a
+/// dependency to a repository tool to match one literal would be the wrong
+/// trade.
+fn regex_citations(source: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for (index, _) in source.match_indices("ParseError::invariant(") {
+        let tail = &source[index..];
+        let quoted: Vec<&str> = tail
+            .split('"')
+            .skip(1)
+            .step_by(2)
+            .take(2)
+            .collect();
+        if quoted.len() == 2
+            && quoted[0].chars().all(|c| c.is_ascii_uppercase() || c == '_' || c.is_ascii_digit())
+            && !quoted[1].is_empty()
+            // Identifier-shaped only. A `ParseError::invariant` call whose
+            // second argument is a sentence is a detail message, not a name.
+            && quoted[1]
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            out.push((quoted[0].to_owned(), quoted[1].to_owned()));
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
 /// Reports which openEHR RM invariants the `openehr` crate **names**.
 ///
 /// # What this measures, and what it does not
@@ -208,6 +240,21 @@ fn invariant_coverage(root: &Path) -> Asset {
             }
         }
     }
+
+    // `lib:L10.4` requires the crate to report openEHR's *own* invariant names,
+    // so a reader can find the rule in the class definition. A prior audit
+    // found five violations by hand and said "and three more" without naming
+    // them. This finds them all, every time it runs.
+    let cited = regex_citations(&source);
+    let mut divergent: Vec<(String, String, Vec<String>)> = Vec::new();
+    for (class, ours) in &cited {
+        if let Some(theirs) = classes.get(class)
+            && !theirs.contains_key(ours)
+        {
+            divergent.push((class.clone(), ours.clone(), theirs.keys().cloned().collect()));
+        }
+    }
+    divergent.sort();
 
     let mut named = 0usize;
     let mut unnamed: Vec<(String, String)> = Vec::new();
@@ -261,6 +308,7 @@ fn invariant_coverage(root: &Path) -> Asset {
          are genuinely unenforced. Distinguishing those three needs a human, and \
          this file does not attempt it.\n"
     );
+    write_divergences(&mut body, &divergent);
     let _ = writeln!(body, "## Not named in the crate's source\n");
     let _ = writeln!(body, "| Class | Invariant |");
     let _ = writeln!(body, "| --- | --- |");
@@ -271,6 +319,37 @@ fn invariant_coverage(root: &Path) -> Asset {
         path: root.join("assets/invariant-coverage.md"),
         body,
     }
+}
+
+/// The `L10.4` section of the coverage report.
+fn write_divergences(body: &mut String, divergent: &[(String, String, Vec<String>)]) {
+    let _ = writeln!(
+        body,
+        "## Invariant names that diverge from openEHR (`lib:L10.4`)\n"
+    );
+    let _ = writeln!(
+        body,
+        "`L10.4` requires the crate to report openEHR's own invariant names, so a reader can find the rule in the class definition. A name the specification does not contain fails that.\n\nOnly classes openEHR gives invariants to are listed; where openEHR states none, a crate rule is an addition rather than a rename.\n"
+    );
+    if divergent.is_empty() {
+        let _ = writeln!(body, "None.\n");
+    } else {
+        let _ = writeln!(body, "| Class | Crate reports | openEHR declares |");
+        let _ = writeln!(body, "| --- | --- | --- |");
+        for (class, ours, theirs) in divergent {
+            let _ = writeln!(
+                body,
+                "| `{class}` | `{ours}` | {} |",
+                theirs
+                    .iter()
+                    .map(|t| format!("`{t}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        let _ = writeln!(body);
+    }
+
 }
 
 fn main() -> std::process::ExitCode {

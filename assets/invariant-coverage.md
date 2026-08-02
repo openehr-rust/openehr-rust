@@ -30,6 +30,36 @@ merely names — see `rm-1.1.0-invariants.json`.
 
 Not-named includes invariants that are **out of scope** by a declared exclusion (EHR Extract, `lib:S1.6`; the Archetype Model, `lib:S1.4`), invariants that are **vacuous in Rust** (`X /= Void implies not X.is_empty` — an empty `Vec` is the absent case), and invariants that are genuinely unenforced. Distinguishing those three needs a human, and this file does not attempt it.
 
+## Invariant names that diverge from openEHR (`lib:L10.4`)
+
+`L10.4` requires the crate to report openEHR's own invariant names, so a reader can find the rule in the class definition. A name the specification does not contain fails that.
+
+Only classes openEHR gives invariants to are listed; where openEHR states none, a crate rule is an addition rather than a rename.
+
+| Class | Crate reports | openEHR declares |
+| --- | --- | --- |
+| `COMPOSITION` | `Is_persistent_validity` | `Category_validity`, `Content_valid`, `Is_archetype_root`, `Language_valid`, `Territory_valid` |
+| `CONTACT` | `Addresses_valid` | `Purpose_valid` |
+| `DV_AMOUNT` | `Accuracy_finite` | `Accuracy_is_percent_validity`, `Accuracy_validity` |
+| `DV_PARSABLE` | `Value_valid` | `Formalism_valid`, `Size_valid` |
+| `DV_PROPORTION` | `Denominator_valid` | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
+| `DV_PROPORTION` | `Is_percent_validity` | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
+| `DV_PROPORTION` | `Is_unitary_validity` | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
+| `DV_PROPORTION` | `Parts_finite` | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
+| `DV_PROPORTION` | `Precision_valid` | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
+| `DV_TEXT` | `Value_valid` | `Encoding_valid`, `Formatting_valid`, `Language_valid`, `Mappings_valid`, `Valid_value` |
+| `ELEMENT` | `Null_flavour_valid` | `Inv_is_null_valid`, `Inv_null_flavour_indicated`, `Inv_null_flavour_valid`, `Inv_null_reason_valid` |
+| `ELEMENT` | `Null_reason_valid` | `Inv_is_null_valid`, `Inv_null_flavour_indicated`, `Inv_null_flavour_valid`, `Inv_null_reason_valid` |
+| `EVENT_CONTEXT` | `End_time_valid` | `Participations_validity`, `Setting_valid`, `location_valid` |
+| `HISTORY` | `Events_exists` | `Events_valid`, `Period_consistency`, `Periodic_validity` |
+| `INSTRUCTION_DETAILS` | `Activity_id_valid` | `Activity_path_valid` |
+| `INTERVAL_EVENT` | `Math_function_valid` | `Interval_start_time_valid`, `Math_function_validity` |
+| `INTERVAL_EVENT` | `Width_non_negative` | `Interval_start_time_valid`, `Math_function_validity` |
+| `ORIGINAL_VERSION` | `Data_valid` | `Attestations_valid`, `Is_merged_validity`, `Other_input_version_uids_valid` |
+| `ORIGINAL_VERSION` | `Lifecycle_state_valid` | `Attestations_valid`, `Is_merged_validity`, `Other_input_version_uids_valid` |
+| `PARTY` | `Uid_valid` | `Contacts_valid`, `Identities_valid`, `Is_archetype_root`, `Relationships_validity`, `Reverse_relationships_validity`, `Type_valid`, `Uid_mandatory` |
+| `REVISION_HISTORY_ITEM` | `Audits_valid` | `Audit_valid` |
+
 ## Not named in the crate's source
 
 | Class | Invariant |
