@@ -261,6 +261,44 @@ these attributes and this store still cannot hold them; remedy 2 — columns, an
 a table or JSON column for attestations — remains the real fix, and needs a
 migration mechanism this project does not have (`O10.14`).
 
+### D-09 — The conformance matrix contradicted itself — **Medium, fixed**
+
+Found by comparing the matrix against the specification it summarises, after a
+day of changes had landed under it.
+
+**Found.** The file that says *"Where it disagrees with a crate's documentation,
+this file is the one to trust"* disagreed with **itself**:
+
+- `M3.39` and `M3.42` were marked **•** in the store-level table — "digest is
+  SHA-256, 32 raw bytes", with `ColTy::Digest` named as evidence — and listed
+  under **Not implemented** as "no digest is stored anywhere yet, and adding one
+  needs a new `ColTy` variant". Both statements were in the same file, and the
+  second had been true when written.
+- `O10.14`'s row said "no migration mechanism and **no applied-version
+  metadata**" while `O10.15` was marked **•** for recording exactly that
+  metadata and refusing a mismatch.
+- `R4.2` was marked **~** because "four `VERSION`/`AUDIT_DETAILS` attributes are
+  accepted and silently dropped — `D-07`", months after `D-07` was fixed. The
+  matrix understated the crate.
+- `PR12.5`/`PR12.6` were listed as absent after `openehr-loco` implemented read
+  auditing above the store.
+
+**Why it happened.** The matrix is prose. Every other claim in this repository
+that drifted was prose too, and the ones that stopped drifting are the ones a
+build reads — the disposition table, the invariant register, the licence check.
+The matrix was assessed once, on 2026-08-01, and nothing has compared it to
+anything since.
+
+**Fixed.** Rows corrected, the session's new requirements assessed, and a CI
+check added: **no requirement may be both marked satisfied and listed under Not
+implemented**. That catches the exact defect and nothing else, which is the most
+a check over prose can honestly do.
+
+**Residual.** The matrix still records status by hand. The check proves it is
+not self-contradictory; it cannot prove a **•** is deserved. `C0.20` already
+says a mark is a claim about evidence, and the evidence is the test named in the
+row — a reader who doubts a row should open it.
+
 ### D-08 — Two engines cannot return the bytes they were given — **High, fixed**
 
 Found while building the tamper-detection test `PR12.12` demands, by asking what

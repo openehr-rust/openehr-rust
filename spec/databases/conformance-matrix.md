@@ -12,7 +12,12 @@ intended. Where it disagrees with a crate's documentation, this file is the one
 to trust — a README is descriptive (`W0.2`), and READMEs are where the
 overstatements have historically been.
 
-**Assessed 2026-08-01.** Anything not in this file is not claimed.
+**Assessed 2026-08-02.** Anything not in this file is not claimed.
+
+This file contradicted itself until 2026-08-02 — two requirements were marked
+satisfied *and* listed as absent, and two rows described gaps that had been
+closed. See [`audit.md`](audit.md) **D-09**. A CI check now refuses the first of
+those; the rest is still assessed by hand.
 
 ## Legend
 
@@ -76,7 +81,7 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `R4.11` canonicalized in Rust, not by the engine | • | shared `to_canonical_string` |
 | `R4.12` reads reconstruct from JSON, not index columns | • | |
 | `R4.13` validate before writing | • | |
-| `R4.2` lossless round-trip incl. lexical instants | ~ | the **composition** round-trips; four `VERSION`/`AUDIT_DETAILS` attributes are accepted and silently dropped — `D-07` |
+| `R4.2` lossless round-trip incl. lexical instants | • | including the four `VERSION`/`AUDIT_DETAILS` attributes `D-07` found dropped |
 | `R4.4` commit is one transaction | • | |
 | `R4.5` snapshot reads | • | a reader looping against a writer never sees a version without its index row |
 | `H5.1` commit appends, never modifies | • | |
@@ -93,7 +98,34 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `M3.39`–`M3.42` digest is SHA-256, 32 raw bytes | • | `ColTy::Digest`, binary in all six dialects |
 | `O10.15` schema version recorded, mismatch refused | • | three states, all tested |
 | `M3.33` projection refuses a non-archetype-root | • | |
+| `M3.16d` content verified from the **stored bytes** | • | `tests/tamper.rs` edits a row through a second connection with the triggers dropped; mutation-checked |
+| `M3.43` canonical JSON in a byte-preserving column | • | the store round-trips it; the per-engine claim is below |
 | `M3.34` anonymous committer stored as `NULL` | • | |
+
+## Service requirements
+
+`openehr-loco` only. It sits **outside the conformance ladder** — every rung
+there is defined by DDL, a `Store`, or a database server (`W0.32`) — so it
+states evidence and takes no level. Nothing here is published.
+
+| Requirement | Status | Note |
+| --- | :-: | --- |
+| `S1.20` deleted is `410`, never-existed is `404` | • | `tests/http.rs`, mutation-checked |
+| `PR12.13` verifies an assertion, does not authenticate | • | relying party; no credential is held |
+| `PR12.14` PASETO `v4.public`, never JWT | • | a `v4.local` token offered as `v4.public` is refused |
+| `PR12.15` verification key only, no signing path | • | by construction; no secret key is loaded |
+| `PR12.16` refuses to start with no verification key | • | observed by hand, and the verifier is built before the store |
+| `PR12.17` no non-expiring token; audience may be bound | • | both tested |
+| `PR12.18` verification is not authorization | • | no route consults who the token names |
+| `PR12.19` committer must be the verified caller | • | `403` for another party, `422` for an unidentifiable one; mutation-checked |
+| `PR12.21` no header may stand in for a token | • | spoofed identity headers, alone and alongside a token; mutation-checked |
+| `PR12.5`, `PR12.6` read auditing, durability stated | • | recorded and flushed **before** the body is returned; a read that cannot be recorded is refused |
+| `PR12.22` an access record names ids, never content | • | the response carries the composition, the log does not |
+| `PR12.23` a failed read is recorded, distinguishably | • | `not_found`, `gone`, `refused` |
+| `PR12.20` a token is not an audit trail | • | auditing is opt-in and `/metadata` says which |
+| `H5.15` update requires a precondition; `412` not `409` | • | stale, absent, and `*` all tested |
+| `H5.16` both `W/"uid"` and the bare uid accepted | • | |
+| `PR12.12` tamper detection | — | the store's, not the service's |
 
 ## Cross-cutting
 
@@ -107,21 +139,26 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `M3.23` foreign keys point backwards only | • | |
 | `M3.27` every `_text` has a nullable `_utc` partner | • | asserted over the whole schema |
 | `M3.30` `ColTy` not `non_exhaustive`, no wildcard arms | • | by construction |
+| `P6.18` no index over a column an engine cannot search | • | schema test; refuses `LongText`/`Json`, and a new `ColTy` fails to compile |
+| `P6.13` every index records the query it exists for | • | schema test over `Index::note` |
 | `W16.19` one licence expression, one licence file | • | checked in CI |
-| `W16.15` `repository` names the real repository | ~ | fixed for 0.1.1; `openehr` **0.1.0 is published with the wrong one and is immutable** (**W-03**) |
+| `W16.15` `repository` names the real repository | ~ | correct since 0.1.1 and in the current 0.2.0; `openehr` **0.1.0 is published with the wrong one and is immutable** (**W-03**) |
 
-## Not implemented
+## Not implemented in the store
 
-Specified, and absent. Listed so the gap is visible rather than inferred from
-silence (`W0.4`).
+Specified, and absent **from `openehr-store` and its engines**. A requirement
+satisfied by `openehr-loco` above them can still appear here — `PR12.5` does —
+because a program embedding the store directly gets the store's behaviour and
+not the service's.
+
+Listed so the gap is visible rather than inferred from silence (`W0.4`).
 
 | Requirement | Subject | Note |
 | --- | --- | --- |
 
 | `M3.18` | GDPR Art. 17 erasure | no erasure operation |
-| `M3.39`–`M3.42` | digest algorithm and storage | SHA-256, 32 raw bytes, binary column — no digest is stored anywhere yet, and adding one needs a new `ColTy` variant |
-| `PR12.5`, `PR12.6` | read auditing | only writes are recorded; an access investigation asks about reads |
-| `O10.14` | schema migration | no migration mechanism and no applied-version metadata |
+| `PR12.5`, `PR12.6` | read auditing **in the store** | `openehr-loco` records reads above it (see the service table); a program embedding `openehr-store` directly still records none, which is the case `PR12.5` was written for |
+| `O10.14` | schema migration | no migration mechanism, and none before 1.0 by decision. The applied version **is** recorded — see `O10.15` above |
 
 
 | `T11.7` | redaction test over emitted logs | |

@@ -296,6 +296,54 @@ jobs:
           done
           echo "mssql and oracle still claim Dialect, as recorded"
 
+      # `db:D-09`: the matrix marked two requirements satisfied and listed the
+      # same two as absent, in one file, for a day. The file that says "where
+      # this disagrees with a crate's documentation, trust this" was disagreeing
+      # with itself.
+      #
+      # This checks the one thing a check over prose honestly can. It cannot
+      # tell whether a bullet is deserved — only that the file does not say
+      # both.
+      - name: The conformance matrix does not contradict itself
+        run: |
+          python3 - <<'PY'
+          import re, sys, pathlib
+          bad = 0
+          for path in ("spec/databases/conformance-matrix.md",
+                       "openehr/spec/conformance-matrix.md"):
+              text = pathlib.Path(path).read_text()
+              if "## Not implemented" not in text:
+                  continue
+              body, absent_section = text.split("## Not implemented", 1)
+              # The service table is a different layer. A requirement the
+              # service satisfies and the store does not is a scoped statement,
+              # not a contradiction — the same shape as the per-engine table,
+              # where `M3.17` is satisfied on four engines and absent on two.
+              body = body.split("## Service requirements", 1)[0] + \
+                     body.split("## Cross-cutting", 1)[-1]
+              ids = lambda cell: set(re.findall(r"`([A-Z]+[0-9]*\.[0-9]+[a-z]?)`", cell))
+              satisfied = set()
+              for line in body.splitlines():
+                  if not line.startswith("|"):
+                      continue
+                  cells = [c.strip() for c in line.split("|")]
+                  if len(cells) > 2 and any(c == "\u2022" for c in cells[2:-1]):
+                      satisfied |= ids(cells[1])
+              absent = set()
+              for line in absent_section.splitlines():
+                  if line.startswith("|"):
+                      cells = [c.strip() for c in line.split("|")]
+                      if len(cells) > 1:
+                          absent |= ids(cells[1])
+              both = sorted(satisfied & absent)
+              if both:
+                  bad = 1
+                  print(f"::error::{path} marks {', '.join(both)} satisfied and "
+                        f"also lists them as not implemented")
+          sys.exit(bad)
+          PY
+          echo "no requirement is both satisfied and absent"
+
       # W0.22-W0.23: one licence expression across all eight crates, and
       # LICENSE.md as the only licence file. Shipping the full text of some
       # licences and not others privileges those and understates the grant.
