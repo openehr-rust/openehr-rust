@@ -63,6 +63,9 @@ impl Dialect for PostgresqlDialect {
             ColTy::InstantUtc => "timestamptz",
             ColTy::Int => "bigint",
             ColTy::Bool => "boolean",
+            // `bytea`, PostgreSQL's only binary type. Fixed width is not
+            // expressible, so length is enforced in Rust (`M3.41` departure).
+            ColTy::Digest => "bytea",
         }
         .to_owned()
     }

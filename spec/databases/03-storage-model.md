@@ -106,6 +106,7 @@ read the reason, so the reason is here rather than in a commit message.
   | `InstantUtc` | a derived instant for ordering — nullable by construction |
   | `Int` | a whole number |
   | `Bool` | a truth value |
+  | `Digest` | a SHA-256 digest — 32 raw bytes in a binary column (`M3.40`) |
 
 - **M3.29** `Id` and `Text` MUST carry a maximum length. MySQL and MariaDB cannot
   index an unbounded `VARCHAR`, and Oracle has no unbounded `VARCHAR2` at all;
@@ -176,9 +177,25 @@ read the reason, so the reason is here rather than in a commit message.
   `install()` and is tolerable there, but it is a real difference and the crate
   documentation MUST say which form it uses.
 
-- **M3.16** *(amended — **not implemented**)* The previous text required a
-  tamper-evident hash chain over history rows, under two algorithms, with
-  checkpoints, key retirement, and key generation.
+- **M3.16** *(amended — **implemented**)* Every committed version MUST carry a
+  chain entry: the digest of the preceding version in the same container, a
+  SHA-256 digest of its own canonical content, and its own digest over
+  `previous || content || uid`. Where a key is supplied, an HMAC-SHA-256 tag
+  over the same pre-image and the id of the key that produced it.
+
+  **Chained per container, in version-tree order.** That detects a version
+  altered in place, removed from the middle, or reordered. It does **not**
+  detect deleting the newest version, or dropping a container whole — for that
+  the head must be published somewhere the database administrator does not
+  control (`M3.16c`, still unimplemented).
+
+  An unkeyed chain detects careless modification and supports an external
+  witness. It does not stop an informed attacker with write access, who can
+  recompute it; that is what the keyed tag is for, and the key lives in the
+  process and never in the database.
+
+  The previous text also required two algorithms, checkpoints, key retirement,
+  and key generation. Those remain unimplemented and are not claimed.
 
   **No such chain exists in this repository.** `openehr_version` has no
   `prev_hash` column and no tag column; `openehr-store` does not reference the

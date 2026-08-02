@@ -236,6 +236,62 @@
         "ty": "Json",
         "nullable": true,
         "note": "canonical JSON of the version's content; NULL only when the version is a logical deletion (V8.9)"
+      },
+      {
+        "name": "audit_description",
+        "ty": "LongText",
+        "nullable": true,
+        "note": "AUDIT_DETAILS.description — the free-text reason for a change, often the only record of why a correction exists"
+      },
+      {
+        "name": "signature",
+        "ty": "LongText",
+        "nullable": true,
+        "note": "VERSION.signature — carried, never verified (S1.11)"
+      },
+      {
+        "name": "attestations_json",
+        "ty": "Json",
+        "nullable": true,
+        "note": "ORIGINAL_VERSION.attestations, canonical JSON; NULL when there are none. A clinician's assertion that content is what they signed off"
+      },
+      {
+        "name": "other_input_version_uids_json",
+        "ty": "Json",
+        "nullable": true,
+        "note": "ORIGINAL_VERSION.other_input_version_uids, canonical JSON; NULL when this version is not a merge"
+      },
+      {
+        "name": "chain_previous",
+        "ty": "Digest",
+        "nullable": false,
+        "note": "digest of the preceding version's chain entry, or the genesis digest"
+      },
+      {
+        "name": "chain_content",
+        "ty": "Digest",
+        "nullable": false,
+        "note": "SHA-256 over the canonical form of this version's content"
+      },
+      {
+        "name": "chain_digest",
+        "ty": "Digest",
+        "nullable": false,
+        "note": "this entry's own digest, over previous || content || uid"
+      },
+      {
+        "name": "chain_tag_key_id",
+        "ty": {
+          "Text": 255
+        },
+        "nullable": true,
+        "note": "which key produced the tag; NULL when the chain is unkeyed"
+      },
+      {
+        "name": "chain_tag_mac",
+        "ty": "Digest",
+        "nullable": true,
+        "note": "HMAC-SHA-256 over the same pre-image; NULL when unkeyed. An unkeyed digest over a published pre-image is reproducible by anyone who can write the rows it covers"
       }
     ],
     "primary_key": [

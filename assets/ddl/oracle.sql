@@ -55,6 +55,15 @@ BEGIN
   "audit_time_committed_text" VARCHAR2(64 CHAR) NOT NULL,
   "audit_time_committed_utc" TIMESTAMP WITH TIME ZONE,
   "data_json" CLOB,
+  "audit_description" CLOB,
+  "signature" CLOB,
+  "attestations_json" CLOB,
+  "other_input_version_uids_json" CLOB,
+  "chain_previous" RAW(32) NOT NULL,
+  "chain_content" RAW(32) NOT NULL,
+  "chain_digest" RAW(32) NOT NULL,
+  "chain_tag_key_id" VARCHAR2(255 CHAR),
+  "chain_tag_mac" RAW(32),
   PRIMARY KEY ("uid"),
   FOREIGN KEY ("versioned_object_uid") REFERENCES "openehr_versioned_object" ("uid")
 )';

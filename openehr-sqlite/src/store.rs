@@ -64,6 +64,22 @@ impl SqliteStore {
         &self.connection
     }
 
+    /// Reads a 32-byte digest column.
+    ///
+    /// A wrong length is a conversion failure rather than a silent truncation:
+    /// a digest that is not 32 bytes did not come from SHA-256, and padding or
+    /// clipping it would produce a value that compares cleanly against nothing.
+    fn digest_column(row: &rusqlite::Row<'_>, name: &str) -> rusqlite::Result<[u8; 32]> {
+        let raw: Vec<u8> = row.get(name)?;
+        <[u8; 32]>::try_from(raw.as_slice()).map_err(|_| {
+            rusqlite::Error::FromSqlConversionFailure(
+                0,
+                rusqlite::types::Type::Blob,
+                format!("{name} is not 32 bytes").into(),
+            )
+        })
+    }
+
     /// Reads a version row from a query row.
     fn read_version(row: &rusqlite::Row<'_>) -> rusqlite::Result<VersionRow> {
         Ok(VersionRow {
@@ -85,6 +101,27 @@ impl SqliteStore {
                 utc_seconds: row.get("audit_time_committed_utc")?,
             },
             data_json: row.get("data_json")?,
+            audit_description: row.get("audit_description")?,
+            signature: row.get("signature")?,
+            attestations_json: row.get("attestations_json")?,
+            other_input_version_uids_json: row.get("other_input_version_uids_json")?,
+            chain: openehr_store::record::ChainColumns {
+                previous: Self::digest_column(row, "chain_previous")?,
+                content: Self::digest_column(row, "chain_content")?,
+                digest: Self::digest_column(row, "chain_digest")?,
+                tag_key_id: row.get("chain_tag_key_id")?,
+                tag_mac: row
+                    .get::<_, Option<Vec<u8>>>("chain_tag_mac")?
+                    .map(|v| <[u8; 32]>::try_from(v.as_slice()))
+                    .transpose()
+                    .map_err(|_| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            0,
+                            rusqlite::types::Type::Blob,
+                            "chain_tag_mac is not 32 bytes".into(),
+                        )
+                    })?,
+            },
         })
     }
 
@@ -94,7 +131,25 @@ impl SqliteStore {
         trunk_version, branch_number, branch_version, preceding_version_uid, \
         lifecycle_state_code, is_deleted, contribution_uid, audit_system_id, \
         audit_change_type_code, audit_committer_name, audit_time_committed_text, \
-        audit_time_committed_utc, data_json";
+        audit_time_committed_utc, data_json, audit_description, signature, \
+        attestations_json, other_input_version_uids_json, chain_previous, \
+        chain_content, chain_digest, chain_tag_key_id, chain_tag_mac";
+
+    /// The chain digest of one version, for linking the next.
+    fn chain_digest_of(&self, uid: &str) -> Result<[u8; 32]> {
+        let raw: Vec<u8> = self
+            .connection
+            .query_row(
+                "SELECT chain_digest FROM openehr_version WHERE uid = ?1",
+                params![uid],
+                |row| row.get(0),
+            )
+            .map_err(|e| engine(&e))?;
+        <[u8; 32]>::try_from(raw.as_slice()).map_err(|_| StoreError::Engine {
+            engine: ENGINE,
+            message: "chain_digest is not 32 bytes".to_owned(),
+        })
+    }
 }
 
 /// Translates a uniqueness violation on the version table into the commit
@@ -325,7 +380,15 @@ impl Store for SqliteStore {
             }
         }
 
-        let row = VersionRow::project(version, contribution_uid)?;
+        // The chain links to the previous version *in this container*, which is
+        // the head we already resolved for the commit rules. Reading it here
+        // rather than re-querying keeps the two from disagreeing about which
+        // version this one follows.
+        let previous_digest = head
+            .as_ref()
+            .map(|(uid, _)| self.chain_digest_of(uid))
+            .transpose()?;
+        let row = VersionRow::project(version, contribution_uid, previous_digest, None)?;
         let created_container = head.is_none();
         let transaction = self
             .connection
@@ -358,8 +421,11 @@ impl Store for SqliteStore {
                   branch_version, preceding_version_uid, lifecycle_state_code, is_deleted, \
                   contribution_uid, audit_system_id, audit_change_type_code, \
                   audit_committer_name, audit_time_committed_text, audit_time_committed_utc, \
-                  data_json) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                  data_json, audit_description, signature, attestations_json, \
+                  other_input_version_uids_json, chain_previous, chain_content, chain_digest, \
+                  chain_tag_key_id, chain_tag_mac) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, \
+                         ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
                 params![
                     row.uid,
                     row.versioned_object_uid,
@@ -377,6 +443,15 @@ impl Store for SqliteStore {
                     row.audit_time_committed.text,
                     row.audit_time_committed.utc_seconds,
                     row.data_json,
+                    row.audit_description,
+                    row.signature,
+                    row.attestations_json,
+                    row.other_input_version_uids_json,
+                    row.chain.previous.as_slice(),
+                    row.chain.content.as_slice(),
+                    row.chain.digest.as_slice(),
+                    row.chain.tag_key_id,
+                    row.chain.tag_mac.map(|m| m.to_vec()),
                 ],
             )
             .map_err(|e| engine(&e))?;

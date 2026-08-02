@@ -69,6 +69,16 @@ impl Digest256 {
     /// The all-zero digest, used as the predecessor of the first entry.
     pub const GENESIS: Self = Self([0u8; 32]);
 
+    /// A digest from its 32 bytes.
+    ///
+    /// Needed to reconstruct a chain from storage: a store keeps the digest as
+    /// 32 raw bytes in a binary column (`db:M3.40`), and verification has to
+    /// get them back into the type.
+    #[must_use]
+    pub const fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
     /// The digest's bytes.
     #[must_use]
     pub fn as_bytes(&self) -> &[u8; 32] {
@@ -195,6 +205,16 @@ pub struct Tag {
 }
 
 impl Tag {
+    /// The tag bytes.
+    ///
+    /// Exposed so a store can persist the tag; comparison still goes through
+    /// [`ChainKey`] in constant time, and a caller comparing these directly
+    /// with `==` reintroduces the timing oracle the tag exists to deny.
+    #[must_use]
+    pub fn mac(&self) -> &[u8] {
+        &self.mac
+    }
+
     /// The id of the key that produced the tag.
     #[must_use]
     pub fn key_id(&self) -> &str {
@@ -343,6 +363,8 @@ pub enum BreakReason {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Chain {
     entries: Vec<ChainEntry>,
+    /// Set when this chain continues from storage rather than from nothing.
+    resumed_head: Option<Digest256>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     genesis_note: Option<String>,
 }
@@ -371,6 +393,7 @@ impl Chain {
     pub fn genesis_after(note: impl Into<String>) -> Self {
         Self {
             entries: Vec::new(),
+            resumed_head: None,
             genesis_note: Some(note.into()),
         }
     }
@@ -379,6 +402,26 @@ impl Chain {
     #[must_use]
     pub fn genesis_note(&self) -> Option<&str> {
         self.genesis_note.as_deref()
+    }
+
+    /// A chain whose next append links to `head`, with no entries in memory.
+    ///
+    /// This is what a store needs. A database holds the whole history and loads
+    /// one predecessor digest to append the next link; reading every prior
+    /// entry into memory to add one would make a commit cost the length of the
+    /// record's history.
+    ///
+    /// The returned chain cannot [`Chain::verify`] itself — it has no entries to
+    /// verify. Verification is a separate operation over rows read back from
+    /// storage, and conflating the two would let a caller believe an append had
+    /// checked the history it appended to. It had not.
+    #[must_use]
+    pub fn resume_from(head: Digest256) -> Self {
+        Self {
+            entries: Vec::new(),
+            resumed_head: Some(head),
+            genesis_note: None,
+        }
     }
 
     /// The entries, oldest first.
@@ -406,7 +449,13 @@ impl Chain {
     /// was already published elsewhere.
     #[must_use]
     pub fn head(&self) -> Digest256 {
-        self.entries.last().map_or(Digest256::GENESIS, |e| e.digest)
+        self.entries.last().map_or(
+            // A resumed chain's head is the digest it was resumed from, not
+            // GENESIS: treating an empty-but-resumed chain as fresh would link
+            // the next entry to nothing and silently start a second chain.
+            self.resumed_head.unwrap_or(Digest256::GENESIS),
+            |e| e.digest,
+        )
     }
 
     /// How many entries the chain holds.

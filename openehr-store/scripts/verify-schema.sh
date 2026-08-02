@@ -109,8 +109,10 @@ INSERT INTO openehr_versioned_object VALUES ('vo1','e1','VERSIONED_COMPOSITION',
 INSERT INTO openehr_contribution VALUES ('c1','e1','249','sys','Committer','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
 INSERT INTO openehr_version (uid, versioned_object_uid, creating_system_id, trunk_version,
   lifecycle_state_code, is_deleted, contribution_uid, audit_system_id,
-  audit_change_type_code, audit_time_committed_text)
-VALUES ('vo1::sys::1','vo1','sys',1,'532',false,'c1','sys','249','2026-01-01T00:00:00Z');
+  audit_change_type_code, audit_time_committed_text,
+  chain_previous, chain_content, chain_digest)
+VALUES ('vo1::sys::1','vo1','sys',1,'532',false,'c1','sys','249','2026-01-01T00:00:00Z',
+  decode(repeat('00',32),'hex'), decode(repeat('11',32),'hex'), decode(repeat('22',32),'hex'));
 SEED
   }
   rows() { pg -Atc "SELECT count(*) FROM openehr_version"; }
@@ -144,8 +146,10 @@ INSERT INTO openehr_versioned_object VALUES ('vo1','e1','VERSIONED_COMPOSITION',
 INSERT INTO openehr_contribution VALUES ('c1','e1','249','sys','Committer','2026-01-01T00:00:00Z','2026-01-01 00:00:00');
 INSERT INTO openehr_version (uid, versioned_object_uid, creating_system_id, trunk_version,
   lifecycle_state_code, is_deleted, contribution_uid, audit_system_id,
-  audit_change_type_code, audit_time_committed_text)
-VALUES ('vo1::sys::1','vo1','sys',1,'532',0,'c1','sys','249','2026-01-01T00:00:00Z');
+  audit_change_type_code, audit_time_committed_text,
+  chain_previous, chain_content, chain_digest)
+VALUES ('vo1::sys::1','vo1','sys',1,'532',0,'c1','sys','249','2026-01-01T00:00:00Z',
+  UNHEX(REPEAT('00',32)), UNHEX(REPEAT('11',32)), UNHEX(REPEAT('22',32)));
 SEED
   }
   rows() { my -Nse "SELECT count(*) FROM openehr_version"; }
@@ -178,8 +182,10 @@ INSERT INTO openehr_versioned_object VALUES ('vo1','e1','VERSIONED_COMPOSITION',
 INSERT INTO openehr_contribution VALUES ('c1','e1','249','sys','Committer','2026-01-01T00:00:00Z','2026-01-01 00:00:00');
 INSERT INTO openehr_version (uid, versioned_object_uid, creating_system_id, trunk_version,
   lifecycle_state_code, is_deleted, contribution_uid, audit_system_id,
-  audit_change_type_code, audit_time_committed_text)
-VALUES ('vo1::sys::1','vo1','sys',1,'532',0,'c1','sys','249','2026-01-01T00:00:00Z');
+  audit_change_type_code, audit_time_committed_text,
+  chain_previous, chain_content, chain_digest)
+VALUES ('vo1::sys::1','vo1','sys',1,'532',0,'c1','sys','249','2026-01-01T00:00:00Z',
+  UNHEX(REPEAT('00',32)), UNHEX(REPEAT('11',32)), UNHEX(REPEAT('22',32)));
 SEED
   }
   rows() { my -Nse "SELECT count(*) FROM openehr_version"; }

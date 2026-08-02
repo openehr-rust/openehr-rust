@@ -59,6 +59,9 @@ impl Dialect for OracleDialect {
             ColTy::Int => "NUMBER(19)",
             // …and no boolean in SQL, whatever PL/SQL offers.
             ColTy::Bool => "NUMBER(1)",
+            // `RAW(32)` is Oracle's fixed-width binary type and is exactly the
+            // size of a SHA-256 digest (`M3.41`).
+            ColTy::Digest => "RAW(32)",
         }
         .to_owned()
     }

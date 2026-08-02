@@ -56,6 +56,10 @@ impl Dialect for MysqlDialect {
             // MySQL has no boolean; TINYINT(1) is the conventional spelling and
             // is what every driver maps to `bool`.
             ColTy::Bool => "TINYINT(1)",
+            // `BINARY(32)`, not `VARBINARY`: the width is exact and fixed, so
+            // the engine rejects a wrong-length digest rather than storing it
+            // (`M3.41`).
+            ColTy::Digest => "BINARY(32)",
         }
         .to_owned()
     }

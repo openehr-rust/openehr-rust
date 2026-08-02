@@ -80,6 +80,9 @@ impl Dialect for MariadbDialect {
             // MariaDB has no boolean; TINYINT(1) is the conventional spelling and
             // is what every driver maps to `bool`.
             ColTy::Bool => "TINYINT(1)",
+            // As MySQL: fixed width, so a wrong-length digest is rejected by
+            // the column rather than discovered during comparison (`M3.41`).
+            ColTy::Digest => "BINARY(32)",
         }
         .to_owned()
     }

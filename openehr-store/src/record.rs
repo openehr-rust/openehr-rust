@@ -11,6 +11,7 @@
 use crate::error::Result;
 use openehr::base::iso8601;
 use openehr::rm::common::{Locatable as _, PartyProxy, Version};
+use openehr::security::audit_chain::{Chain, ChainKey};
 use openehr::rm::ehr::Composition;
 use serde::{Deserialize, Serialize};
 
@@ -79,25 +80,88 @@ pub struct VersionRow {
     pub audit_time_committed: StoredInstant,
     /// Canonical JSON of the content, or `None` for a deletion.
     pub data_json: Option<String>,
+    /// `AUDIT_DETAILS.description`.
+    pub audit_description: Option<String>,
+    /// `VERSION.signature`, carried and never verified.
+    pub signature: Option<String>,
+    /// `ORIGINAL_VERSION.attestations` as canonical JSON, `None` when empty.
+    pub attestations_json: Option<String>,
+    /// `ORIGINAL_VERSION.other_input_version_uids` as canonical JSON, `None`
+    /// when this version is not a merge.
+    pub other_input_version_uids_json: Option<String>,
+    /// The version's link in the tamper-evidence chain (`M3.16`).
+    pub chain: ChainColumns,
+}
+
+/// The chain columns of one version row.
+///
+/// Grouped rather than flattened into [`VersionRow`] because they are one
+/// object — a `ChainEntry` — and a caller that has three of the five has
+/// nothing. Keeping them together makes that hard to get wrong.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChainColumns {
+    /// Digest of the preceding entry, or the genesis digest.
+    pub previous: [u8; 32],
+    /// SHA-256 over the canonical form of this version's content.
+    pub content: [u8; 32],
+    /// This entry's own digest, over `previous || content || uid`.
+    pub digest: [u8; 32],
+    /// Which key produced [`ChainColumns::tag_mac`], if the chain is keyed.
+    pub tag_key_id: Option<String>,
+    /// HMAC-SHA-256 over the same pre-image, if the chain is keyed.
+    pub tag_mac: Option<[u8; 32]>,
 }
 
 impl VersionRow {
     /// Projects a version onto a row.
     ///
+    /// `previous` is the chain digest of the version this one follows in the
+    /// same container, or `None` for the first — see [`ChainColumns`] and
+    /// `M3.16`.
+    ///
     /// # Errors
     ///
     /// Returns [`crate::StoreError::Json`] if the content cannot be
-    /// canonicalised, or [`crate::StoreError::Unsupported`] if the version
-    /// carries an attribute this schema has no column for — see
-    /// [`refuse_unpersistable`].
-    pub fn project<T: Serialize>(version: &Version<T>, contribution_uid: &str) -> Result<Self> {
-        refuse_unpersistable(version)?;
+    /// canonicalised.
+    ///
+    /// # Panics
+    ///
+    /// Never: the chain entry is read back immediately after the `append` that
+    /// pushed it, on a chain this function owns and nothing else can touch.
+    pub fn project<T: Serialize>(
+        version: &Version<T>,
+        contribution_uid: &str,
+        previous: Option<[u8; 32]>,
+        key: Option<&ChainKey>,
+    ) -> Result<Self> {
         let uid = version.uid();
         let audit = version.commit_audit();
         let data_json = version
             .data()
             .map(openehr::security::to_canonical_string)
             .transpose()?;
+
+        // The chain covers the version's *content*, which is what a reader
+        // would be shown, and is chained to the previous version in the same
+        // container. See the module header for what that detects.
+        let mut chain_builder = previous.map_or_else(Chain::new, |head| {
+            Chain::resume_from(openehr::security::Digest256::from_bytes(head))
+        });
+        chain_builder.append(uid.to_string(), &version.data(), key)?;
+        let entry = chain_builder
+            .entries()
+            .last()
+            .expect("append pushed an entry");
+        let chain = ChainColumns {
+            previous: *entry.previous.as_bytes(),
+            content: *entry.content.as_bytes(),
+            digest: *entry.digest.as_bytes(),
+            tag_key_id: entry.tag.as_ref().map(|t| t.key_id().to_owned()),
+            tag_mac: entry
+                .tag
+                .as_ref()
+                .and_then(|t| <[u8; 32]>::try_from(t.mac()).ok()),
+        };
         Ok(Self {
             uid: uid.to_string(),
             versioned_object_uid: uid.object_id().to_string(),
@@ -114,61 +178,28 @@ impl VersionRow {
             audit_committer_name: party_name(audit.committer()),
             audit_time_committed: StoredInstant::from_date_time(audit.time_committed().value()),
             data_json,
+            audit_description: audit.description().map(ToString::to_string),
+            signature: version.signature().map(ToOwned::to_owned),
+            attestations_json: encode_if_any(version.attestations())?,
+            other_input_version_uids_json: encode_if_any(version.other_input_version_uids())?,
+            chain,
         })
     }
 }
 
-/// Refuses a version carrying an attribute this schema cannot store.
+/// Canonical JSON for a slice, or `None` when it is empty.
 ///
-/// The schema decomposes the `VERSION` envelope into columns and stores only
-/// the *content* as canonical JSON (`M3.19`, `R4.8`). An attribute with no
-/// column therefore has nowhere to go — and until this check existed, a commit
-/// carrying one returned `Ok` and dropped it.
-///
-/// Four attributes are affected, all optional in openEHR RM 1.1.0 and none
-/// droppable:
-///
-/// - `AUDIT_DETAILS.description` — the free-text reason for a change, often the
-///   only record of *why* a correction exists.
-/// - `ORIGINAL_VERSION.attestations` — a clinician asserting that content is
-///   what they signed off. Losing it loses the thing that made the record
-///   evidence.
-/// - `ORIGINAL_VERSION.other_input_version_uids` — the versions a merge
-///   combined, without which the merge cannot be explained.
-/// - `VERSION.signature` — the signature over the version. An original version
-///   could not carry one at all until `lib:A-18` was fixed; now that it can,
-///   this schema still has nowhere to put it.
-///
-/// Refusing is the smaller of two evils, not a good outcome. `S1.11` requires
-/// an operation this layer does not implement to say so rather than return a
-/// silent success, and a caller told `Unsupported` can act, while a caller
-/// whose attestation vanished cannot. Persisting them properly needs columns
-/// this schema does not have; see `spec/databases/audit.md` **D-07**.
+/// `None` rather than `[]` so that "this version is not a merge" and "this
+/// version merged nothing" are the same absent value in SQL, which they are.
 ///
 /// # Errors
 ///
-/// Returns [`crate::StoreError::Unsupported`] naming the attribute.
-fn refuse_unpersistable<T>(version: &Version<T>) -> Result<()> {
-    let unsupported = |what: &'static str| crate::StoreError::Unsupported {
-        engine: "openehr-store",
-        what,
-        spec_ref: "spec/databases/audit.md D-07",
-    };
-    if version.commit_audit().description().is_some() {
-        return Err(unsupported("AUDIT_DETAILS.description has no column"));
+/// Returns [`crate::StoreError::Json`] if the value cannot be canonicalised.
+fn encode_if_any<T: Serialize>(items: &[T]) -> Result<Option<String>> {
+    if items.is_empty() {
+        return Ok(None);
     }
-    if !version.attestations().is_empty() {
-        return Err(unsupported("ORIGINAL_VERSION.attestations has no column"));
-    }
-    if !version.other_input_version_uids().is_empty() {
-        return Err(unsupported(
-            "ORIGINAL_VERSION.other_input_version_uids has no column",
-        ));
-    }
-    if version.signature().is_some() {
-        return Err(unsupported("VERSION.signature has no column"));
-    }
-    Ok(())
+    Ok(Some(openehr::security::to_canonical_string(&items)?))
 }
 
 /// A committer's or composer's name, where the party form carries one.
@@ -250,30 +281,21 @@ impl CompositionIndexRow {
 #[cfg(test)]
 mod tests {
     use super::VersionRow;
-    use openehr::rm::common::{AuditDetails, OriginalVersion, PartyIdentified};
-    use openehr::rm::data_types::Text;
-    use openehr::rm::data_types::DvDateTime;
+    use openehr::rm::common::{AuditDetails, OriginalVersion, PartyIdentified, Version};
+    use openehr::rm::data_types::{DvDateTime, Text};
     use openehr::rm::ehr::Composition;
     use openehr::terminology::{audit_change_type, version_lifecycle_state};
 
-    /// `D-07`: a version carrying an attribute with no column is refused, not
-    /// silently stripped.
-    ///
-    /// Written after the fact, from the openEHR RM 1.1.0 BMM rather than from
-    /// the code — which is how the gap was found at all.
-    #[test]
-    fn an_audit_description_is_refused_rather_than_dropped() {
+    fn version(build: impl FnOnce(OriginalVersion<Composition>) -> OriginalVersion<Composition>)
+    -> Version<Composition> {
         let audit = AuditDetails::new(
             "ehr1.example.org",
             DvDateTime::new("2026-08-01T09:00:00Z").expect("literal"),
-            audit_change_type::AMENDMENT,
+            audit_change_type::CREATION,
             PartyIdentified::named("Dr A Nurse").expect("literal").into(),
         )
-        .expect("literal")
-        .with_description(Text::plain("corrected after telephone call with the lab").expect("literal"));
-
-        let owner = crate::conformance::sample_ehr().ehr_status().clone();
-        let version: openehr::rm::common::Version<Composition> = OriginalVersion::new(
+        .expect("literal");
+        let original = OriginalVersion::new(
             format!("{}::ehr1.example.org::1", crate::conformance::RECORD)
                 .parse()
                 .expect("literal"),
@@ -281,54 +303,116 @@ mod tests {
             version_lifecycle_state::COMPLETE,
             Some(crate::conformance::sample_composition("Encounter")),
             audit,
-            owner,
+            crate::conformance::sample_ehr().ehr_status().clone(),
         )
-        .expect("literal")
-        .into();
-
-        let error = VersionRow::project(&version, "c1")
-            .expect_err("a description with no column must be refused");
-        assert!(
-            matches!(error, crate::StoreError::Unsupported { .. }),
-            "must be Unsupported, not a silent success or an engine error: {error}"
-        );
+        .expect("literal");
+        build(original).into()
     }
 
-    /// `A-18` closed the library gap that let a signature exist; this asserts
-    /// the store does not then silently drop it.
+    /// `D-07`: the four attributes that used to be dropped are now stored.
+    ///
+    /// Before this, `project` refused them; before *that*, it accepted them and
+    /// returned `Ok` while losing them. Refusing was the smaller evil, not a
+    /// good outcome — openEHR permits these and a store should hold them.
     #[test]
-    fn a_signature_is_refused_rather_than_dropped() {
-        let version: openehr::rm::common::Version<Composition> = OriginalVersion::new(
-            format!("{}::ehr1.example.org::1", crate::conformance::RECORD)
+    fn the_attributes_that_used_to_be_dropped_are_persisted() {
+        let audit = AuditDetails::new(
+            "ehr1.example.org",
+            DvDateTime::new("2026-08-01T09:00:00Z").expect("literal"),
+            audit_change_type::AMENDMENT,
+            PartyIdentified::named("Dr A Nurse").expect("literal").into(),
+        )
+        .expect("literal")
+        .with_description(
+            Text::plain("corrected after telephone call with the lab").expect("literal"),
+        );
+        let v: Version<Composition> = OriginalVersion::new(
+            format!("{}::ehr1.example.org::2", crate::conformance::RECORD)
                 .parse()
                 .expect("literal"),
-            None,
+            Some(
+                format!("{}::ehr1.example.org::1", crate::conformance::RECORD)
+                    .parse()
+                    .expect("literal"),
+            ),
             version_lifecycle_state::COMPLETE,
             Some(crate::conformance::sample_composition("Encounter")),
-            AuditDetails::new(
-                "ehr1.example.org",
-                DvDateTime::new("2026-08-01T09:00:00Z").expect("literal"),
-                audit_change_type::CREATION,
-                PartyIdentified::named("Dr A Nurse").expect("literal").into(),
-            )
-            .expect("literal"),
+            audit,
             crate::conformance::sample_ehr().ehr_status().clone(),
         )
         .expect("literal")
         .with_signature("-----BEGIN PGP SIGNATURE-----")
         .into();
 
-        let error = VersionRow::project(&version, "c1")
-            .expect_err("a signature with no column must be refused");
-        assert!(matches!(error, crate::StoreError::Unsupported { .. }), "{error}");
+        let row = VersionRow::project(&v, "c1", None, None).expect("projects");
+        assert_eq!(
+            row.audit_description.as_deref(),
+            Some("corrected after telephone call with the lab"),
+        );
+        assert_eq!(row.signature.as_deref(), Some("-----BEGIN PGP SIGNATURE-----"));
     }
 
-    /// The control: the same version without the description projects cleanly.
-    /// A refusal that rejected everything would be indistinguishable from a
-    /// broken projection.
+    /// Absent is `NULL`, not `[]`.
+    ///
+    /// "This version is not a merge" and "this version merged nothing" are the
+    /// same fact, and SQL has one way to say it.
     #[test]
-    fn a_version_with_no_unpersistable_attribute_projects() {
-        let version = crate::conformance::sample_version(1, None, 0);
-        VersionRow::project(&version, "c1").expect("must project");
+    fn empty_collections_are_null_rather_than_an_empty_array() {
+        let row = VersionRow::project(&version(|v| v), "c1", None, None).expect("projects");
+        assert!(row.attestations_json.is_none());
+        assert!(row.other_input_version_uids_json.is_none());
+        assert!(row.audit_description.is_none());
+        assert!(row.signature.is_none());
+    }
+
+    /// `M3.16`: the first version links to the genesis digest.
+    #[test]
+    fn the_first_version_chains_to_genesis() {
+        let row = VersionRow::project(&version(|v| v), "c1", None, None).expect("projects");
+        assert_eq!(row.chain.previous, [0u8; 32], "first entry follows genesis");
+        assert_ne!(row.chain.digest, [0u8; 32], "the entry has its own digest");
+        assert_ne!(
+            row.chain.content, row.chain.digest,
+            "the content digest and the entry digest are different values"
+        );
+    }
+
+    /// A successor links to its predecessor, and the link changes the digest.
+    ///
+    /// This is the whole property: altering or removing an earlier version
+    /// changes every digest after it.
+    #[test]
+    fn a_successor_links_to_its_predecessor() {
+        let first = VersionRow::project(&version(|v| v), "c1", None, None).expect("projects");
+        let second =
+            VersionRow::project(&version(|v| v), "c1", Some(first.chain.digest), None)
+                .expect("projects");
+
+        assert_eq!(second.chain.previous, first.chain.digest);
+        assert_eq!(
+            second.chain.content, first.chain.content,
+            "same content digests the same"
+        );
+        assert_ne!(
+            second.chain.digest, first.chain.digest,
+            "identical content at a different position must not share a digest, \
+             or a version could be moved without detection"
+        );
+    }
+
+    /// The digest is a function of its inputs and nothing else.
+    #[test]
+    fn chaining_is_deterministic() {
+        let a = VersionRow::project(&version(|v| v), "c1", None, None).expect("projects");
+        let b = VersionRow::project(&version(|v| v), "c1", None, None).expect("projects");
+        assert_eq!(a.chain.digest, b.chain.digest);
+    }
+
+    /// Unkeyed by default: a tag is present only when a key is supplied.
+    #[test]
+    fn the_chain_is_unkeyed_unless_a_key_is_given() {
+        let row = VersionRow::project(&version(|v| v), "c1", None, None).expect("projects");
+        assert!(row.chain.tag_key_id.is_none());
+        assert!(row.chain.tag_mac.is_none());
     }
 }

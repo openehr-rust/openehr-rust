@@ -47,6 +47,15 @@ IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_version' AND typ
   [audit_time_committed_text] nvarchar(64) NOT NULL,
   [audit_time_committed_utc] datetimeoffset(7),
   [data_json] nvarchar(max),
+  [audit_description] nvarchar(max),
+  [signature] nvarchar(max),
+  [attestations_json] nvarchar(max),
+  [other_input_version_uids_json] nvarchar(max),
+  [chain_previous] binary(32) NOT NULL,
+  [chain_content] binary(32) NOT NULL,
+  [chain_digest] binary(32) NOT NULL,
+  [chain_tag_key_id] nvarchar(255),
+  [chain_tag_mac] binary(32),
   PRIMARY KEY ([uid]),
   FOREIGN KEY ([versioned_object_uid]) REFERENCES [openehr_versioned_object] ([uid])
 )');

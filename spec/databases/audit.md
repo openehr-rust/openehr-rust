@@ -165,7 +165,7 @@ they gain one, and their drivers report constraint violations differently. The
 requirement is `H5.9`; the shared conformance suite cannot check it until a
 second store exists.
 
-### D-07 — The store silently dropped three VERSION attributes — **High, fixed**
+### D-07 — The store silently dropped four VERSION attributes — **High, fixed, properly**
 
 Found by reading the openEHR **BMM** for RM 1.1.0 rather than the code, which is
 what `D-05` asked for. The rendered specification pages omit every class table —
@@ -232,7 +232,17 @@ being broken.
    column, and there is no migration mechanism (`O10.14`) for the eight crates
    already on crates.io at 0.1.1.
 
-**Fixed by remedy 1.** `VersionRow::project` now refuses a version carrying any
+**Fixed by remedy 2 — the columns.** Refusal was the smaller evil and shipped
+first, in 0.2.0. The schema now has the columns instead: `audit_description`,
+`signature`, `attestations_json`, and `other_input_version_uids_json`. An empty
+collection stores `NULL` rather than `[]`, because "not a merge" and "merged
+nothing" are the same fact and SQL has one way to say it.
+
+Verified against PostgreSQL 18, MySQL 8.4, and MariaDB 11.4: parses, idempotent,
+append-only enforced, row intact. The seed in `verify-schema.sh` failed first —
+it omitted the new `NOT NULL` chain columns — which is the check doing its job.
+
+*Superseded text:* `VersionRow::project` refused a version carrying any
 of the four, with `StoreError::Unsupported` naming the attribute and citing this
 finding. It sits in the **shared** projection, so all six engines inherit it
 rather than each needing the same check (`M3.35`).
@@ -251,7 +261,7 @@ these attributes and this store still cannot hold them; remedy 2 — columns, an
 a table or JSON column for attestations — remains the real fix, and needs a
 migration mechanism this project does not have (`O10.14`).
 
-### D-03 — Tamper evidence is specified, built, and unused — **Low, open**
+### D-03 — Tamper evidence is specified, built, and unused — **Low, fixed**
 
 **Found.** `M3.16` requires a tamper-evident chain over committed versions. The
 `openehr` crate implements the primitives in full — `Chain`, `ChainEntry`,

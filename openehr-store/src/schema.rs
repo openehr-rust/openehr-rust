@@ -78,6 +78,13 @@ pub enum ColTy {
     Int,
     /// A truth value.
     Bool,
+    /// A SHA-256 digest: **32 raw bytes in a binary column** (`M3.39`-`M3.42`).
+    ///
+    /// Never hexadecimal text. Hex reintroduces string identity — a 64-character
+    /// value has a case and a collation, so equality would depend on which
+    /// collation the column happens to have — and doubles the width of a column
+    /// whose whole purpose is to be compared.
+    Digest,
 }
 
 /// One column.
@@ -307,6 +314,63 @@ pub const VERSION: Table = Table {
             ColTy::Json,
             "canonical JSON of the version's content; NULL only when the version \
              is a logical deletion (V8.9)",
+        ),
+        // D-07: openEHR gives VERSION and AUDIT_DETAILS four optional
+        // attributes that had no column. The store accepted them and dropped
+        // them silently, which for an attestation means losing the part of the
+        // record that made it evidence.
+        Column::optional(
+            "audit_description",
+            ColTy::LongText,
+            "AUDIT_DETAILS.description — the free-text reason for a change, often \
+             the only record of why a correction exists",
+        ),
+        Column::optional(
+            "signature",
+            ColTy::LongText,
+            "VERSION.signature — carried, never verified (S1.11)",
+        ),
+        Column::optional(
+            "attestations_json",
+            ColTy::Json,
+            "ORIGINAL_VERSION.attestations, canonical JSON; NULL when there are \
+             none. A clinician's assertion that content is what they signed off",
+        ),
+        Column::optional(
+            "other_input_version_uids_json",
+            ColTy::Json,
+            "ORIGINAL_VERSION.other_input_version_uids, canonical JSON; NULL when \
+             this version is not a merge",
+        ),
+        // D-03: the tamper-evidence chain (M3.16). Chained per container, in
+        // version-tree order — see the module header for what that does and
+        // does not detect.
+        Column::required(
+            "chain_previous",
+            ColTy::Digest,
+            "digest of the preceding version's chain entry, or the genesis digest",
+        ),
+        Column::required(
+            "chain_content",
+            ColTy::Digest,
+            "SHA-256 over the canonical form of this version's content",
+        ),
+        Column::required(
+            "chain_digest",
+            ColTy::Digest,
+            "this entry's own digest, over previous || content || uid",
+        ),
+        Column::optional(
+            "chain_tag_key_id",
+            ColTy::Text(255),
+            "which key produced the tag; NULL when the chain is unkeyed",
+        ),
+        Column::optional(
+            "chain_tag_mac",
+            ColTy::Digest,
+            "HMAC-SHA-256 over the same pre-image; NULL when unkeyed. An unkeyed \
+             digest over a published pre-image is reproducible by anyone who can \
+             write the rows it covers",
         ),
     ],
     primary_key: &["uid"],

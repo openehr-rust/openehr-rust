@@ -45,6 +45,9 @@ impl Dialect for SqliteDialect {
             // SQLite has no boolean; 0 and 1 in an INTEGER column is the
             // documented convention.
             ColTy::Bool => "INTEGER",
+            // SQLite has one binary type and no length enforcement — affinity
+            // again, so 32 bytes is a Rust-side rule here (`M3.41`).
+            ColTy::Digest => "BLOB",
         }
         .to_owned()
     }

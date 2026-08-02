@@ -44,6 +44,15 @@ CREATE TABLE IF NOT EXISTS "openehr_version" (
   "audit_time_committed_text" text NOT NULL,
   "audit_time_committed_utc" timestamptz,
   "data_json" jsonb,
+  "audit_description" text,
+  "signature" text,
+  "attestations_json" jsonb,
+  "other_input_version_uids_json" jsonb,
+  "chain_previous" bytea NOT NULL,
+  "chain_content" bytea NOT NULL,
+  "chain_digest" bytea NOT NULL,
+  "chain_tag_key_id" text,
+  "chain_tag_mac" bytea,
   PRIMARY KEY ("uid"),
   FOREIGN KEY ("versioned_object_uid") REFERENCES "openehr_versioned_object" ("uid")
 );

@@ -46,6 +46,9 @@ impl Dialect for MssqlDialect {
             ColTy::InstantUtc => "datetimeoffset(7)",
             ColTy::Int => "bigint",
             ColTy::Bool => "bit",
+            // `binary(32)`, fixed width. T-SQL pads a shorter value rather than
+            // rejecting it, so length is also checked in Rust (`M3.41`).
+            ColTy::Digest => "binary(32)",
         }
         .to_owned()
     }

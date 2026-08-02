@@ -162,3 +162,93 @@ fn the_generated_ddl_executes_and_is_idempotent() {
     connection.execute_batch(&script).expect("first install");
     connection.execute_batch(&script).expect("second install");
 }
+
+/// `M3.16` / `D-03`: the chain links successive versions in a container, and a
+/// mutation to stored content is detectable.
+///
+/// The chain is per container, in version-tree order. That detects a version
+/// altered in place, removed from the middle, or reordered. It does **not**
+/// detect deleting the newest version or dropping a whole container — that is
+/// what an external checkpoint is for (`M3.16c`, unimplemented).
+#[test]
+fn the_chain_links_versions_and_notices_a_rewrite() {
+    use openehr::security::{Chain, Digest256};
+
+    let mut store = SqliteStore::in_memory().expect("open");
+    store.install().expect("install");
+    let ehr = conformance::sample_ehr();
+    store.create_ehr(&ehr).expect("ehr");
+    store
+        .create_contribution(ehr.ehr_id(), &conformance::sample_contribution("c1", &[1, 2, 3]))
+        .expect("contribution");
+
+    for n in 1..=3u32 {
+        let preceding = (n > 1).then(|| n - 1);
+        store
+            .commit_composition(ehr.ehr_id(), &conformance::sample_version(n, preceding, n), "c1")
+            .unwrap_or_else(|e| panic!("commit {n}: {e}"));
+    }
+
+    let container = ehr.ehr_id().clone();
+    let all = store.all_versions(&container).expect("all_versions");
+    assert_eq!(all.len(), 3);
+
+    // Each entry links to the one before it, and the first to genesis.
+    assert_eq!(all[0].chain.previous, [0u8; 32], "first links to genesis");
+    for pair in all.windows(2) {
+        assert_eq!(
+            pair[1].chain.previous, pair[0].chain.digest,
+            "version {} does not link to {}",
+            pair[1].uid, pair[0].uid
+        );
+    }
+
+    // Recompute the chain from the stored content. This is the check an auditor
+    // runs: it uses only what the database holds, so a rewritten row fails it.
+    let mut recomputed = Chain::new();
+    for row in &all {
+        let content: serde_json::Value = row
+            .data_json
+            .as_deref()
+            .map(|j| serde_json::from_str(j).expect("stored JSON parses"))
+            .expect("a committed version has content");
+        recomputed
+            .append(row.uid.clone(), &Some(content), None)
+            .expect("append");
+    }
+    assert_eq!(
+        recomputed.head(),
+        Digest256::from_bytes(all[2].chain.digest),
+        "the chain recomputed from stored rows must reach the stored head"
+    );
+
+    // Now rewrite a row behind the store's back and show the chain notices.
+    // The append-only trigger blocks UPDATE, so this goes around it the way a
+    // determined operator would: drop the trigger first. That is precisely the
+    // attacker the unkeyed chain is documented as detecting but not stopping.
+    let connection = store.connection();
+    connection
+        .execute_batch("DROP TRIGGER trg_openehr_version_no_update;")
+        .expect("drop trigger");
+    connection
+        .execute(
+            "UPDATE openehr_version SET data_json = replace(data_json, 'Encounter 2', 'Tampered') \
+             WHERE trunk_version = 2",
+            [],
+        )
+        .expect("rewrite");
+
+    let after = store.all_versions(&container).expect("all_versions");
+    let mut recheck = Chain::new();
+    for row in &after {
+        let content: serde_json::Value =
+            serde_json::from_str(row.data_json.as_deref().expect("content")).expect("parses");
+        recheck.append(row.uid.clone(), &Some(content), None).expect("append");
+    }
+    assert_ne!(
+        recheck.head(),
+        Digest256::from_bytes(after[2].chain.digest),
+        "a rewritten version must not recompute to the stored head — \
+         the chain would be evidence of nothing"
+    );
+}
