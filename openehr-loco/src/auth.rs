@@ -44,6 +44,27 @@
 //! With `v4.public`, the worst a compromised instance can do is misuse the
 //! tokens presented to it. Bad, and bounded (`db:PR12.15`).
 //!
+//! # PASETO replaces the header
+//!
+//! The principal comes from the token and from nothing else. No header names a
+//! caller here: not `X-Principal`, not `X-Forwarded-User`, not
+//! `X-On-Behalf-Of`, not `Remote-User`, not `X-Provenance`. There is no
+//! trusted-proxy mode and no allow-listed-peer mode (`db:PR12.21`).
+//!
+//! The difference between the two designs is *where the check lives*. A
+//! trusted header is believed because of where it arrived from, which puts the
+//! check in the network diagram — and network diagrams are edited by people who
+//! are not reading this. A header that is safe behind one ingress becomes
+//! attacker-controlled the day a second route to the service exists, and
+//! nothing in the code changes to mark that day. A signature is checked here,
+//! on every request, and does not depend on any claim about topology still
+//! being true.
+//!
+//! [`principal_from_headers`] reads exactly one header, and
+//! `a_spoofed_identity_header_neither_authenticates_nor_overrides` holds it to
+//! that. The prohibition is otherwise satisfied by nobody having written the
+//! feature yet, which is a different thing.
+//!
 //! # What it deliberately does not do
 //!
 //! **Verification is not authorization.** Knowing that a caller is
@@ -353,6 +374,12 @@ impl Principal {
 
 /// Pulls the token out of an `Authorization` header and verifies it.
 ///
+/// **This function reads one header and no others**, which is the whole of
+/// `db:PR12.21`. Anything that looks like an identity elsewhere in the request
+/// — a header naming a user, a proxy, or an origin — is not consulted, cannot
+/// authenticate, and cannot alter the subject. Adding a fallback here is the
+/// single change that would turn this service back into a trusted-header one.
+///
 /// Split out from the extractor so it can be tested without standing up an
 /// [`AppContext`]. What remains in the extractor is the shared-state lookup.
 ///
@@ -595,6 +622,53 @@ mod tests {
                 "{value}"
             );
         }
+    }
+
+    /// Headers a deployment might once have been asked to trust.
+    const SPOOFED: [&str; 6] = [
+        "x-principal",
+        "x-forwarded-user",
+        "x-on-behalf-of",
+        "x-provenance",
+        "remote-user",
+        "x-authenticated-user",
+    ];
+
+    #[test]
+    fn a_spoofed_identity_header_neither_authenticates_nor_overrides() {
+        use axum::http::HeaderName;
+
+        let pair = AsymmetricKeyPair::<V4>::generate().expect("keypair");
+        let verifier = PasetoVerifier::new(&paserk(&pair), None, None, None).expect("verifier");
+        let token = signed(&pair, &subject_claims("clinician-4417"));
+
+        let spoof = |base: HeaderMap| {
+            let mut headers = base;
+            for name in SPOOFED {
+                headers.insert(
+                    HeaderName::from_static(name),
+                    HeaderValue::from_static("chief-medical-officer"),
+                );
+            }
+            headers
+        };
+
+        // Alone, none of them is a credential. A service that fell back to one
+        // of these would be a trusted-header service again, and the fallback is
+        // exactly one `else` away (PR12.21).
+        assert_eq!(
+            principal_from_headers(&spoof(HeaderMap::new()), &verifier),
+            Err(Denial::Missing)
+        );
+
+        // Alongside a valid token, they do not win, tie, or contribute. The
+        // subject is whoever the issuer signed for, unchanged.
+        assert_eq!(
+            principal_from_headers(&spoof(bearer(&format!("Bearer {token}"))), &verifier)
+                .expect("verifies")
+                .subject,
+            "clinician-4417"
+        );
     }
 
     #[test]

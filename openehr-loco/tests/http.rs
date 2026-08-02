@@ -19,7 +19,7 @@
 use axum::{
     Router,
     body::{Body, to_bytes},
-    http::{Request, StatusCode, header},
+    http::{HeaderMap, HeaderName, HeaderValue, Request, StatusCode, header},
 };
 use loco_rs::{
     app::{AppContext, Hooks as _},
@@ -314,6 +314,43 @@ async fn a_401_never_reveals_whether_the_record_exists() {
     assert!(
         seen.windows(2).all(|pair| pair[0] == pair[1]),
         "anonymous responses differ between an existing and a missing record: {seen:?}"
+    );
+}
+
+#[tokio::test]
+async fn no_header_can_stand_in_for_a_token() {
+    // PASETO replaces the trusted header (PR12.21). A trusted header is
+    // believed because of where it arrived from, so the check lives in the
+    // network diagram — and a header that is safe behind one ingress is
+    // attacker-controlled the day a second route exists, with nothing in the
+    // code changing to mark it.
+    let served = Served::new();
+    let mut headers = HeaderMap::new();
+    for name in [
+        "x-principal",
+        "x-forwarded-user",
+        "x-on-behalf-of",
+        "x-provenance",
+        "remote-user",
+        "x-authenticated-user",
+    ] {
+        headers.insert(
+            HeaderName::from_static(name),
+            HeaderValue::from_static("chief-medical-officer"),
+        );
+    }
+
+    let mut request = Request::builder()
+        .uri(served.composition(LIVE))
+        .body(Body::empty())
+        .expect("request");
+    *request.headers_mut() = headers;
+
+    let (status, _, _) = served.send(request).await;
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "an identity header was accepted in place of a signed token"
     );
 }
 

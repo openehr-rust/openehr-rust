@@ -11,9 +11,10 @@
 //! `410` for a deleted composition against `404` for one that never existed,
 //! the history readable behind that `410`, `401` on every clinical route
 //! without a token with a body that does not reveal whether the record exists,
-//! the weak `ETag`, paging and its cap, `501` on `DELETE`, and `503` rather
-//! than `404` when the store is absent. The first two were mutation-checked.
-//! [`auth`] is covered separately.
+//! no identity header standing in for a token, the weak `ETag`, paging and its
+//! cap, `501` on `DELETE`, and `503` rather than `404` when the store is
+//! absent. The `410`, the auth gate, and the header prohibition were each
+//! mutation-checked. [`auth`] is covered separately.
 //!
 //! **Not shown.** No real deployment, no concurrency, no TLS, no engine but
 //! `SQLite`. Not published.

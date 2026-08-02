@@ -131,6 +131,28 @@ of this.
   prevent, arriving through the front door instead. Binding on the first write
   endpoint that carries an audit; no such endpoint exists yet.
 
+- **PR12.21** The principal MUST come from the verified token and from nothing
+  else. A service MUST NOT read identity, provenance, or authority from any
+  request header — `X-Principal`, `X-Forwarded-User`, `X-On-Behalf-Of`,
+  `Remote-User`, `X-Provenance` and their kin — and MUST NOT let one override,
+  supplement, or stand in for the verified subject. There is no
+  allow-listed-peer mode and no trusted-proxy mode.
+
+  **PASETO replaces the header.** The two mechanisms differ in where the check
+  lives. A trusted header is believed because of where it arrived from, which
+  puts the check in the network diagram — and network diagrams are edited by
+  people who are not reading this specification. A header that is safe behind
+  one ingress is attacker-controlled the day a second route to the service
+  exists, and nothing in the service changes to mark the day it happened. A
+  signature is checked by the recipient, on every request, and does not depend
+  on any statement about topology still being true.
+
+  This is why `PR12.1` and `PR12.2` are not restored now that a service exists.
+  A service MUST have a test demonstrating that such headers do not
+  authenticate and do not alter the subject; the prohibition is otherwise
+  satisfied by nobody having written the feature yet, which is not the same
+  thing.
+
 - **PR12.20** Requiring a token does **not** create a read audit trail, and
   documentation MUST NOT imply that it does.
 
@@ -222,9 +244,8 @@ build (`S1.7`).
 
 A service now exists and does establish a principal, so it is worth saying why
 these are not simply restored. `PR12.1` and `PR12.2` describe **trusted header**
-schemes — a header believed because of where it arrived from. That is the design
-`PR12.14` replaces: a signature is checked by the recipient, whereas a trusted
-header is checked by whoever is asked to believe in the network diagram.
+schemes — a header believed because of where it arrived from. PASETO replaces
+that header outright, and `PR12.21` forbids reinstating it in any form.
 `PR12.3` is closest to live — a require-principal mode — and its ground is now
 held by `PR12.16` under a new number, because numbers are never reused (`C0.5`,
 `C0.19`).

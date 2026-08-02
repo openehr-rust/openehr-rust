@@ -7,7 +7,7 @@ Not published, and it sits **outside the conformance ladder** — every rung the
 is defined by DDL, a `Store` implementation, or a database server, and this
 crate is none of those. So it states evidence instead of a level (`W0.32`).
 
-**Demonstrated.** 26 tests. `tests/http.rs` serves real requests through Loco's
+**Demonstrated.** 28 tests. `tests/http.rs` serves real requests through Loco's
 own router: `410` for a deleted composition against `404` for one that never
 existed, the history still readable behind that `410`, `401` on every clinical
 route without a token and an identical body whether or not the record exists,
@@ -15,8 +15,8 @@ the weak `ETag`, `_count`/`_offset`/`total` and the paging cap, `501` on
 `DELETE`, and `503` rather than `404` when the store is missing. Both of the
 first two were mutation-checked — the branch was disabled and the test went red.
 `src/auth.rs` covers key rotation, expiry, audience binding, the implicit
-assertion, a token naming nobody, and a `v4.local` token offered as
-`v4.public`.
+assertion, a token naming nobody, a `v4.local` token offered as `v4.public`,
+and spoofed identity headers.
 
 **Not demonstrated.** No run against a real deployment, no concurrency
 behaviour, no TLS, and no engine other than SQLite.
@@ -131,6 +131,34 @@ checks that an issuer signed a statement about who is calling; it holds no
 credential, checks no password, and has no registration or recovery path. A
 careless issuer produces careless attributions and every signature still
 verifies — which is why `PR12.8` still says this layer does not authenticate.
+
+### PASETO replaces the header
+
+The principal comes from the token and from nothing else. No header names a
+caller here — not `X-Principal`, not `X-Forwarded-User`, not `X-On-Behalf-Of`,
+not `Remote-User`, not `X-Provenance`. There is no trusted-proxy mode and no
+allow-listed-peer mode (`PR12.21`).
+
+```
+Before   X-Principal: clinician-4417
+         ↑ believed because of where it arrived from
+
+Now      Authorization: Bearer v4.public.…
+         ↑ believed because the signature verifies
+```
+
+The difference is *where the check lives*. A trusted header puts it in the
+network diagram — and network diagrams are edited by people who are not reading
+this. A header that is safe behind one ingress becomes attacker-controlled the
+day a second route to the service exists, and nothing in the code changes to
+mark that day. A signature is checked here, on every request, and does not
+depend on any claim about topology still being true.
+
+Two tests hold this: one that such headers alone never authenticate, and one
+that alongside a valid token they do not alter the subject. Both were
+mutation-checked by adding the `X-Forwarded-User` fallback and watching them go
+red — otherwise the prohibition is satisfied by nobody having written the
+feature yet, which is a different thing.
 
 ### Why PASETO and not JWT
 
