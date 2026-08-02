@@ -296,6 +296,73 @@ jobs:
           done
           echo "mssql and oracle still claim Dialect, as recorded"
 
+      # `lib:A-26`: the library matrix said "every requirement id checked to
+      # appear exactly once — 291 ids, 291 covered, none missing". That was
+      # derived from the rows once, and then six requirements were added with
+      # no row and nothing re-derived it.
+      #
+      # A boast about mechanical completeness should be mechanical.
+      - name: Every requirement has exactly one row in the library matrix
+        run: |
+          python3 - <<'PY'
+          import re, sys, glob, pathlib
+          from collections import Counter
+
+          def expand(cell):
+              out = []
+              for part in re.split(r"[,;]", cell):
+                  part = part.strip().strip("`").strip()
+                  if not part:
+                      continue
+                  # A lettered range: R4.12a-R4.12c
+                  m = re.match(r"^([A-Z]+[0-9]*\.\d+)([a-z])\s*[\u2013-]\s*"
+                               r"(?:[A-Z]+[0-9]*\.\d+)?([a-z])$", part)
+                  if m:
+                      base, a, b = m.groups()
+                      out += [f"{base}{chr(c)}" for c in range(ord(a), ord(b) + 1)]
+                      continue
+                  # A numeric range: C0.1-C0.3
+                  m = re.match(r"^([A-Z]+[0-9]*)\.(\d+)\s*[\u2013-]\s*"
+                               r"(?:([A-Z]+[0-9]*)\.)?(\d+)$", part)
+                  if m:
+                      pre, a, pre2, b = m.groups()
+                      if pre2 and pre2 != pre:
+                          continue
+                      out += [f"{pre}.{n}" for n in range(int(a), int(b) + 1)]
+                      continue
+                  m = re.match(r"^([A-Z]+[0-9]*\.\d+[a-z]?)$", part)
+                  if m:
+                      out.append(m.group(1))
+              return out
+
+          defined = set()
+          for path in sorted(glob.glob("openehr/spec/*.md")):
+              if pathlib.Path(path).name in ("conformance-matrix.md", "audit.md", "index.md"):
+                  continue
+              defined |= set(re.findall(r"^- \*\*([A-Z]+[0-9]*\.[0-9]+[a-z]?)\*\*",
+                                        pathlib.Path(path).read_text(), re.M))
+
+          seen = Counter()
+          for line in pathlib.Path("openehr/spec/conformance-matrix.md").read_text().splitlines():
+              if line.startswith("|"):
+                  cells = [c.strip() for c in line.split("|")]
+                  if len(cells) > 1 and cells[1] not in ("Id", "---"):
+                      seen.update(expand(cells[1]))
+
+          bad = 0
+          for label, items in (
+              ("defined with no row", sorted(defined - set(seen))),
+              ("a row for a requirement that does not exist", sorted(set(seen) - defined)),
+              ("covered more than once", sorted(k for k, v in seen.items() if v > 1)),
+          ):
+              if items:
+                  bad = 1
+                  print(f"::error::{label}: {', '.join(items)}")
+          if not bad:
+              print(f"{len(defined)} requirements, {len(defined)} covered exactly once")
+          sys.exit(bad)
+          PY
+
       # `db:D-09`: the matrix marked two requirements satisfied and listed the
       # same two as absent, in one file, for a day. The file that says "where
       # this disagrees with a crate's documentation, trust this" was disagreeing

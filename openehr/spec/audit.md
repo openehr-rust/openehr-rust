@@ -95,6 +95,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-23 | High | A `VERSION`'s invariants were checked by `OriginalVersion::new` and by nothing else — deserialization bypassed them and no `Validate` impl existed, so the path an HTTP service takes was unchecked | **fixed** — `Validate for Version`, the store validates the envelope, and `Preceding_version_uid_validity` enforced for the first time |
 | A-24 | Medium | The 75 unnamed RM invariants were undifferentiated, so a real gap was indistinguishable from a class deliberately not modelled | **classified** — 29 out of scope, 17 vacuous, 25 unenforced, 1 enforced-but-misnamed; the build now fails on an unclassified one. **Unenforced now 21**: the four `EHR` reference rules and the interval rename are fixed; two sub-findings open |
 | A-25 | High | The invariant-coverage count matched invariant **names** without their class, matched names in comments, and saw only two of the ways a rule is reported | **fixed** — matches the cited `(class, name)` pair through a real scanner; **83 named became 69**, and 24 invariants nobody had examined were revealed |
+| A-26 | Low | The conformance matrix boasted mechanical completeness — "291 ids, 291 covered, none missing" — and six requirements added afterwards had no row | **fixed** — 297 of 297, and CI re-derives the count on every push |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
 | A-13 | Medium | One `IF NOT EXISTS` flag covered two statements MySQL treats differently | **fixed**, verified on MySQL 8.4 |
@@ -925,6 +926,43 @@ the code so the next person does not tidy it back.
 **The honest reading.** This did not make the crate worse; it made the report
 true. Sixteen invariants that had been counted as covered never were, and the
 number had been quoted in a generated file that says at the top it is evidence.
+
+## A-26 — a total that was derived once
+
+**Severity:** Low. **Requirement:** `C0.7`, `C0.20`. **Status: fixed.**
+
+Found by checking `db:D-09`'s defect against the other tree.
+
+**Found.** The matrix said, of itself:
+
+> Counted mechanically from the tables below, with every requirement id in
+> `spec/*.md` checked to appear exactly once — 291 ids, 291 covered, none
+> missing. A hand-written total in a file like this is a number nobody
+> rechecks; this one was derived from the rows.
+
+It was derived from the rows, once. Six requirements added afterwards had no row
+at all: `S1.18`, `S1.19`, `S1.20`, `L10.9`, `L10.10`, `L10.11` — three of them
+added the same day, the other three earlier in the same sequence of work. The
+sentence warning against a number nobody rechecks was itself the number nobody
+rechecked.
+
+Milder than `D-09`: nothing contradicted anything, and the *covered* figure was
+right. What was wrong was the denominator, and the claim of completeness that
+rested on it.
+
+**Fixed.** The six have rows, the header records the version it was actually
+assessed against, and **CI re-derives the count on every push** — expanding the
+ranges in the `Id` column, comparing against the requirements the specification
+defines, and failing on a requirement with no row, a row for a requirement that
+does not exist, or an id covered twice.
+
+**A near miss worth recording.** The first measurement reported nine missing,
+including `R4.12a`–`R4.12c`. Those are covered, by a row reading
+`R4.12a–R4.12c`; the range expander dropped letter suffixes and collapsed it to
+`R4.12`. Three of nine reported gaps were defects in the instrument, which is
+`A-25` in miniature and the second time in two days that a measurement of this
+specification has been wrong before the specification was.
+
 ## Closed findings
 
 **A-01** and **A-03** are fixed and kept above with their evidence, because the

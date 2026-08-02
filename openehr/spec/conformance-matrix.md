@@ -4,7 +4,7 @@
 the file to distrust last: if it disagrees with the code, the code wins and this
 file has a defect.
 
-**Assessed:** 2026-08-01, against `rustc 1.96.1`, `openehr` 0.1.0.
+**Assessed:** 2026-08-02, against `rustc 1.97.1`, `openehr` 0.2.0.
 **Method:** each requirement read against the code that implements it and the
 test that exercises it; test names below are real and runnable with
 `cargo test <name>`.
@@ -25,9 +25,18 @@ Doctests count as tests: they compile and run in CI (`T13.8`).
 ## Totals
 
 Counted mechanically from the tables below, with every requirement id in
-`spec/*.md` checked to appear exactly once — 291 ids, 291 covered, none
-missing. A hand-written total in a file like this is a number nobody rechecks;
-this one was derived from the rows.
+`spec/*.md` checked to appear exactly once — **297 ids, 297 covered, none
+missing**.
+
+A hand-written total in a file like this is a number nobody rechecks, and this
+one proved the point: it said 291 of 291 while six requirements added after the
+assessment had no row at all — `S1.18`, `S1.19`, `S1.20`, `L10.9`, `L10.10`,
+`L10.11`. "Derived from the rows" was true once and then was not.
+
+**CI now re-derives it** on every push, expanding the ranges in the `Id` column
+and comparing against the requirements the specification defines. A new
+requirement with no row fails the build; so does a row for a requirement that
+does not exist, and so does an id covered twice.
 
 | Status | Count | 2026-07-31 |
 | --- | --- | --- |
@@ -90,6 +99,9 @@ Process requirements; they govern this specification rather than the code.
 | S1.14 | doc | `security` module header |
 | S1.15 | doc | `J9.15`; bounded by `canonical_json::reading_a_composition_stays_within_a_small_stack` |
 | S1.16–S1.17 | • | `terminology::tests::the_codes_that_disagree_between_terminology_repositories_are_the_current_ones` |
+| S1.18 | — | declared departure: ISO 3166 and ISO 639 are not carried, so `COMPOSITION.Territory_valid` and `Language_valid` are not checked (`A-19`) |
+| S1.19 | — | declared exclusion: no demographic repository, so the four `PARTY` graph invariants cannot be checked from a value in hand |
+| S1.20 | — | declared departure: an `EHR_ACCESS` may record no policy, so `Scheme_valid` is not checked. `X11.24`'s fail-closed default is why that is safe |
 
 ## §2 Identifiers — `I2`
 
@@ -298,6 +310,8 @@ Process requirements; they govern this specification rather than the code.
 | L10.6 | • | `invariants::every_validation_check_fires_on_a_document_that_breaks_it` drives twelve of them from JSON; the `DV_ORDERED` pair have their own tests |
 | L10.7 | • | `invariants::violations_are_reported_in_document_order_and_that_order_is_stable` |
 | L10.8 | • | `text::tests::rubric_checking_reports_unchecked_separately_from_valid` |
+| L10.9–L10.10 | • | the crate-added register in [`10-validation.md`](10-validation.md); `openehr-assets` fails the build when it and the generated report disagree |
+| L10.11 | • | the unenforced register, same file, same check — in both directions (`D-09` is the same defect one tree over) |
 
 ## §11 Security — `X11`
 
