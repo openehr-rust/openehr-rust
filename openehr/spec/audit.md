@@ -92,6 +92,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-20 | Medium | `L10.4` requires openEHR's own invariant names; citations diverged and nothing checked | **fixed** — 15 renamed; the 13 crate *additions* declared under `L10.9`; both checked every build |
 | A-21 | Medium | `EHR.Ehr_status_valid` and `Ehr_access_valid` unenforced; the shared fixture violated both | **fixed** — `Ehr::new` checks, fixture corrected, round-trip assertion strengthened |
 | A-22 | Medium | `DV_MULTIMEDIA`: `Integrity_check_validity` reported for the wrong rule; three checkable invariants unenforced despite the crate shipping their code sets | **fixed** — four checks added, the addition renamed and declared |
+| A-23 | High | A `VERSION`'s invariants were checked by `OriginalVersion::new` and by nothing else — deserialization bypassed them and no `Validate` impl existed, so the path an HTTP service takes was unchecked | **fixed** — `Validate for Version`, the store validates the envelope, and `Preceding_version_uid_validity` enforced for the first time |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
 | A-13 | Medium | One `IF NOT EXISTS` flag covered two statements MySQL treats differently | **fixed**, verified on MySQL 8.4 |
@@ -648,6 +649,64 @@ The three share one shape: the subject of the test was absent, and absence
 reads as success.
 
 ---
+
+
+## A-23 — a version's invariants were checked in one place, and not the one that matters
+
+**Severity:** High. **Requirement:** `V8.1`, `L10.9`, `J9.9`. **Status: fixed.**
+
+Found while classifying the 75 invariants
+[`assets/invariant-coverage.md`](../../assets/invariant-coverage.md) reports as
+unnamed — a list whose own header says distinguishing out-of-scope from vacuous
+from unenforced "needs a human".
+
+**Found.** `OriginalVersion::new` checks `Lifecycle_state_valid` and
+`Data_valid`. The type derives `Deserialize`, which writes the fields straight
+in, and no `Validate` implementation existed for a version at all — `validation.rs`
+did not mention `OriginalVersion` once. The store validated
+`version.data()`, the composition *inside* the envelope, and never the envelope.
+
+So a version arriving as JSON was checked by nothing. Measured, not inferred: a
+document naming lifecycle state `9999` and carrying no data at all deserialized
+to `Ok`, and `openehr-loco`'s `POST` accepted exactly that shape.
+
+**A third invariant was enforced nowhere.**
+`VERSION.Preceding_version_uid_validity` — `uid.version_tree_id.is_first xor
+preceding_version_uid /= Void` — was in neither the constructor nor the store.
+The store refuses a rootless successor only by comparing against the container's
+head, so committing **version 2 into an empty container** succeeded and produced
+a history whose first entry says it is not the first.
+
+Two things make it credible that this went unnoticed:
+
+- The conformance suite tested the rootless successor *with* a head present.
+  One case, and the guard was only as wide as it.
+- A unit test in `common.rs` built version 2 with no predecessor while testing
+  something else entirely. The impossible version was easy enough to construct
+  that a test did it by accident, and enforcing the invariant is what surfaced
+  it.
+
+**Fixed.** Three parts, because the gap had three:
+
+1. `OriginalVersion::new` enforces `Preceding_version_uid_validity`.
+2. `impl Validate for Version<T>` covers `Lifecycle_state_valid`, `Data_valid`,
+   and `Preceding_version_uid_validity`, and descends into the data. This is the
+   half that covers deserialized input.
+3. `commit_composition` validates the **version**, not the composition inside
+   it.
+
+Deserialization stays lenient rather than being made to refuse, because `J9.9`
+says so and the reason holds: a document that cannot be read cannot be inspected,
+repaired, or reported on. What was missing was any way to ask whether it was
+valid, and now there is one.
+
+`Attestations_valid` and `Other_input_version_uids_valid` are named in the new
+impl and deliberately not checked: both are `X /= Void implies not X.is_empty`,
+and a `Vec` has no way to be present and empty in the openEHR sense. Named so a
+reader finds the reason rather than concluding they were missed.
+
+**Residual.** The other 74 unnamed invariants are still unclassified. This one
+was found by starting that work, which suggests the rest is worth finishing.
 
 ## Closed findings
 

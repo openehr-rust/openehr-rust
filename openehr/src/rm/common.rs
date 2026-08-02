@@ -1460,6 +1460,22 @@ impl<T> OriginalVersion<T> {
         if data.is_none() && lifecycle_state_code != terminology::version_lifecycle_state::DELETED {
             return Err(ParseError::invariant("ORIGINAL_VERSION", "Data_valid"));
         }
+        // `VERSION.Preceding_version_uid_validity`: the first version has no
+        // predecessor and every later one has exactly one. openEHR states it as
+        // an exclusive or, and both halves matter — a first version naming a
+        // predecessor claims a history that does not exist, and a later one
+        // naming none starts a second history in the same container.
+        //
+        // Nothing enforced this, in the library or the store. The store refuses
+        // a rootless successor only when the container already has a head, so
+        // committing version 2 into an *empty* container succeeded and produced
+        // a history whose first entry says it is not the first (`A-23`).
+        if uid.version_tree_id().is_first() == preceding_version_uid.is_some() {
+            return Err(ParseError::invariant(
+                "VERSION",
+                "Preceding_version_uid_validity",
+            ));
+        }
         Ok(Self {
             uid,
             preceding_version_uid,
@@ -1638,17 +1654,31 @@ pub enum CommitError {
 /// vo.commit(v1.into()).unwrap();
 /// assert_eq!(vo.version_count(), 1);
 ///
-/// // A second version claiming no predecessor is refused: it would make the
-/// // history two roots, and neither would be wrong on its face.
-/// let bad = OriginalVersion::new(
+/// // A second version claiming no predecessor would make the history two
+/// // roots, neither wrong on its face. It is now refused one step earlier: the
+/// // version cannot be built at all (`VERSION.Preceding_version_uid_validity`).
+/// assert!(OriginalVersion::new(
 ///     "87284370-2D4B-4E3D-A3F3-F303D2F4F34B::ehr1.example.org::2".parse().unwrap(),
 ///     None,
 ///     version_lifecycle_state::COMPLETE,
 ///     Some("second".to_string()),
+///     audit.clone(),
+///     owner.clone(),
+/// ).is_err());
+///
+/// // `CommitError::PrecedingVersionMismatch` still exists, because a version
+/// // that arrived as JSON never went through the constructor — deserialization
+/// // is lenient by design (`J9.9`). It is reached by naming a predecessor that
+/// // is not the current head.
+/// let stale = OriginalVersion::new(
+///     "87284370-2D4B-4E3D-A3F3-F303D2F4F34B::ehr1.example.org::3".parse().unwrap(),
+///     Some("87284370-2D4B-4E3D-A3F3-F303D2F4F34B::ehr1.example.org::2".parse().unwrap()),
+///     version_lifecycle_state::COMPLETE,
+///     Some("third".to_string()),
 ///     audit,
 ///     owner,
 /// ).unwrap();
-/// assert!(vo.commit(bad.into()).is_err());
+/// assert!(vo.commit(stale.into()).is_err());
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'de>"))]
@@ -2011,10 +2041,19 @@ mod tests {
         let id: ObjectVersionId = "87284370-2D4B-4E3D-A3F3-F303D2F4F34B::ehr1.example.org::2"
             .parse()
             .unwrap();
+        // Version 2, so it names version 1. This test built it with no
+        // predecessor until `Preceding_version_uid_validity` was enforced, and
+        // the fixture was itself an instance of the state the invariant
+        // forbids — which is how `A-23` came to be believable: the impossible
+        // version was easy enough to construct that a test did it by accident.
+        let preceding: ObjectVersionId =
+            "87284370-2D4B-4E3D-A3F3-F303D2F4F34B::ehr1.example.org::1"
+                .parse()
+                .unwrap();
         assert!(
             OriginalVersion::<String>::new(
                 id.clone(),
-                None,
+                Some(preceding.clone()),
                 terminology::version_lifecycle_state::DELETED,
                 None,
                 audit(terminology::audit_change_type::DELETED),
@@ -2025,13 +2064,51 @@ mod tests {
         assert!(
             OriginalVersion::<String>::new(
                 id,
-                None,
+                Some(preceding),
                 terminology::version_lifecycle_state::COMPLETE,
                 None,
                 audit(terminology::audit_change_type::CREATION),
                 owner,
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn a_version_number_and_its_predecessor_must_agree() {
+        let (_, owner) = versioned();
+        let first: ObjectVersionId = "87284370-2D4B-4E3D-A3F3-F303D2F4F34B::ehr1.example.org::1"
+            .parse()
+            .unwrap();
+        let second: ObjectVersionId = "87284370-2D4B-4E3D-A3F3-F303D2F4F34B::ehr1.example.org::2"
+            .parse()
+            .unwrap();
+        let build = |uid: ObjectVersionId, preceding: Option<ObjectVersionId>| {
+            OriginalVersion::new(
+                uid,
+                preceding,
+                terminology::version_lifecycle_state::COMPLETE,
+                Some("content".to_owned()),
+                audit(terminology::audit_change_type::CREATION),
+                owner.clone(),
+            )
+        };
+
+        // The two legal shapes.
+        assert!(build(first.clone(), None).is_ok());
+        assert!(build(second.clone(), Some(first.clone())).is_ok());
+
+        // A first version claiming a history that does not exist.
+        assert_eq!(
+            build(first, Some(second.clone())).unwrap_err().to_string(),
+            ParseError::invariant("VERSION", "Preceding_version_uid_validity").to_string()
+        );
+        // A successor starting a second history in the same container. The
+        // store refuses this only once the container has a head, so committing
+        // it into an empty one succeeded (`A-23`).
+        assert_eq!(
+            build(second, None).unwrap_err().to_string(),
+            ParseError::invariant("VERSION", "Preceding_version_uid_validity").to_string()
         );
     }
 

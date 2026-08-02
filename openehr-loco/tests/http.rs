@@ -942,3 +942,52 @@ async fn metadata_stops_calling_read_auditing_absent_once_it_is_on() {
 
     let _ = std::fs::remove_file(&path);
 }
+
+#[tokio::test]
+async fn a_version_that_never_went_through_the_constructor_is_still_checked() {
+    // `lib:A-23`. `OriginalVersion::new` checked the version's invariants and
+    // deserialization checked none of them, so a body arriving here bypassed
+    // every one. Nothing else validated the envelope: the store validated the
+    // composition inside it.
+    let served = Served::new();
+
+    // Valid JSON, valid composition, impossible version: it claims `complete`
+    // and carries no data.
+    let mut value = serde_json::to_value(version(FRESH, 1, None, false)).expect("json");
+    value.as_object_mut().expect("object").remove("data");
+    let (status, body, _) = served
+        .send(
+            Request::builder()
+                .method("POST")
+                .uri(served.compositions())
+                .header(header::AUTHORIZATION, &served.authorization)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&value).expect("json")))
+                .expect("request"),
+        )
+        .await;
+
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert!(body.contains("Data_valid"), "{body}");
+
+    // And a successor with its predecessor removed — the shape the constructor
+    // now refuses and the wire still carries.
+    let mut value = serde_json::to_value(version(LIVE, 2, Some(1), false)).expect("json");
+    value
+        .as_object_mut()
+        .expect("object")
+        .remove("preceding_version_uid");
+    let (status, body, _) = served
+        .send(
+            Request::builder()
+                .method("POST")
+                .uri(served.compositions())
+                .header(header::AUTHORIZATION, &served.authorization)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&value).expect("json")))
+                .expect("request"),
+        )
+        .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert!(body.contains("Preceding_version_uid_validity"), "{body}");
+}

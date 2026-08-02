@@ -834,6 +834,69 @@ fn check_multimedia(m: &crate::rm::data_types::DvMultimedia, ctx: &mut Context) 
     }
 }
 
+/// Checks a `VERSION`'s own invariants — the envelope, not the content.
+///
+/// # Why this exists
+///
+/// [`OriginalVersion::new`] checks `Lifecycle_state_valid`, `Data_valid`, and
+/// `Preceding_version_uid_validity`. **Deserialization checked none of them**,
+/// because the type carries a derived `Deserialize` that writes the fields
+/// straight in, and nothing else validated a version at all — the store
+/// validated the composition inside it and never the envelope around it.
+///
+/// So a version arriving as JSON could name a lifecycle state openEHR does not
+/// define, or claim `complete` and carry no content, and be committed. That is
+/// `A-23`, and this is the half of the fix that covers the path an HTTP service
+/// actually takes.
+///
+/// Validating rather than refusing to deserialize is deliberate and matches the
+/// rest of the crate: reading is lenient so that a document can be inspected,
+/// repaired, or reported on (`J9.9`), and `validate()` is where a caller finds
+/// out what is wrong with it. What was missing was any way to ask.
+impl<T: Validate> Validate for crate::rm::common::Version<T> {
+    fn visit(&self, ctx: &mut Context) {
+        if !crate::terminology::version_lifecycle_state::GROUP.contains(self.lifecycle_state_code())
+        {
+            ctx.violation(
+                "ORIGINAL_VERSION",
+                "Lifecycle_state_valid",
+                "lifecycle_state is not from the openEHR version_lifecycle_state group",
+            );
+        }
+        // A version with no data and a non-deleted state claims its content is
+        // finished and then does not supply it.
+        if self.data().is_none()
+            && self.lifecycle_state_code() != crate::terminology::version_lifecycle_state::DELETED
+        {
+            ctx.violation(
+                "ORIGINAL_VERSION",
+                "Data_valid",
+                "a version with no data must carry the deleted lifecycle state",
+            );
+        }
+        // `uid.version_tree_id.is_first xor preceding_version_uid /= Void`.
+        // Both halves are wrong in their own way: a first version naming a
+        // predecessor claims a history that does not exist, and a successor
+        // naming none starts a second history inside one container.
+        if self.uid().version_tree_id().is_first() == self.preceding_version_uid().is_some() {
+            ctx.violation(
+                "VERSION",
+                "Preceding_version_uid_validity",
+                "the first version must have no preceding_version_uid and every \
+                 later version must have one",
+            );
+        }
+        // `Attestations_valid` and `Other_input_version_uids_valid` are
+        // `X /= Void implies not X.is_empty`, which cannot fail here: both are
+        // `Vec`, and an empty `Vec` *is* the absent case. Named so that a
+        // reader looking for them finds why they are not checked rather than
+        // concluding they were missed.
+        if let Some(data) = self.data() {
+            ctx.nested("/data".to_owned(), |c| data.visit(c));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

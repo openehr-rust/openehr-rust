@@ -222,12 +222,52 @@ pub fn run<S: Store>(store: &mut S) -> Result<()> {
     );
 
     // A successor claiming no predecessor.
+    //
+    // Built by deserialization, because `sample_version(2, None, ..)` no longer
+    // *exists*: `OriginalVersion::new` refuses it as of `lib:A-23`. That is the
+    // point — the shape is now unconstructible through the constructor and
+    // still arrives over the wire, which is exactly the path that was
+    // unchecked. Deserialization stays lenient by design (`lib:J9.9`), so this
+    // is how a caller's bad JSON reaches a store.
+    let rootless = |container: &str| -> Version<Composition> {
+        let mut value: serde_json::Value =
+            serde_json::to_value(sample_version(2, Some(1), 7)).expect("the fixture serialises");
+        value
+            .as_object_mut()
+            .expect("a version is an object")
+            .remove("preceding_version_uid");
+        serde_json::from_str(
+            &serde_json::to_string(&value)
+                .expect("json")
+                .replace(RECORD, container),
+        )
+        .expect("deserialization is lenient by design")
+    };
+
+    // Into an **empty** container. The assertion after this covers the same
+    // shape once a head exists, and that was the only one there was — so
+    // committing version 2 into a container with nothing in it succeeded, and
+    // produced a history whose first entry says it is not the first.
     assert!(
         matches!(
-            store.commit_composition(&ehr_id, &sample_version(2, None, 7), contribution_uid),
-            Err(crate::StoreError::Commit(
-                CommitError::PrecedingVersionMismatch
-            ))
+            store.commit_composition(
+                &ehr_id,
+                &rootless("3F2504E0-4F89-11D3-9A0C-0305E82C3301"),
+                contribution_uid
+            ),
+            Err(crate::StoreError::Invalid(_))
+        ),
+        "{engine}: a rootless successor was accepted into an empty container"
+    );
+
+    // And where a head does exist. Refused by the version's own invariant now
+    // rather than by the head comparison, so the message changes; what matters
+    // is that it is still refused.
+    assert!(
+        matches!(
+            store.commit_composition(&ehr_id, &rootless(RECORD), contribution_uid),
+            Err(crate::StoreError::Invalid(_)
+                | crate::StoreError::Commit(CommitError::PrecedingVersionMismatch))
         ),
         "{engine}: a rootless successor was accepted"
     );

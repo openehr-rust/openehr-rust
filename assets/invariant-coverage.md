@@ -25,8 +25,8 @@ merely names — see `rm-1.1.0-invariants.json`.
 | | Count |
 | --- | --- |
 | Invariants in RM 1.1.0 | 155 |
-| Named in the crate's source | 80 |
-| Not named | 75 |
+| Named in the crate's source | 83 |
+| Not named | 72 |
 
 Not-named includes invariants that are **out of scope** by a declared exclusion (EHR Extract, `lib:S1.6`; the Archetype Model, `lib:S1.4`), invariants that are **vacuous in Rust** (`X /= Void implies not X.is_empty` — an empty `Vec` is the absent case), and invariants that are genuinely unenforced. Distinguishing those three needs a human, and this file does not attempt it.
 
@@ -101,9 +101,7 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | `ITEM_TAG` | `Inv_value_valid` |
 | `LOCATABLE` | `Archetyped_valid` |
 | `LOCATABLE` | `Links_valid` |
-| `ORIGINAL_VERSION` | `Attestations_valid` |
 | `ORIGINAL_VERSION` | `Is_merged_validity` |
-| `ORIGINAL_VERSION` | `Other_input_version_uids_valid` |
 | `PARTY` | `Contacts_valid` |
 | `PARTY` | `Relationships_validity` |
 | `PARTY` | `Reverse_relationships_validity` |
@@ -125,7 +123,6 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | `TERM_MAPPING` | `Purpose_valid` |
 | `TRANSLATION_DETAILS` | `Language_valid` |
 | `VERSION` | `Owner_id_valid` |
-| `VERSION` | `Preceding_version_uid_validity` |
 | `VERSIONED_COMPOSITION` | `Persistent_validity` |
 | `VERSIONED_OBJECT` | `All_version_ids_valid` |
 | `VERSIONED_OBJECT` | `All_versions_valid` |

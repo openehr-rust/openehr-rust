@@ -406,9 +406,13 @@ impl Store for SqliteStore {
         // Gate one: the content must satisfy the Reference Model. A store that
         // accepted an invalid composition would make every later reader's
         // `validate()` fail on data it cannot fix.
-        if let Some(composition) = version.data() {
-            composition.validate_ok()?;
-        }
+        // The **version**, not just the composition inside it. This validated
+        // `version.data()` alone, which meant the envelope was never checked
+        // anywhere: `OriginalVersion::new` checks it and deserialization does
+        // not, so a version arriving as JSON could name a lifecycle state
+        // openEHR does not define, or claim `complete` and carry no content
+        // (`A-23`). Validating the version covers its data too.
+        version.validate_ok()?;
 
         // The EHR must exist. Without this the foreign key would fire on the
         // container insert with a message about a constraint rather than about
