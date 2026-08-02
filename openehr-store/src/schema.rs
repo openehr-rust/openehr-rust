@@ -599,6 +599,91 @@ mod tests {
         }
     }
 
+    /// Whether every one of the six engines can index **and** `=` compare this
+    /// type directly, with no adjunct.
+    ///
+    /// An exhaustive match with no wildcard, for `M3.30`'s reason: adding a
+    /// `ColTy` should force a decision here too. A new type is not searchable
+    /// until someone says which engines can search it, and the compiler is what
+    /// makes that a decision rather than an oversight.
+    //
+    // The `true` arms stay separate although they agree. Each is `true` for its
+    // own reason — bounded by construction, fixed width, a native scalar — and
+    // merging them would delete three reasons to leave one fact, so that a type
+    // whose reason later stops holding would move with the others. Same trade as
+    // the dialects' `col_sql`.
+    #[allow(clippy::match_same_arms)]
+    const fn every_engine_can_search(ty: ColTy) -> bool {
+        match ty {
+            // Bounded by construction (`M3.29`), and bounded character columns
+            // index and compare everywhere.
+            ColTy::Id(_) | ColTy::Text(_) => true,
+            // Fixed width, and never hexadecimal text (`M3.40`).
+            ColTy::Digest => true,
+            ColTy::Instant | ColTy::InstantUtc | ColTy::Int | ColTy::Bool => true,
+            // The two that are not. On SQL Server these cannot be indexed; on
+            // Oracle a CLOB can be neither indexed nor `=` compared. Searching
+            // one needs the adjuncts of `db:AD5`, and nothing emits an adjunct
+            // (`db:P6.18`).
+            ColTy::LongText | ColTy::Json => false,
+        }
+    }
+
+    /// `db:P6.18` as a check rather than a sentence.
+    ///
+    /// The specification says no search target requires an adjunct today,
+    /// because every indexed column is a type all six engines handle. That is
+    /// true, and nothing stopped it from quietly stopping being true — an index
+    /// added over `data_json` would compile, pass every other test, and produce
+    /// a schema that cannot be searched on two of the six engines: a scan on
+    /// SQL Server and an error on Oracle.
+    ///
+    /// `D-08` is why this is worth a test now rather than later. Canonical JSON
+    /// moved onto a byte-preserving text type, which on Oracle is a `CLOB` — so
+    /// the largest column in the schema became the one fewest engines can
+    /// search, and it is exactly the column somebody will reach for first.
+    #[test]
+    fn every_indexed_column_is_one_every_engine_can_search() {
+        for table in TABLES {
+            for index in table.indexes {
+                for name in index.columns {
+                    let column = table
+                        .columns
+                        .iter()
+                        .find(|c| c.name == *name)
+                        .expect("checked by every_table_is_internally_consistent");
+                    assert!(
+                        every_engine_can_search(column.ty),
+                        "{}: index {} covers {name}, whose type {:?} cannot be \
+                         indexed or compared on every engine. Either index a \
+                         different column or specify its adjuncts \
+                         (spec/databases/search-adjuncts.md AD16), and note that \
+                         no adjunct is emitted anywhere yet (db:P6.18).",
+                        table.name,
+                        index.name,
+                        column.ty
+                    );
+                }
+            }
+        }
+    }
+
+    /// `db:P6.13`: an index whose query nobody recorded is one nobody dares
+    /// drop.
+    #[test]
+    fn every_index_records_the_query_it_exists_for() {
+        for table in TABLES {
+            for index in table.indexes {
+                assert!(
+                    !index.note.trim().is_empty(),
+                    "{}: index {} records no query",
+                    table.name,
+                    index.name
+                );
+            }
+        }
+    }
+
     #[test]
     fn foreign_keys_only_point_backwards() {
         // The property that lets `ddl()` emit tables in list order without
