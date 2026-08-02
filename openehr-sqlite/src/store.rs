@@ -292,6 +292,11 @@ impl Store for SqliteStore {
     }
 
     fn create_ehr(&mut self, ehr: &Ehr) -> Result<()> {
+        // As for a version (`lib:A-23`): `Ehr::new` checks two of these six
+        // reference types and deserialization checks none, so an EHR read from
+        // JSON reached no check at all. A record whose `compositions` list
+        // names a CONTRIBUTION is one every later reader has to cope with.
+        ehr.validate_ok()?;
         let id = ehr.ehr_id().to_string();
         let existing: Option<String> = self
             .connection

@@ -549,13 +549,6 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
         Disposition::Vacuous,
         "items is a Vec<Element>, so the element type is the constraint",
     ),
-    // --- enforced, under a name openEHR does not use (lib:L10.4) -------------
-    (
-        "DV_INTERVAL",
-        "Limits_consistent",
-        Disposition::Renamed,
-        "Interval::new refuses lower > upper, reporting INTERVAL rather than Limits_consistent",
-    ),
     // --- not enforced: needs a code set the crate does not carry (lib:S1.18) -
     (
         "COMPOSITION",
@@ -617,30 +610,6 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
         "Purpose_valid",
         Disposition::Unenforced,
         "the term_mapping_purpose group ships and nothing checks against it (lib:A-24)",
-    ),
-    (
-        "EHR",
-        "Compositions_valid",
-        Disposition::Unenforced,
-        "the reference type is unchecked, as Ehr_status_valid was before lib:A-21",
-    ),
-    (
-        "EHR",
-        "Contributions_valid",
-        Disposition::Unenforced,
-        "the reference type is unchecked",
-    ),
-    (
-        "EHR",
-        "Directory_valid",
-        Disposition::Unenforced,
-        "the reference type is unchecked",
-    ),
-    (
-        "EHR",
-        "Folders_valid",
-        Disposition::Unenforced,
-        "the reference type is unchecked",
     ),
     (
         "VERSION",

@@ -897,6 +897,91 @@ impl<T: Validate> Validate for crate::rm::common::Version<T> {
     }
 }
 
+/// Checks an `EHR`'s four reference collections and its two required
+/// references.
+///
+/// # Why the constructor was not enough
+///
+/// `A-21` made `Ehr::new` check `Ehr_status_valid` and `Ehr_access_valid`. The
+/// four collections are filled by infallible `with_*` builders, which a
+/// constructor cannot see, and `Deserialize` is derived — so an `EHR` read from
+/// JSON reached neither check. That is `A-23`'s shape again, in a second class,
+/// and it is why both the constructor's rules are repeated here rather than
+/// assumed.
+///
+/// What these catch is a reference pointing at the wrong kind of thing: an
+/// `EHR` whose `compositions` list names a `CONTRIBUTION`, or whose `directory`
+/// names a versioned composition. Rust's type system cannot tell them apart —
+/// every one is an `OBJECT_REF` — so the type name is the only thing that can.
+impl Validate for crate::rm::ehr::Ehr {
+    fn visit(&self, ctx: &mut Context) {
+        // `(reference, required type, invariant, what a reader is told)`. The
+        // detail is per call site because a violation's message is
+        // `&'static str` — deliberately, since a message assembled from the
+        // data is a message that can carry the data (`X11.7`).
+        let expect = |reference: &crate::base::ObjectRef,
+                      wanted: &str,
+                      invariant: &'static str,
+                      detail: &'static str,
+                      ctx: &mut Context| {
+            if reference.type_name() != wanted {
+                ctx.violation("EHR", invariant, detail);
+            }
+        };
+
+        expect(
+            self.ehr_status(),
+            "VERSIONED_EHR_STATUS",
+            "Ehr_status_valid",
+            "ehr_status does not reference a VERSIONED_EHR_STATUS",
+            ctx,
+        );
+        expect(
+            self.ehr_access(),
+            "VERSIONED_EHR_ACCESS",
+            "Ehr_access_valid",
+            "ehr_access does not reference a VERSIONED_EHR_ACCESS",
+            ctx,
+        );
+        for reference in self.compositions() {
+            expect(
+                reference,
+                "VERSIONED_COMPOSITION",
+                "Compositions_valid",
+                "a composition reference does not name a VERSIONED_COMPOSITION",
+                ctx,
+            );
+        }
+        for reference in self.contributions() {
+            expect(
+                reference,
+                "CONTRIBUTION",
+                "Contributions_valid",
+                "a contribution reference does not name a CONTRIBUTION",
+                ctx,
+            );
+        }
+        for reference in self.folders() {
+            expect(
+                reference,
+                "VERSIONED_FOLDER",
+                "Folders_valid",
+                "a folder reference does not name a VERSIONED_FOLDER",
+                ctx,
+            );
+        }
+        if let Some(directory) = self.directory() {
+            expect(
+                directory,
+                "VERSIONED_FOLDER",
+                "Directory_valid",
+                "directory does not reference a VERSIONED_FOLDER",
+                ctx,
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1135,5 +1220,109 @@ mod tests {
         let element = Element::new(attrs("Glucose", "at0004"), DataValue::Quantity(q));
         assert!(element.validate().is_empty());
         let _ = DvText::new("unused");
+    }
+
+    #[test]
+    fn an_ehr_reference_pointing_at_the_wrong_kind_of_thing_is_a_violation() {
+        use crate::base::{HierObjectId, ObjectId, ObjectRef};
+        use crate::rm::data_types::DvDateTime;
+        use crate::rm::ehr::Ehr;
+
+        let uid = HierObjectId::from_uid_str("87284370-2D4B-4E3D-A3F3-F303D2F4F34B").unwrap();
+        let reference =
+            |ty: &str| ObjectRef::new("local", ty, ObjectId::HierObjectId(uid.clone())).unwrap();
+        let ehr = || {
+            Ehr::new(
+                HierObjectId::from_uid_str("11111111-2222-3333-4444-555555555555").unwrap(),
+                uid.clone(),
+                reference("VERSIONED_EHR_STATUS"),
+                reference("VERSIONED_EHR_ACCESS"),
+                DvDateTime::new("2026-08-01T09:00:00Z").unwrap(),
+            )
+            .unwrap()
+        };
+
+        assert!(ehr().validate().is_empty());
+
+        // Every one of these is an OBJECT_REF, so nothing but the type name can
+        // tell them apart. The builders are infallible, which is why the
+        // constructor could never have caught them.
+        let cases = [
+            (
+                ehr().with_composition(reference("CONTRIBUTION")),
+                "Compositions_valid",
+            ),
+            (
+                ehr().with_contribution(reference("VERSIONED_COMPOSITION")),
+                "Contributions_valid",
+            ),
+            // `with_folders` sets `directory` to the first folder, so one bad
+            // folder reference trips both rules — which is the model's own
+            // doing (`Directory_in_folders`) and worth seeing.
+            (
+                ehr()
+                    .with_folders(vec![reference("VERSIONED_COMPOSITION")])
+                    .unwrap(),
+                "Folders_valid",
+            ),
+            (
+                ehr()
+                    .with_folders(vec![reference("VERSIONED_COMPOSITION")])
+                    .unwrap(),
+                "Directory_valid",
+            ),
+        ];
+        for (subject, invariant) in cases {
+            let report = subject.validate();
+            assert!(
+                report.violations().iter().any(|v| v.invariant == invariant),
+                "{invariant} not reported: {report:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_ehr_that_never_went_through_the_constructor_is_still_checked() {
+        use crate::rm::ehr::Ehr;
+
+        // `A-21` made `Ehr::new` refuse these two. Deserialization does not call
+        // it, so until `Validate for Ehr` existed an EHR read from JSON was
+        // checked by nothing at all — the same hole as `A-23`, one class along.
+        let json = r#"{
+          "system_id": {"_type":"HIER_OBJECT_ID","value":"11111111-2222-3333-4444-555555555555"},
+          "ehr_id": {"_type":"HIER_OBJECT_ID","value":"87284370-2D4B-4E3D-A3F3-F303D2F4F34B"},
+          "ehr_status": {"_type":"OBJECT_REF","namespace":"local","type":"EHR",
+            "id":{"_type":"HIER_OBJECT_ID","value":"87284370-2D4B-4E3D-A3F3-F303D2F4F34B"}},
+          "ehr_access": {"_type":"OBJECT_REF","namespace":"local","type":"EHR",
+            "id":{"_type":"HIER_OBJECT_ID","value":"87284370-2D4B-4E3D-A3F3-F303D2F4F34B"}},
+          "time_created": {"_type":"DV_DATE_TIME","value":"2026-08-01T09:00:00Z"}
+        }"#;
+        let ehr: Ehr = serde_json::from_str(json).expect("deserialization is lenient (J9.9)");
+        let report = ehr.validate();
+        assert!(
+            report
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Ehr_status_valid"),
+            "{report:?}"
+        );
+        assert!(
+            report
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Ehr_access_valid"),
+            "{report:?}"
+        );
+    }
+
+    #[test]
+    fn an_interval_reports_openehrs_own_name_for_its_bounds_rule() {
+        use crate::base::Interval;
+
+        // `lib:A-24`: enforced all along, reported as `INTERVAL` with prose, so
+        // a reader could not find the rule in any class definition (`L10.4`).
+        let err = Interval::closed(10i64, 1i64).unwrap_err().to_string();
+        assert!(err.contains("DV_INTERVAL"), "{err}");
+        assert!(err.contains("Limits_consistent"), "{err}");
     }
 }

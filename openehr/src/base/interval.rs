@@ -91,11 +91,14 @@ impl<T: PartialOrd> Interval<T> {
                 lo.partial_cmp(hi),
                 Some(core::cmp::Ordering::Less | core::cmp::Ordering::Equal)
             ) {
-                return Err(ParseError::new(
-                    "INTERVAL",
-                    "lower bound is not established to be at or below the upper bound",
-                    "",
-                ));
+                // `DV_INTERVAL.Limits_consistent`, reported by openEHR's own
+                // name. It said `INTERVAL` with prose until `lib:A-24`, which
+                // meant the rule was enforced and a reader could not find it in
+                // any class definition — the defect `L10.4` exists to prevent,
+                // and the one `A-20` fixed fifteen times. It survived because
+                // that audit greps for names the crate *uses*, and this rule
+                // was the one that used none.
+                return Err(ParseError::invariant("DV_INTERVAL", "Limits_consistent"));
             }
         }
         Ok(Self {

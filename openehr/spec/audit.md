@@ -93,7 +93,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-21 | Medium | `EHR.Ehr_status_valid` and `Ehr_access_valid` unenforced; the shared fixture violated both | **fixed** — `Ehr::new` checks, fixture corrected, round-trip assertion strengthened |
 | A-22 | Medium | `DV_MULTIMEDIA`: `Integrity_check_validity` reported for the wrong rule; three checkable invariants unenforced despite the crate shipping their code sets | **fixed** — four checks added, the addition renamed and declared |
 | A-23 | High | A `VERSION`'s invariants were checked by `OriginalVersion::new` and by nothing else — deserialization bypassed them and no `Validate` impl existed, so the path an HTTP service takes was unchecked | **fixed** — `Validate for Version`, the store validates the envelope, and `Preceding_version_uid_validity` enforced for the first time |
-| A-24 | Medium | The 75 unnamed RM invariants were undifferentiated, so a real gap was indistinguishable from a class deliberately not modelled | **classified** — 29 out of scope, 17 vacuous, 1 renamed, **25 genuinely unenforced**; the build now fails on an unclassified one. Three sub-findings open |
+| A-24 | Medium | The 75 unnamed RM invariants were undifferentiated, so a real gap was indistinguishable from a class deliberately not modelled | **classified** — 29 out of scope, 17 vacuous, 25 unenforced, 1 enforced-but-misnamed; the build now fails on an unclassified one. **Unenforced now 21**: the four `EHR` reference rules and the interval rename are fixed; two sub-findings open |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
 | A-13 | Medium | One `IF NOT EXISTS` flag covered two statements MySQL treats differently | **fixed**, verified on MySQL 8.4 |
@@ -746,12 +746,12 @@ construction, and each would have read as a missing check forever.
 
 **Three sub-findings, open:**
 
-- **`DV_INTERVAL.Limits_consistent` is enforced under the wrong name.**
-  `Interval::new` refuses `lower > upper` and reports `INTERVAL` with prose,
-  not `Limits_consistent`. `L10.4` requires openEHR's own name so a reader can
-  find the rule in the class definition — this is the same defect `A-20` fixed
-  fifteen times, surviving because the grep that found those looks for names
-  that *are* used and this one is not.
+- ~~**`DV_INTERVAL.Limits_consistent` is enforced under the wrong name.**~~
+  **Fixed.** `Interval::new` refused `lower > upper` and reported `INTERVAL`
+  with prose. `L10.4` requires openEHR's own name so a reader can find the rule
+  in the class definition — the same defect `A-20` fixed fifteen times,
+  surviving because the grep that found those looks for names that *are* used
+  and this one used none.
 
 - **`TERM_MAPPING.Purpose_valid` is unenforced although the crate ships the code
   set.** `term_mapping_purpose::GROUP` exists and is registered; nothing checks
@@ -776,10 +776,28 @@ no back-references. That is a legitimate exclusion and it is **not declared
 anywhere**, which `C0.16` calls a defect in its own right. It needs a numbered
 requirement beside `S1.4` and `S1.6`.
 
-**Residual.** Twenty-five unenforced invariants remain unenforced. Nine of them
-need external code sets the crate does not carry (ISO 639, ISO 3166, IANA
-character sets and media types) and are the same decision as `A-19`; the other
-sixteen are checkable with what is already here.
+**Fixed alongside the classification.** The four `EHR` reference-collection
+rules — `Compositions_valid`, `Contributions_valid`, `Folders_valid`,
+`Directory_valid` — now have an `impl Validate for Ehr`, and the store validates
+an EHR before it writes one.
+
+That fix is `A-23` in a second class, and worth stating as such. `A-21` made
+`Ehr::new` check `Ehr_status_valid` and `Ehr_access_valid`. The four collections
+are filled by **infallible** `with_*` builders, which no constructor can see,
+and `Deserialize` is derived — so an EHR read from JSON reached none of the six
+checks. Both of `A-21`'s rules are therefore repeated in the `Validate` impl
+rather than assumed, and a test deserializes an EHR whose status and access
+references are both typed `"EHR"` and asserts both violations come back.
+
+Every one of these is an `OBJECT_REF`. Rust cannot tell a reference to a
+composition from one to a contribution, so the type name is the only thing that
+can — which is why the rules exist and why nothing else would have caught a
+`compositions` list naming a `CONTRIBUTION`.
+
+**Residual.** Twenty-one unenforced invariants remain. Nine need external code
+sets the crate does not carry (ISO 639, ISO 3166, IANA character sets and media
+types) and are the same decision as `A-19`; the other twelve are checkable with
+what is already here.
 
 ## Closed findings
 

@@ -25,14 +25,13 @@ merely names — see `rm-1.1.0-invariants.json`.
 | | Count |
 | --- | --- |
 | Invariants in RM 1.1.0 | 155 |
-| Named in the crate's source | 83 |
-| Not named | 72 |
+| Named in the crate's source | 88 |
+| Not named | 67 |
 
 Every not-named invariant is accounted for below, and the build fails if one is not (`W0.4`). This file used to say that telling them apart "needs a human" — which was true only for as long as nobody did it, and while it stood a genuine gap was indistinguishable from a class this crate deliberately does not model.
 
-- **Not enforced**: **25**
+- **Not enforced**: **21**
 - Cannot fail in Rust: **17**
-- Enforced under another name (`lib:L10.4`): **1**
 - Out of scope: **29**
 
 ## Invariant names that diverge from openEHR (`lib:L10.4`)
@@ -50,6 +49,7 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | `DV_MULTIMEDIA` | `Integrity_check_matches` | yes | `Compression_algorithm_validity`, `Integrity_check_algorithm_validity`, `Integrity_check_validity`, `Media_type_valid`, `Not_empty`, `Size_valid` |
 | `DV_PARSABLE` | `Value_valid` | yes | `Formalism_valid`, `Size_valid` |
 | `DV_PROPORTION` | `Parts_finite` | yes | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
+| `EHR` | `VERSIONED_EHR_STATUS` | **NO** | `Compositions_valid`, `Contributions_valid`, `Directory_in_folders`, `Directory_valid`, `Ehr_access_valid`, `Ehr_status_valid`, `Folders_valid` |
 | `EVENT` | `Time_after_origin` | yes | `Offset_validity1` |
 | `EVENT_CONTEXT` | `End_time_valid` | yes | `Participations_validity`, `Setting_valid`, `location_valid` |
 | `INSTRUCTION` | `Narrative_valid` | yes | `Activities_valid` |
@@ -62,7 +62,7 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 
 Grouped by why. **Not enforced** is the only group that is a gap; the others are answers.
 
-### **Not enforced** — 25
+### **Not enforced** — 21
 
 | Class | Invariant | Why |
 | --- | --- | --- |
@@ -75,10 +75,6 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `DV_ORDERED` | `Is_simple_validity` | not checked |
 | `DV_TEXT` | `Encoding_valid` | IANA character sets are not carried |
 | `DV_TEXT` | `Language_valid` | ISO 639 is not carried |
-| `EHR` | `Compositions_valid` | the reference type is unchecked, as Ehr_status_valid was before lib:A-21 |
-| `EHR` | `Contributions_valid` | the reference type is unchecked |
-| `EHR` | `Directory_valid` | the reference type is unchecked |
-| `EHR` | `Folders_valid` | the reference type is unchecked |
 | `ENTRY` | `Encoding_valid` | IANA character sets are not carried |
 | `ENTRY` | `Language_valid` | ISO 639 is not carried |
 | `ENTRY` | `Subject_validity` | subject_is_self is not checked against the subject's type |
@@ -91,12 +87,6 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `VERSION` | `Owner_id_valid` | owner_id is not modelled on a version at all (lib:A-24) |
 | `VERSIONED_OBJECT` | `Latest_version_valid` | not checked |
 | `VERSIONED_OBJECT` | `Uid_validity` | the uid extension is not required to be empty |
-
-### Enforced under another name (`lib:L10.4`) — 1
-
-| Class | Invariant | Why |
-| --- | --- | --- |
-| `DV_INTERVAL` | `Limits_consistent` | Interval::new refuses lower > upper, reporting INTERVAL rather than Limits_consistent |
 
 ### Cannot fail in Rust — 17
 
