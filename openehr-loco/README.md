@@ -6,6 +6,12 @@ A RESTful openEHR API server on **Axum** and **Loco 1.0.1**, over
 Not published. It carries no conformance level, and `W16.14` forbids publishing
 above one.
 
+What *is* tested is verification: 14 unit tests over `src/auth.rs` cover key
+rotation, expiry, audience binding, the implicit assertion, a token naming
+nobody, and a `v4.local` token offered as `v4.public`. What is **not** tested is
+any of the HTTP surface — no test has served a request, so the `410`-vs-`404`
+behaviour this crate exists for is asserted and not demonstrated.
+
 ## Why this crate exists separately
 
 The database crates deliberately ship no server, so a program that wants storage
@@ -48,6 +54,11 @@ found" stops looking (`S1.20`).
 | `GET` | `…/composition/{uid}/version/{version_uid}` | vread |
 | `DELETE` | `…/composition/{uid}` | `501` — see below |
 
+Every endpoint except `/metadata` requires a token — see
+[Verifying the caller](#verifying-the-caller). `/metadata` is open because a
+caller has to be able to discover how to authenticate before it can, and nothing
+there is clinical.
+
 `_count` and `_offset` page, capped at 100. `_total` is returned as `total` and
 is the count *before* paging: a short page without it is indistinguishable from
 the end of the results.
@@ -58,16 +69,23 @@ the claim the service can actually keep.
 
 ### `DELETE` returns 501, deliberately
 
-Deleting in openEHR is a *commit* carrying `AUDIT_DETAILS` — who did it and why.
-That cannot be synthesised from a bare `DELETE` with no body: this service does
-not authenticate (`S1.8`), so it has no committer to record, and inventing one
-would put a false name in an audit trail. Commit a deleted version instead.
+Deleting in openEHR is a *commit* carrying `AUDIT_DETAILS` — who did it, what
+kind of change it was, and **why** — plus a `preceding_version_uid` placing it in
+the history.
+
+This used to say the service had no committer to record. It now has one: the
+verified subject would map onto `AUDIT_DETAILS.committer` perfectly well. What a
+bare `DELETE` still cannot supply is the reason, and defaulting it to something
+like `"deleted via HTTP DELETE"` would synthesise the field an investigation
+actually reads (`PR12.9`). So the refusal stands — now by choice rather than by
+inability. Commit a deleted version instead.
 
 ## Shape
 
 ```
 src/
   app.rs           Hooks: routes, and before_run
+  auth.rs          PASETO v4.public verification
   controllers/     mod.rs owns the status-code mapping
   views.rs         what goes over the wire
   initializers.rs
@@ -94,13 +112,109 @@ that is deliberately *not* shredded (`S1.5`); taking Loco's as well would mean
 two persistence layers with two ideas of what a record is, and the one Loco
 brings does not know what a `COMPOSITION` is.
 
-`auth` is off for a different reason: a JWT layer here would imply this service
-establishes who is calling. It does not (`S1.8`).
+`auth` is off for a different reason: it is `jsonwebtoken`, and this service
+verifies PASETO instead. See below.
+
+## Verifying the caller
+
+This service is a **relying party, not an identity provider** (`PR12.13`). It
+checks that an issuer signed a statement about who is calling; it holds no
+credential, checks no password, and has no registration or recovery path. A
+careless issuer produces careless attributions and every signature still
+verifies — which is why `PR12.8` still says this layer does not authenticate.
+
+### Why PASETO and not JWT
+
+JWT negotiates its algorithm *inside the token*, and the token comes from the
+caller. That one decision is the root of `alg: none`, of RS256 verified as HS256
+against the public key used as an HMAC secret, and of a decade of advisories
+that are all the same advisory rediscovered.
+
+PASETO removes the negotiation. The version **is** the algorithm: `v4.public` is
+Ed25519, and there is no field in which a caller can propose otherwise
+(`PR12.14`). Same instinct as `ColTy` not being `#[non_exhaustive]` — prefer the
+design where the dangerous thing cannot be *expressed* over the one where it can
+be expressed and must be caught.
+
+### Public key only, and why that matters more here
+
+This crate holds a verification key, contains no code that signs, and never
+loads a secret key (`PR12.15`).
+
+Symmetric verification — PASETO `v4.local`, or JWT's HS256 — means the verifier
+holds the key that *mints*. Ordinarily that is an accepted trade. It is not
+acceptable here, because a verified subject becomes an `AUDIT_DETAILS.committer`
+inside an append-only, hash-chained history whose whole purpose is to be
+evidence years later. An attacker reaching a minting service could attribute a
+commit to a clinician who never touched the system, and that attribution would
+then be chained, append-only, and indistinguishable from the real ones.
+
+Asymmetric verification bounds the worst case to misuse of tokens actually
+presented. Fabricated evidence and misused evidence are different incidents.
+
+### Configuration
+
+| Variable | | |
+| --- | --- | --- |
+| `OPENEHR_PASETO_PUBLIC_KEYS` | **required** | PASERK `k4.public.…`, comma separated |
+| `OPENEHR_PASETO_ISSUER` | optional | expected `iss` |
+| `OPENEHR_PASETO_AUDIENCE` | optional | expected `aud` — **read the note** |
+| `OPENEHR_PASETO_IMPLICIT_ASSERTION` | optional | binds tokens to one environment |
+
+**Without a key the service refuses to start** (`PR12.16`). Not a warning, not a
+development fallback. The failure being guarded against is silent in the worst
+direction: the process starts, the health check is green, every request
+succeeds, and the only symptom is that the whole record set is readable by
+anyone who can reach the port. A refusal to start pages someone at 03:00; a
+service that starts open produces a breach notification.
+
+**Leaving `AUDIENCE` unset is a real exposure.** Where one issuer serves several
+services and none check `aud`, a token handed to the least sensitive of them can
+be replayed against this one. It is optional because a single-service deployment
+genuinely does not need it, and stated loudly because the gap is invisible until
+somebody goes looking (`PR12.17`).
+
+Several keys may be listed. That is the rotation story: publish the incoming key
+alongside the outgoing one, wait for every issued token to expire, then drop the
+old entry. Every configured key is tried, rather than selecting one from the
+token's own footer — an attacker-supplied field steering key selection is the
+shape of mistake this crate chose PASETO to avoid.
+
+Non-expiring tokens are refused (`PR12.17`). There is no revocation list here,
+so a token that never expires cannot be withdrawn without rotating the key for
+everybody at once.
+
+### What it still does not do
+
+**Verification is not authorization** (`PR12.18`). Every route below
+`/openehr/v1` demands a valid token and **not one of them consults who it
+names**. Deciding which records `clinician-4417` may open needs the care
+relationship, the care team, the consent directives, and the break-glass rules —
+a model this repository does not have. A service that checked a `roles` claim
+and considered the matter settled would enforce a policy nobody wrote, which is
+worse than enforcing none, because it looks like it works.
+
+**Requiring a token did not create an audit trail** (`PR12.20`). The service now
+establishes who is reading, on every single request, and discards it. That is a
+worse statement than the old "this layer records no reads", not a better one:
+the information exists and is thrown away. A deployment needing an access log
+must still build one.
 
 ## Running
 
+Generate a keypair with any PASETO v4 tooling, keep the secret at your issuer,
+and give this service the public half:
+
 ```sh
-OPENEHR_SQLITE_PATH=openehr.sqlite3 cargo run
+OPENEHR_SQLITE_PATH=openehr.sqlite3 \
+OPENEHR_PASETO_PUBLIC_KEYS=k4.public.… \
+OPENEHR_PASETO_AUDIENCE=openehr-loco \
+  cargo run
+```
+
+```sh
+curl -H 'Authorization: Bearer v4.public.…' \
+  http://localhost:5150/openehr/v1/ehr/{ehr_id}
 ```
 
 ## Licence

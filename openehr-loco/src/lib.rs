@@ -16,9 +16,17 @@
 //! the moment somebody uses the store directly.
 //!
 //! It also does not authenticate. Identity is established at the deployment
-//! perimeter (`db:S1.8`), which is why Loco's `auth` feature is switched off
-//! rather than merely unused — a JWT layer here would imply this service
-//! establishes who is calling, and it does not.
+//! perimeter (`db:S1.8`); what this service does is **verify** the assertion
+//! that perimeter signed — a PASETO `v4.public` token, checked against a public
+//! key it holds and a secret key it does not (`db:PR12.13`–`db:PR12.15`). It is
+//! a relying party, not an identity provider, and [`auth`] sets out the
+//! difference and why the key direction matters.
+//!
+//! Nor does it authorize. Every route below `/openehr/v1` requires a valid
+//! token and not one of them consults who it names, because deciding *which*
+//! records a clinician may open needs the care relationship, the consent
+//! directives, and the break-glass rules — none of which exist here
+//! (`db:PR12.18`).
 //!
 //! # The one distinction it does own
 //!
@@ -34,12 +42,16 @@
 //!
 //! GDPR erasure is not implemented anywhere in this repository (`db:M3.18`), so
 //! no endpoint offers it. Read auditing is not implemented either
-//! (`db:PR12.5`): this service records no record of who read what, and a
-//! deployment needing that must provide it above this layer.
+//! (`db:PR12.5`), and verification makes that worth restating rather than
+//! quietly improving: this service now knows who is reading, verifies it on
+//! every request, and **discards it**. A deployment needing an access log must
+//! still provide one above this layer, and must not assume that requiring a
+//! token produced one.
 
 #![forbid(unsafe_code)]
 
 pub mod app;
+pub mod auth;
 pub mod controllers;
 pub mod initializers;
 pub mod tasks;

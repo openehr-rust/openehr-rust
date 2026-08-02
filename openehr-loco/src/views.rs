@@ -36,6 +36,11 @@ pub struct Metadata {
     pub engine: &'static str,
     /// The schema version the database is installed under.
     pub schema_version: i64,
+    /// The token every other endpoint requires.
+    ///
+    /// Stated so a caller learns the scheme by reading rather than by
+    /// collecting a `401`. This is the only endpoint that does not require it.
+    pub token_scheme: &'static str,
     /// Capabilities this service does **not** provide, and why.
     pub not_implemented: Vec<Absence>,
 }

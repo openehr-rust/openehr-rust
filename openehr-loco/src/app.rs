@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use loco_rs::{
+    Result,
     app::{AppContext, Hooks, Initializer},
     bgworker::Queue,
     boot::{BootResult, StartMode, create_app},
@@ -9,11 +10,12 @@ use loco_rs::{
     controller::AppRoutes,
     environment::Environment,
     task::Tasks,
-    Result,
 };
 use openehr_sqlite::SqliteStore;
 use openehr_store::Store as _;
 use std::sync::{Arc, Mutex};
+
+use crate::auth::{PasetoVerifier, SharedVerifier};
 
 /// The store, shared across requests.
 ///
@@ -43,7 +45,11 @@ impl Hooks for App {
         )
     }
 
-    async fn boot(mode: StartMode, environment: &Environment, config: Config) -> Result<BootResult> {
+    async fn boot(
+        mode: StartMode,
+        environment: &Environment,
+        config: Config,
+    ) -> Result<BootResult> {
         create_app::<Self>(mode, environment, config).await
     }
 
@@ -54,13 +60,25 @@ impl Hooks for App {
             .add_route(controllers_routes::composition())
     }
 
-    /// Opens the store, **here and not in [`Hooks::boot`]**.
+    /// Opens the store and builds the verifier, **here and not in
+    /// [`Hooks::boot`]**.
     ///
     /// `boot` is not on the path `start` takes. Initialising the store there
     /// left every request answering `503` while the health check stayed green —
     /// the worst combination available, because a load balancer keeps a
     /// wholly broken instance in rotation and reports it healthy.
+    ///
+    /// The verifier is built **first**, and its failure is fatal. A service
+    /// that could not read its verification key and started anyway would serve
+    /// an entire EHR to anyone who asked, with a green health check and no
+    /// symptom (`db:PR12.16`). Ordering it before the store means the
+    /// unconfigured case cannot reach a state where it holds an open database.
     async fn before_run(ctx: &AppContext) -> Result<()> {
+        let verifier =
+            PasetoVerifier::from_env().map_err(|e| loco_rs::Error::Message(e.to_string()))?;
+        ctx.shared_store
+            .insert::<SharedVerifier>(Arc::new(verifier));
+
         let mut store = SqliteStore::open(std::path::Path::new(
             &std::env::var("OPENEHR_SQLITE_PATH").unwrap_or_else(|_| "openehr.sqlite3".to_owned()),
         ))
@@ -68,7 +86,8 @@ impl Hooks for App {
         store
             .install()
             .map_err(|e| loco_rs::Error::Message(e.to_string()))?;
-        ctx.shared_store.insert::<SharedOpenehrStore>(Arc::new(Mutex::new(store)));
+        ctx.shared_store
+            .insert::<SharedOpenehrStore>(Arc::new(Mutex::new(store)));
         Ok(())
     }
 

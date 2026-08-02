@@ -2,9 +2,9 @@
 
 use async_trait::async_trait;
 use loco_rs::{
+    Result,
     app::AppContext,
     task::{Task, TaskInfo, Vars},
-    Result,
 };
 
 /// Prints a chain checkpoint for a container.

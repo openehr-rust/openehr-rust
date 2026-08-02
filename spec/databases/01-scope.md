@@ -86,8 +86,16 @@ reader deciding whether to use these crates needs the reason more than the fact.
   service existing; reinstating text nobody wrote, and mapping it to regulatory
   obligations in §13, is the failure `C0.16` records. A service specification
   will be written when the service has behaviour worth specifying.
-- **S1.8** The core MUST NOT authenticate or authorize. It records who acted;
-  establishing who they are belongs to the deployment (§12, `lib:X11.1`).
+- **S1.8** *(amended 2026-08-02)* The **core** MUST NOT authenticate or
+  authorize. It records who acted; establishing who they are belongs to the
+  deployment (§12, `lib:X11.1`).
+
+  A *service* crate may go one step further and **verify** an assertion the
+  deployment signed — `openehr-loco` does (`PR12.13`–`PR12.15`). That is
+  checking a signature, not establishing an identity, and it changes nothing
+  above: `openehr`, `openehr-store`, and the six engine crates still contain no
+  credential, no key, and no principal. Neither the core nor any service
+  authorizes (`PR12.18`).
 - **S1.9** The core MUST NOT resolve external terminologies, convert units, or
   interpret timing expressions. Those exclusions belong to the `openehr` crate
   (`lib:S1.8`–`lib:S1.10`) and are inherited here unchanged: a store does not get

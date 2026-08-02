@@ -11,6 +11,7 @@ use openehr::base::HierObjectId;
 use openehr_store::{Store as _, record::VersionRow};
 use serde::Deserialize;
 
+use crate::auth::Principal;
 use crate::controllers::{status_for, store};
 use crate::views::{Page, VersionView};
 
@@ -111,12 +112,15 @@ fn lock<T>(
 /// `404` would tell a caller it never was.
 async fn read(
     State(ctx): State<AppContext>,
+    _principal: Principal,
     Path((_ehr_id, uid)): Path<(String, String)>,
 ) -> Reply<VersionView> {
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
     let container = parse_id(&uid)?;
-    let row = guard.latest_version(&container).map_err(|e| status_for(&e))?;
+    let row = guard
+        .latest_version(&container)
+        .map_err(|e| status_for(&e))?;
 
     if row.is_deleted {
         return Err((
@@ -138,6 +142,7 @@ async fn read(
 /// "this version recorded a deletion" is the answer.
 async fn vread(
     State(ctx): State<AppContext>,
+    _principal: Principal,
     Path((_ehr_id, _uid, version_uid)): Path<(String, String, String)>,
 ) -> Reply<VersionView> {
     let handle = store(&ctx)?;
@@ -156,6 +161,7 @@ async fn vread(
 /// (`db:H5.12`).
 async fn history(
     State(ctx): State<AppContext>,
+    _principal: Principal,
     Path((_ehr_id, uid)): Path<(String, String)>,
     Query(paging): Query<Paging>,
 ) -> Reply<Page<VersionView>> {
@@ -183,6 +189,7 @@ async fn history(
 /// service executes no AQL and does not pretend to (`db:S1.6`).
 async fn search(
     State(ctx): State<AppContext>,
+    _principal: Principal,
     Path(ehr_id): Path<String>,
     Query(paging): Query<Paging>,
     Query(filter): Query<Search>,
@@ -223,16 +230,33 @@ pub struct Search {
 /// Not implemented, and it returns `501` rather than pretending.
 ///
 /// Deleting in openEHR means committing a version whose lifecycle state is
-/// `deleted` (`db:H5.2`), which needs an `AUDIT_DETAILS` naming who did it and
-/// why. That cannot be synthesised from a bare `DELETE` with no body: this
-/// service does not authenticate (`db:S1.8`), so it has no committer to record,
-/// and inventing one would put a false name in an audit trail.
+/// `deleted` (`db:H5.2`), carrying an `AUDIT_DETAILS` that says who did it,
+/// what kind of change it was, and **why** — and a `preceding_version_uid`
+/// placing it in the history.
+///
+/// # The reason changed when verification arrived, so it is restated
+///
+/// This previously said the service had no committer to record. It now has
+/// one: [`Principal::subject`] is verified on every request and would map onto
+/// `AUDIT_DETAILS.committer` perfectly well.
+///
+/// What a bare `DELETE` still cannot supply is the rest. A deletion without a
+/// reason is a row in an audit trail that answers the easy question and not the
+/// one an investigation asks, and defaulting the description to `"deleted via
+/// HTTP DELETE"` would be synthesising the part that matters — the same
+/// objection as `db:PR12.9`, one field along. So the endpoint stays refused,
+/// now by choice rather than by inability, and the caller is told what to send
+/// instead.
 #[allow(clippy::unused_async)]
-async fn remove(Path((_ehr_id, _uid)): Path<(String, String)>) -> (StatusCode, String) {
+async fn remove(
+    _principal: Principal,
+    Path((_ehr_id, _uid)): Path<(String, String)>,
+) -> (StatusCode, String) {
     (
         StatusCode::NOT_IMPLEMENTED,
-        "deletion is a commit carrying AUDIT_DETAILS; POST a deleted version instead \
-         (openEHR H5.2). This service has no committer to record (S1.8)."
+        "deletion is a commit: POST a version whose lifecycle state is deleted, carrying \
+         AUDIT_DETAILS with a change reason and a preceding_version_uid (openEHR H5.2). \
+         A bare DELETE carries no reason, and this service will not invent one (PR12.9)."
             .to_owned(),
     )
 }
