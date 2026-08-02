@@ -173,6 +173,30 @@ fn build(root: &Path) -> Vec<Asset> {
 /// Hand-rolled rather than a regex crate: the shape is fixed and adding a
 /// dependency to a repository tool to match one literal would be the wrong
 /// trade.
+/// Whether a character can appear inside a Rust identifier.
+///
+/// Used to tell the `r` of a raw string from the `r` ending `char` or `for`.
+const fn is_ident(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// Consumes a raw string body and its closing delimiter.
+fn skip_raw_string(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, hashes: usize) {
+    while let Some(c) = chars.next() {
+        if c != '"' {
+            continue;
+        }
+        let mut seen = 0usize;
+        while seen < hashes && chars.peek() == Some(&'#') {
+            chars.next();
+            seen += 1;
+        }
+        if seen == hashes {
+            return;
+        }
+    }
+}
+
 fn regex_citations(source: &str) -> Vec<(String, String)> {
     // **Any** adjacent pair of string literals shaped like a class and an
     // invariant, not an enumerated list of call forms.
@@ -197,7 +221,35 @@ fn regex_citations(source: &str) -> Vec<(String, String)> {
     let mut literals: Vec<String> = Vec::new();
     let mut chars = source.chars().peekable();
     let mut current: Option<String> = None;
+    // Raw strings are skipped whole. The library carries 39 of them, mostly
+    // JSON fixtures, and a scanner that read `r#"…"#` as an ordinary literal
+    // would take their inner quotes as boundaries. Today that is harmless
+    // because JSON always separates two quoted tokens, so no pair of fragments
+    // can look like a citation — but "harmless because of how the fixtures
+    // happen to be punctuated" is not a property worth resting on, and a raw
+    // string holding an *odd* number of quotes would put the rest of the file
+    // out of phase, which is the bug this scanner exists to have stopped
+    // having.
+    let mut previous = ' ';
     while let Some(c) = chars.next() {
+        if current.is_none() && c == 'r' && !is_ident(previous) {
+            let mut hashes = 0usize;
+            while chars.peek() == Some(&'#') {
+                chars.next();
+                hashes += 1;
+            }
+            if chars.peek() == Some(&'"') {
+                chars.next();
+                skip_raw_string(&mut chars, hashes);
+                previous = ' ';
+                continue;
+            }
+            // `r` began an identifier after all; nothing was consumed but the
+            // hashes, which cannot start a literal.
+            previous = 'r';
+            continue;
+        }
+        previous = c;
         match (&mut current, c) {
             // Inside a literal: only an unescaped quote ends it.
             (Some(buffer), '\\') => {
@@ -1131,6 +1183,153 @@ fn main() -> std::process::ExitCode {
         other => {
             eprintln!("usage: openehr-assets [write|check]  (got {other:?})");
             std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DISPOSITIONS, regex_citations};
+
+    /// Every failure mode this function has actually had.
+    ///
+    /// It had none of these tests while three findings in a row — `lib:A-24`,
+    /// `lib:A-25`, and `A-25`'s own correction — were about it being wrong.
+    /// A measuring instrument with no tests measures whatever it happens to do.
+    #[test]
+    fn a_citation_is_recognised_in_every_form_that_reports_one() {
+        let source = r#"
+            ctx.violation("EHR", "Ehr_status_valid", "detail");
+            return Err(ParseError::invariant("VERSION", "Owner_id_valid"));
+            check_optional_group(x, GROUP, "PARTICIPATION", "Function_valid", ctx);
+            check_party(p, "AUDIT_DETAILS", "Committer_valid", ctx);
+        "#;
+        let cited = regex_citations(source);
+        for expected in [
+            ("EHR", "Ehr_status_valid"),
+            ("VERSION", "Owner_id_valid"),
+            // The helper forms. Enumerating call sites is what made
+            // `ATTESTATION.Reason_valid` look unenforced when it was not.
+            ("PARTICIPATION", "Function_valid"),
+            ("AUDIT_DETAILS", "Committer_valid"),
+        ] {
+            assert!(
+                cited.contains(&(expected.0.to_owned(), expected.1.to_owned())),
+                "{expected:?} not cited in {cited:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_comment_never_counts_as_a_citation() {
+        // A note explaining that a rule is *deliberately* not checked is the
+        // most likely thing to be written next to one, and counting it makes
+        // the report say the opposite of what the comment says.
+        let source = r#"
+            // "ATTESTATION", "Items_valid" cannot fail: items is a Vec.
+            /// `DV_TEXT`, "Mappings_valid" is vacuous here.
+            /* "SECTION", "Items_valid" likewise. */
+            let x = 1;
+        "#;
+        assert!(
+            regex_citations(source).is_empty(),
+            "{:?}",
+            regex_citations(source)
+        );
+    }
+
+    #[test]
+    fn a_double_slash_inside_a_string_does_not_desynchronise_the_scan() {
+        // The regression that matters most. Skipping comments by searching for
+        // `//` truncated `"https://…"` mid-literal and put every quote after it
+        // out of phase, silently un-naming forty rules that were fine. The
+        // citation below sits *after* the URL, and is the whole point.
+        let source = r#"
+            let url = "https://example.invalid/spec#anchor";
+            ctx.violation("EHR", "Ehr_access_valid", "detail");
+        "#;
+        assert_eq!(
+            regex_citations(source),
+            vec![("EHR".to_owned(), "Ehr_access_valid".to_owned())]
+        );
+    }
+
+    #[test]
+    fn an_escaped_quote_does_not_end_a_literal() {
+        let source = r#"
+            let s = "a \" b";
+            ctx.violation("EHR", "Ehr_status_valid", "detail");
+        "#;
+        assert_eq!(
+            regex_citations(source),
+            vec![("EHR".to_owned(), "Ehr_status_valid".to_owned())]
+        );
+    }
+
+    #[test]
+    fn two_class_names_are_not_a_citation() {
+        // `ObjectRef::new("local", "EHR", …)` and type comparisons put two
+        // SCREAMING literals side by side. An invariant name has a lower-case
+        // letter; a class name does not.
+        let source = r#"
+            let r = ObjectRef::new("LOCAL", "VERSIONED_COMPOSITION", id);
+        "#;
+        assert!(
+            regex_citations(source).is_empty(),
+            "{:?}",
+            regex_citations(source)
+        );
+    }
+
+    #[test]
+    fn a_raw_string_is_skipped_whole() {
+        // A JSON fixture must not manufacture a citation from its own inner
+        // quotes.
+        let json = "let j = r#\"{\"EHR\": {\"Ehr_status_valid\": 1}}\"#;";
+        assert!(
+            regex_citations(json).is_empty(),
+            "a JSON fixture produced {:?}",
+            regex_citations(json)
+        );
+
+        // The case that separates handling raw strings from being lucky: an
+        // **odd** number of quotes inside one. Reading it as an ordinary
+        // literal leaves every quote after it out of phase, so the real
+        // citation below is missed — which is exactly how forty rules were
+        // silently un-named once already.
+        let odd =
+            "let q = r#\"he said \"hi\"#;\nctx.violation(\"EHR\", \"Ehr_status_valid\", \"d\");";
+        assert_eq!(
+            regex_citations(odd),
+            vec![("EHR".to_owned(), "Ehr_status_valid".to_owned())],
+            "a raw string put the scan out of phase"
+        );
+    }
+
+    #[test]
+    fn an_r_that_merely_ends_an_identifier_is_not_a_raw_string() {
+        // `char`, `for`, `our` — any identifier ending in `r` sits next to
+        // whatever follows it, and treating that `r` as a raw-string opener
+        // would swallow the rest of the file.
+        let source = r#"
+            let c: char = 'x';
+            for _ in 0..1 {}
+            ctx.violation("EHR", "Ehr_status_valid", "detail");
+        "#;
+        assert_eq!(
+            regex_citations(source),
+            vec![("EHR".to_owned(), "Ehr_status_valid".to_owned())]
+        );
+    }
+
+    #[test]
+    fn no_disposition_is_listed_twice() {
+        let mut seen = std::collections::BTreeSet::new();
+        for (class, name, _, _) in DISPOSITIONS {
+            assert!(
+                seen.insert((*class, *name)),
+                "{class}.{name} is dispositioned twice"
+            );
         }
     }
 }
