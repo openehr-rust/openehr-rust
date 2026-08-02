@@ -1,5 +1,23 @@
 //! A `RESTful` openEHR service, on Axum and Loco.
 //!
+//! # Evidence, in place of a conformance level
+//!
+//! This crate is **outside the ladder**: every rung there is defined by DDL, a
+//! `Store` implementation, or a database server, and this is none of those, so
+//! it states what has been shown rather than borrowing the nearest-looking
+//! level (`W0.32`).
+//!
+//! **Shown.** `tests/http.rs` serves requests through Loco's own router:
+//! `410` for a deleted composition against `404` for one that never existed,
+//! the history readable behind that `410`, `401` on every clinical route
+//! without a token with a body that does not reveal whether the record exists,
+//! the weak `ETag`, paging and its cap, `501` on `DELETE`, and `503` rather
+//! than `404` when the store is absent. The first two were mutation-checked.
+//! [`auth`] is covered separately.
+//!
+//! **Not shown.** No real deployment, no concurrency, no TLS, no engine but
+//! `SQLite`. Not published.
+//!
 //! # What this crate is for
 //!
 //! The database crates deliberately ship no server, so that a program wanting

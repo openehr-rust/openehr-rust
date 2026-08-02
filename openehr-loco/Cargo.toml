@@ -15,10 +15,11 @@ keywords = ["openehr", "ehr", "healthcare", "axum", "loco"]
 categories = ["web-programming::http-server"]
 repository = "https://github.com/openehr-rust/openehr-rust"
 readme = "README.md"
-# Not published while it is at conformance level nothing. `src/auth.rs` is
-# tested; no test has served an HTTP request, so the status-code behaviour this
-# crate exists for is unverified. `W16.14` forbids publishing above a level,
-# and this crate has not earned one yet.
+# Not published. This crate sits outside the conformance ladder — every rung
+# there is defined by DDL, a `Store`, or a database server (`W0.32`) — so it
+# states evidence rather than a level, in README.md and in lib.rs. The status
+# codes it exists for are now served and asserted in `tests/http.rs`; nothing
+# has been run against a real deployment.
 publish = false
 
 [dependencies]
@@ -66,3 +67,7 @@ missing_errors_doc = "deny"
 missing_panics_doc = "deny"
 
 [workspace]
+
+[dev-dependencies]
+loco-rs = { version = "1.0.1", default-features = false, features = ["cli", "testing"] }
+tower = { version = "0.5.3", features = ["util"] }

@@ -79,8 +79,20 @@ than either alone.
   | **Store** | Implements `Store` against a real database. | `conformance::run` passing against that engine. |
   | **Verified** | Store level, run in CI against the engine's own server on every commit. | A CI job that provisions the engine and fails — not skips — without it. |
 
-- **W0.9** A crate MUST NOT claim a level it has not earned, and its README and
-  crate documentation MUST state its level in the first screenful.
+- **W0.32** *(added 2026-08-02)* The ladder above describes **engine** crates.
+  Every rung is defined by DDL, by a `Store` implementation, or by a database
+  server, so a crate that is none of those — `openehr-loco` — cannot occupy one.
+
+  Such a crate MUST NOT borrow the nearest-looking rung, and MUST NOT be
+  described as unverified when it is tested. It states, in the first screenful,
+  **what has been demonstrated and what has not**, in those terms. A ladder
+  invented so that every crate has a rung would give the word "Verified" two
+  meanings, and the one that lost would be the one carrying evidence about a
+  database.
+
+- **W0.9** *(amended 2026-08-02)* A crate MUST NOT claim a level it has not
+  earned, and its README and crate documentation MUST state its level — or, for
+  a crate outside the ladder, its evidence (`W0.32`) — in the first screenful.
 - **W0.10** A level is a claim about the present, not about an afternoon in the
   past. A level whose evidence is a one-off local run MUST say so rather than
   imply continuous verification.

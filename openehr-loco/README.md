@@ -3,14 +3,23 @@
 A RESTful openEHR API server on **Axum** and **Loco 1.0.1**, over
 [`openehr-sqlite`](../openehr-sqlite).
 
-Not published. It carries no conformance level, and `W16.14` forbids publishing
-above one.
+Not published, and it sits **outside the conformance ladder** — every rung there
+is defined by DDL, a `Store` implementation, or a database server, and this
+crate is none of those. So it states evidence instead of a level (`W0.32`).
 
-What *is* tested is verification: 14 unit tests over `src/auth.rs` cover key
-rotation, expiry, audience binding, the implicit assertion, a token naming
-nobody, and a `v4.local` token offered as `v4.public`. What is **not** tested is
-any of the HTTP surface — no test has served a request, so the `410`-vs-`404`
-behaviour this crate exists for is asserted and not demonstrated.
+**Demonstrated.** 26 tests. `tests/http.rs` serves real requests through Loco's
+own router: `410` for a deleted composition against `404` for one that never
+existed, the history still readable behind that `410`, `401` on every clinical
+route without a token and an identical body whether or not the record exists,
+the weak `ETag`, `_count`/`_offset`/`total` and the paging cap, `501` on
+`DELETE`, and `503` rather than `404` when the store is missing. Both of the
+first two were mutation-checked — the branch was disabled and the test went red.
+`src/auth.rs` covers key rotation, expiry, audience binding, the implicit
+assertion, a token naming nobody, and a `v4.local` token offered as
+`v4.public`.
+
+**Not demonstrated.** No run against a real deployment, no concurrency
+behaviour, no TLS, and no engine other than SQLite.
 
 ## Why this crate exists separately
 
