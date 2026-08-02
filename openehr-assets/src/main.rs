@@ -174,28 +174,83 @@ fn build(root: &Path) -> Vec<Asset> {
 /// dependency to a repository tool to match one literal would be the wrong
 /// trade.
 fn regex_citations(source: &str) -> Vec<(String, String)> {
-    // Two reporting forms, and missing one of them makes the report lie by
-    // omission. `ParseError::invariant` is the construction path;
-    // `ctx.violation` is the validation path, which is where most invariants
-    // are actually reported. Scanning only the first hid every divergence in
-    // `validation.rs` until a test failure surfaced it.
+    // **Any** adjacent pair of string literals shaped like a class and an
+    // invariant, not an enumerated list of call forms.
+    //
+    // This scanned for `ParseError::invariant(` and `.violation(` only. Both
+    // are real reporting paths and neither is the whole set: `check_party` and
+    // `check_optional_group` take the class and invariant as literals and
+    // report through them, so every rule enforced by a helper was invisible.
+    // `ATTESTATION.Reason_valid` and `PARTICIPATION.Function_valid` were
+    // enforced all along while this file called them unenforced — a claim that
+    // reached `lib:A-25`'s own text before the code was read (`W0.3`).
+    //
+    // An enumerated list of call forms is a guard only as wide as its list, and
+    // that shape has now bitten twice in one register. Matching the *pair*
+    // needs no list: a helper added tomorrow is covered.
+    //
+    // Comments are skipped, so a note explaining that a rule is **not** checked
+    // cannot make it count as checked. That skipping is done by a scanner and
+    // not by searching for `//`, because a first attempt at the latter
+    // truncated `"https://…"` mid-literal and put every quote after it out of
+    // phase — which silently *un*named forty rules that were fine.
+    let mut literals: Vec<String> = Vec::new();
+    let mut chars = source.chars().peekable();
+    let mut current: Option<String> = None;
+    while let Some(c) = chars.next() {
+        match (&mut current, c) {
+            // Inside a literal: only an unescaped quote ends it.
+            (Some(buffer), '\\') => {
+                buffer.push('\\');
+                if let Some(escaped) = chars.next() {
+                    buffer.push(escaped);
+                }
+            }
+            (Some(_), '"') => literals.push(current.take().unwrap_or_default()),
+            (Some(buffer), other) => buffer.push(other),
+            // Outside: a quote opens one, and a slash may open a comment.
+            (None, '"') => current = Some(String::new()),
+            (None, '/') => match chars.peek() {
+                Some('/') => {
+                    for c in chars.by_ref() {
+                        if c == '\n' {
+                            break;
+                        }
+                    }
+                }
+                Some('*') => {
+                    let mut last = ' ';
+                    for c in chars.by_ref() {
+                        if last == '*' && c == '/' {
+                            break;
+                        }
+                        last = c;
+                    }
+                }
+                _ => {}
+            },
+            (None, _) => {}
+        }
+    }
+
     let mut out = Vec::new();
-    let sites = source
-        .match_indices("ParseError::invariant(")
-        .chain(source.match_indices(".violation("));
-    for (index, _) in sites {
-        let tail = &source[index..];
-        let quoted: Vec<&str> = tail.split('"').skip(1).step_by(2).take(2).collect();
-        if quoted.len() == 2
-            && quoted[0].chars().all(|c| c.is_ascii_uppercase() || c == '_' || c.is_ascii_digit())
-            && !quoted[1].is_empty()
-            // Identifier-shaped only. A `ParseError::invariant` call whose
-            // second argument is a sentence is a detail message, not a name.
-            && quoted[1]
+    for pair in literals.windows(2) {
+        let (class, invariant) = (pair[0].as_str(), pair[1].as_str());
+        if !class.is_empty()
+            && class
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c == '_' || c.is_ascii_digit())
+            && !invariant.is_empty()
+            // Identifier-shaped only. A second argument that is a sentence is a
+            // detail message, not a name.
+            && invariant
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '_')
+            // A name, not another class: `("EHR", "CONTRIBUTION")` is a type
+            // check's two arguments, not a citation.
+            && invariant.chars().any(|c| c.is_ascii_lowercase())
         {
-            out.push((quoted[0].to_owned(), quoted[1].to_owned()));
+            out.push((class.to_owned(), invariant.to_owned()));
         }
     }
     out.sort();
@@ -759,18 +814,6 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
         "Type_valid",
         Disposition::Unenforced,
         "type = name is not asserted",
-    ),
-    (
-        "ATTESTATION",
-        "Reason_valid",
-        Disposition::Unenforced,
-        "the attestation_reason group ships and nothing checks against it",
-    ),
-    (
-        "PARTICIPATION",
-        "Function_valid",
-        Disposition::Unenforced,
-        "the participation_function group ships and nothing checks against it",
     ),
     (
         "EHR_ACCESS",

@@ -94,7 +94,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-22 | Medium | `DV_MULTIMEDIA`: `Integrity_check_validity` reported for the wrong rule; three checkable invariants unenforced despite the crate shipping their code sets | **fixed** — four checks added, the addition renamed and declared |
 | A-23 | High | A `VERSION`'s invariants were checked by `OriginalVersion::new` and by nothing else — deserialization bypassed them and no `Validate` impl existed, so the path an HTTP service takes was unchecked | **fixed** — `Validate for Version`, the store validates the envelope, and `Preceding_version_uid_validity` enforced for the first time |
 | A-24 | Medium | The 75 unnamed RM invariants were undifferentiated, so a real gap was indistinguishable from a class deliberately not modelled | **classified** — 29 out of scope, 17 vacuous, 25 unenforced, 1 enforced-but-misnamed; the build now fails on an unclassified one. **Unenforced now 21**: the four `EHR` reference rules and the interval rename are fixed; two sub-findings open |
-| A-25 | High | The invariant-coverage count matched invariant **names** without their class, and matched names in comments. openEHR reuses 15 names — `Language_valid` across seven classes — so the headline "named" figure was inflated | **fixed** — matched on the cited `(class, name)` pair; **83 named became 67**, and 24 invariants nobody had examined were revealed |
+| A-25 | High | The invariant-coverage count matched invariant **names** without their class, matched names in comments, and saw only two of the ways a rule is reported | **fixed** — matches the cited `(class, name)` pair through a real scanner; **83 named became 69**, and 24 invariants nobody had examined were revealed |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
 | A-13 | Medium | One `IF NOT EXISTS` flag covered two statements MySQL treats differently | **fixed**, verified on MySQL 8.4 |
@@ -832,14 +832,31 @@ satisfy it.
 
 | | Before | After |
 | --- | --- | --- |
-| Named | 83 | **67** |
-| Not named | 72 | **88** |
+| Named | 83 | **69** |
+| Not named | 72 | **86** |
 
 Twenty-four invariants nobody had examined were revealed, and are now
 dispositioned: 6 enforced under another name, 5 that cannot fail, 4 out of
-scope, and **9 genuinely unenforced**. Among them
-`ATTESTATION.Reason_valid` and `PARTICIPATION.Function_valid` — both with their
-terminology groups already shipping, which is `A-22`'s shape twice more.
+scope, and 7 genuinely unenforced.
+
+**Two of them I called unenforced, and they were not.** `ATTESTATION.Reason_valid`
+and `PARTICIPATION.Function_valid` are checked by `check_optional_group`, which
+takes the class and invariant as literals and reports through them. The parser
+matched two call forms — `ParseError::invariant(` and `.violation(` — and a
+rule enforced by a helper was invisible to both. I wrote "genuinely unenforced,
+with their groups already shipping" into this finding before reading the code
+that enforces them, which is `W0.3` in the register that exists to enforce it.
+
+An enumerated list of call forms is a guard only as wide as its list, and that
+shape had now bitten twice in one finding. The parser matches the **pair** —
+any two adjacent string literals shaped like a class and an invariant — so a
+helper added tomorrow is covered without anyone remembering to add it.
+
+Making that change needed a second correction. Comments must not count, and the
+first attempt skipped them by searching for `//` — which truncated `"https://…"`
+mid-literal and put every quote after it out of phase, silently *un*naming forty
+rules that were fine. Replaced with a scanner that tracks whether it is inside a
+string, a line comment, or a block comment.
 
 **It also caught my own code.** The first `impl Validate for Ehr` raised its six
 violations through a closure taking the invariant name as a *variable*. The

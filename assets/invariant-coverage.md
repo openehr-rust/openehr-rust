@@ -25,12 +25,12 @@ merely names — see `rm-1.1.0-invariants.json`.
 | | Count |
 | --- | --- |
 | Invariants in RM 1.1.0 | 155 |
-| Named in the crate's source | 67 |
-| Not named | 88 |
+| Named in the crate's source | 69 |
+| Not named | 86 |
 
 Every not-named invariant is accounted for below, and the build fails if one is not (`W0.4`). This file used to say that telling them apart "needs a human" — which was true only for as long as nobody did it, and while it stood a genuine gap was indistinguishable from a class this crate deliberately does not model.
 
-- **Not enforced**: **27**
+- **Not enforced**: **25**
 - Cannot fail in Rust: **22**
 - Enforced under another name (`lib:L10.4`): **6**
 - Out of scope: **33**
@@ -44,30 +44,47 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | Class | Crate reports | Declared (`lib:L10.9`) | openEHR declares |
 | --- | --- | --- | --- |
 | `ARCHETYPED` | `Archetype_id_rm_entity_matches` | yes | `Rm_version_valid` |
+| `AUDIT_DETAILS` | `Committer_valid` | **NO** | `Change_type_valid`, `System_id_valid` |
+| `CODE_PHRASE` | `terminology_id` | **NO** | `Code_string_valid` |
+| `COMPOSITION` | `Composer_valid` | **NO** | `Category_validity`, `Content_valid`, `Is_archetype_root`, `Language_valid`, `Territory_valid` |
 | `COMPOSITION` | `Is_persistent_validity` | yes | `Category_validity`, `Content_valid`, `Is_archetype_root`, `Language_valid`, `Territory_valid` |
 | `CONTACT` | `Addresses_valid` | yes | `Purpose_valid` |
 | `DV_AMOUNT` | `Accuracy_finite` | yes | `Accuracy_is_percent_validity`, `Accuracy_validity` |
 | `DV_MULTIMEDIA` | `Integrity_check_matches` | yes | `Compression_algorithm_validity`, `Integrity_check_algorithm_validity`, `Integrity_check_validity`, `Media_type_valid`, `Not_empty`, `Size_valid` |
 | `DV_PARSABLE` | `Value_valid` | yes | `Formalism_valid`, `Size_valid` |
 | `DV_PROPORTION` | `Parts_finite` | yes | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
+| `DV_TEXT` | `value` | **NO** | `Encoding_valid`, `Formatting_valid`, `Language_valid`, `Mappings_valid`, `Valid_value` |
+| `DV_URI` | `empty` | **NO** | `Value_valid` |
+| `EHR_STATUS` | `_type` | **NO** | `Is_archetype_root` |
+| `ELEMENT` | `archetype_node_id` | **NO** | `Inv_is_null_valid`, `Inv_null_flavour_indicated`, `Inv_null_flavour_valid`, `Inv_null_reason_valid` |
+| `ENTRY` | `Provider_valid` | **NO** | `Encoding_valid`, `Is_archetype_root`, `Language_valid`, `Other_participations_valid`, `Subject_validity` |
+| `ENTRY` | `Subject_valid` | **NO** | `Encoding_valid`, `Is_archetype_root`, `Language_valid`, `Other_participations_valid`, `Subject_validity` |
 | `EVENT` | `Time_after_origin` | yes | `Offset_validity1` |
 | `EVENT_CONTEXT` | `End_time_valid` | yes | `Participations_validity`, `Setting_valid`, `location_valid` |
 | `INSTRUCTION` | `Narrative_valid` | yes | `Activities_valid` |
 | `INTERVAL_EVENT` | `Width_non_negative` | yes | `Interval_start_time_valid`, `Math_function_validity` |
+| `INTERVAL_EVENT` | `_type` | **NO** | `Interval_start_time_valid`, `Math_function_validity` |
 | `ITEM_TABLE` | `Rows_regular` | yes | `Valid_structure` |
 | `ORIGINAL_VERSION` | `Data_valid` | yes | `Attestations_valid`, `Is_merged_validity`, `Other_input_version_uids_valid` |
 | `ORIGINAL_VERSION` | `Lifecycle_state_valid` | yes | `Attestations_valid`, `Is_merged_validity`, `Other_input_version_uids_valid` |
+| `PARTICIPATION` | `Performer_valid` | **NO** | `Function_valid`, `Mode_valid` |
+| `PARTY_IDENTIFIED` | `relationship` | **NO** | `Basic_validity`, `Identifiers_valid`, `Name_valid` |
+| `PARTY_RELATED` | `_type` | **NO** | `Relationship_valid` |
+| `REFERENCE_RANGE` | `primitive` | **NO** | `Range_is_simple` |
+| `ROLE` | `_type` | **NO** | `Capabilities_valid` |
+| `VERSIONED_COMPOSITION` | `Contributions_valid` | **NO** | `Archetype_node_id_valid`, `Persistent_validity` |
+| `VERSIONED_COMPOSITION` | `Directory_valid` | **NO** | `Archetype_node_id_valid`, `Persistent_validity` |
+| `VERSIONED_COMPOSITION` | `Folders_valid` | **NO** | `Archetype_node_id_valid`, `Persistent_validity` |
 
 ## Not named in the crate's source
 
 Grouped by why. **Not enforced** is the only group that is a gap; the others are answers.
 
-### **Not enforced** — 27
+### **Not enforced** — 25
 
 | Class | Invariant | Why |
 | --- | --- | --- |
 | `ADDRESS` | `Type_valid` | type = name is not asserted |
-| `ATTESTATION` | `Reason_valid` | the attestation_reason group ships and nothing checks against it |
 | `COMPOSITION` | `Language_valid` | ISO 639 is not carried (lib:A-19) |
 | `COMPOSITION` | `Territory_valid` | ISO 3166 is not carried (lib:A-19) |
 | `CONTACT` | `Purpose_valid` | purpose = name is not asserted |
@@ -85,7 +102,6 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `ENTRY` | `Subject_validity` | subject_is_self is not checked against the subject's type |
 | `EVENT` | `Offset_validity1` | needs the parent HISTORY's origin, which an EVENT does not hold |
 | `INTERVAL_EVENT` | `Interval_start_time_valid` | needs time arithmetic against width |
-| `PARTICIPATION` | `Function_valid` | the participation_function group ships and nothing checks against it |
 | `PARTY` | `Is_archetype_root` | checked for COMPOSITION and EHR_STATUS, not here |
 | `PARTY` | `Type_valid` | not checked |
 | `PARTY_IDENTITY` | `Purpose_valid` | purpose = name is not asserted |
