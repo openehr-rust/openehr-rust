@@ -12,10 +12,16 @@ plus the things that specifically trip up automated work here.
 
 ## Layout
 
-Fifteen crates, **each its own Cargo workspace**. There is no root workspace —
-run cargo from inside a crate directory. Eight are published at 0.2.0; the seven
-fuzz harnesses (`openehr-fuzz` and six `openehr-<engine>-fuzz`) are
-`publish = false`.
+Seventeen crates, **each its own Cargo workspace**. There is no root workspace —
+run cargo from inside a crate directory. Eight are published at 0.2.0; the other
+nine are `publish = false`.
+
+**The tree has moved past what is published.** Twenty-five commits and several
+breaking changes separate local 0.2.0 from published 0.2.0 — `SCHEMA_VERSION`
+now exists and is `4`, `ColTy::Json` changed type, `ColTy::Digest` was added,
+and `OriginalVersion::new` refuses input it used to accept. The next release is
+**0.3.0**. Read [`AGENTS/publishing.md`](AGENTS/publishing.md) before touching
+a version number.
 
 | Crate | Role | Level |
 | --- | --- | --- |
@@ -27,8 +33,13 @@ fuzz harnesses (`openehr-fuzz` and six `openehr-<engine>-fuzz`) are
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
 | `openehr-mssql` | SQL Server dialect | **Dialect** |
 | `openehr-oracle` | Oracle dialect | **Dialect** |
+| `openehr-loco` | HTTP service: Axum, Loco, PASETO verification | not published |
+| `openehr-assets` | regenerates `assets/`; fails on a stale one | not published |
 | `openehr-fuzz` | fuzz harness for the RM parsers | not published |
 | `openehr-<engine>-fuzz` × 6 | dialect fuzz harnesses | not published |
+
+`openehr-loco` is outside the conformance ladder: every rung there is defined by
+DDL, a `Store`, or a database server (`W0.32`). It states evidence instead.
 
 ## Commands
 
@@ -38,10 +49,14 @@ cd <crate> && cargo clippy --all-targets
 
 # everything
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \
-         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle; do
+         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
+         openehr-loco openehr-assets; do
   (cd "$d" && cargo test --quiet && cargo clippy --all-targets --quiet) \
     || echo "FAIL $d"
 done
+
+# regenerate the committed assets, or fail if what is committed is stale
+(cd openehr-assets && cargo run -- write)   # or: -- check
 
 # verify a dialect against a real engine (needs podman or docker)
 sh openehr-store/scripts/verify-schema.sh postgresql|mysql|mariadb
@@ -75,8 +90,9 @@ warnings — keep it there.**
 - **Two spec trees allocate the same identifiers.** `lib:S1.4` (no Archetype
   Model) and `db:S1.4` (declare an engine floor) are different requirements.
   Qualify citations with `lib:` or `db:` (`W0.5`).
-- **`openehr` is already on crates.io at 0.1.0**, published with a wrong
-  `repository` field that is now immutable. Local versions are 0.2.0. Read
+- **A published version is immutable, and one here is permanently wrong.**
+  `openehr` 0.1.0 went out with a `repository` pointing at an unrelated project.
+  0.1.1 and 0.2.0 fixed it; 0.1.0 still says it. Read
   [`AGENTS/publishing.md`](AGENTS/publishing.md) before any publish.
 - **CI is green and `openehr-sqlite` is at Verified.** Every other crate is at
   Schema or Dialect and must not be promoted without evidence. Do not write text
@@ -96,6 +112,28 @@ warnings — keep it there.**
 - **Times are two columns.** `…_text` is authoritative and exact; `…_utc` is
   derived and nullable. Never collapse them, and never make the derived column
   non-nullable — `2024-05` is a date known to the month, not `2024-05-01`.
+- **Canonical JSON must be stored in a byte-preserving type** (`db:M3.43`). Not
+  `jsonb`, not MySQL's `JSON`. Both reorder keys, and MySQL rewrote a magnitude
+  of `1.10` as `1.1` — a clinical precision loss, independent of any digest.
+  `db:D-08` measured it. `conformance::check_dialect` refuses those two
+  spellings, and `verify-schema.sh` round-trips the bytes through a real server.
+- **A constructor validates and `Deserialize` does not.** `OriginalVersion::new`
+  and `Ehr::new` check invariants; the derived `Deserialize` writes fields
+  straight in. Anything arriving as JSON must be run through `validate()`, and
+  the store does (`lib:A-23`). Adding a rule to a constructor alone leaves the
+  path an HTTP service takes unchecked.
+- **Nothing may index a column an engine cannot search.** A schema test refuses
+  an index over `LongText` or `Json`; searching one needs the adjuncts of
+  [`spec/databases/search-adjuncts.md`](spec/databases/search-adjuncts.md), and
+  none is emitted anywhere (`db:P6.18`).
+- **`openehr` and `openehr-store` depend inward only.** A CI job reads the
+  manifests, dev-dependencies included — a probe once added `openehr-store` as a
+  dev-dependency of `openehr`, a cycle, and everything still built and passed.
+- **Every RM invariant is accounted for.** `openehr-assets` fails the build if
+  one is neither cited by the crate nor dispositioned with a reason, and also if
+  a disposition outlives the rule it explains (`lib:A-24`). Cite an invariant as
+  `("CLASS", "Invariant_name")` **literals** at the call site, or the scanner
+  cannot see it (`lib:A-25`).
 
 ## Before saying something works
 

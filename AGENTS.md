@@ -15,10 +15,10 @@ Detailed topic guides live in [`AGENTS/`](AGENTS/index.md).
 
 ## What this repository is
 
-Fifteen crates implementing openEHR in Rust: one Reference Model library, one
-engine-agnostic persistence library, six SQL engine crates, and seven fuzz
-harnesses. The first eight are published to crates.io at 0.2.0; the fuzz crates
-are `publish = false`.
+Seventeen crates implementing openEHR in Rust: one Reference Model library, one
+engine-agnostic persistence library, six SQL engine crates, an HTTP service, an
+asset generator, and seven fuzz harnesses. The first eight are published to
+crates.io at 0.2.0; the other nine are `publish = false`.
 
 | Crate | Role | Level |
 | --- | --- | --- |
@@ -30,6 +30,13 @@ are `publish = false`.
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
 | `openehr-mssql` | SQL Server dialect | **Dialect** |
 | `openehr-oracle` | Oracle dialect | **Dialect** |
+| `openehr-loco` | HTTP service on Axum and Loco; verifies PASETO `v4.public` | outside the ladder (`W0.32`) |
+| `openehr-assets` | regenerates `assets/`, and fails the build on a stale one | not published |
+| `openehr-fuzz`, `openehr-<engine>-fuzz` × 6 | fuzz harnesses | not published |
+
+`openehr-loco` states **evidence** rather than a level: every rung on the ladder
+is defined by DDL, a `Store`, or a database server, and a service crate is none
+of those (`W0.32`).
 
 Each crate is **its own Cargo workspace**. There is no root workspace. Run cargo
 from inside a crate directory.
@@ -168,8 +175,17 @@ version:
 
 ## Publishing
 
-All eight publishable crates are live on crates.io at **0.2.0**. Read
-[`AGENTS/publishing.md`](AGENTS/publishing.md) before publishing again.
+All eight publishable crates are live on crates.io at **0.2.0**, and **the tree
+has moved past them**. Twenty-five commits separate local 0.2.0 from published
+0.2.0, several of them breaking: `SCHEMA_VERSION` now exists and is `4`,
+`ColTy::Json` changed type, `ColTy::Digest` was added, and
+`OriginalVersion::new` refuses input it used to accept. The next release is
+**0.3.0**, not 0.2.1 — cargo treats `0.2.x` as compatible, so any of those as a
+patch would break a dependent on `cargo update`.
+
+There is no schema migration and there will not be one before 1.0
+(`db:O10.14`). A deployment on published 0.2.0 exports, recreates, and reloads.
+Read [`AGENTS/publishing.md`](AGENTS/publishing.md) before publishing again.
 
 A published version is **immutable**. `openehr` 0.1.0 is already live carrying a
 `repository` field pointing at an unrelated project; that cannot be fixed, only
