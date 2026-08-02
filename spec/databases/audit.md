@@ -186,12 +186,17 @@ attributes the `openehr` crate models as struct fields and the store persists
 
 All are optional in the BMM. **Optional is not droppable.**
 
-The fourth row is a different defect and belongs to the library, not the store.
-A first pass of this finding recorded `VERSION.signature` as modelled and
-dropped; checking the field's owner before writing the fix showed it sits on
-`ImportedVersion` alone, while the BMM puts `signature` on `VERSION`, which
-`ORIGINAL_VERSION` inherits. So a locally created version cannot be signed at
-all. Split out as `lib:A-18`.
+The fourth row was a different defect and belonged to the library. A first pass
+of this finding recorded `VERSION.signature` as modelled and dropped; checking
+the field's owner before writing the fix showed it sat on `ImportedVersion`
+alone, while the BMM puts `signature` on `VERSION`, which `ORIGINAL_VERSION`
+inherits — so a locally created version could not be signed at all. Split out as
+`lib:A-18` and since **fixed**: `OriginalVersion` now has the field, a
+`with_signature` builder, an accessor, and a round-trip test.
+
+Closing `A-18` made the fourth row real. A signature can now exist, and this
+schema still has no column for it — so `refuse_unpersistable` rejects it too,
+and the count here is four.
 
 `data_json` holds the version's *content* — the `COMPOSITION` — not the `VERSION`
 envelope, which is decomposed into columns (`M3.19`, `R4.8`). So an attribute
@@ -228,7 +233,7 @@ being broken.
    already on crates.io at 0.1.1.
 
 **Fixed by remedy 1.** `VersionRow::project` now refuses a version carrying any
-of the three, with `StoreError::Unsupported` naming the attribute and citing this
+of the four, with `StoreError::Unsupported` naming the attribute and citing this
 finding. It sits in the **shared** projection, so all six engines inherit it
 rather than each needing the same check (`M3.35`).
 

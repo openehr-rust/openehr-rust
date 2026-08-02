@@ -1302,3 +1302,40 @@ fn a_chain_begins_where_it_begins_and_says_when_it_began_late() {
     let back: Chain = serde_json::from_str(&json).unwrap();
     assert_eq!(back.genesis_note(), late.genesis_note());
 }
+
+/// `A-18`: an original version can carry a signature, and it survives canonical
+/// JSON.
+///
+/// openEHR declares `signature` on `VERSION`, so `ORIGINAL_VERSION` inherits it.
+/// This crate modelled it only on `IMPORTED_VERSION`, which meant a locally
+/// created version could not be signed at all — only one that had arrived from
+/// somewhere else. Found by reading the RM 1.1.0 BMM rather than the code.
+#[test]
+fn an_original_version_can_be_signed_and_the_signature_round_trips() {
+    let signed = OriginalVersion::new(
+        version_id(1),
+        None,
+        version_lifecycle_state::COMPLETE,
+        Some("signed locally".to_owned()),
+        audit(audit_change_type::CREATION, "2026-07-31T09:00:00Z"),
+        owner(),
+    )
+    .unwrap()
+    .with_signature("-----BEGIN PGP SIGNATURE-----");
+
+    assert_eq!(
+        signed.signature(),
+        Some("-----BEGIN PGP SIGNATURE-----"),
+        "an original version must be able to carry a signature"
+    );
+
+    let version: Version<String> = signed.into();
+    let json = serde_json::to_string(&version).unwrap();
+    assert!(
+        json.contains("signature"),
+        "the signature must reach canonical JSON, or it is not stored anywhere"
+    );
+    let back: Version<String> = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, version, "the signature must survive a round trip");
+    assert_eq!(back.signature(), Some("-----BEGIN PGP SIGNATURE-----"));
+}

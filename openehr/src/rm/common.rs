@@ -1330,15 +1330,14 @@ impl<T> Version<T> {
     /// Carried opaquely: this crate does not verify it (`S1.11`), because doing
     /// so needs key management that belongs to the deployment.
     ///
-    /// **Always `None` for an original version.** openEHR puts `signature` on
-    /// `VERSION`, so `ORIGINAL_VERSION` inherits it — and this crate models it
-    /// only on `IMPORTED_VERSION`. That is a gap in the model, recorded as
-    /// `A-18`, not a property of the data: a locally created version can be
-    /// signed and this crate cannot hold the signature.
+    /// An imported version's signature is the **importer's**, over the wrapper
+    /// it created; the wrapped original keeps its own. They are different
+    /// assertions by different parties, so this returns the outer one and
+    /// `Version::Imported(v) => v.item().signature()` reaches the inner.
     #[must_use]
     pub fn signature(&self) -> Option<&str> {
         match self {
-            Self::Original(_) => None,
+            Self::Original(v) => v.signature.as_deref(),
             Self::Imported(v) => v.signature.as_deref(),
         }
     }
@@ -1393,9 +1392,33 @@ pub struct OriginalVersion<T> {
     attestations: Vec<Attestation>,
     commit_audit: AuditDetails,
     contribution: ObjectRef,
+    /// openEHR declares `signature` on `VERSION`, so an original version
+    /// inherits it as surely as an imported one does (`A-18`). It was missing
+    /// here, which meant a locally created version could not be signed at all —
+    /// only a version that had arrived from somewhere else.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    signature: Option<String>,
 }
 
 impl<T> OriginalVersion<T> {
+    /// Attaches a signature over this version.
+    ///
+    /// **Carried, never verified.** Verifying it needs key management that
+    /// belongs to the deployment (`S1.11`, `X11.11`), and a library that
+    /// checked a signature it could not establish trust for would be asserting
+    /// something it does not know.
+    #[must_use]
+    pub fn with_signature(mut self, signature: impl Into<String>) -> Self {
+        self.signature = Some(signature.into());
+        self
+    }
+
+    /// The signature over this version, if one was supplied. **Unverified.**
+    #[must_use]
+    pub fn signature(&self) -> Option<&str> {
+        self.signature.as_deref()
+    }
+
     /// Builds a version.
     ///
     /// # Errors
@@ -1423,6 +1446,7 @@ impl<T> OriginalVersion<T> {
             uid,
             preceding_version_uid,
             other_input_version_uids: Vec::new(),
+            signature: None,
             lifecycle_state,
             data,
             attestations: Vec::new(),

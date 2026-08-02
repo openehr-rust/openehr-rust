@@ -125,7 +125,7 @@ impl VersionRow {
 /// column therefore has nowhere to go — and until this check existed, a commit
 /// carrying one returned `Ok` and dropped it.
 ///
-/// Three attributes are affected, all optional in openEHR RM 1.1.0 and none
+/// Four attributes are affected, all optional in openEHR RM 1.1.0 and none
 /// droppable:
 ///
 /// - `AUDIT_DETAILS.description` — the free-text reason for a change, often the
@@ -135,6 +135,9 @@ impl VersionRow {
 ///   evidence.
 /// - `ORIGINAL_VERSION.other_input_version_uids` — the versions a merge
 ///   combined, without which the merge cannot be explained.
+/// - `VERSION.signature` — the signature over the version. An original version
+///   could not carry one at all until `lib:A-18` was fixed; now that it can,
+///   this schema still has nowhere to put it.
 ///
 /// Refusing is the smaller of two evils, not a good outcome. `S1.11` requires
 /// an operation this layer does not implement to say so rather than return a
@@ -161,6 +164,9 @@ fn refuse_unpersistable<T>(version: &Version<T>) -> Result<()> {
         return Err(unsupported(
             "ORIGINAL_VERSION.other_input_version_uids has no column",
         ));
+    }
+    if version.signature().is_some() {
+        return Err(unsupported("VERSION.signature has no column"));
     }
     Ok(())
 }
@@ -286,6 +292,35 @@ mod tests {
             matches!(error, crate::StoreError::Unsupported { .. }),
             "must be Unsupported, not a silent success or an engine error: {error}"
         );
+    }
+
+    /// `A-18` closed the library gap that let a signature exist; this asserts
+    /// the store does not then silently drop it.
+    #[test]
+    fn a_signature_is_refused_rather_than_dropped() {
+        let version: openehr::rm::common::Version<Composition> = OriginalVersion::new(
+            format!("{}::ehr1.example.org::1", crate::conformance::RECORD)
+                .parse()
+                .expect("literal"),
+            None,
+            version_lifecycle_state::COMPLETE,
+            Some(crate::conformance::sample_composition("Encounter")),
+            AuditDetails::new(
+                "ehr1.example.org",
+                DvDateTime::new("2026-08-01T09:00:00Z").expect("literal"),
+                audit_change_type::CREATION,
+                PartyIdentified::named("Dr A Nurse").expect("literal").into(),
+            )
+            .expect("literal"),
+            crate::conformance::sample_ehr().ehr_status().clone(),
+        )
+        .expect("literal")
+        .with_signature("-----BEGIN PGP SIGNATURE-----")
+        .into();
+
+        let error = VersionRow::project(&version, "c1")
+            .expect_err("a signature with no column must be refused");
+        assert!(matches!(error, crate::StoreError::Unsupported { .. }), "{error}");
     }
 
     /// The control: the same version without the description projects cleanly.
