@@ -179,13 +179,20 @@ fn the_chain_links_versions_and_notices_a_rewrite() {
     let ehr = conformance::sample_ehr();
     store.create_ehr(&ehr).expect("ehr");
     store
-        .create_contribution(ehr.ehr_id(), &conformance::sample_contribution("c1", &[1, 2, 3]))
+        .create_contribution(
+            ehr.ehr_id(),
+            &conformance::sample_contribution("c1", &[1, 2, 3]),
+        )
         .expect("contribution");
 
     for n in 1..=3u32 {
         let preceding = (n > 1).then(|| n - 1);
         store
-            .commit_composition(ehr.ehr_id(), &conformance::sample_version(n, preceding, n), "c1")
+            .commit_composition(
+                ehr.ehr_id(),
+                &conformance::sample_version(n, preceding, n),
+                "c1",
+            )
             .unwrap_or_else(|e| panic!("commit {n}: {e}"));
     }
 
@@ -243,7 +250,9 @@ fn the_chain_links_versions_and_notices_a_rewrite() {
     for row in &after {
         let content: serde_json::Value =
             serde_json::from_str(row.data_json.as_deref().expect("content")).expect("parses");
-        recheck.append(row.uid.clone(), &Some(content), None).expect("append");
+        recheck
+            .append(row.uid.clone(), &Some(content), None)
+            .expect("append");
     }
     assert_ne!(
         recheck.head(),
@@ -332,7 +341,10 @@ fn a_truncated_chain_verifies_clean_and_only_the_checkpoint_notices() {
     let ehr = conformance::sample_ehr();
     store.create_ehr(&ehr).expect("ehr");
     store
-        .create_contribution(ehr.ehr_id(), &conformance::sample_contribution("c1", &[1, 2, 3]))
+        .create_contribution(
+            ehr.ehr_id(),
+            &conformance::sample_contribution("c1", &[1, 2, 3]),
+        )
         .expect("contribution");
     for n in 1..=3u32 {
         store
@@ -381,7 +393,9 @@ fn a_truncated_chain_verifies_clean_and_only_the_checkpoint_notices() {
     for row in &after {
         let content: serde_json::Value =
             serde_json::from_str(row.data_json.as_deref().expect("content")).expect("parses");
-        rebuilt.append(row.uid.clone(), &Some(content), None).expect("append");
+        rebuilt
+            .append(row.uid.clone(), &Some(content), None)
+            .expect("append");
     }
     assert_eq!(
         rebuilt.head(),

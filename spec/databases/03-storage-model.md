@@ -191,6 +191,27 @@ read the reason, so the reason is here rather than in a commit message.
   shorter chain that verifies perfectly, because a chain has no way to know how
   long it was supposed to be.
 
+- **M3.16d** *(added 2026-08-02)* A store MUST verify a version's content
+  against its recorded content digest by hashing **the bytes the column
+  returned**, and MUST NOT re-derive them by parsing the stored document and
+  canonicalising it again.
+
+  This is the check the chain cannot make. A chain entry holds the digest of the
+  content and never the content, so a row whose document was edited and whose
+  five chain columns were left alone verifies perfectly — every link matches and
+  every digest recomputes. Verifying the links is a claim about the *writer*;
+  this is the claim about the *record*.
+
+  Re-deriving is forbidden because it repairs what it is looking for. Parsing
+  turns `1.10` into `1.1` (`lib:J9.13`) and drops attributes the reader does not
+  model (`lib:J9.9`), so an altered document becomes a plausible one *before* it
+  is hashed. It follows that this requirement depends on `M3.43`: the column has
+  to return the bytes it was given, which two engines did not (`D-08`).
+
+  `openehr_store::integrity::verify_versions` is that check, and
+  `openehr-sqlite/tests/tamper.rs` demonstrates it by editing a stored document
+  through a second connection with the triggers dropped.
+
 - **M3.16c** *(implemented)* A store MUST offer a **checkpoint** over a
   container's chain: a count, the head digest, and the last version's
   identifier, and no clinical content.

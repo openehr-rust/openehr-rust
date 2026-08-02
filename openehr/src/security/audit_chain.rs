@@ -79,6 +79,23 @@ impl Digest256 {
         Self(bytes)
     }
 
+    /// The SHA-256 digest **of these bytes**.
+    ///
+    /// [`Chain::append`] hashes a value by canonicalising it first, which is
+    /// right when the value is in hand. A store verifying what it read back
+    /// does not have the value — it has the canonical bytes, and must not
+    /// parse them to re-derive it. Parsing loses: `serde_json` reads `1.10`
+    /// into an `f64` and writes `1.1`, which is the precision loss `J9.13`
+    /// forbids and `db:D-08` found an engine doing.
+    ///
+    /// So the store hashes the stored bytes directly, through this, rather
+    /// than through a round trip that would quietly repair the very tampering
+    /// it is looking for.
+    #[must_use]
+    pub fn of(bytes: &[u8]) -> Self {
+        Self(Sha256::digest(bytes).into())
+    }
+
     /// The digest's bytes.
     #[must_use]
     pub fn as_bytes(&self) -> &[u8; 32] {
@@ -219,6 +236,20 @@ impl Tag {
     #[must_use]
     pub fn key_id(&self) -> &str {
         &self.key_id
+    }
+
+    /// Rebuilds a tag from its stored columns.
+    ///
+    /// The counterpart of [`Tag::mac`] and [`Tag::key_id`]: a store persists
+    /// the two halves and needs them back in one object to verify. This
+    /// constructs an *unverified* tag — it asserts nothing, and
+    /// [`Chain::verify`] is what decides whether the key agrees.
+    #[must_use]
+    pub fn from_stored(key_id: impl Into<String>, mac: impl Into<Vec<u8>>) -> Self {
+        Self {
+            key_id: key_id.into(),
+            mac: mac.into(),
+        }
     }
 }
 
@@ -420,6 +451,31 @@ impl Chain {
         Self {
             entries: Vec::new(),
             resumed_head: Some(head),
+            genesis_note: None,
+        }
+    }
+
+    /// Rebuilds a chain from entries read out of storage, **oldest first**.
+    ///
+    /// This is how a store verifies: the five chain columns of each row become
+    /// a [`ChainEntry`], and [`Chain::verify`] then applies one definition of
+    /// what linking means to both the in-memory and the persisted case. A store
+    /// that reimplemented the walk would eventually disagree with this one, and
+    /// the disagreement would be discovered during an investigation.
+    ///
+    /// It asserts nothing about the entries. Everything here is untrusted input
+    /// — that is the point — and `verify` is what decides.
+    ///
+    /// **It does not check content.** A `ChainEntry` holds the digest of the
+    /// content, never the content, so nothing here can tell whether the stored
+    /// document still hashes to it. That check needs the document and belongs
+    /// to the store (`db:M3.16`); a chain over rows whose bodies were edited
+    /// verifies perfectly.
+    #[must_use]
+    pub fn from_stored(entries: Vec<ChainEntry>) -> Self {
+        Self {
+            entries,
+            resumed_head: None,
             genesis_note: None,
         }
     }

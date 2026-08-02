@@ -19,7 +19,10 @@ use std::sync::{Arc, Barrier};
 /// A unique database path for one test.
 fn scratch(name: &str) -> PathBuf {
     let mut p = std::env::temp_dir();
-    p.push(format!("openehr-concurrency-{}-{name}.sqlite3", std::process::id()));
+    p.push(format!(
+        "openehr-concurrency-{}-{name}.sqlite3",
+        std::process::id()
+    ));
     let _ = std::fs::remove_file(&p);
     p
 }
@@ -72,7 +75,10 @@ fn racing_commits_to_one_position_produce_one_winner() {
                 })
             })
             .collect();
-        handles.into_iter().map(|h| h.join().expect("thread")).collect()
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("thread"))
+            .collect()
     });
 
     let winners = outcomes.iter().filter(|r| r.is_ok()).count();
@@ -134,10 +140,7 @@ fn a_reader_never_observes_a_torn_commit() {
                 };
                 // Every version the reader can see must have its index row.
                 let indexed = store
-                    .find_compositions_by_archetype(
-                        &ehr_id,
-                        "openEHR-EHR-COMPOSITION.encounter.v1",
-                    )
+                    .find_compositions_by_archetype(&ehr_id, "openEHR-EHR-COMPOSITION.encounter.v1")
                     .expect("archetype query");
                 assert!(
                     indexed.iter().any(|row| row.version_uid == head.uid),

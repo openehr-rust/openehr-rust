@@ -185,12 +185,7 @@ fn regex_citations(source: &str) -> Vec<(String, String)> {
         .chain(source.match_indices(".violation("));
     for (index, _) in sites {
         let tail = &source[index..];
-        let quoted: Vec<&str> = tail
-            .split('"')
-            .skip(1)
-            .step_by(2)
-            .take(2)
-            .collect();
+        let quoted: Vec<&str> = tail.split('"').skip(1).step_by(2).take(2).collect();
         if quoted.len() == 2
             && quoted[0].chars().all(|c| c.is_ascii_uppercase() || c == '_' || c.is_ascii_digit())
             && !quoted[1].is_empty()
@@ -259,7 +254,11 @@ fn invariant_coverage(root: &Path) -> Asset {
         if let Some(theirs) = classes.get(class)
             && !theirs.contains_key(ours)
         {
-            divergent.push((class.clone(), ours.clone(), theirs.keys().cloned().collect()));
+            divergent.push((
+                class.clone(),
+                ours.clone(),
+                theirs.keys().cloned().collect(),
+            ));
         }
     }
     divergent.sort();
@@ -318,8 +317,8 @@ fn invariant_coverage(root: &Path) -> Asset {
     );
     // An addition is only legitimate once declared (`lib:L10.9`). Reading the
     // register out of the spec means the report cannot drift from it.
-    let declared = std::fs::read_to_string(root.join("openehr/spec/10-validation.md"))
-        .unwrap_or_default();
+    let declared =
+        std::fs::read_to_string(root.join("openehr/spec/10-validation.md")).unwrap_or_default();
     write_divergences(&mut body, &divergent, &declared);
     let _ = writeln!(body, "## Not named in the crate's source\n");
     let _ = writeln!(body, "| Class | Invariant |");
@@ -373,11 +372,12 @@ fn write_divergences(
         }
         let _ = writeln!(body);
     }
-
 }
 
 fn main() -> std::process::ExitCode {
-    let mode = std::env::args().nth(1).unwrap_or_else(|| "write".to_owned());
+    let mode = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "write".to_owned());
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("repository root")

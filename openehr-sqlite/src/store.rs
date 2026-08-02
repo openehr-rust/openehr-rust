@@ -182,18 +182,12 @@ impl SqliteStore {
 
     /// Records the schema version, once.
     fn record_schema_version(&self) -> Result<()> {
-        let now = StoredInstant::from_date_time(
-            &"1970-01-01T00:00:00Z".parse().expect("literal"),
-        );
+        let now = StoredInstant::from_date_time(&"1970-01-01T00:00:00Z".parse().expect("literal"));
         self.connection
             .execute(
                 "INSERT OR IGNORE INTO openehr_schema_version (version, applied_text, applied_utc) \
                  VALUES (?1, ?2, ?3)",
-                params![
-                    openehr_store::SCHEMA_VERSION,
-                    now.text,
-                    now.utc_seconds
-                ],
+                params![openehr_store::SCHEMA_VERSION, now.text, now.utc_seconds],
             )
             .map(|_| ())
             .map_err(|e| engine(&e))

@@ -31,16 +31,28 @@
 //! canonical JSON **is** the record, and the relational part indexes only the
 //! attributes the Reference Model itself fixes. See [`schema`] for the full
 //! argument, including why every stored instant occupies two columns.
+//!
+//! # Verifying what came back
+//!
+//! [`integrity::verify_versions`] checks a container's history against what is
+//! stored. It exists because verifying the chain is not enough: a chain entry
+//! holds the *digest* of the content and never the content, so a row whose
+//! document was edited and whose chain columns were left alone verifies
+//! perfectly. Recomputing the content digest from the stored bytes is the one
+//! check that needs a store, and it is why `M3.43` requires a column that
+//! returns the bytes it was given.
 
 pub mod conformance;
 pub mod dialect;
 pub mod error;
+pub mod integrity;
 pub mod record;
 pub mod schema;
 pub mod store;
 
 pub use dialect::{Dialect, Idempotence, ObjectKind, Placeholder, ddl_script};
 pub use error::{Result, StoreError};
+pub use integrity::{Breach, Integrity, verify_versions};
 pub use record::{CompositionIndexRow, StoredInstant, VersionRow};
 pub use schema::{ColTy, Column, Index, SCHEMA_VERSION, SCHEMA_VERSION_TABLE, TABLES, Table};
 pub use store::{CommitOutcome, Store};

@@ -212,22 +212,38 @@ of this.
   two properties are often conflated, and the conflation is comfortable, which is
   why it needs a requirement rather than a footnote.
 
-- **PR12.12** *(amended 2026-08-02 — **partly implemented**)* This said the hash
-  chain of `M3.16` did not exist. It does: `D-07` added the chain columns, every
-  version links to its predecessor, and `chain_checkpoint` is served.
+- **PR12.12** *(amended twice on 2026-08-02 — **implemented for `openehr-sqlite`
+  only**)* This said the hash chain of `M3.16` did not exist. It does, and the
+  detector now does too.
 
-  The original wording set two conditions, and only the first is met. **The
-  columns exist. No test demonstrates that mutation is detected.** The
-  conformance suite checks the chain is *well formed* — genesis is zero, each
-  link matches its predecessor's digest, no digest is empty — which is a
-  different claim from "altering a stored row is caught". Mutation detection is
-  demonstrated in `openehr/examples/04_versioning_and_audit.rs`, over the
-  in-memory `Chain` primitive, and never over a stored row.
+  The requirement set two conditions: the columns exist, **and** a test alters a
+  row and shows the store rejects it. Both are now met, for one engine.
 
-  So the standing prohibition stands: **no crate may describe its storage as
-  tamper-evident until a test alters a row and shows the store rejects it.** A
-  well-formed chain over rows nobody has tried to corrupt is evidence that the
-  writer works, not that the detector does.
+  Meeting the second turned up why the first was not enough. The conformance
+  suite checked that the chain was *well formed* — genesis zero, each link
+  matching, no digest empty — which is a claim about the writer. A chain entry
+  holds the digest of the content and never the content, so a row whose document
+  was edited and whose five chain columns were left alone passed every one of
+  those assertions. `M3.16d` is the check that closes it, and
+  `openehr-sqlite/tests/tamper.rs` demonstrates it by editing a stored document
+  through a second connection with the append-only triggers dropped — which is
+  the threat, since a trigger is a row in `sqlite_master` and not a law of
+  physics (`PR12.11`).
+
+  **The prohibition still binds every other engine.** No crate may describe its
+  storage as tamper-evident until a test alters a row *in that engine* and shows
+  the store rejects it. The judgement is shared
+  (`openehr_store::integrity::verify_versions`); only the corruption is
+  engine-specific, because getting past append-only enforcement is spelled
+  differently by each. Five engines have no such test, and four have no store to
+  write one against.
+
+  **Two limits are demonstrated rather than argued.** Truncation is not detected
+  — deleting the newest version leaves a shorter history that verifies perfectly
+  — and a test asserts that, so the gap cannot quietly close or quietly widen
+  without someone noticing. And an unsigned chain reports `Unkeyed`, never
+  `Verified`: it catches an editor who cannot recompute a digest, which is not
+  an attacker holding the database, since the algorithm is public.
 
 ## Withdrawn
 

@@ -345,6 +345,47 @@ pub fn run<S: Store>(store: &mut S) -> Result<()> {
         );
     }
 
+    // --- tamper detection, over the rows the engine actually returned --------
+    //
+    // The assertions above check that the chain *links*. That is a claim about
+    // the writer. `PR12.12` asks for a different one: that altering a stored
+    // row is **detected** — a claim about the detector, which a well-formed
+    // chain over rows nobody has tried to corrupt says nothing about.
+    //
+    // Corrupting a row is engine-specific: it means getting past the
+    // append-only triggers of `M3.17`, which each engine spells its own way.
+    // So the corruption lives in each engine crate and the *judgement* lives
+    // here, which is the same division as the rest of this module. What is
+    // asserted here is that an untampered history verifies — the other half,
+    // and the one that fails first if `verify_versions` is wrong about the
+    // canonical bytes.
+    let verdict = crate::integrity::verify_versions(&chained, &[]);
+    assert!(
+        verdict.is_intact(),
+        "{engine}: a freshly written history did not verify: {verdict:?}"
+    );
+    // Unkeyed rather than Verified, and the suite says so out loud. Nothing
+    // signed these entries, so the chain detects an edit by someone who cannot
+    // recompute a digest and not one by an attacker holding the database. A
+    // suite that accepted `Verified` here would be accepting a claim no key
+    // backs.
+    assert_eq!(
+        verdict,
+        crate::integrity::Integrity::Unkeyed,
+        "{engine}: an unsigned chain must not report as Verified"
+    );
+
+    // A deleted version carries no content and is hashed as canonical `null`.
+    // If `verify_versions` got that wrong, every deletion in every record would
+    // report as altered — a false accusation against exactly the rows an
+    // investigation looks at hardest. Cheap to assert, and it has to be here
+    // rather than in a unit test because it depends on what the *engine*
+    // returns for a NULL `data_json`.
+    assert!(
+        chained.iter().any(|row| row.data_json.is_some()),
+        "{engine}: the fixture must include content for the digest to cover"
+    );
+
     // --- the checkpoint (M3.16c) ---------------------------------------------
     let checkpoint = store.chain_checkpoint(&container)?;
     assert!(
