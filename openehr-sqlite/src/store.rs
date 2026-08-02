@@ -358,7 +358,7 @@ impl Store for SqliteStore {
             reference(&status_uid, "VERSIONED_EHR_STATUS")?,
             reference(&access_uid, "VERSIONED_EHR_ACCESS")?,
             DvDateTime::new(&created)?,
-        ))
+        )?)
     }
 
     fn create_contribution(

@@ -25,8 +25,8 @@ merely names — see `rm-1.1.0-invariants.json`.
 | | Count |
 | --- | --- |
 | Invariants in RM 1.1.0 | 155 |
-| Named in the crate's source | 74 |
-| Not named | 81 |
+| Named in the crate's source | 76 |
+| Not named | 79 |
 
 Not-named includes invariants that are **out of scope** by a declared exclusion (EHR Extract, `lib:S1.6`; the Archetype Model, `lib:S1.4`), invariants that are **vacuous in Rust** (`X /= Void implies not X.is_empty` — an empty `Vec` is the absent case), and invariants that are genuinely unenforced. Distinguishing those three needs a human, and this file does not attempt it.
 
@@ -83,8 +83,6 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | `EHR` | `Compositions_valid` |
 | `EHR` | `Contributions_valid` |
 | `EHR` | `Directory_valid` |
-| `EHR` | `Ehr_access_valid` |
-| `EHR` | `Ehr_status_valid` |
 | `EHR` | `Folders_valid` |
 | `ELEMENT` | `Inv_is_null_valid` |
 | `ENTRY` | `Encoding_valid` |

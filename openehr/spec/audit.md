@@ -90,6 +90,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-18 | Medium | `ORIGINAL_VERSION` cannot carry a `signature`; openEHR puts it on `VERSION` | **fixed** — field, builder, accessor, round-trip test |
 | A-19 | Medium | `COMPOSITION.Territory_valid` and `Language_valid` are neither enforced nor declared | **declared** as `S1.18`; enforcement open |
 | A-20 | Medium | `L10.4` requires openEHR's own invariant names; citations diverged and nothing checked | **fixed** — 15 renamed; the 13 crate *additions* declared under `L10.9`; both checked every build |
+| A-21 | Medium | `EHR.Ehr_status_valid` and `Ehr_access_valid` unenforced; the shared fixture violated both | **fixed** — `Ehr::new` checks, fixture corrected, round-trip assertion strengthened |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
 | A-13 | Medium | One `IF NOT EXISTS` flag covered two statements MySQL treats differently | **fixed**, verified on MySQL 8.4 |

@@ -491,14 +491,18 @@ fn an_anonymous_subject_round_trips_as_itself() {
 /// the directory to *be* the first folder.
 #[test]
 fn the_directory_is_the_first_folder_or_there_is_neither() {
+    let versioned = |ty: &str| {
+        ObjectRef::new(ty, ty, ObjectId::HierObjectId(record_uid())).unwrap()
+    };
     let ehr = || {
         Ehr::new(
             record_uid(),
             record_uid(),
-            owner(),
-            owner(),
+            versioned("VERSIONED_EHR_STATUS"),
+            versioned("VERSIONED_EHR_ACCESS"),
             DvDateTime::new("2026-07-31T09:00:00Z").unwrap(),
         )
+        .unwrap()
     };
     assert!(ehr().directory().is_none());
     assert!(ehr().with_folders(Vec::new()).is_err());
@@ -1340,4 +1344,36 @@ fn an_original_version_can_be_signed_and_the_signature_round_trips() {
     let back: Version<String> = serde_json::from_str(&json).unwrap();
     assert_eq!(back, version, "the signature must survive a round trip");
     assert_eq!(back.signature(), Some("-----BEGIN PGP SIGNATURE-----"));
+}
+
+/// `E6.3` — `EHR.Ehr_status_valid` and `Ehr_access_valid`.
+///
+/// An `OBJECT_REF` carries its target's type as a string, so nothing in Rust
+/// stops an EHR pointing its status at a versioned composition. openEHR states
+/// both as invariants and this crate checked neither; the shared fixture built
+/// both references as `"EHR"` from the day it was written, and the `SQLite` store
+/// read them back as `VERSIONED_EHR_STATUS` — so a round trip silently changed
+/// the type and only `ehr_id` was ever compared (`A-21`).
+#[test]
+fn an_ehr_must_reference_the_versioned_containers_openehr_names() {
+    let reference = |ty: &str| {
+        ObjectRef::new(ty, ty, ObjectId::HierObjectId(record_uid())).unwrap()
+    };
+    let build = |status: &str, access: &str| {
+        Ehr::new(
+            record_uid(),
+            record_uid(),
+            reference(status),
+            reference(access),
+            DvDateTime::new("2026-07-31T09:00:00Z").unwrap(),
+        )
+    };
+
+    assert!(build("VERSIONED_EHR_STATUS", "VERSIONED_EHR_ACCESS").is_ok());
+
+    let wrong_status = build("EHR", "VERSIONED_EHR_ACCESS").unwrap_err();
+    assert_eq!(wrong_status.reason, "Ehr_status_valid");
+
+    let wrong_access = build("VERSIONED_EHR_STATUS", "VERSIONED_COMPOSITION").unwrap_err();
+    assert_eq!(wrong_access.reason, "Ehr_access_valid");
 }

@@ -75,15 +75,31 @@ pub struct Ehr {
 
 impl Ehr {
     /// Builds an EHR.
-    #[must_use]
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseError`] if `ehr_status` or `ehr_access` does not reference
+    /// the type openEHR requires — `Ehr_status_valid` and `Ehr_access_valid`.
+    ///
+    /// An `OBJECT_REF` carries its target's type as a **string**, so nothing in
+    /// Rust's type system stops an `EHR` pointing its status at a versioned
+    /// composition. openEHR states both as invariants; this crate did not check
+    /// either, and its own fixture built both references with type `"EHR"` from
+    /// the day it was written (`A-21`).
     pub fn new(
         system_id: HierObjectId,
         ehr_id: HierObjectId,
         ehr_status: ObjectRef,
         ehr_access: ObjectRef,
         time_created: DvDateTime,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, ParseError> {
+        if ehr_status.type_name() != "VERSIONED_EHR_STATUS" {
+            return Err(ParseError::invariant("EHR", "Ehr_status_valid"));
+        }
+        if ehr_access.type_name() != "VERSIONED_EHR_ACCESS" {
+            return Err(ParseError::invariant("EHR", "Ehr_access_valid"));
+        }
+        Ok(Self {
             system_id,
             ehr_id,
             ehr_status,
@@ -93,7 +109,7 @@ impl Ehr {
             contributions: Vec::new(),
             folders: Vec::new(),
             directory: None,
-        }
+        })
     }
 
     /// Adds a composition reference.

@@ -37,15 +37,29 @@ pub const SYSTEM: &str = "ehr1.example.org";
 #[must_use]
 pub fn sample_ehr() -> Ehr {
     let uid = HierObjectId::from_uid_str(RECORD).expect("literal");
-    let reference =
-        ObjectRef::new("local", "EHR", ObjectId::HierObjectId(uid.clone())).expect("literal");
+    // openEHR requires these to name the versioned containers, not the record
+    // (`EHR.Ehr_status_valid`, `Ehr_access_valid`). This fixture built both as
+    // "EHR" from the day it was written, and nothing checked — see `lib:A-21`.
+    let status = ObjectRef::new(
+        "local",
+        "VERSIONED_EHR_STATUS",
+        ObjectId::HierObjectId(uid.clone()),
+    )
+    .expect("literal");
+    let access = ObjectRef::new(
+        "local",
+        "VERSIONED_EHR_ACCESS",
+        ObjectId::HierObjectId(uid.clone()),
+    )
+    .expect("literal");
     Ehr::new(
         HierObjectId::from_uid_str("11111111-2222-3333-4444-555555555555").expect("literal"),
         uid,
-        reference.clone(),
-        reference,
+        status,
+        access,
         DvDateTime::new("2026-08-01T09:00:00Z").expect("literal"),
     )
+    .expect("literal")
 }
 
 /// Builds a valid composition.
@@ -171,9 +185,13 @@ pub fn run<S: Store>(store: &mut S) -> Result<()> {
     store.create_ehr(&ehr)?;
 
     let round_tripped = store.get_ehr(&ehr_id)?;
+    // The whole record, not just its id. This compared `ehr_id` alone while
+    // its message claimed a round trip, and the gap hid `lib:A-21`: the fixture
+    // built `ehr_status` and `ehr_access` with type `"EHR"`, the store read them
+    // back as `VERSIONED_EHR_STATUS` and `VERSIONED_EHR_ACCESS`, and the
+    // reference type changed silently on every round trip.
     assert_eq!(
-        round_tripped.ehr_id().to_string(),
-        ehr.ehr_id().to_string(),
+        round_tripped, ehr,
         "{engine}: an EHR did not round-trip"
     );
 
