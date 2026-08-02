@@ -733,20 +733,14 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
     (
         "EVENT",
         "Offset_validity1",
-        Disposition::Unenforced,
-        "needs the parent HISTORY's origin, which an EVENT does not hold",
+        Disposition::Vacuous,
+        "offset is a derived function, computed as time.diff(parent.origin) (BMM); the crate stores none",
     ),
     (
         "INTERVAL_EVENT",
         "Interval_start_time_valid",
-        Disposition::Unenforced,
-        "needs time arithmetic against width",
-    ),
-    (
-        "REFERENCE_RANGE",
-        "Range_is_simple",
-        Disposition::Unenforced,
-        "not checked",
+        Disposition::Vacuous,
+        "interval_start_time is derived; the crate computes it from time - width (BMM)",
     ),
     (
         "CONTACT",
@@ -863,21 +857,9 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
     ),
     (
         "EHR_ACCESS",
-        "Is_archetype_root",
-        Disposition::Unenforced,
-        "checked for COMPOSITION and EHR_STATUS, not here",
-    ),
-    (
-        "EHR_ACCESS",
         "Scheme_valid",
         Disposition::Unenforced,
-        "not checked",
-    ),
-    (
-        "PARTY",
-        "Is_archetype_root",
-        Disposition::Unenforced,
-        "checked for COMPOSITION and EHR_STATUS, not here",
+        "a declared departure: EhrAccess::new records no policy, and `no policy set` is not `deny all`",
     ),
     (
         "PARTY",

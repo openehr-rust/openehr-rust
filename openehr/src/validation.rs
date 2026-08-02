@@ -204,6 +204,43 @@ fn check_coded_text(coded: &DvCodedText, ctx: &mut Context) {
 /// `is_abnormal` is the value's own answer to "am I outside my normal range?",
 /// which is `None` when no range was recorded — see [`DvOrdered::is_abnormal`].
 fn check_ordered(attrs: &OrderedAttrs, is_abnormal: Option<bool>, ctx: &mut Context) {
+    // `REFERENCE_RANGE.Range_is_simple`: a reference range's endpoints must
+    // themselves be simple — carrying no normal range and no reference ranges
+    // of their own.
+    //
+    // The model really is this cyclic: a quantity's normal range is expressed
+    // as quantities, each of which can carry its own reference ranges. Without
+    // this rule a range can nest to any depth, and a renderer walking it to
+    // show "normal: 4.0–6.0" either recurses forever or silently shows the
+    // outermost layer.
+    for range in attrs.other_reference_ranges() {
+        // `DataValue` has no single accessor for ordered attributes — only the
+        // ordered variants carry them — so the check names them. Written out
+        // rather than wildcarded: a new ordered variant should be a decision
+        // here, not a silent pass.
+        let simple = |bound: Option<&crate::rm::data_types::DataValue>| {
+            use crate::rm::data_types::DataValue;
+            let attrs = match bound {
+                Some(DataValue::Quantity(v)) => Some(v.ordered_attrs()),
+                Some(DataValue::Count(v)) => Some(v.ordered_attrs()),
+                Some(DataValue::Proportion(v)) => Some(v.ordered_attrs()),
+                Some(DataValue::Ordinal(v)) => Some(v.ordered_attrs()),
+                Some(DataValue::Scale(v)) => Some(v.ordered_attrs()),
+                _ => None,
+            };
+            attrs.is_none_or(|o| {
+                o.normal_range().is_none() && o.other_reference_ranges().is_empty()
+            })
+        };
+        if !simple(range.range().lower()) || !simple(range.range().upper()) {
+            ctx.violation(
+                "REFERENCE_RANGE",
+                "Range_is_simple",
+                "a reference range's endpoint carries reference ranges of its own",
+            );
+        }
+    }
+
     let Some(status) = attrs.normal_status() else {
         return;
     };
@@ -1111,6 +1148,78 @@ impl<T: Validate> Validate for crate::rm::common::VersionedObject<T> {
     }
 }
 
+/// `EHR_ACCESS.Is_archetype_root`.
+///
+/// The fourth class to assert it, after `COMPOSITION`, `EHR_STATUS`, and
+/// `ENTRY`. An `EHR_ACCESS` is a versioned, archetyped object in its own right,
+/// and one without `archetype_details` cannot say which archetype shaped it.
+///
+/// `Scheme_valid` is **not** checked here, and the reason is a departure worth
+/// naming. openEHR derives `scheme` from the concrete `settings` instance and
+/// requires it non-empty, which means an `EHR_ACCESS` must always carry a
+/// policy. This crate's `EhrAccess::new` deliberately builds one with **no
+/// policy recorded**, because "no access policy has been set" and "the policy
+/// is deny-all" are different facts and collapsing them would invent one. The
+/// divergence is recorded rather than enforced away.
+impl Validate for crate::security::access::EhrAccess {
+    fn visit(&self, ctx: &mut Context) {
+        check_locatable(self, ctx);
+        if !self.is_archetype_root() {
+            ctx.violation(
+                "EHR_ACCESS",
+                "Is_archetype_root",
+                "an EHR_ACCESS has no archetype_details, so it is not an archetype root",
+            );
+        }
+    }
+}
+
+/// `PARTY.Is_archetype_root`.
+///
+/// A demographic `PARTY` is the root of a party archetype, exactly as a
+/// `COMPOSITION` is the root of a composition archetype.
+impl Validate for crate::rm::demographic::Party {
+    fn visit(&self, ctx: &mut Context) {
+        use crate::rm::demographic::Party;
+        // Per variant, because `Locatable` is in scope only once the concrete
+        // type is known — the same shape as `check_locatable_entry`.
+        let check = |rooted: bool, ctx: &mut Context| {
+            if !rooted {
+                ctx.violation(
+                    "PARTY",
+                    "Is_archetype_root",
+                    "a party has no archetype_details, so it is not an archetype root",
+                );
+            }
+        };
+        match self {
+            Party::Person(p) => {
+                check_locatable(p, ctx);
+                check(p.is_archetype_root(), ctx);
+            }
+            Party::Organisation(p) => {
+                check_locatable(p, ctx);
+                check(p.is_archetype_root(), ctx);
+            }
+            Party::Group(p) => {
+                check_locatable(p, ctx);
+                check(p.is_archetype_root(), ctx);
+            }
+            Party::Agent(p) => {
+                check_locatable(p, ctx);
+                check(p.is_archetype_root(), ctx);
+            }
+            // A ROLE is a PARTY too, and openEHR declares the invariant on
+            // PARTY, so the violation is reported against PARTY rather than
+            // against the subtype a reader happens to be holding.
+            Party::Role(p) => {
+                check_locatable(p, ctx);
+                check(p.is_archetype_root(), ctx);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1623,6 +1732,61 @@ mod tests {
                 .iter()
                 .any(|v| v.invariant == "Subject_validity"),
             "{report:?}"
+        );
+    }
+
+    #[test]
+    fn a_reference_range_endpoint_may_not_carry_reference_ranges_of_its_own() {
+        use crate::base::Interval;
+        use crate::rm::data_types::{DataValue, DvQuantity, ReferenceRange};
+
+        // The model is genuinely this cyclic: a quantity's reference range is
+        // expressed as quantities, each of which can carry reference ranges.
+        // Without `Range_is_simple` a range nests to any depth, and a renderer
+        // showing "normal: 4.0–6.0" either recurses forever or shows only the
+        // outermost layer.
+        let plain = |v: f64| DvQuantity::new(v, "mmol/l").unwrap();
+        let nested = plain(4.0).with_other_reference_range(ReferenceRange::new(
+            DvText::new("inner").unwrap(),
+            Interval::closed(
+                DataValue::Quantity(plain(1.0)),
+                DataValue::Quantity(plain(2.0)),
+            )
+            .unwrap(),
+        ));
+
+        let subject = plain(5.0).with_other_reference_range(ReferenceRange::new(
+            DvText::new("normal").unwrap(),
+            Interval::closed(
+                DataValue::Quantity(nested),
+                DataValue::Quantity(plain(6.0)),
+            )
+            .unwrap(),
+        ));
+        let report = DataValue::Quantity(subject).validate();
+        assert!(
+            report
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Range_is_simple"),
+            "{report:?}"
+        );
+
+        // A simple range says nothing.
+        let ok = plain(5.0).with_other_reference_range(ReferenceRange::new(
+            DvText::new("normal").unwrap(),
+            Interval::closed(
+                DataValue::Quantity(plain(4.0)),
+                DataValue::Quantity(plain(6.0)),
+            )
+            .unwrap(),
+        ));
+        assert!(
+            !DataValue::Quantity(ok)
+                .validate()
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Range_is_simple")
         );
     }
 }

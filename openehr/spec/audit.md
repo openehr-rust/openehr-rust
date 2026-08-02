@@ -707,8 +707,8 @@ impl and deliberately not checked: both are `X /= Void implies not X.is_empty`,
 and a `Vec` has no way to be present and empty in the openEHR sense. Named so a
 reader finds the reason rather than concluding they were missed.
 
-**Residual.** The other 74 unnamed invariants are still unclassified. This one
-was found by starting that work, which suggests the rest is worth finishing.
+**Residual.** None. The other 74 were classified by `A-24`, which this finding
+prompted — and that work found `A-25` in turn.
 
 
 ## A-24 — seventy-five invariants nobody had looked at
@@ -830,13 +830,30 @@ relationship is `self`, so an entry could claim to be about the patient while
 naming a related party, and the two readings of "who is this about" diverged in
 silence.
 
-**Residual.** Fifteen unenforced invariants remain. Nine need external code sets
-the crate does not carry (ISO 639, ISO 3166, IANA character sets and media types)
-and are the same decision as `A-19`; the other six are checkable with what is
-already here — `Is_archetype_root` on `EHR_ACCESS` and `PARTY`,
-`EHR_ACCESS.Scheme_valid`, `REFERENCE_RANGE.Range_is_simple`, and the two
-`EVENT` timing rules, which need a parent `HISTORY`'s origin that an event does
-not hold.
+**Since, again.** `REFERENCE_RANGE.Range_is_simple` and `Is_archetype_root` on
+`EHR_ACCESS` and `PARTY` are enforced, and the two `EVENT` timing rules turned
+out to be definitional — the BMM makes `offset` and `interval_start_time`
+derived functions, and this crate stores neither.
+
+**Ten unenforced invariants remain, and none of them is merely undone.** Nine
+need external code sets the crate deliberately does not carry — ISO 639, ISO
+3166, IANA character sets and media types, the `A-19` decision. The tenth,
+`EHR_ACCESS.Scheme_valid`, is a **declared departure**: openEHR derives `scheme`
+from the concrete `settings` and requires it non-empty, so an `EHR_ACCESS` must
+always carry a policy. `EhrAccess::new` deliberately records none, because "no
+access policy has been set" and "the policy is deny-all" are different facts and
+collapsing them would invent one.
+
+That is the end of the classification `A-24` began. Every one of RM 1.1.0's 155
+invariants is now either cited by the crate, definitional, out of scope,
+enforced under another name, or unenforced **for a stated reason** — and the
+build fails if a new one appears with no answer.
+
+**Residual.** `EHR_ACCESS.Scheme_valid` is a departure this register records and
+the library specification does not yet declare. `C0.16` calls an undeclared
+departure a defect in its own right, so it needs a numbered requirement rather
+than a paragraph here. The same is true of the demographics exclusion noted
+above.
 
 
 ## A-25 — the measurement was wrong, and wrong in the flattering direction

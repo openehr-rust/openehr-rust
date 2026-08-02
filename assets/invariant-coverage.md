@@ -25,13 +25,13 @@ merely names — see `rm-1.1.0-invariants.json`.
 | | Count |
 | --- | --- |
 | Invariants in RM 1.1.0 | 155 |
-| Named in the crate's source | 71 |
-| Not named | 84 |
+| Named in the crate's source | 74 |
+| Not named | 81 |
 
 Every not-named invariant is accounted for below, and the build fails if one is not (`W0.4`). This file used to say that telling them apart "needs a human" — which was true only for as long as nobody did it, and while it stood a genuine gap was indistinguishable from a class this crate deliberately does not model.
 
-- **Not enforced**: **15**
-- Cannot fail in Rust: **30**
+- **Not enforced**: **10**
+- Cannot fail in Rust: **32**
 - Enforced under another name (`lib:L10.4`): **6**
 - Out of scope: **33**
 
@@ -80,7 +80,7 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 
 Grouped by why. **Not enforced** is the only group that is a gap; the others are answers.
 
-### **Not enforced** — 15
+### **Not enforced** — 10
 
 | Class | Invariant | Why |
 | --- | --- | --- |
@@ -91,14 +91,9 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `DV_MULTIMEDIA` | `Media_type_valid` | IANA media types are not carried |
 | `DV_TEXT` | `Encoding_valid` | IANA character sets are not carried |
 | `DV_TEXT` | `Language_valid` | ISO 639 is not carried |
-| `EHR_ACCESS` | `Is_archetype_root` | checked for COMPOSITION and EHR_STATUS, not here |
-| `EHR_ACCESS` | `Scheme_valid` | not checked |
+| `EHR_ACCESS` | `Scheme_valid` | a declared departure: EhrAccess::new records no policy, and `no policy set` is not `deny all` |
 | `ENTRY` | `Encoding_valid` | IANA character sets are not carried |
 | `ENTRY` | `Language_valid` | ISO 639 is not carried |
-| `EVENT` | `Offset_validity1` | needs the parent HISTORY's origin, which an EVENT does not hold |
-| `INTERVAL_EVENT` | `Interval_start_time_valid` | needs time arithmetic against width |
-| `PARTY` | `Is_archetype_root` | checked for COMPOSITION and EHR_STATUS, not here |
-| `REFERENCE_RANGE` | `Range_is_simple` | not checked |
 
 ### Enforced under another name (`lib:L10.4`) — 6
 
@@ -111,7 +106,7 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `DV_URI` | `Value_valid` | the URI parser refuses invalid text and reports itself |
 | `VERSION` | `Lifecycle_state_ valid` | checked and cited as ORIGINAL_VERSION; openEHR declares it on VERSION |
 
-### Cannot fail in Rust — 30
+### Cannot fail in Rust — 32
 
 | Class | Invariant | Why |
 | --- | --- | --- |
@@ -126,7 +121,9 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `DV_TEXT` | `Mappings_valid` | mappings is a Vec |
 | `ELEMENT` | `Inv_is_null_valid` | is_null() returns value.is_none() |
 | `ENTRY` | `Other_participations_valid` | other_participations is a Vec |
+| `EVENT` | `Offset_validity1` | offset is a derived function, computed as time.diff(parent.origin) (BMM); the crate stores none |
 | `EVENT_CONTEXT` | `Participations_validity` | participations is a Vec |
+| `INTERVAL_EVENT` | `Interval_start_time_valid` | interval_start_time is derived; the crate computes it from time - width (BMM) |
 | `ITEM_LIST` | `Valid_structure` | items is a Vec<Element>, so the element type is the constraint |
 | `LOCATABLE` | `Archetyped_valid` | is_archetype_root() returns archetype_details.is_some() |
 | `LOCATABLE` | `Links_valid` | links is a Vec |
