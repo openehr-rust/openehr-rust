@@ -89,7 +89,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-10 | Low | `X11.24` fail-closed has no provokable error path | open |
 | A-18 | Medium | `ORIGINAL_VERSION` cannot carry a `signature`; openEHR puts it on `VERSION` | **fixed** — field, builder, accessor, round-trip test |
 | A-19 | Medium | `COMPOSITION.Territory_valid` and `Language_valid` are neither enforced nor declared | **declared** as `S1.18`; enforcement open |
-| A-20 | Medium | `L10.4` requires openEHR's own invariant names; citations diverged and nothing checked | **fixed** — 15 renamed to openEHR's names; the check runs every build. 13 remaining are crate *additions*, not renames |
+| A-20 | Medium | `L10.4` requires openEHR's own invariant names; citations diverged and nothing checked | **fixed** — 15 renamed; the 13 crate *additions* declared under `L10.9`; both checked every build |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
 | A-13 | Medium | One `IF NOT EXISTS` flag covered two statements MySQL treats differently | **fixed**, verified on MySQL 8.4 |
@@ -294,7 +294,7 @@ compiler enforces, where a runtime test could not fail. Marking them `type`
 rather than `•` keeps the verified count meaning what it says.
 
 **Mutation verification.** Five checks were disabled one at a time and the tests
-watched to fail: `DV_QUANTITY.Units_valid`, `DV_PROPORTION.Denominator_valid`,
+watched to fail: `DV_QUANTITY.Units_valid`, `DV_PROPORTION.Valid_denominator`,
 `DV_PROPORTION.Precision_validity`, the `skip_serializing_if` that keeps `null`
 out of the JSON, and the document-order walk in `validation`. All five were
 detected — but **two initially reported "survived" and had never applied**,
@@ -431,9 +431,10 @@ test asserts both halves.
 
 **One misattribution.** An empty `LOCATABLE.name` was reported as
 `LOCATABLE.Name_valid`; openEHR's `Name_valid` is only `name /= Void`, and an
-empty name breaks `DV_TEXT.Value_valid`. The wrong invariant name sends a reader
-to the wrong class definition, which is what `L10.4` exists to prevent — so
-`L10.5a` now requires the attribution to be right.
+empty name breaks `DV_TEXT.Valid_value` — reported as `Value_valid` until
+`A-20` corrected the crate to openEHR's own spelling. The wrong invariant name
+sends a reader to the wrong class definition, which is what `L10.4` exists to
+prevent — so `L10.5a` now requires the attribution to be right.
 
 ---
 

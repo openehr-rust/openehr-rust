@@ -59,7 +59,7 @@ relational or FHIR-shaped pipeline most often destroys.
 
 ## `HISTORY` and events
 
-- **R4.11** `HISTORY` MUST have events, or a summary, or both (`Events_exists`). A history with
+- **R4.11** `HISTORY` MUST have events, or a summary, or both (`Events_valid`). A history with
   neither records that observations were made and supplies none of them.
 - **R4.12** `HISTORY.period` MUST be positive when present, and
   `is_periodic` MUST be exactly "a period was declared" (`Periodic_validity`) —

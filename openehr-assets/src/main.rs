@@ -316,7 +316,11 @@ fn invariant_coverage(root: &Path) -> Asset {
          are genuinely unenforced. Distinguishing those three needs a human, and \
          this file does not attempt it.\n"
     );
-    write_divergences(&mut body, &divergent);
+    // An addition is only legitimate once declared (`lib:L10.9`). Reading the
+    // register out of the spec means the report cannot drift from it.
+    let declared = std::fs::read_to_string(root.join("openehr/spec/10-validation.md"))
+        .unwrap_or_default();
+    write_divergences(&mut body, &divergent, &declared);
     let _ = writeln!(body, "## Not named in the crate's source\n");
     let _ = writeln!(body, "| Class | Invariant |");
     let _ = writeln!(body, "| --- | --- |");
@@ -330,7 +334,11 @@ fn invariant_coverage(root: &Path) -> Asset {
 }
 
 /// The `L10.4` section of the coverage report.
-fn write_divergences(body: &mut String, divergent: &[(String, String, Vec<String>)]) {
+fn write_divergences(
+    body: &mut String,
+    divergent: &[(String, String, Vec<String>)],
+    declared: &str,
+) {
     let _ = writeln!(
         body,
         "## Invariant names that diverge from openEHR (`lib:L10.4`)\n"
@@ -342,12 +350,20 @@ fn write_divergences(body: &mut String, divergent: &[(String, String, Vec<String
     if divergent.is_empty() {
         let _ = writeln!(body, "None.\n");
     } else {
-        let _ = writeln!(body, "| Class | Crate reports | openEHR declares |");
-        let _ = writeln!(body, "| --- | --- | --- |");
+        let _ = writeln!(
+            body,
+            "| Class | Crate reports | Declared (`lib:L10.9`) | openEHR declares |"
+        );
+        let _ = writeln!(body, "| --- | --- | --- | --- |");
         for (class, ours, theirs) in divergent {
+            let mark = if declared.contains(&format!("| `{ours}` |")) {
+                "yes"
+            } else {
+                "**NO**"
+            };
             let _ = writeln!(
                 body,
-                "| `{class}` | `{ours}` | {} |",
+                "| `{class}` | `{ours}` | {mark} | {} |",
                 theirs
                     .iter()
                     .map(|t| format!("`{t}`"))

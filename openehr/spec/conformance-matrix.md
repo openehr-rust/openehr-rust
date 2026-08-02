@@ -294,7 +294,7 @@ Process requirements; they govern this specification rather than the code.
 | L10.3 | • | `validation::tests::every_violation_is_reported_not_just_the_first` |
 | L10.4 | • | `validation::tests::a_coded_text_that_contradicts_its_own_code_is_reported` |
 | L10.5 | • | `guarantees::a_validation_report_names_paths_and_never_values` |
-| L10.5a | • | `invariants::every_validation_check_fires_on_a_document_that_breaks_it` attributes an empty name to `DV_TEXT.Value_valid` |
+| L10.5a | • | `invariants::every_validation_check_fires_on_a_document_that_breaks_it` attributes an empty name to `DV_TEXT.Valid_value` |
 | L10.6 | • | `invariants::every_validation_check_fires_on_a_document_that_breaks_it` drives twelve of them from JSON; the `DV_ORDERED` pair have their own tests |
 | L10.7 | • | `invariants::violations_are_reported_in_document_order_and_that_order_is_stable` |
 | L10.8 | • | `text::tests::rubric_checking_reports_unchecked_separately_from_valid` |

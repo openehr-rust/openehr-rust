@@ -27,9 +27,50 @@ Requirement prefix: `L10`.
 - **L10.5** No violation may include node content (`X11.7`). Paths, class names,
   and invariant names only.
 - **L10.5a** A violation MUST be attributed to the class whose invariant it
-  actually breaks. An empty `LOCATABLE.name` breaks `DV_TEXT.Value_valid`, not
+  actually breaks. An empty `LOCATABLE.name` breaks `DV_TEXT.Valid_value`, not
   `LOCATABLE.Name_valid` — openEHR's `Name_valid` is only `name /= Void` — and
   the wrong attribution sends a reader to the wrong class definition.
+
+- **L10.9** A check the crate performs that openEHR does **not** state for that
+  class is an **addition**, not a rename, and MUST be declared in the register
+  below. `L10.4` cannot govern it: there is no openEHR name to use.
+
+  The distinction is not pedantry. A rename is a defect — the same rule reported
+  under a name the specification does not contain, so a reader cannot find it. An
+  addition is a *strengthening*: a rule openEHR does not require, which this
+  crate enforces anyway. Confusing the two makes both invisible, and it is what
+  made the first sweep for `A-20` over-report by treating every unmatched name as
+  wrong.
+
+- **L10.10** An addition MUST NOT use a name openEHR uses for that class, even
+  for a different rule, and SHOULD avoid a name openEHR uses anywhere, so that a
+  future openEHR release cannot silently collide with it.
+
+### Crate-added checks
+
+Declared under `L10.9`. Each is a rule openEHR does not state for that class,
+which this crate enforces anyway.
+
+| Class | Name | Checks | Why it is added |
+| --- | --- | --- | --- |
+| `ARCHETYPED` | `Archetype_id_rm_entity_matches` | the archetype id's RM entity matches the class it annotates | an `OBSERVATION` carrying a `COMPOSITION` archetype id is a document nobody can query correctly |
+| `COMPOSITION` | `Is_persistent_validity` | a persistent composition has no `context` | openEHR states this on `VERSIONED_COMPOSITION`; enforcing it where the data is caught it earlier |
+| `CONTACT` | `Addresses_valid` | a contact has at least one address | a contact with no address is a record of nothing |
+| `DV_AMOUNT` | `Accuracy_finite` | accuracy is a finite float | openEHR assumes real numbers; IEEE 754 has `NaN` and `±∞`, and a `NaN` accuracy compares false against everything |
+| `DV_PARSABLE` | `Value_valid` | the value is non-empty | openEHR constrains `formalism` and `size` but not the value |
+| `DV_PROPORTION` | `Parts_finite` | numerator and denominator are finite | as `DV_AMOUNT.Accuracy_finite` |
+| `EVENT` | `Time_after_origin` | an event's time is at or after its history's origin | openEHR states the offset relation but not the ordering |
+| `EVENT_CONTEXT` | `End_time_valid` | end time is at or after start time | a consultation that ended before it began |
+| `INSTRUCTION` | `Narrative_valid` | the narrative is non-empty | the narrative is what a human reads when the structured form is not understood |
+| `INTERVAL_EVENT` | `Width_non_negative` | width is not negative | an interval of negative duration |
+| `ITEM_TABLE` | `Rows_regular` | every row has the same column count | openEHR requires rows of `ELEMENT`; a ragged table renders as a table and is not one |
+| `ORIGINAL_VERSION` | `Data_valid` | data is present unless the lifecycle state is `deleted` | a version claiming `complete` and supplying nothing |
+| `ORIGINAL_VERSION` | `Lifecycle_state_valid` | the state is in the openEHR group | openEHR states this on `VERSION`; reported on the concrete class the caller constructed |
+
+Two of these — `Accuracy_finite` and `Parts_finite` — exist because openEHR is
+written against mathematical reals and Rust is not. A specification that says
+"accuracy is a real number" does not anticipate `NaN`, and a `NaN` that reaches a
+clinical comparison is false against every bound including itself.
 
 ## The checks
 

@@ -36,21 +36,21 @@ Not-named includes invariants that are **out of scope** by a declared exclusion 
 
 Only classes openEHR gives invariants to are listed; where openEHR states none, a crate rule is an addition rather than a rename.
 
-| Class | Crate reports | openEHR declares |
-| --- | --- | --- |
-| `ARCHETYPED` | `Archetype_id_rm_entity_matches` | `Rm_version_valid` |
-| `COMPOSITION` | `Is_persistent_validity` | `Category_validity`, `Content_valid`, `Is_archetype_root`, `Language_valid`, `Territory_valid` |
-| `CONTACT` | `Addresses_valid` | `Purpose_valid` |
-| `DV_AMOUNT` | `Accuracy_finite` | `Accuracy_is_percent_validity`, `Accuracy_validity` |
-| `DV_PARSABLE` | `Value_valid` | `Formalism_valid`, `Size_valid` |
-| `DV_PROPORTION` | `Parts_finite` | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
-| `EVENT` | `Time_after_origin` | `Offset_validity1` |
-| `EVENT_CONTEXT` | `End_time_valid` | `Participations_validity`, `Setting_valid`, `location_valid` |
-| `INSTRUCTION` | `Narrative_valid` | `Activities_valid` |
-| `INTERVAL_EVENT` | `Width_non_negative` | `Interval_start_time_valid`, `Math_function_validity` |
-| `ITEM_TABLE` | `Rows_regular` | `Valid_structure` |
-| `ORIGINAL_VERSION` | `Data_valid` | `Attestations_valid`, `Is_merged_validity`, `Other_input_version_uids_valid` |
-| `ORIGINAL_VERSION` | `Lifecycle_state_valid` | `Attestations_valid`, `Is_merged_validity`, `Other_input_version_uids_valid` |
+| Class | Crate reports | Declared (`lib:L10.9`) | openEHR declares |
+| --- | --- | --- | --- |
+| `ARCHETYPED` | `Archetype_id_rm_entity_matches` | yes | `Rm_version_valid` |
+| `COMPOSITION` | `Is_persistent_validity` | yes | `Category_validity`, `Content_valid`, `Is_archetype_root`, `Language_valid`, `Territory_valid` |
+| `CONTACT` | `Addresses_valid` | yes | `Purpose_valid` |
+| `DV_AMOUNT` | `Accuracy_finite` | yes | `Accuracy_is_percent_validity`, `Accuracy_validity` |
+| `DV_PARSABLE` | `Value_valid` | yes | `Formalism_valid`, `Size_valid` |
+| `DV_PROPORTION` | `Parts_finite` | yes | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
+| `EVENT` | `Time_after_origin` | yes | `Offset_validity1` |
+| `EVENT_CONTEXT` | `End_time_valid` | yes | `Participations_validity`, `Setting_valid`, `location_valid` |
+| `INSTRUCTION` | `Narrative_valid` | yes | `Activities_valid` |
+| `INTERVAL_EVENT` | `Width_non_negative` | yes | `Interval_start_time_valid`, `Math_function_validity` |
+| `ITEM_TABLE` | `Rows_regular` | yes | `Valid_structure` |
+| `ORIGINAL_VERSION` | `Data_valid` | yes | `Attestations_valid`, `Is_merged_validity`, `Other_input_version_uids_valid` |
+| `ORIGINAL_VERSION` | `Lifecycle_state_valid` | yes | `Attestations_valid`, `Is_merged_validity`, `Other_input_version_uids_valid` |
 
 ## Not named in the crate's source
 
