@@ -240,6 +240,44 @@ jobs:
   #
   # This job asserts the gap is still the one recorded, so that a crate cannot
   # quietly start claiming Schema without a job to back it.
+  layering:
+    name: dependencies run inward only
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # `db:S1.7` and the whole architecture: `openehr` knows nothing of
+      # storage, `openehr-store` knows nothing of any engine, and the service
+      # depends on both and is depended on by nothing.
+      #
+      # This exists because the rule was broken by accident and committed. A
+      # throwaway probe added `openehr-store` as a dev-dependency of `openehr`
+      # — a cycle, and an inversion of the layering — and nothing objected,
+      # because cargo permits dev-dependency cycles and no check looked.
+      #
+      # Dev-dependencies count. A test that reaches downward can only be
+      # written because the layering allows it, and the next one will not be a
+      # throwaway.
+      - name: openehr depends on nothing in this repository
+        run: |
+          set -eu
+          bad=0
+          for crate in openehr openehr-store; do
+            for other in openehr openehr-store openehr-sqlite openehr-postgresql \
+                         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
+                         openehr-loco; do
+              [ "$crate" = "$other" ] && continue
+              # openehr-store may depend on openehr; nothing else is allowed.
+              [ "$crate" = "openehr-store" ] && [ "$other" = "openehr" ] && continue
+              if grep -qE "^$other[[:space:]]*=" "$crate/Cargo.toml"; then
+                echo "::error::$crate/Cargo.toml depends on $other; dependencies run inward only"
+                bad=1
+              fi
+            done
+          done
+          [ "$bad" -eq 0 ] || exit 1
+          echo "openehr and openehr-store depend only inward"
+
   claims:
     name: conformance claims match evidence
     runs-on: ubuntu-latest

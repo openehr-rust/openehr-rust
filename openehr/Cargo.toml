@@ -49,7 +49,6 @@ serde_json = { version = "1", features = ["preserve_order"] }
 # parser totality, `D3.10` lexical fidelity, and the partial-order axioms,
 # which is where a hand-written `partial_cmp` goes wrong.
 proptest = "1"
-openehr-store = { path = "../openehr-store" }
 
 [lints.rust]
 missing_docs = "deny"

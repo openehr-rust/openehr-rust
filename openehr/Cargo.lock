@@ -204,7 +204,6 @@ name = "openehr"
 version = "0.2.0"
 dependencies = [
  "hmac",
- "openehr-store",
  "proptest",
  "serde",
  "serde_json",
@@ -212,16 +211,6 @@ dependencies = [
  "subtle",
  "thiserror",
  "zeroize",
-]
-
-[[package]]
-name = "openehr-store"
-version = "0.2.0"
-dependencies = [
- "openehr",
- "serde",
- "serde_json",
- "thiserror",
 ]
 
 [[package]]
