@@ -57,6 +57,7 @@ which this crate enforces anyway.
 | `COMPOSITION` | `Is_persistent_validity` | a persistent composition has no `context` | openEHR states this on `VERSIONED_COMPOSITION`; enforcing it where the data is caught it earlier |
 | `CONTACT` | `Addresses_valid` | a contact has at least one address | a contact with no address is a record of nothing |
 | `DV_AMOUNT` | `Accuracy_finite` | accuracy is a finite float | openEHR assumes real numbers; IEEE 754 has `NaN` and `±∞`, and a `NaN` accuracy compares false against everything |
+| `DV_MULTIMEDIA` | `Integrity_check_matches` | the recorded digest matches the inline data | openEHR requires a check to name its algorithm (`Integrity_check_validity`) but never says the digest must be *right*. Reported under openEHR's name until `A-22`, which sent a reader to an invariant about something else |
 | `DV_PARSABLE` | `Value_valid` | the value is non-empty | openEHR constrains `formalism` and `size` but not the value |
 | `DV_PROPORTION` | `Parts_finite` | numerator and denominator are finite | as `DV_AMOUNT.Accuracy_finite` |
 | `EVENT` | `Time_after_origin` | an event's time is at or after its history's origin | openEHR states the offset relation but not the ordering |

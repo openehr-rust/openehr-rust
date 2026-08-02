@@ -491,9 +491,8 @@ fn an_anonymous_subject_round_trips_as_itself() {
 /// the directory to *be* the first folder.
 #[test]
 fn the_directory_is_the_first_folder_or_there_is_neither() {
-    let versioned = |ty: &str| {
-        ObjectRef::new(ty, ty, ObjectId::HierObjectId(record_uid())).unwrap()
-    };
+    let versioned =
+        |ty: &str| ObjectRef::new(ty, ty, ObjectId::HierObjectId(record_uid())).unwrap();
     let ehr = || {
         Ehr::new(
             record_uid(),
@@ -1356,9 +1355,8 @@ fn an_original_version_can_be_signed_and_the_signature_round_trips() {
 /// the type and only `ehr_id` was ever compared (`A-21`).
 #[test]
 fn an_ehr_must_reference_the_versioned_containers_openehr_names() {
-    let reference = |ty: &str| {
-        ObjectRef::new(ty, ty, ObjectId::HierObjectId(record_uid())).unwrap()
-    };
+    let reference =
+        |ty: &str| ObjectRef::new(ty, ty, ObjectId::HierObjectId(record_uid())).unwrap();
     let build = |status: &str, access: &str| {
         Ehr::new(
             record_uid(),
@@ -1376,4 +1374,78 @@ fn an_ehr_must_reference_the_versioned_containers_openehr_names() {
 
     let wrong_access = build("VERSIONED_EHR_STATUS", "VERSIONED_COMPOSITION").unwrap_err();
     assert_eq!(wrong_access.reason, "Ehr_access_valid");
+}
+
+/// `A-22` — `DV_MULTIMEDIA`'s checkable invariants, under openEHR's own names.
+///
+/// Three compare against code sets **openEHR owns and this crate already
+/// ships**, so `S1.18`'s argument for not validating ISO 3166 and 639 — the
+/// tables are mutable, and a stale copy rejects conformant data — does not
+/// apply. These sets are closed, small, and already in `terminology.rs`.
+///
+/// Driven through deserialization because that is the path these reach in
+/// practice: serde writes the fields directly and never calls a constructor,
+/// which is the whole reason validation exists as a second gate (`L10.1`).
+#[test]
+fn multimedia_invariants_fire_under_openehrs_own_names() {
+    let element = |value: serde_json::Value| -> Vec<String> {
+        let json = serde_json::json!({
+            "name": {"value": "x"},
+            "archetype_node_id": "at0001",
+            "value": value,
+        });
+        let element: Element = serde_json::from_value(json).expect("deserializes");
+        element
+            .validate()
+            .violations()
+            .iter()
+            .map(|v| v.invariant.to_owned())
+            .collect()
+    };
+    let media = serde_json::json!({
+        "terminology_id": {"value": "IANA_media-types"},
+        "code_string": "image/png",
+    });
+
+    // A well-formed value trips none of them.
+    let clean = element(serde_json::json!({
+        "_type": "DV_MULTIMEDIA", "media_type": media, "data": "cG5n",
+    }));
+    assert!(
+        clean.is_empty(),
+        "a well-formed value must be clean: {clean:?}"
+    );
+
+    // A compression algorithm openEHR does not name.
+    let bad_compression = element(serde_json::json!({
+        "_type": "DV_MULTIMEDIA", "media_type": media, "data": "cG5n",
+        "compression_algorithm": {
+            "terminology_id": {"value": "openehr"}, "code_string": "zstd",
+        },
+    }));
+    assert!(
+        bad_compression.contains(&"Compression_algorithm_validity".to_owned()),
+        "an unnamed compression algorithm must be reported: {bad_compression:?}"
+    );
+
+    // A negative size.
+    let negative = element(serde_json::json!({
+        "_type": "DV_MULTIMEDIA", "media_type": media, "data": "cG5n", "size": -1,
+    }));
+    assert!(
+        negative.contains(&"Size_valid".to_owned()),
+        "a negative size must be reported: {negative:?}"
+    );
+
+    // An integrity check with no algorithm naming how it was made. This is
+    // openEHR's `Integrity_check_validity`; the crate used that name for a
+    // digest mismatch, which is a different claim (`A-22`).
+    let unnamed_check = element(serde_json::json!({
+        "_type": "DV_MULTIMEDIA", "media_type": media, "data": "cG5n",
+        "integrity_check": "AAAA",
+    }));
+    assert!(
+        unnamed_check.contains(&"Integrity_check_validity".to_owned()),
+        "a check with no algorithm must be reported: {unnamed_check:?}"
+    );
 }

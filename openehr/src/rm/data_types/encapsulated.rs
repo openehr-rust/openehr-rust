@@ -336,6 +336,26 @@ impl DvMultimedia {
         self.thumbnail.as_deref()
     }
 
+    /// The compression algorithm, if the content is compressed.
+    #[must_use]
+    pub fn compression_algorithm(&self) -> Option<&CodePhrase> {
+        self.compression_algorithm.as_ref()
+    }
+
+    /// The algorithm that produced [`DvMultimedia::integrity_check`].
+    #[must_use]
+    pub fn integrity_check_algorithm(&self) -> Option<&CodePhrase> {
+        self.integrity_check_algorithm.as_ref()
+    }
+
+    /// The recorded integrity check, if one was supplied.
+    ///
+    /// A digest, not content — safe to return, unlike [`DvMultimedia::data`].
+    #[must_use]
+    pub fn integrity_check(&self) -> Option<&[u8]> {
+        self.integrity_check.as_deref()
+    }
+
     /// The recorded size in bytes, if any.
     #[must_use]
     pub fn size(&self) -> Option<i64> {

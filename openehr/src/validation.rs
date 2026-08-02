@@ -54,6 +54,7 @@ use crate::rm::common::{Attestation, Locatable as _, Participation, PartyProxy};
 use crate::rm::data_structures::{Cluster, Element, Event, History, Item, ItemStructure};
 use crate::rm::data_types::{DataValue, DvCodedText, DvOrdered, DvQuantity, OrderedAttrs, Text};
 use crate::rm::ehr::{Composition, ContentItem, EhrStatus, Entry, EventContext, Section};
+use crate::terminology;
 
 /// Accumulates violations while walking a structure, tracking where it is.
 #[derive(Debug, Default)]
@@ -341,22 +342,7 @@ impl Validate for DataValue {
                 }
                 check_ordered(p.ordered_attrs(), p.is_abnormal(), ctx);
             }
-            Self::Multimedia(m) => {
-                if !m.has_content() {
-                    ctx.violation(
-                        "DV_MULTIMEDIA",
-                        "Not_empty",
-                        "neither inline data nor a uri is present",
-                    );
-                }
-                if m.verify_integrity() == crate::rm::data_types::IntegrityCheck::Failed {
-                    ctx.violation(
-                        "DV_MULTIMEDIA",
-                        "Integrity_check_validity",
-                        "the recorded digest does not match the inline data",
-                    );
-                }
-            }
+            Self::Multimedia(m) => check_multimedia(m, ctx),
             Self::Text(t) if t.value().is_empty() => {
                 ctx.violation("DV_TEXT", "Valid_value", "value is empty");
             }
@@ -786,6 +772,68 @@ impl Validate for Composition {
     }
 }
 
+/// `DV_MULTIMEDIA`'s invariants.
+///
+/// Lifted out of `visit` because it grew past the length lint, and because
+/// these are the checks most likely to be extended: three of them compare
+/// against openEHR code sets, and openEHR adds to those.
+fn check_multimedia(m: &crate::rm::data_types::DvMultimedia, ctx: &mut Context) {
+    if !m.has_content() {
+        ctx.violation(
+            "DV_MULTIMEDIA",
+            "Not_empty",
+            "neither inline data nor a uri is present",
+        );
+    }
+    // A crate addition (`L10.9`), not openEHR's
+    // `Integrity_check_validity` — which says only that a check
+    // implies an algorithm, checked below. Reporting a digest
+    // mismatch under that name sent a reader to an invariant about
+    // something else (`A-22`).
+    if m.verify_integrity() == crate::rm::data_types::IntegrityCheck::Failed {
+        ctx.violation(
+            "DV_MULTIMEDIA",
+            "Integrity_check_matches",
+            "the recorded digest does not match the inline data",
+        );
+    }
+    // openEHR's actual `Integrity_check_validity`: a check with no
+    // algorithm cannot be verified by anyone, so it is a claim of
+    // integrity that nothing can act on.
+    if m.integrity_check().is_some() && m.integrity_check_algorithm().is_none() {
+        ctx.violation(
+            "DV_MULTIMEDIA",
+            "Integrity_check_validity",
+            "an integrity check is present with no algorithm naming how it was made",
+        );
+    }
+    if let Some(algorithm) = m.integrity_check_algorithm()
+        && terminology::integrity_check_algorithm::GROUP
+            .rubric(algorithm.code_string())
+            .is_none()
+    {
+        ctx.violation(
+            "DV_MULTIMEDIA",
+            "Integrity_check_algorithm_validity",
+            "the integrity check algorithm is not one openEHR names",
+        );
+    }
+    if let Some(algorithm) = m.compression_algorithm()
+        && terminology::compression_algorithm::GROUP
+            .rubric(algorithm.code_string())
+            .is_none()
+    {
+        ctx.violation(
+            "DV_MULTIMEDIA",
+            "Compression_algorithm_validity",
+            "the compression algorithm is not one openEHR names",
+        );
+    }
+    if m.size().is_some_and(|s| s < 0) {
+        ctx.violation("DV_MULTIMEDIA", "Size_valid", "size is negative");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -851,7 +899,10 @@ mod tests {
         let element: Element = serde_json::from_str(json).unwrap();
         let report = element.validate();
         assert_eq!(report.len(), 1);
-        assert_eq!(report.violations()[0].invariant, "Inv_null_flavour_indicated");
+        assert_eq!(
+            report.violations()[0].invariant,
+            "Inv_null_flavour_indicated"
+        );
     }
 
     #[test]

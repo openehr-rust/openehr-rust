@@ -842,16 +842,10 @@ impl DvProportion {
         #[allow(clippy::float_cmp)]
         match kind {
             ProportionKind::Unitary if denominator != 1.0 => {
-                return Err(ParseError::invariant(
-                    "DV_PROPORTION",
-                    "Unitary_validity",
-                ));
+                return Err(ParseError::invariant("DV_PROPORTION", "Unitary_validity"));
             }
             ProportionKind::Percent if denominator != 100.0 => {
-                return Err(ParseError::invariant(
-                    "DV_PROPORTION",
-                    "Percent_validity",
-                ));
+                return Err(ParseError::invariant("DV_PROPORTION", "Percent_validity"));
             }
             k if k.requires_integral()
                 && (numerator.fract() != 0.0 || denominator.fract() != 0.0) =>

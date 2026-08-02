@@ -25,8 +25,8 @@ merely names — see `rm-1.1.0-invariants.json`.
 | | Count |
 | --- | --- |
 | Invariants in RM 1.1.0 | 155 |
-| Named in the crate's source | 76 |
-| Not named | 79 |
+| Named in the crate's source | 80 |
+| Not named | 75 |
 
 Not-named includes invariants that are **out of scope** by a declared exclusion (EHR Extract, `lib:S1.6`; the Archetype Model, `lib:S1.4`), invariants that are **vacuous in Rust** (`X /= Void implies not X.is_empty` — an empty `Vec` is the absent case), and invariants that are genuinely unenforced. Distinguishing those three needs a human, and this file does not attempt it.
 
@@ -42,6 +42,7 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | `COMPOSITION` | `Is_persistent_validity` | yes | `Category_validity`, `Content_valid`, `Is_archetype_root`, `Language_valid`, `Territory_valid` |
 | `CONTACT` | `Addresses_valid` | yes | `Purpose_valid` |
 | `DV_AMOUNT` | `Accuracy_finite` | yes | `Accuracy_is_percent_validity`, `Accuracy_validity` |
+| `DV_MULTIMEDIA` | `Integrity_check_matches` | yes | `Compression_algorithm_validity`, `Integrity_check_algorithm_validity`, `Integrity_check_validity`, `Media_type_valid`, `Not_empty`, `Size_valid` |
 | `DV_PARSABLE` | `Value_valid` | yes | `Formalism_valid`, `Size_valid` |
 | `DV_PROPORTION` | `Parts_finite` | yes | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
 | `EVENT` | `Time_after_origin` | yes | `Offset_validity1` |
@@ -70,13 +71,9 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | `DV_ENCAPSULATED` | `Charset_valid` |
 | `DV_ENCAPSULATED` | `Language_valid` |
 | `DV_INTERVAL` | `Limits_consistent` |
-| `DV_MULTIMEDIA` | `Compression_algorithm_validity` |
-| `DV_MULTIMEDIA` | `Integrity_check_algorithm_validity` |
 | `DV_MULTIMEDIA` | `Media_type_valid` |
-| `DV_MULTIMEDIA` | `Size_valid` |
 | `DV_ORDERED` | `Is_simple_validity` |
 | `DV_ORDERED` | `Other_reference_ranges_validity` |
-| `DV_PARSABLE` | `Size_valid` |
 | `DV_TEXT` | `Encoding_valid` |
 | `DV_TEXT` | `Language_valid` |
 | `DV_TEXT` | `Mappings_valid` |
