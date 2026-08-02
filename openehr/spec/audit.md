@@ -496,9 +496,38 @@ impossible value through unsafe means. The requirement is satisfied by
 construction — the function has no partial-output path — and "satisfied by
 construction with no test" is `?`, not `•` (`C0.8`).
 
-**To close:** make the redactor generic over the serializable document type so
-a deliberately-failing type can be injected in a test, or accept that this one
-stays `?` and say so here permanently.
+**Amended 2026-08-02 — the premise is now checked, and the reason it holds was
+wrong.** This finding said every constructible `Composition` serializes. True,
+and not for the reason implied. Measured:
+
+```
+serde_json::to_string(&f64::NAN)           = Ok("null")
+serde_json::to_value(f64::NAN)             = Ok(Null)
+security::to_canonical_string(&f64::NAN)   = Ok("null")
+```
+
+**`serde_json` does not refuse a non-finite float. It writes `null`.** So a
+`NaN` magnitude reaching serialization would not fail the redactor — it would
+silently become an absent value, in the canonical form the content digest of
+`db:M3.16` is taken over. Serialization is not a barrier; it is a place where
+the value disappears quietly.
+
+What actually holds the line is the constructors. Every `f64` entry point in the
+crate — `DV_QUANTITY.magnitude`, `DV_SCALE.value`, `DV_AMOUNT.accuracy`, and
+both parts of `DV_PROPORTION` — refuses `NaN` and both infinities, and
+`guarantees::no_document_this_crate_can_build_carries_a_non_finite_float`
+asserts all five against all three values, plus the `null` behaviour that makes
+them load-bearing.
+
+That changes what this finding is about. It is not "a `Result` nobody can
+provoke"; it is "five constructors standing between a document and silent data
+loss, with nothing downstream to catch a miss". The test fails and names the
+constructor if one is ever relaxed.
+
+**To close:** unchanged. `X11.24` stays `?` — the redactor's error path is still
+unprovokable, and making the redactor generic purely to inject a failing type
+would be a test of the test harness. What has changed is that the *premise* is
+no longer taken on trust.
 
 ---
 

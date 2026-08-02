@@ -342,7 +342,7 @@ Process requirements; they govern this specification rather than the code.
 | X11.21 | • | `redact::tests::a_redacted_composition_is_still_valid` |
 | X11.22 | • | `guarantees::redaction_masks_and_reports_a_count_not_a_category` |
 | X11.23 | • | `redact::tests::a_reason_appears_and_does_not_disclose_the_category` |
-| X11.24 | ? | `redact` returns `Result` and yields nothing on error. The error path cannot currently be provoked — every `Composition` this crate can build serializes — so there is no honest test. Tracked as **A-10** |
+| X11.24 | ? | `redact` returns `Result` and yields nothing on error, and the error path cannot be provoked. The premise is now tested — `guarantees::no_document_this_crate_can_build_carries_a_non_finite_float` — because `serde_json` writes `null` for a non-finite float rather than failing, so the constructors are the only barrier (**A-10**) |
 | X11.25 | • | `guarantees::redaction_masks_and_reports_a_count_not_a_category` |
 
 ## §12 Paths and query — `Q12`

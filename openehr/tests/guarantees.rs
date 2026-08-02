@@ -367,3 +367,69 @@ fn aql_catches_a_path_rooted_at_an_unbound_alias() {
         .unwrap();
     assert!(fixed.check().is_ok());
 }
+
+// ---------------------------------------------------------------------------
+// The premise `X11.24` rests on
+
+/// `A-10` says redaction's fail-closed path cannot be provoked, because "every
+/// `Composition` this crate can construct serializes". That is the reason
+/// `X11.24` is recorded as **?** rather than **•**, so it is worth more than a
+/// belief.
+///
+/// The reason is sharper than "documents are well formed", and worse.
+/// `serde_json` does **not** refuse a non-finite float: it writes `null`. So a
+/// `NaN` magnitude that ever reached serialization would not fail — it would
+/// silently become an absent value, in the canonical form the content digest
+/// is taken over.
+///
+/// Every `f64` a document can carry is therefore refused **at construction**,
+/// and those constructors are the only barrier. This asserts each one holds.
+/// If somebody relaxes one — an `Accuracy_finite` that starts accepting `NaN` —
+/// this test fails and names it, and what follows is silent data loss rather
+/// than an error anybody sees.
+#[test]
+fn no_document_this_crate_can_build_carries_a_non_finite_float() {
+    use openehr::rm::data_types::{DvCodedText, DvProportion, DvScale, ProportionKind};
+
+    let symbol = || {
+        DvCodedText::new("symbol", CodePhrase::new("local", "at0001").unwrap()).unwrap()
+    };
+    for (name, value) in [
+        ("NaN", f64::NAN),
+        ("+inf", f64::INFINITY),
+        ("-inf", f64::NEG_INFINITY),
+    ] {
+        assert!(
+            DvQuantity::new(value, "mm[Hg]").is_err(),
+            "DV_QUANTITY accepted a magnitude of {name}"
+        );
+        assert!(
+            DvScale::new(value, symbol()).is_err(),
+            "DV_SCALE accepted a value of {name}"
+        );
+        assert!(
+            DvQuantity::new(1.0, "mm[Hg]")
+                .unwrap()
+                .with_accuracy(value, false)
+                .is_err(),
+            "DV_AMOUNT accepted an accuracy of {name}"
+        );
+        assert!(
+            DvProportion::new(value, 1.0, ProportionKind::Ratio).is_err(),
+            "DV_PROPORTION accepted a numerator of {name}"
+        );
+        assert!(
+            DvProportion::new(1.0, value, ProportionKind::Ratio).is_err(),
+            "DV_PROPORTION accepted a denominator of {name}"
+        );
+    }
+
+    // The fact that makes the above load-bearing, asserted rather than
+    // assumed. Serialization does not fail here; it loses the value.
+    assert_eq!(serde_json::to_string(&f64::NAN).unwrap(), "null");
+    assert_eq!(
+        openehr::security::to_canonical_string(&f64::INFINITY).unwrap(),
+        "null"
+    );
+}
+
