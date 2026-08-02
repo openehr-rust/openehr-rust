@@ -187,9 +187,22 @@ read the reason, so the reason is here rather than in a commit message.
 
   **Chained per container, in version-tree order.** That detects a version
   altered in place, removed from the middle, or reordered. It does **not**
-  detect deleting the newest version, or dropping a container whole — for that
-  the head must be published somewhere the database administrator does not
-  control (`M3.16c`, still unimplemented).
+  detect **truncation** — delete the newest version and what remains is a
+  shorter chain that verifies perfectly, because a chain has no way to know how
+  long it was supposed to be.
+
+- **M3.16c** *(implemented)* A store MUST offer a **checkpoint** over a
+  container's chain: a count, the head digest, and the last version's
+  identifier, and no clinical content.
+
+  A checkpoint closes the truncation gap and **only if it is published somewhere
+  the database administrator does not control**. One stored beside the data it
+  attests to is worth nothing: whoever can truncate the history can rewrite the
+  checkpoint too. That is a deployment obligation this layer cannot discharge,
+  and stating it is the most this layer can do.
+
+  It carries no clinical content precisely so it can go somewhere clinical data
+  may not — an append-only log, a third party, a printout in a safe.
 
   An unkeyed chain detects careless modification and supports an external
   witness. It does not stop an informed attacker with write access, who can

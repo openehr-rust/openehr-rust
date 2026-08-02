@@ -253,6 +253,19 @@ fn commit_conflict(error: &rusqlite::Error) -> Option<StoreError> {
     }
 }
 
+/// Lower-case hex for a digest, matching `Digest256`'s own rendering.
+///
+/// Hex is correct here and wrong in a column: this is a value for a human and a
+/// log, not a value to compare in SQL (`M3.40`).
+fn hex32(bytes: &[u8; 32]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(64);
+    for b in bytes {
+        let _ = write!(out, "{b:02x}");
+    }
+    out
+}
+
 /// Wraps a driver error without letting row data into the message.
 fn engine(error: &rusqlite::Error) -> StoreError {
     if let Some(conflict) = commit_conflict(error) {
@@ -657,6 +670,25 @@ impl Store for SqliteStore {
             .map_err(|e| engine(&e))?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
             .map_err(|e| engine(&e))
+    }
+
+    fn chain_checkpoint(&self, versioned_object_uid: &HierObjectId) -> Result<String> {
+        // Computed from the stored rows in the same order `all_versions` reads
+        // them, and formatted exactly as `Chain::checkpoint` formats one, so a
+        // checkpoint taken from the database and one recomputed from a rebuilt
+        // chain are the same string. If they were merely equivalent, comparing
+        // them would need a parser, and a witness that needs a parser is a
+        // witness nobody runs.
+        let versions = self.all_versions(versioned_object_uid)?;
+        let head = versions
+            .last()
+            .map_or_else(|| "0".repeat(64), |v| hex32(&v.chain.digest));
+        Ok(format!(
+            "entries={} head={} last_version={}",
+            versions.len(),
+            head,
+            versions.last().map_or("-", |v| v.uid.as_str())
+        ))
     }
 
     fn find_compositions_by_archetype(

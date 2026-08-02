@@ -314,3 +314,87 @@ fn a_database_predating_the_version_table_is_refused() {
         "a populated database with no recorded version must be refused"
     );
 }
+
+/// `M3.16c` / `T11.8`: a **truncated** chain still verifies clean, and only the
+/// checkpoint reveals it.
+///
+/// This is the checkpoint's whole reason for existing, and a test that only
+/// checked the checkpoint had moved would not show it. Removing the newest
+/// version leaves a shorter history whose every link is intact — the chain has
+/// no way to know how long it was supposed to be. Something outside the
+/// database has to remember.
+#[test]
+fn a_truncated_chain_verifies_clean_and_only_the_checkpoint_notices() {
+    use openehr::security::{Chain, Digest256};
+
+    let mut store = SqliteStore::in_memory().expect("open");
+    store.install().expect("install");
+    let ehr = conformance::sample_ehr();
+    store.create_ehr(&ehr).expect("ehr");
+    store
+        .create_contribution(ehr.ehr_id(), &conformance::sample_contribution("c1", &[1, 2, 3]))
+        .expect("contribution");
+    for n in 1..=3u32 {
+        store
+            .commit_composition(
+                ehr.ehr_id(),
+                &conformance::sample_version(n, (n > 1).then(|| n - 1), n),
+                "c1",
+            )
+            .expect("commit");
+    }
+
+    let container = ehr.ehr_id().clone();
+    let before = store.chain_checkpoint(&container).expect("checkpoint");
+    assert!(before.starts_with("entries=3 "), "{before}");
+    assert!(
+        !before.contains("Encounter"),
+        "a checkpoint must carry no clinical content: {before}"
+    );
+
+    // Truncate: remove the newest version, as an operator with write access
+    // would. The append-only trigger blocks DELETE, so it goes first — which is
+    // the attacker this design says it detects but does not stop.
+    let connection = store.connection();
+    connection
+        .execute_batch("DROP TRIGGER trg_openehr_version_no_delete;")
+        .expect("drop trigger");
+    // The index row references the version, so a foreign key blocks deleting
+    // the version alone. That is a small, real obstacle — it makes casual
+    // truncation fail — and no obstacle at all to someone who reads the error
+    // and removes both, which is what this does.
+    connection
+        .execute(
+            "DELETE FROM openehr_composition_index WHERE version_uid IN \
+             (SELECT uid FROM openehr_version WHERE trunk_version = 3)",
+            [],
+        )
+        .expect("remove index row");
+    connection
+        .execute("DELETE FROM openehr_version WHERE trunk_version = 3", [])
+        .expect("truncate");
+
+    // The remaining chain is *perfectly consistent*. Every link still holds.
+    let after = store.all_versions(&container).expect("all_versions");
+    assert_eq!(after.len(), 2);
+    let mut rebuilt = Chain::new();
+    for row in &after {
+        let content: serde_json::Value =
+            serde_json::from_str(row.data_json.as_deref().expect("content")).expect("parses");
+        rebuilt.append(row.uid.clone(), &Some(content), None).expect("append");
+    }
+    assert_eq!(
+        rebuilt.head(),
+        Digest256::from_bytes(after[1].chain.digest),
+        "the truncated history verifies against itself — which is exactly the \
+         problem, and why a checkpoint is not optional"
+    );
+
+    // Only the checkpoint, held elsewhere, shows the loss.
+    let now = store.chain_checkpoint(&container).expect("checkpoint");
+    assert!(now.starts_with("entries=2 "), "{now}");
+    assert_ne!(
+        before, now,
+        "a checkpoint published before the truncation must not match after it"
+    );
+}

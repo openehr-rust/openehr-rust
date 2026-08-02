@@ -88,6 +88,10 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `H5.4` concurrent commits produce one winner | • | 8 racing writers, one winner, losers refused by the commit rules (`D-06`) |
 | `P6.12` archetype lookup served by an index | • | |
 | `P6.8` values bound as parameters | • | |
+| `M3.16` tamper-evidence chain | • | per container; a rewritten row fails to recompute |
+| `M3.16c` checkpoint over the chain | • | a truncated chain verifies clean; only the checkpoint notices |
+| `M3.39`–`M3.42` digest is SHA-256, 32 raw bytes | • | `ColTy::Digest`, binary in all six dialects |
+| `O10.15` schema version recorded, mismatch refused | • | three states, all tested |
 | `M3.33` projection refuses a non-archetype-root | • | |
 | `M3.34` anonymous committer stored as `NULL` | • | |
 
@@ -113,7 +117,7 @@ silence (`W0.4`).
 
 | Requirement | Subject | Note |
 | --- | --- | --- |
-| `M3.16` | tamper-evident hash chain | the `openehr` crate has the primitives; the store does not use them and the schema has no hash columns |
+
 | `M3.18` | GDPR Art. 17 erasure | no erasure operation |
 | `M3.39`–`M3.42` | digest algorithm and storage | SHA-256, 32 raw bytes, binary column — no digest is stored anywhere yet, and adding one needs a new `ColTy` variant |
 | `PR12.5`, `PR12.6` | read auditing | only writes are recorded; an access investigation asks about reads |

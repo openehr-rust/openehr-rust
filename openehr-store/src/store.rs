@@ -136,6 +136,27 @@ pub trait Store {
     /// Returns [`crate::StoreError::Engine`] on an engine failure.
     fn all_versions(&self, versioned_object_uid: &HierObjectId) -> Result<Vec<VersionRow>>;
 
+    /// A checkpoint over a container's chain, for an external witness.
+    ///
+    /// The chain of `M3.16` links each version to its predecessor, so altering
+    /// or removing a version in the *middle* invalidates everything after it.
+    /// It cannot detect **truncation**: delete the newest version and what
+    /// remains is a shorter chain that verifies perfectly.
+    ///
+    /// That is the gap this closes, and only if the checkpoint is published
+    /// somewhere the database administrator does not control (`M3.16c`). A
+    /// checkpoint stored beside the data it attests to is worth nothing — an
+    /// attacker who can truncate the history can rewrite the checkpoint too.
+    ///
+    /// Carries a count, a head digest, and the last version's identifier, and
+    /// **no clinical content**, so it is safe to ship to a log or a witness that
+    /// must never hold patient data.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::StoreError::Engine`] on an engine failure.
+    fn chain_checkpoint(&self, versioned_object_uid: &HierObjectId) -> Result<String>;
+
     /// Compositions in a record whose archetype matches.
     ///
     /// The one query the index exists for: `AQL`'s
