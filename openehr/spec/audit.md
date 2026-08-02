@@ -94,6 +94,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-22 | Medium | `DV_MULTIMEDIA`: `Integrity_check_validity` reported for the wrong rule; three checkable invariants unenforced despite the crate shipping their code sets | **fixed** — four checks added, the addition renamed and declared |
 | A-23 | High | A `VERSION`'s invariants were checked by `OriginalVersion::new` and by nothing else — deserialization bypassed them and no `Validate` impl existed, so the path an HTTP service takes was unchecked | **fixed** — `Validate for Version`, the store validates the envelope, and `Preceding_version_uid_validity` enforced for the first time |
 | A-24 | Medium | The 75 unnamed RM invariants were undifferentiated, so a real gap was indistinguishable from a class deliberately not modelled | **classified** — 29 out of scope, 17 vacuous, 25 unenforced, 1 enforced-but-misnamed; the build now fails on an unclassified one. **Unenforced now 21**: the four `EHR` reference rules and the interval rename are fixed; two sub-findings open |
+| A-25 | High | The invariant-coverage count matched invariant **names** without their class, and matched names in comments. openEHR reuses 15 names — `Language_valid` across seven classes — so the headline "named" figure was inflated | **fixed** — matched on the cited `(class, name)` pair; **83 named became 67**, and 24 invariants nobody had examined were revealed |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
 | A-13 | Medium | One `IF NOT EXISTS` flag covered two statements MySQL treats differently | **fixed**, verified on MySQL 8.4 |
@@ -799,6 +800,57 @@ sets the crate does not carry (ISO 639, ISO 3166, IANA character sets and media
 types) and are the same decision as `A-19`; the other twelve are checkable with
 what is already here.
 
+
+## A-25 — the measurement was wrong, and wrong in the flattering direction
+
+**Severity:** High. **Requirement:** `L10.4`, `W0.3`, `W0.4`. **Status: fixed.**
+
+Found by `A-24`'s own staleness guard. After enforcing `TERM_MAPPING.Purpose_valid`
+the build refused to proceed, naming ten dispositions it said were now
+unnecessary — among them `CONTACT.Purpose_valid` and `PARTY_IDENTITY.Purpose_valid`,
+which nothing had been done to.
+
+**Found.** `invariant_coverage` decided an invariant was named by asking whether
+the crate's source *contained the string*. Two things follow, and both inflate:
+
+1. **The class was ignored.** openEHR reuses 15 invariant names —
+   `Language_valid` belongs to seven classes, `Value_valid` to six,
+   `Is_archetype_root` to five, `Purpose_valid` to four. Naming one marked all
+   of them.
+2. **Comments counted.** A doc comment saying an invariant is *not* checked, and
+   why, made it count as named. `A-24`'s own careful notes — "`Attestations_valid`
+   and `Other_input_version_uids_valid` are named here and deliberately not
+   checked" — did exactly that.
+
+Both are false passes, in a file written to remove that kind of ambiguity.
+
+**Fixed.** An invariant counts as named when the source cites the
+`(class, name)` **pair**, using the same parser that already reads
+`ParseError::invariant(...)` and `ctx.violation(...)` for the `L10.4` divergence
+check. Comments cannot satisfy it; a rule belonging to another class cannot
+satisfy it.
+
+| | Before | After |
+| --- | --- | --- |
+| Named | 83 | **67** |
+| Not named | 72 | **88** |
+
+Twenty-four invariants nobody had examined were revealed, and are now
+dispositioned: 6 enforced under another name, 5 that cannot fail, 4 out of
+scope, and **9 genuinely unenforced**. Among them
+`ATTESTATION.Reason_valid` and `PARTICIPATION.Function_valid` — both with their
+terminology groups already shipping, which is `A-22`'s shape twice more.
+
+**It also caught my own code.** The first `impl Validate for Ehr` raised its six
+violations through a closure taking the invariant name as a *variable*. The
+citation parser reads literals, so all four new `EHR` rules still counted as
+unnamed. Rewritten with the class and invariant spelled out at each call site —
+which is what makes them findable by a human grepping too, and is now noted in
+the code so the next person does not tidy it back.
+
+**The honest reading.** This did not make the crate worse; it made the report
+true. Sixteen invariants that had been counted as covered never were, and the
+number had been quoted in a generated file that says at the top it is evidence.
 ## Closed findings
 
 **A-01** and **A-03** are fixed and kept above with their evidence, because the

@@ -25,14 +25,15 @@ merely names — see `rm-1.1.0-invariants.json`.
 | | Count |
 | --- | --- |
 | Invariants in RM 1.1.0 | 155 |
-| Named in the crate's source | 88 |
-| Not named | 67 |
+| Named in the crate's source | 67 |
+| Not named | 88 |
 
 Every not-named invariant is accounted for below, and the build fails if one is not (`W0.4`). This file used to say that telling them apart "needs a human" — which was true only for as long as nobody did it, and while it stood a genuine gap was indistinguishable from a class this crate deliberately does not model.
 
-- **Not enforced**: **21**
-- Cannot fail in Rust: **17**
-- Out of scope: **29**
+- **Not enforced**: **27**
+- Cannot fail in Rust: **22**
+- Enforced under another name (`lib:L10.4`): **6**
+- Out of scope: **33**
 
 ## Invariant names that diverge from openEHR (`lib:L10.4`)
 
@@ -49,7 +50,6 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | `DV_MULTIMEDIA` | `Integrity_check_matches` | yes | `Compression_algorithm_validity`, `Integrity_check_algorithm_validity`, `Integrity_check_validity`, `Media_type_valid`, `Not_empty`, `Size_valid` |
 | `DV_PARSABLE` | `Value_valid` | yes | `Formalism_valid`, `Size_valid` |
 | `DV_PROPORTION` | `Parts_finite` | yes | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
-| `EHR` | `VERSIONED_EHR_STATUS` | **NO** | `Compositions_valid`, `Contributions_valid`, `Directory_in_folders`, `Directory_valid`, `Ehr_access_valid`, `Ehr_status_valid`, `Folders_valid` |
 | `EVENT` | `Time_after_origin` | yes | `Offset_validity1` |
 | `EVENT_CONTEXT` | `End_time_valid` | yes | `Participations_validity`, `Setting_valid`, `location_valid` |
 | `INSTRUCTION` | `Narrative_valid` | yes | `Activities_valid` |
@@ -62,10 +62,12 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 
 Grouped by why. **Not enforced** is the only group that is a gap; the others are answers.
 
-### **Not enforced** — 21
+### **Not enforced** — 27
 
 | Class | Invariant | Why |
 | --- | --- | --- |
+| `ADDRESS` | `Type_valid` | type = name is not asserted |
+| `ATTESTATION` | `Reason_valid` | the attestation_reason group ships and nothing checks against it |
 | `COMPOSITION` | `Language_valid` | ISO 639 is not carried (lib:A-19) |
 | `COMPOSITION` | `Territory_valid` | ISO 3166 is not carried (lib:A-19) |
 | `CONTACT` | `Purpose_valid` | purpose = name is not asserted |
@@ -75,26 +77,43 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `DV_ORDERED` | `Is_simple_validity` | not checked |
 | `DV_TEXT` | `Encoding_valid` | IANA character sets are not carried |
 | `DV_TEXT` | `Language_valid` | ISO 639 is not carried |
+| `EHR_ACCESS` | `Is_archetype_root` | checked for COMPOSITION and EHR_STATUS, not here |
+| `EHR_ACCESS` | `Scheme_valid` | not checked |
 | `ENTRY` | `Encoding_valid` | IANA character sets are not carried |
+| `ENTRY` | `Is_archetype_root` | checked for COMPOSITION and EHR_STATUS, not here |
 | `ENTRY` | `Language_valid` | ISO 639 is not carried |
 | `ENTRY` | `Subject_validity` | subject_is_self is not checked against the subject's type |
 | `EVENT` | `Offset_validity1` | needs the parent HISTORY's origin, which an EVENT does not hold |
 | `INTERVAL_EVENT` | `Interval_start_time_valid` | needs time arithmetic against width |
-| `ITEM_TABLE` | `Valid_structure` | rows are Clusters whose items are not constrained to ELEMENT |
+| `PARTICIPATION` | `Function_valid` | the participation_function group ships and nothing checks against it |
+| `PARTY` | `Is_archetype_root` | checked for COMPOSITION and EHR_STATUS, not here |
+| `PARTY` | `Type_valid` | not checked |
 | `PARTY_IDENTITY` | `Purpose_valid` | purpose = name is not asserted |
+| `PARTY_RELATIONSHIP` | `Type_validity` | not checked |
 | `REFERENCE_RANGE` | `Range_is_simple` | not checked |
-| `TERM_MAPPING` | `Purpose_valid` | the term_mapping_purpose group ships and nothing checks against it (lib:A-24) |
 | `VERSION` | `Owner_id_valid` | owner_id is not modelled on a version at all (lib:A-24) |
 | `VERSIONED_OBJECT` | `Latest_version_valid` | not checked |
-| `VERSIONED_OBJECT` | `Uid_validity` | the uid extension is not required to be empty |
 
-### Cannot fail in Rust — 17
+### Enforced under another name (`lib:L10.4`) — 6
+
+| Class | Invariant | Why |
+| --- | --- | --- |
+| `DV_DATE` | `Value_valid` | the ISO 8601 parser refuses invalid text and reports itself, not DV_DATE |
+| `DV_DATE_TIME` | `Value_valid` | as DV_DATE |
+| `DV_DURATION` | `Value_valid` | as DV_DATE |
+| `DV_TIME` | `Value_valid` | as DV_DATE |
+| `DV_URI` | `Value_valid` | the URI parser refuses invalid text and reports itself |
+| `VERSION` | `Lifecycle_state_ valid` | checked and cited as ORIGINAL_VERSION; openEHR declares it on VERSION |
+
+### Cannot fail in Rust — 22
 
 | Class | Invariant | Why |
 | --- | --- | --- |
 | `ACTOR` | `Roles_valid` | roles is a Vec |
+| `ATTESTATION` | `Items_valid` | items is a Vec |
 | `COMPOSITION` | `Content_valid` | content is a Vec |
 | `DV_ORDERED` | `Other_reference_ranges_validity` | other_reference_ranges is a Vec |
+| `DV_PARSABLE` | `Size_valid` | size is not stored, so it cannot disagree with the value's length |
 | `DV_TEXT` | `Mappings_valid` | mappings is a Vec |
 | `ELEMENT` | `Inv_is_null_valid` | is_null() returns value.is_none() |
 | `ENTRY` | `Other_participations_valid` | other_participations is a Vec |
@@ -102,15 +121,18 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `ITEM_LIST` | `Valid_structure` | items is a Vec<Element>, so the element type is the constraint |
 | `LOCATABLE` | `Archetyped_valid` | is_archetype_root() returns archetype_details.is_some() |
 | `LOCATABLE` | `Links_valid` | links is a Vec |
+| `ORIGINAL_VERSION` | `Attestations_valid` | attestations is a Vec |
 | `ORIGINAL_VERSION` | `Is_merged_validity` | is_merged() returns !other_input_version_uids.is_empty() |
+| `ORIGINAL_VERSION` | `Other_input_version_uids_valid` | other_input_version_uids is a Vec |
 | `PARTY` | `Contacts_valid` | contacts is a Vec |
 | `PARTY_IDENTIFIED` | `Identifiers_valid` | identifiers is a Vec |
 | `ROLE` | `Capabilities_valid` | capabilities is a Vec |
+| `SECTION` | `Items_valid` | items is a Vec |
 | `VERSIONED_OBJECT` | `All_version_ids_valid` | the count is the Vec's length |
 | `VERSIONED_OBJECT` | `All_versions_valid` | the count is the Vec's length |
 | `VERSIONED_OBJECT` | `Version_count_valid` | the count is a usize |
 
-### Out of scope — 29
+### Out of scope — 33
 
 | Class | Invariant | Why |
 | --- | --- | --- |
@@ -122,6 +144,8 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `AUTHORED_RESOURCE` | `Translations_valid` | no archetype or template is modelled |
 | `EXTRACT` | `Sequence_nr_valid` | EHR Extract is not modelled |
 | `EXTRACT_CONTENT_ITEM` | `Item_validity` | EHR Extract is not modelled |
+| `EXTRACT_PARTICIPATION` | `Function_valid` | EHR Extract is not modelled |
+| `EXTRACT_PARTICIPATION` | `Mode_valid` | EHR Extract is not modelled |
 | `EXTRACT_UPDATE_SPEC` | `Overall_validity` | EHR Extract is not modelled |
 | `EXTRACT_UPDATE_SPEC` | `Send_changes_only_validity` | EHR Extract is not modelled |
 | `EXTRACT_UPDATE_SPEC` | `Trigger_events_validity` | EHR Extract is not modelled |
@@ -134,6 +158,7 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `PARTY_RELATIONSHIP` | `Target_valid` | no demographic repository is modelled (undeclared: lib:A-24) |
 | `RESOURCE_DESCRIPTION` | `Details_valid` | describes an authored resource |
 | `RESOURCE_DESCRIPTION` | `Language_valid` | describes an authored resource |
+| `RESOURCE_DESCRIPTION` | `Lifecycle_state_valid` | describes an authored resource |
 | `RESOURCE_DESCRIPTION` | `Original_author_valid` | describes an authored resource |
 | `RESOURCE_DESCRIPTION` | `Parent_resource_valid` | describes an authored resource |
 | `RESOURCE_DESCRIPTION_ITEM` | `Language_valid` | describes an authored resource |
@@ -142,5 +167,6 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `RESOURCE_DESCRIPTION_ITEM` | `copyright_valid` | describes an authored resource |
 | `RESOURCE_DESCRIPTION_ITEM` | `misuse_valid` | describes an authored resource |
 | `TRANSLATION_DETAILS` | `Language_valid` | describes an authored resource |
+| `VERSIONED_COMPOSITION` | `Archetype_node_id_valid` | VERSIONED_COMPOSITION is not modelled |
 | `VERSIONED_COMPOSITION` | `Persistent_validity` | VERSIONED_OBJECT is generic here; no COMPOSITION-specific subtype exists |
 

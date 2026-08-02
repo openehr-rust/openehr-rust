@@ -133,6 +133,7 @@ fn check_locatable<L: crate::rm::common::Locatable>(node: &L, ctx: &mut Context)
     // openEHR's `LOCATABLE.Name_valid` is only `name /= Void` — an *empty* name
     // breaks `DV_TEXT.Value_valid` instead, and attributing it to `Name_valid`
     // would send a reader to the wrong class definition (`L10.4`).
+    check_text(node.name().as_text(), ctx);
     if node.name().value().is_empty() {
         ctx.nested("/name".to_owned(), |c| {
             c.violation("DV_TEXT", "Valid_value", "value is empty");
@@ -158,7 +159,36 @@ fn check_locatable<L: crate::rm::common::Locatable>(node: &L, ctx: &mut Context)
 }
 
 /// Checks a `DV_CODED_TEXT` against the openEHR support terminology.
+/// `TERM_MAPPING.Purpose_valid` — a mapping's purpose must come from openEHR's
+/// own group.
+///
+/// The group has shipped as `terminology::term_mapping_purpose` since the
+/// terminology was written, and nothing consulted it (`lib:A-24`). That is the
+/// same shape as `A-22`, which found three `DV_MULTIMEDIA` rules unenforced
+/// while the crate carried exactly the code sets they needed.
+///
+/// Reached from [`check_locatable`] for every node name and from
+/// [`check_coded_text`] for every coded text — `DV_CODED_TEXT` embeds a
+/// `DV_TEXT`, so one helper covers both. A `DV_TEXT` inside a data value the
+/// walk does not descend into is not reached, which is a property of the walk
+/// rather than of this rule.
+fn check_text(text: &crate::rm::data_types::DvText, ctx: &mut Context) {
+    for mapping in text.mappings() {
+        if let Some(purpose) = mapping.purpose()
+            && !crate::terminology::term_mapping_purpose::GROUP
+                .contains(purpose.defining_code().code_string())
+        {
+            ctx.violation(
+                "TERM_MAPPING",
+                "Purpose_valid",
+                "a term mapping's purpose is not from the openEHR                  term_mapping_purpose group",
+            );
+        }
+    }
+}
+
 fn check_coded_text(coded: &DvCodedText, ctx: &mut Context) {
+    check_text(coded.as_text(), ctx);
     if coded.check_openehr_rubric() == Some(false) {
         ctx.violation(
             "DV_CODED_TEXT",
@@ -440,6 +470,23 @@ impl Validate for ItemStructure {
                     );
                 }
                 for (i, r) in s.rows().iter().enumerate() {
+                    // `Valid_structure`: a table's cells are ELEMENTs. A row is
+                    // a CLUSTER and a CLUSTER may hold either, so the type
+                    // system permits a table cell that is itself a cluster —
+                    // a nested structure in what a reader will render as one
+                    // cell, and what a path expression will not find.
+                    if r.items()
+                        .iter()
+                        .any(|item| !matches!(item, crate::rm::data_structures::Item::Element(_)))
+                    {
+                        ctx.nested(format!("/rows[{i}]"), |c| {
+                            c.violation(
+                                "ITEM_TABLE",
+                                "Valid_structure",
+                                "a row holds something other than ELEMENTs",
+                            );
+                        });
+                    }
                     ctx.nested(format!("/rows[{i}]"), |c| r.visit(c));
                 }
             }
@@ -915,69 +962,96 @@ impl<T: Validate> Validate for crate::rm::common::Version<T> {
 /// every one is an `OBJECT_REF` — so the type name is the only thing that can.
 impl Validate for crate::rm::ehr::Ehr {
     fn visit(&self, ctx: &mut Context) {
-        // `(reference, required type, invariant, what a reader is told)`. The
-        // detail is per call site because a violation's message is
-        // `&'static str` — deliberately, since a message assembled from the
-        // data is a message that can carry the data (`X11.7`).
-        let expect = |reference: &crate::base::ObjectRef,
-                      wanted: &str,
-                      invariant: &'static str,
-                      detail: &'static str,
-                      ctx: &mut Context| {
-            if reference.type_name() != wanted {
-                ctx.violation("EHR", invariant, detail);
-            }
-        };
-
-        expect(
-            self.ehr_status(),
-            "VERSIONED_EHR_STATUS",
-            "Ehr_status_valid",
-            "ehr_status does not reference a VERSIONED_EHR_STATUS",
-            ctx,
-        );
-        expect(
-            self.ehr_access(),
-            "VERSIONED_EHR_ACCESS",
-            "Ehr_access_valid",
-            "ehr_access does not reference a VERSIONED_EHR_ACCESS",
-            ctx,
-        );
-        for reference in self.compositions() {
-            expect(
-                reference,
-                "VERSIONED_COMPOSITION",
+        // Written out rather than looped, because the class and invariant must
+        // be **literals** at the call site. `openehr-assets` reads these two
+        // call forms to decide which invariants the crate can name, and a
+        // violation raised through a variable is one it cannot see — which is
+        // how the first version of this impl left all four rules counted as
+        // unnamed (`lib:A-25`).
+        if self.ehr_status().type_name() != "VERSIONED_EHR_STATUS" {
+            ctx.violation(
+                "EHR",
+                "Ehr_status_valid",
+                "ehr_status does not reference a VERSIONED_EHR_STATUS",
+            );
+        }
+        if self.ehr_access().type_name() != "VERSIONED_EHR_ACCESS" {
+            ctx.violation(
+                "EHR",
+                "Ehr_access_valid",
+                "ehr_access does not reference a VERSIONED_EHR_ACCESS",
+            );
+        }
+        if self
+            .compositions()
+            .iter()
+            .any(|r| r.type_name() != "VERSIONED_COMPOSITION")
+        {
+            ctx.violation(
+                "EHR",
                 "Compositions_valid",
                 "a composition reference does not name a VERSIONED_COMPOSITION",
-                ctx,
             );
         }
-        for reference in self.contributions() {
-            expect(
-                reference,
-                "CONTRIBUTION",
+        if self
+            .contributions()
+            .iter()
+            .any(|r| r.type_name() != "CONTRIBUTION")
+        {
+            ctx.violation(
+                "EHR",
                 "Contributions_valid",
                 "a contribution reference does not name a CONTRIBUTION",
-                ctx,
             );
         }
-        for reference in self.folders() {
-            expect(
-                reference,
-                "VERSIONED_FOLDER",
+        if self
+            .folders()
+            .iter()
+            .any(|r| r.type_name() != "VERSIONED_FOLDER")
+        {
+            ctx.violation(
+                "EHR",
                 "Folders_valid",
                 "a folder reference does not name a VERSIONED_FOLDER",
-                ctx,
             );
         }
-        if let Some(directory) = self.directory() {
-            expect(
-                directory,
-                "VERSIONED_FOLDER",
+        if self
+            .directory()
+            .is_some_and(|d| d.type_name() != "VERSIONED_FOLDER")
+        {
+            ctx.violation(
+                "EHR",
                 "Directory_valid",
                 "directory does not reference a VERSIONED_FOLDER",
-                ctx,
             );
+        }
+    }
+}
+
+/// Checks a `VERSIONED_OBJECT`'s identity and every version it holds.
+///
+/// `Uid_validity` requires the container's uid to carry **no extension**. A
+/// `HIER_OBJECT_ID` may have one — `root::extension` — and openEHR forbids it
+/// here because the extension is what distinguishes two objects sharing a root,
+/// and a version container's identity is the root. One with an extension names
+/// something narrower than the thing all its versions belong to.
+///
+/// `All_versions_valid`, `All_version_ids_valid`, and `Latest_version_valid`
+/// are not checked and cannot fail: `version_count()` returns `versions.len()`
+/// and `latest_version()` returns `versions.last()`, so each is true by
+/// construction.
+impl<T: Validate> Validate for crate::rm::common::VersionedObject<T> {
+    fn visit(&self, ctx: &mut Context) {
+        if self.uid().extension().is_some() {
+            ctx.violation(
+                "VERSIONED_OBJECT",
+                "Uid_validity",
+                "the container's uid carries an extension, so it names something \
+                 narrower than the object its versions belong to",
+            );
+        }
+        for (i, version) in self.all_versions().iter().enumerate() {
+            ctx.nested(format!("/versions[{i}]"), |c| version.visit(c));
         }
     }
 }
@@ -1324,5 +1398,92 @@ mod tests {
         let err = Interval::closed(10i64, 1i64).unwrap_err().to_string();
         assert!(err.contains("DV_INTERVAL"), "{err}");
         assert!(err.contains("Limits_consistent"), "{err}");
+    }
+
+    #[test]
+    fn a_term_mapping_purpose_outside_openehrs_group_is_a_violation() {
+        use crate::rm::common::LocatableAttrs;
+        use crate::rm::data_structures::Element;
+        use crate::rm::data_types::{
+            CodePhrase, DataValue, DvCodedText, DvText, MappingMatch, TermMapping,
+        };
+
+        let mapped = |purpose_code: &str| {
+            let mapping = TermMapping::new(
+                CodePhrase::new("SNOMED-CT", "73211009").unwrap(),
+                MappingMatch::Equivalent,
+            )
+            .with_purpose(
+                DvCodedText::new("purpose", CodePhrase::new("openehr", purpose_code).unwrap())
+                    .unwrap(),
+            );
+            // Carried on the node's *name*, which is where `check_locatable`
+            // reaches a text.
+            let name = DvText::new("Diabetes").unwrap().with_mapping(mapping);
+            Element::new(
+                LocatableAttrs::new(name.into(), "at0004").unwrap(),
+                DataValue::Text(DvText::new("present").unwrap()),
+            )
+        };
+
+        // `669` is `public health` — a real member of the group that has
+        // shipped all along while nothing consulted it (`A-24`).
+        let ok = mapped("669");
+        assert!(ok.validate().is_empty(), "{:?}", ok.validate());
+
+        let bad = mapped("9999");
+        let report = bad.validate();
+        assert!(
+            report
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Purpose_valid"),
+            "{report:?}"
+        );
+    }
+
+    #[test]
+    fn a_versioned_object_uid_may_not_carry_an_extension() {
+        use crate::base::{HierObjectId, ObjectId, ObjectRef};
+        use crate::rm::common::VersionedObject;
+        use crate::rm::data_types::DvDateTime;
+
+        let owner = ObjectRef::new(
+            "local",
+            "EHR",
+            ObjectId::HierObjectId(
+                HierObjectId::from_uid_str("87284370-2D4B-4E3D-A3F3-F303D2F4F34B").unwrap(),
+            ),
+        )
+        .unwrap();
+        let at = DvDateTime::new("2026-08-01T09:00:00Z").unwrap();
+
+        // `Composition` rather than `String`: the impl requires `T: Validate`,
+        // because a container that checked its own uid and not its versions
+        // would be a walk that stops at the interesting part.
+        let plain: VersionedObject<crate::rm::ehr::Composition> = VersionedObject::new(
+            HierObjectId::from_uid_str("87284370-2D4B-4E3D-A3F3-F303D2F4F34B").unwrap(),
+            owner.clone(),
+            at.clone(),
+        );
+        assert!(plain.validate().is_empty());
+
+        // The extension distinguishes two objects sharing a root, and a version
+        // container's identity is the root.
+        let extended: VersionedObject<crate::rm::ehr::Composition> = VersionedObject::new(
+            "87284370-2D4B-4E3D-A3F3-F303D2F4F34B::narrower"
+                .parse()
+                .unwrap(),
+            owner,
+            at,
+        );
+        let report = extended.validate();
+        assert!(
+            report
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Uid_validity"),
+            "{report:?}"
+        );
     }
 }

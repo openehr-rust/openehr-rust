@@ -606,12 +606,6 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
     ),
     // --- not enforced, and the crate has what it would need ------------------
     (
-        "TERM_MAPPING",
-        "Purpose_valid",
-        Disposition::Unenforced,
-        "the term_mapping_purpose group ships and nothing checks against it (lib:A-24)",
-    ),
-    (
         "VERSION",
         "Owner_id_valid",
         Disposition::Unenforced,
@@ -622,12 +616,6 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
         "Latest_version_valid",
         Disposition::Unenforced,
         "not checked",
-    ),
-    (
-        "VERSIONED_OBJECT",
-        "Uid_validity",
-        Disposition::Unenforced,
-        "the uid extension is not required to be empty",
     ),
     (
         "DV_ORDERED",
@@ -654,12 +642,6 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
         "needs time arithmetic against width",
     ),
     (
-        "ITEM_TABLE",
-        "Valid_structure",
-        Disposition::Unenforced,
-        "rows are Clusters whose items are not constrained to ELEMENT",
-    ),
-    (
         "REFERENCE_RANGE",
         "Range_is_simple",
         Disposition::Unenforced,
@@ -676,6 +658,155 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
         "Purpose_valid",
         Disposition::Unenforced,
         "purpose = name is not asserted",
+    ),
+    // --- revealed once the count became class-aware (lib:A-25) ---------------
+    //
+    // Every one of these was counted as *named* because some other class's rule
+    // shares the name, or because a comment mentioned it. `Language_valid`
+    // belongs to seven classes and `Value_valid` to six.
+
+    // Enforced, reported under a name openEHR does not use.
+    (
+        "DV_DATE",
+        "Value_valid",
+        Disposition::Renamed,
+        "the ISO 8601 parser refuses invalid text and reports itself, not DV_DATE",
+    ),
+    (
+        "DV_DATE_TIME",
+        "Value_valid",
+        Disposition::Renamed,
+        "as DV_DATE",
+    ),
+    ("DV_TIME", "Value_valid", Disposition::Renamed, "as DV_DATE"),
+    (
+        "DV_DURATION",
+        "Value_valid",
+        Disposition::Renamed,
+        "as DV_DATE",
+    ),
+    (
+        "DV_URI",
+        "Value_valid",
+        Disposition::Renamed,
+        "the URI parser refuses invalid text and reports itself",
+    ),
+    (
+        "VERSION",
+        "Lifecycle_state_ valid",
+        Disposition::Renamed,
+        "checked and cited as ORIGINAL_VERSION; openEHR declares it on VERSION",
+    ),
+    // Cannot fail.
+    (
+        "ATTESTATION",
+        "Items_valid",
+        Disposition::Vacuous,
+        "items is a Vec",
+    ),
+    (
+        "ORIGINAL_VERSION",
+        "Attestations_valid",
+        Disposition::Vacuous,
+        "attestations is a Vec",
+    ),
+    (
+        "ORIGINAL_VERSION",
+        "Other_input_version_uids_valid",
+        Disposition::Vacuous,
+        "other_input_version_uids is a Vec",
+    ),
+    (
+        "SECTION",
+        "Items_valid",
+        Disposition::Vacuous,
+        "items is a Vec",
+    ),
+    (
+        "DV_PARSABLE",
+        "Size_valid",
+        Disposition::Vacuous,
+        "size is not stored, so it cannot disagree with the value's length",
+    ),
+    // Out of scope.
+    (
+        "EXTRACT_PARTICIPATION",
+        "Function_valid",
+        Disposition::Excluded,
+        "EHR Extract is not modelled",
+    ),
+    (
+        "EXTRACT_PARTICIPATION",
+        "Mode_valid",
+        Disposition::Excluded,
+        "EHR Extract is not modelled",
+    ),
+    (
+        "RESOURCE_DESCRIPTION",
+        "Lifecycle_state_valid",
+        Disposition::Excluded,
+        "describes an authored resource",
+    ),
+    (
+        "VERSIONED_COMPOSITION",
+        "Archetype_node_id_valid",
+        Disposition::Excluded,
+        "VERSIONED_COMPOSITION is not modelled",
+    ),
+    // Not enforced.
+    (
+        "ADDRESS",
+        "Type_valid",
+        Disposition::Unenforced,
+        "type = name is not asserted",
+    ),
+    (
+        "ATTESTATION",
+        "Reason_valid",
+        Disposition::Unenforced,
+        "the attestation_reason group ships and nothing checks against it",
+    ),
+    (
+        "PARTICIPATION",
+        "Function_valid",
+        Disposition::Unenforced,
+        "the participation_function group ships and nothing checks against it",
+    ),
+    (
+        "EHR_ACCESS",
+        "Is_archetype_root",
+        Disposition::Unenforced,
+        "checked for COMPOSITION and EHR_STATUS, not here",
+    ),
+    (
+        "EHR_ACCESS",
+        "Scheme_valid",
+        Disposition::Unenforced,
+        "not checked",
+    ),
+    (
+        "ENTRY",
+        "Is_archetype_root",
+        Disposition::Unenforced,
+        "checked for COMPOSITION and EHR_STATUS, not here",
+    ),
+    (
+        "PARTY",
+        "Is_archetype_root",
+        Disposition::Unenforced,
+        "checked for COMPOSITION and EHR_STATUS, not here",
+    ),
+    (
+        "PARTY",
+        "Type_valid",
+        Disposition::Unenforced,
+        "not checked",
+    ),
+    (
+        "PARTY_RELATIONSHIP",
+        "Type_validity",
+        Disposition::Unenforced,
+        "not checked",
     ),
 ];
 
@@ -729,12 +860,24 @@ fn invariant_coverage(root: &Path) -> Asset {
     let mut unnamed: Vec<(String, String)> = Vec::new();
     for (class, invariants) in &classes {
         for name in invariants.keys() {
+            // The **pair**, not the name. A bare substring search counts an
+            // invariant as named when some *other* class's rule happens to
+            // share its name — openEHR reuses 15 of them, `Language_valid`
+            // across seven classes and `Value_valid` across six — and counts a
+            // name written in a comment saying the rule is *not* checked. Both
+            // are false passes, and this file exists to remove exactly that
+            // kind of ambiguity (`lib:A-25`).
+            //
+            // `cited` comes from parsing the two call forms that report an
+            // invariant, so a match means the crate can actually name this rule
+            // when it fails.
+            //
             // The BMM has stray spaces in a few names ("Lifecycle_state_ valid").
             let squashed = name.replace(' ', "");
             let underscored = name.replace(' ', "_");
-            if source.contains(name.as_str())
-                || source.contains(&squashed)
-                || source.contains(&underscored)
+            if cited
+                .iter()
+                .any(|(c, n)| c == class && (n == name || *n == squashed || *n == underscored))
             {
                 named += 1;
             } else {
