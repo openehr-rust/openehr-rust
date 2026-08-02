@@ -1,0 +1,297 @@
+{
+ "classes": {
+  "ACTIVITY": {
+   "Action_archetype_id_valid": "not action_archetype_id.is_empty"
+  },
+  "ACTOR": {
+   "Roles_valid": "roles /= Void implies not roles.is_empty"
+  },
+  "ADDRESS": {
+   "Type_valid": "type = name"
+  },
+  "ARCHETYPED": {
+   "Rm_version_valid": "not rm_version.is_empty"
+  },
+  "ATTESTATION": {
+   "Items_valid": "items /= Void implies not items.is_empty",
+   "Reason_valid": "(reason.generating_type.is_equal (\u201cDV_CODED_TEXT\u201d) implies terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_attestation_reason, reason.defining_code))"
+  },
+  "AUDIT_DETAILS": {
+   "Change_type_valid": "terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_audit_change_type, change_type.defining_code)",
+   "System_id_valid": "not system_id.is_empty"
+  },
+  "AUTHORED_RESOURCE": {
+   "Current_revision_valid": "(current_revision /= Void and not is_controlled) implies current_revision.is_equal (\u201c(uncontrolled)\u201d)",
+   "Description_valid": "translations /= Void implies (description.details.for_all (d |\ntranslations.has_key (d.language.code_string)))",
+   "Languages_available_valid": "languages_available.has (original_language)",
+   "Original_language_valid": "code_set (Code_set_id_languages).has_code (original_language.as_string)",
+   "Revision_history_valid": "is_controlled xor revision_history = Void",
+   "Translations_valid": "translations /= Void implies (not translations.is_empty and not translations.has (orginal_language.code_string))"
+  },
+  "CODE_PHRASE": {
+   "Code_string_valid": "not code_string.is_empty"
+  },
+  "COMPOSITION": {
+   "Category_validity": "terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_composition_category, category.defining_code)",
+   "Content_valid": "content /= Void implies not content.is_empty",
+   "Is_archetype_root": "is_archetype_root",
+   "Language_valid": "code_set(Code_set_id_languages).has_code(language)",
+   "Territory_valid": "code_set(Code_set_id_countries).has_code(territory)"
+  },
+  "CONTACT": {
+   "Purpose_valid": "purpose = name"
+  },
+  "DV_AMOUNT": {
+   "Accuracy_is_percent_validity": "accuracy = 0 implies not accuracy_is_percent",
+   "Accuracy_validity": "accuracy_is_percent implies valid_percentage (accuracy)"
+  },
+  "DV_DATE": {
+   "Value_valid": "valid_iso8601_date(value)"
+  },
+  "DV_DATE_TIME": {
+   "Value_valid": "valid_iso8601_date_time (value)"
+  },
+  "DV_DURATION": {
+   "Value_valid": "valid_iso8601_duration (value)"
+  },
+  "DV_EHR_URI": {
+   "Scheme_valid": "scheme.is_equal (Ehr_scheme)"
+  },
+  "DV_ENCAPSULATED": {
+   "Charset_valid": "charset /= Void implies code_set (Code_set_id_character_sets).has_code (charset)",
+   "Language_valid": "language /= Void implies code_set (Code_set_id_languages).has_code (language)"
+  },
+  "DV_IDENTIFIER": {
+   "Id_valid": "not id.is_empty"
+  },
+  "DV_INTERVAL": {
+   "Limits_consistent": "(not upper_unbounded and not lower_unbounded) implies (lower.is_strictly_comparable_to(upper) and lower <= upper)"
+  },
+  "DV_MULTIMEDIA": {
+   "Compression_algorithm_validity": "compression_algorithm /= Void implies code_set (Code_set_id_compression_algorithms).has_code (compression_algorithm)",
+   "Integrity_check_algorithm_validity": "integrity_check_algorithm /= Void implies code_set (Code_set_id_integrity_check_algorithms).has_code (integrity_check_algorithm)",
+   "Integrity_check_validity": "integrity_check /= Void implies integrity_check_algorithm /= Void",
+   "Media_type_valid": "media_type /= Void and then code_set (Code_set_id_media_types).has_code (media_type)",
+   "Not_empty": "is_inline or is_external",
+   "Size_valid": "size >= 0"
+  },
+  "DV_ORDERED": {
+   "Is_simple_validity": "(normal_range = Void and other_reference_ranges = Void) implies is_simple",
+   "Normal_range_and_status_consistency": "(normal_range /= Void and normal_status /= Void) implies (normal_status.code_string.is_equal (\u201cN\u201d) xor not normal_range.has (self))",
+   "Normal_status_validity": "normal_status /= Void implies code_set (Code_set_id_normal_statuses).has_code (normal_status)",
+   "Other_reference_ranges_validity": "other_reference_ranges /= Void implies not other_reference_ranges.is_empty"
+  },
+  "DV_PARAGRAPH": {
+   "Items_valid": "not items.is_empty"
+  },
+  "DV_PARSABLE": {
+   "Formalism_valid": "not formalism.is_empty",
+   "Size_valid": "size >= 0"
+  },
+  "DV_PERIODIC_TIME_SPECIFICATION": {
+   "Value_valid": "value.formalism.is_equal (\u201cHL7:PIVL\u201d) or value.formalism. is_equal (\u201cHL7:EIVL\u201d)"
+  },
+  "DV_PROPORTION": {
+   "Fraction_validity": "(type = pk_fraction or type = pk_integer_fraction) implies is_integral",
+   "Is_integral_validity": "is_integral implies (numerator.floor = numerator and denominator.floor = denominator)",
+   "Percent_validity": "type = pk_percent implies denominator = 100",
+   "Precision_validity": "precision = 0 implies is_integral",
+   "Type_validity": "valid_proportion_kind (type)",
+   "Unitary_validity": "type = pk_unitary implies denominator = 1",
+   "Valid_denominator": "denominator /= 0.0"
+  },
+  "DV_QUANTIFIED": {
+   "Magnitude_status_valid": "magnitude_status /= Void implies valid_magnitude_status (magnitude_status)"
+  },
+  "DV_TEXT": {
+   "Encoding_valid": "encoding /= Void implies code_set (Code_set_id_character_sets).has_code (encoding)",
+   "Formatting_valid": "formatting /= void implies not formatting.is_empty",
+   "Language_valid": "language /= Void implies code_set (Code_set_id_languages).has_code (language)",
+   "Mappings_valid": "mappings /= void implies not mappings.is_empty",
+   "Valid_value": "not value.is_empty"
+  },
+  "DV_TIME": {
+   "Value_valid": "valid_iso8601_time (value)"
+  },
+  "DV_URI": {
+   "Value_valid": "not value.is_empty"
+  },
+  "EHR": {
+   "Compositions_valid": "for_all c in compositions | c.type.is_equal (\"VERSIONED_COMPOSITION\")",
+   "Contributions_valid": "for_all c in contributions | c.type.is_equal(\"CONTRIBUTION\")",
+   "Directory_in_folders": "folders /= Void implies folders.item(1) = directory",
+   "Directory_valid": "directory /= Void implies directory.type.is_equal (\"VERSIONED_FOLDER\")",
+   "Ehr_access_valid": "ehr_access.type.is_equal (\"VERSIONED_EHR_ACCESS\")",
+   "Ehr_status_valid": "ehr_status.type.is_equal(\"VERSIONED_EHR_STATUS\")",
+   "Folders_valid": "folders /= Void implies for_all f in folders | f.type.is_equal(\"VERSIONED_FOLDER\")"
+  },
+  "EHR_ACCESS": {
+   "Is_archetype_root": "is_archetype_root",
+   "Scheme_valid": "not scheme.is_empty"
+  },
+  "EHR_STATUS": {
+   "Is_archetype_root": "is_archetype_root"
+  },
+  "ELEMENT": {
+   "Inv_is_null_valid": "is_null() = (value = Void)",
+   "Inv_null_flavour_indicated": "is_null() xor null_flavour = Void",
+   "Inv_null_flavour_valid": "is_null implies terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_null_flavour, null_flavour.defining_code)",
+   "Inv_null_reason_valid": "null_reason /= Void implies is_null()"
+  },
+  "ENTRY": {
+   "Encoding_valid": "code_set (Code_set_id_character_sets).has_code (encoding)",
+   "Is_archetype_root": "is_archetype_root",
+   "Language_valid": "code_set (Code_set_id_languages).has_code (language)",
+   "Other_participations_valid": "other_participations /= Void implies not other_participations.is_empty",
+   "Subject_validity": "subject_is_self implies subject.generating_type = \u201cPARTY_SELF\u201d"
+  },
+  "EVENT": {
+   "Offset_validity1": "offset /= Void and then offset = time.diff (parent.origin)"
+  },
+  "EVENT_CONTEXT": {
+   "Participations_validity": "participations /= Void implies not participations.is_empty",
+   "Setting_valid": "Terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_setting, setting.defining_code)",
+   "location_valid": "location /= Void implies not location.is_empty"
+  },
+  "EXTRACT": {
+   "Sequence_nr_valid": "sequence_nr >= 1"
+  },
+  "EXTRACT_CONTENT_ITEM": {
+   "Item_validity": "is_masked xor item /= Void"
+  },
+  "EXTRACT_PARTICIPATION": {
+   "Function_valid": "function /= Void and then function.generating_type.is_equal (\u201cDV_CODED_TEXT\u201d) implies terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_participation_function, function.defining_code)",
+   "Mode_valid": "mode /= Void and terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_participation_mode, mode.defining_code)"
+  },
+  "EXTRACT_UPDATE_SPEC": {
+   "Overall_validity": "repeat_period /= Void or trigger_events /= Void",
+   "Send_changes_only_validity": "send_changes_only implies persist_in_server",
+   "Trigger_events_validity": "trigger_events /= Void implies not trigger_events.is_empty"
+  },
+  "EXTRACT_VERSION_SPEC": {
+   "Includes_revision_history_valid": "not include_data implies include_revision_history"
+  },
+  "FEEDER_AUDIT_DETAILS": {
+   "System_id_valid": "not system_id.is_empty"
+  },
+  "HISTORY": {
+   "Events_valid": "(events /= Void and then not events.is_empty) or summary /= Void",
+   "Period_consistency": "is_periodic implies events.for_all (e: EVENT | e.offset. to_seconds.mod(period.to_seconds) = 0)",
+   "Periodic_validity": "is_periodic xor period = Void"
+  },
+  "INSTRUCTION": {
+   "Activities_valid": "activities /= Void implies not activities.is_empty"
+  },
+  "INSTRUCTION_DETAILS": {
+   "Activity_path_valid": "not activity_id.is_empty"
+  },
+  "INTERVAL_EVENT": {
+   "Interval_start_time_valid": "interval_start_time = time - width",
+   "Math_function_validity": "terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_event_math_function, math_function.defining_code)"
+  },
+  "ISM_TRANSITION": {
+   "Current_state_valid": "terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_instruction_states, current_state.defining_code)",
+   "Transition_valid": "transition /= Void implies terminology (Terminology_id_openehr).\nhas_code_for_group_id (Group_id_instruction_transitions, transition.defining_code)"
+  },
+  "ITEM_LIST": {
+   "Valid_structure": " items.forall (i:ITEM | i.type = \"ELEMENT\")"
+  },
+  "ITEM_TABLE": {
+   "Valid_structure": "rows.for_all (items.for_all (instance_of (\"ELEMENT\")))"
+  },
+  "ITEM_TAG": {
+   "Inv_key_valid": "not key.is_empty and key.is_justified",
+   "Inv_value_valid": "value /= Void implies not value.is_empty"
+  },
+  "LOCATABLE": {
+   "Archetype_node_id_valid": "not archetype_node_id.is_empty",
+   "Archetyped_valid": "is_archetype_root xor archetype_details = Void",
+   "Links_valid": "links /= Void implies not links.is_empty"
+  },
+  "ORIGINAL_VERSION": {
+   "Attestations_valid": "attestations /= Void implies not attestations.is_empty",
+   "Is_merged_validity": "other_input_version_ids = Void xor is_merged",
+   "Other_input_version_uids_valid": "other_input_version_uids /= Void implies not other_input_version_uids.is_empty"
+  },
+  "PARTICIPATION": {
+   "Function_valid": "function.generating_type.is_equal (\"DV_CODED_TEXT\") implies\nterminology (Terminology_id_openehr).has_code_for_group_id (Group_id_participation_function, function.defining_code)",
+   "Mode_valid": "mode /= Void implies terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_participation_mode, mode.defining_code)"
+  },
+  "PARTY": {
+   "Contacts_valid": "contacts /= Void implies not contacts.is_empty",
+   "Identities_valid": "not identities.is_empty",
+   "Is_archetype_root": "is_archetype_root",
+   "Relationships_validity": "relationships /= Void implies (not relationships.is_empty and then relationships.for_all (r | r.source = self)",
+   "Reverse_relationships_validity": "reverse_relationships /= Void implies (not reverse_relationships.empty and then reverse_relationships.for_all (item | repository (\"demographics\").all_party_relationships.has_object (item) and then repository(\"demographics\").all_party_relationships.object (item).target = self))",
+   "Type_valid": "type = name",
+   "Uid_mandatory": "uid /= Void"
+  },
+  "PARTY_IDENTIFIED": {
+   "Basic_validity": "name /= Void or identifiers /= Void or external_ref /= Void",
+   "Identifiers_valid": "identifiers /= Void implies not identifiers.is_empty",
+   "Name_valid": "name /= Void implies not name.is_empty"
+  },
+  "PARTY_IDENTITY": {
+   "Purpose_valid": "purpose = name"
+  },
+  "PARTY_RELATED": {
+   "Relationship_valid": "terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_subject_relationship, relationship.defining_code)"
+  },
+  "PARTY_RELATIONSHIP": {
+   "Source_valid": "source /= Void and then source.relationships.has (self)",
+   "Target_valid": "target /= Void and then not target.reverse_relationships.has (self)",
+   "Type_validity": "type = name"
+  },
+  "REFERENCE_RANGE": {
+   "Range_is_simple": "(range.lower_unbounded or else range.lower.is_simple) and (range.upper_unbounded or else range.upper.is_simple)"
+  },
+  "RESOURCE_DESCRIPTION": {
+   "Details_valid": "not details.is_empty",
+   "Language_valid": "parent_resource /= Void implies details.for_all (d | parent_resource.languages_available.has (d.language.code_string))",
+   "Lifecycle_state_valid": "not lifecycle_state.is_empty",
+   "Original_author_valid": "not original_author.is_empty",
+   "Parent_resource_valid": "parent_resource /= Void implies parent_resource.description = self"
+  },
+  "RESOURCE_DESCRIPTION_ITEM": {
+   "Language_valid": "code_set (Code_set_id_languages).has_code (language)",
+   "Purpose_valid": "not purpose.is_empty",
+   "Use_valid": "use /= Void implies not use.is_empty",
+   "copyright_valid": "copyright /= Void implies not copyright.is_empty",
+   "misuse_valid": "misuse /= Void implies not misuse.is_empty"
+  },
+  "REVISION_HISTORY_ITEM": {
+   "Audit_valid": "not audits.is_empty"
+  },
+  "ROLE": {
+   "Capabilities_valid": "capabilities /= Void implies not capabilities.empty"
+  },
+  "SECTION": {
+   "Items_valid": "items /= Void implies not items.is_empty"
+  },
+  "TERM_MAPPING": {
+   "Match_valid": "is_valid_match_code (match)",
+   "Purpose_valid": "purpose /= Void implies terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_term_mapping_purpose, purpose.defining_code)"
+  },
+  "TRANSLATION_DETAILS": {
+   "Language_valid": "code_set (Code_set_id_languages).has_code (language)"
+  },
+  "VERSION": {
+   "Lifecycle_state_ valid": "lifecycle_state /= Void and then terminology (Term_id_openehr).has_code_for_group_id (Group_id_version_lifecycle_state, lifecycle_state.defining_code)",
+   "Owner_id_valid": "owner_id.value.is_equal (uid.object_id.value)",
+   "Preceding_version_uid_validity": "uid.version_tree_id.is_first xor preceding_version_uid /= Void"
+  },
+  "VERSIONED_COMPOSITION": {
+   "Archetype_node_id_valid": "for_all v in all_versions | v.archetype_node_id.is_equal (all_versions.first.archetype_node_id)",
+   "Persistent_validity": "for_all v in all_versions | v.is_persistent = all_versions.first.data.is_persistent"
+  },
+  "VERSIONED_OBJECT": {
+   "All_version_ids_valid": "all_version_ids.count = version_count",
+   "All_versions_valid": "all_versions.count = version_count",
+   "Latest_version_valid": "version_count > 0 implies latest_version /= Void",
+   "Uid_validity": "extension.is_empty",
+   "Version_count_valid": "version_count >= 0"
+  }
+ },
+ "rm_release": "1.1.0",
+ "source": "openEHR/specifications-ITS-BMM components/RM/json/openehr_rm_1.1.0.bmm.json"
+}
