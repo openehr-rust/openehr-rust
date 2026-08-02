@@ -29,8 +29,8 @@
 //!
 //! let sql = ddl_script(&PostgresqlDialect);
 //! assert!(sql.contains("CREATE TABLE IF NOT EXISTS \"openehr_version\""));
-//! // JSON is native, and the derived instant column is a real timestamp.
-//! assert_eq!(PostgresqlDialect.col_sql(ColTy::Json), "jsonb");
+//! // Canonical JSON is text, not `jsonb` — see `col_sql` (`M3.43`, `D-08`).
+//! assert_eq!(PostgresqlDialect.col_sql(ColTy::Json), "text");
 //! assert_eq!(PostgresqlDialect.col_sql(ColTy::InstantUtc), "timestamptz");
 //! // …while the authoritative one is text, so the lexical form survives.
 //! assert_eq!(PostgresqlDialect.col_sql(ColTy::Instant), "text");
@@ -48,6 +48,13 @@ impl Dialect for PostgresqlDialect {
         "PostgreSQL"
     }
 
+    // `ColTy::Json` and the general text arm now spell the same type, and they
+    // stay separate arms (`M3.43`). They coincide for unrelated reasons: one is
+    // "this engine has no reason to bound these", the other is "canonical JSON
+    // must return the bytes it was given". Merging them would delete the second
+    // reason and silently couple the two, so that changing the text arm would
+    // move the JSON column with it — which is how `D-08` happened in reverse.
+    #[allow(clippy::match_same_arms)]
     fn col_sql(&self, ty: ColTy) -> String {
         match ty {
             // `text`, not `varchar(n)`. PostgreSQL stores both identically and
@@ -55,11 +62,25 @@ impl Dialect for PostgresqlDialect {
             // but legal `ARCHETYPE_ID` — and rejecting conformant data is a
             // worse failure than storing a few extra bytes.
             ColTy::Id(_) | ColTy::Text(_) | ColTy::LongText | ColTy::Instant => "text",
-            // `jsonb`, not `json`: the store never needs to reproduce the
-            // document's byte form from the column, because the canonical form
-            // is regenerated from the parsed object (`J9.12`). What `jsonb`
-            // buys is containment and path indexes.
-            ColTy::Json => "jsonb",
+            // `text`, and emphatically **not** `jsonb` (`M3.43`).
+            //
+            // This said `jsonb`, reasoning that the byte form never had to come
+            // back out because the canonical form was regenerated from the
+            // parsed object. That stopped being true when `D-07` wired the
+            // chain: the content digest is SHA-256 over the canonical bytes, so
+            // those bytes must be reproducible *from storage*.
+            //
+            // `jsonb` reorders keys and inserts whitespace — measured on
+            // PostgreSQL 18, not assumed — so what came back was a different
+            // document that happened to be equivalent, and the digest could not
+            // be recomputed. Canonical means these bytes in this order
+            // (`lib:J9.12`).
+            //
+            // What this gives up is `jsonb` operators and GIN indexing over
+            // content. Real, and unused: the relational columns are this
+            // schema's index and the JSON is never queried as structure
+            // (`M3.20`).
+            ColTy::Json => "text",
             ColTy::InstantUtc => "timestamptz",
             ColTy::Int => "bigint",
             ColTy::Bool => "boolean",

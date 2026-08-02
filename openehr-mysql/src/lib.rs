@@ -35,6 +35,13 @@ impl Dialect for MysqlDialect {
         "MySQL"
     }
 
+    // `ColTy::Json` and the general text arm now spell the same type, and they
+    // stay separate arms (`M3.43`). They coincide for unrelated reasons: one is
+    // "this engine has no reason to bound these", the other is "canonical JSON
+    // must return the bytes it was given". Merging them would delete the second
+    // reason and silently couple the two, so that changing the text arm would
+    // move the JSON column with it — which is how `D-08` happened in reverse.
+    #[allow(clippy::match_same_arms)]
     fn col_sql(&self, ty: ColTy) -> String {
         match ty {
             // Bounded, and the bound is load-bearing: InnoDB cannot index an
@@ -42,7 +49,22 @@ impl Dialect for MysqlDialect {
             // key or part of one.
             ColTy::Id(n) | ColTy::Text(n) => return format!("VARCHAR({n})"),
             ColTy::LongText => "LONGTEXT",
-            ColTy::Json => "JSON",
+            // `LONGTEXT`, not `JSON` (`M3.43`). MySQL's `JSON` is a binary
+            // type that normalises on the way in: it reorders keys and — the
+            // reason this is a defect and not a preference — **rewrote a
+            // magnitude of `1.10` as `1.1`**, measured on MySQL 8.4.
+            //
+            // In openEHR that trailing zero is precision. `1.10 mg` asserts two
+            // decimal places and `1.1 mg` asserts one, so the column was
+            // changing what the record claimed about itself, whether or not
+            // anything hashed it. `lib:J9.13` already forbade it: numbers MUST
+            // NOT be renormalised, measured precision is data.
+            //
+            // Note that `openehr-mariadb` spells this differently and always
+            // round-tripped, because MariaDB's `JSON` is an alias for
+            // `LONGTEXT`. Two engines, one type name, opposite behaviour — see
+            // `D-08`.
+            ColTy::Json => "LONGTEXT",
             // 64 characters: the longest ISO 8601 form this crate accepts is a
             // date-time with fractional seconds and an offset, well under half
             // that. Bounded rather than TEXT so it can be indexed alongside the

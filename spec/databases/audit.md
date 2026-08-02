@@ -261,6 +261,77 @@ these attributes and this store still cannot hold them; remedy 2 — columns, an
 a table or JSON column for attestations — remains the real fix, and needs a
 migration mechanism this project does not have (`O10.14`).
 
+### D-08 — Two engines cannot return the bytes they were given — **High, fixed**
+
+Found while building the tamper-detection test `PR12.12` demands, by asking what
+`ColTy::Json` actually maps to on each engine rather than trusting that a column
+called JSON stores JSON.
+
+**Found.** The chain's content digest is `SHA-256` over the version's canonical
+JSON (`M3.16`, `M3.23`). Canonical means *these bytes, in this order* — keys in
+Unicode-scalar order, no whitespace, numbers as written. `ColTy::Json` mapped to
+a **normalizing** column type on three of six engines, so what came back was not
+what was hashed, and the digest was unverifiable from the database.
+
+Verified against real engines, not from documentation:
+
+| Engine | `ColTy::Json` was | Round-trips? | Observed |
+| --- | --- | --- | --- |
+| SQLite | `TEXT` | yes | — |
+| **PostgreSQL 18** | `jsonb` | **no** | keys reordered, `": "` inserted |
+| **MySQL 8.4** | `JSON` | **no** | keys reordered, **`1.10` → `1.1`** |
+| MariaDB 11.4 | `JSON` | yes | alias for `LONGTEXT` |
+| SQL Server | `nvarchar(max)` | yes | — |
+| Oracle | `CLOB` | yes | — |
+
+Two things make this worse than a digest bug.
+
+**MySQL destroyed a clinical fact.** `1.10` became `1.1`. In openEHR a
+`DV_QUANTITY` magnitude's trailing zero is precision — "1.10 mg" asserts
+two decimal places and "1.1 mg" asserts one. That loss is independent of the
+chain and would have corrupted the record whether or not anything hashed it.
+No digest was needed to make this a defect; a digest is only what made it
+visible.
+
+**MySQL and MariaDB disagreed, and both spell it `JSON`.** These are the two
+crates that `W-01` records as having once been byte-identical copies. The
+cross-dialect guard was widened to catch that, and it did — it proves the two
+now differ. Nothing checked whether the difference was *correct*. A guard that
+asserts two things are not the same says nothing about which of them is right,
+and here MariaDB happened to be right by inheritance while MySQL was wrong.
+
+**The comments recorded the assumption that made it wrong.** All three crates
+carried a variant of "nothing here relies on binary storage, since the canonical
+bytes are regenerated from the parsed object rather than read back from the
+column", citing `J9.12`. That was true when written and `D-03`/`D-07` made it
+false — the chain now hashes bytes that must be reproducible *from storage* —
+and no one revisited the comment, because a comment explaining a decision is not
+a thing that fails.
+
+The citation was wrong twice over. `J9.12` is `lib:J9.12` and was cited
+unqualified against the `db:` tree, which `W0.5` forbids for exactly this reason
+— there is no `db:J9.12`, so the citation resolved to nothing. And `lib:J9.12`
+does not say what was claimed: it *defines* the canonical byte form and says
+nothing about regeneration.
+
+The requirement actually breached was next to it. **`lib:J9.13`: "Numbers MUST
+NOT be renormalised in the canonical form. Measured precision is data."** MySQL
+was renormalising them in the column. The rule was written, correct, and
+unenforced at the only layer that could break it.
+
+**Fixed.** `ColTy::Json` maps to a byte-preserving text type on every engine,
+and `M3.43` now requires it. `SCHEMA_VERSION` is `4`.
+
+The reasoning is the same as `M3.39`–`M3.42`, which forbid storing a digest as
+hexadecimal text: a value whose bytes carry the meaning must not be handed to a
+type whose contract permits reinterpretation. `jsonb` is the right type for a
+document you intend to *query*; the relational columns are this schema's index
+and the JSON is never queried as structure (`M3.20`), so nothing is given up.
+
+**What this cost, stated plainly.** PostgreSQL loses `jsonb` operators and GIN
+indexing over content. That is a real capability and it is not used here, but a
+deployment that reached into `data_json` with `->>` will have to stop.
+
 ### D-03 — Tamper evidence is specified, built, and unused — **Low, fixed**
 
 **Found.** `M3.16` requires a tamper-evident chain over committed versions. The

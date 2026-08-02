@@ -109,13 +109,15 @@ INSERT INTO openehr_versioned_object VALUES ('vo1','e1','VERSIONED_COMPOSITION',
 INSERT INTO openehr_contribution VALUES ('c1','e1','249','sys','Committer','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
 INSERT INTO openehr_version (uid, versioned_object_uid, creating_system_id, trunk_version,
   lifecycle_state_code, is_deleted, contribution_uid, audit_system_id,
-  audit_change_type_code, audit_time_committed_text,
+  audit_change_type_code, audit_time_committed_text, data_json,
   chain_previous, chain_content, chain_digest)
 VALUES ('vo1::sys::1','vo1','sys',1,'532',false,'c1','sys','249','2026-01-01T00:00:00Z',
+  '{"z":1,"a":2,"magnitude":1.10,"dup":"first"}',
   decode(repeat('00',32),'hex'), decode(repeat('11',32),'hex'), decode(repeat('22',32),'hex'));
 SEED
   }
   rows() { pg -Atc "SELECT count(*) FROM openehr_version"; }
+  json_out() { pg -Atc "SELECT data_json FROM openehr_version WHERE uid = 'vo1::sys::1'"; }
   refuse() { pg -c "$1" 2>&1 | grep -c 'append-only' || true; }
   ;;
 mysql)
@@ -146,13 +148,15 @@ INSERT INTO openehr_versioned_object VALUES ('vo1','e1','VERSIONED_COMPOSITION',
 INSERT INTO openehr_contribution VALUES ('c1','e1','249','sys','Committer','2026-01-01T00:00:00Z','2026-01-01 00:00:00');
 INSERT INTO openehr_version (uid, versioned_object_uid, creating_system_id, trunk_version,
   lifecycle_state_code, is_deleted, contribution_uid, audit_system_id,
-  audit_change_type_code, audit_time_committed_text,
+  audit_change_type_code, audit_time_committed_text, data_json,
   chain_previous, chain_content, chain_digest)
 VALUES ('vo1::sys::1','vo1','sys',1,'532',0,'c1','sys','249','2026-01-01T00:00:00Z',
+  '{"z":1,"a":2,"magnitude":1.10,"dup":"first"}',
   UNHEX(REPEAT('00',32)), UNHEX(REPEAT('11',32)), UNHEX(REPEAT('22',32)));
 SEED
   }
   rows() { my -Nse "SELECT count(*) FROM openehr_version"; }
+  json_out() { my -Nse "SELECT data_json FROM openehr_version WHERE uid = 'vo1::sys::1'"; }
   refuse() { my -e "$1" | grep -c 'append-only' || true; }
   ;;
 mariadb)
@@ -182,13 +186,15 @@ INSERT INTO openehr_versioned_object VALUES ('vo1','e1','VERSIONED_COMPOSITION',
 INSERT INTO openehr_contribution VALUES ('c1','e1','249','sys','Committer','2026-01-01T00:00:00Z','2026-01-01 00:00:00');
 INSERT INTO openehr_version (uid, versioned_object_uid, creating_system_id, trunk_version,
   lifecycle_state_code, is_deleted, contribution_uid, audit_system_id,
-  audit_change_type_code, audit_time_committed_text,
+  audit_change_type_code, audit_time_committed_text, data_json,
   chain_previous, chain_content, chain_digest)
 VALUES ('vo1::sys::1','vo1','sys',1,'532',0,'c1','sys','249','2026-01-01T00:00:00Z',
+  '{"z":1,"a":2,"magnitude":1.10,"dup":"first"}',
   UNHEX(REPEAT('00',32)), UNHEX(REPEAT('11',32)), UNHEX(REPEAT('22',32)));
 SEED
   }
   rows() { my -Nse "SELECT count(*) FROM openehr_version"; }
+  json_out() { my -Nse "SELECT data_json FROM openehr_version WHERE uid = 'vo1::sys::1'"; }
   refuse() { my -e "$1" | grep -c 'append-only' || true; }
   ;;
 *)
@@ -208,6 +214,26 @@ printf 'idempotent '
 
 seed
 [ "$(rows | tr -d '[:space:]')" = "1" ] || fail "seed row absent; enforcement below would prove nothing"
+
+# M3.43: canonical JSON must come back as the bytes it went in as.
+#
+# The chain's content digest is SHA-256 over those bytes (M3.16), so a column
+# that returns an equivalent document returns a value the digest cannot be
+# recomputed from. The probe is built to fail loudly against a normalizing type:
+# the keys are deliberately not sorted, and the magnitude carries a trailing
+# zero that openEHR treats as precision (lib:J9.13).
+#
+# This is the check that does not depend on a list of bad type names. The
+# denylist in `conformance::check_dialect` catches `jsonb` and `json` at
+# `cargo test`; this catches whatever the engine actually does. D-08 was found
+# because `jsonb` and MySQL's `JSON` were both in use and neither round-tripped
+# — MySQL rewrote 1.10 as 1.1.
+JSON_IN='{"z":1,"a":2,"magnitude":1.10,"dup":"first"}'
+JSON_OUT=$(json_out)
+[ "$JSON_OUT" = "$JSON_IN" ] || fail "canonical JSON did not round-trip (M3.43, D-08)
+  in:  $JSON_IN
+  out: $JSON_OUT"
+printf 'json byte-exact '
 
 # A text column, not `is_deleted`: PostgreSQL rejects `is_deleted = 1` as a type
 # error at plan time, before any trigger fires, so the refusal counted would

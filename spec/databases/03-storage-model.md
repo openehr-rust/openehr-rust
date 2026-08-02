@@ -294,6 +294,32 @@ here rather than per use.
   engine can express that, so a wrong-length value is rejected by the column
   rather than discovered during comparison.
 
+- **M3.43** *(added 2026-08-02)* Canonical JSON MUST be stored in a column that
+  returns the bytes it was given. A store MUST NOT use a **normalizing** JSON
+  type — `jsonb`, MySQL's `JSON`, or any type whose contract permits reordering
+  keys, altering whitespace, or rewriting numbers.
+
+  This is `M3.40` one level up. There the objection was to handing a digest to a
+  type that reinterprets it; here it is to handing the *thing the digest covers*
+  to a type that reinterprets it. Canonical means these bytes in this order
+  (`M3.23`), so a column that returns an equivalent document returns a different
+  record, and the content digest of `M3.16` cannot be reproduced from storage.
+
+  Two engines were doing exactly this, and one of them lost a clinical fact
+  rather than merely a digest: MySQL rewrote a magnitude of `1.10` as `1.1`,
+  which in openEHR changes what the value asserts about its own precision. That
+  is a corruption whether or not anything hashes it. See
+  [`audit.md`](audit.md) **D-08** for the measurements.
+
+  What this gives up is real and small: `jsonb` operators and GIN indexing over
+  content. The relational columns are this schema's index and the JSON is never
+  queried as structure (`M3.20`), so nothing the design uses is lost.
+
+  A dialect MUST NOT satisfy this by accident. MariaDB's `JSON` round-trips
+  because it is an alias for `LONGTEXT`, which is a property of today's MariaDB
+  and not a promise to this schema; it spells the type `LONGTEXT` so that the
+  column's declared contract is the one relied on.
+
 - **M3.42** Comparing digests MUST be a byte-equality test on the full 32 bytes.
   A digest match alone MUST NOT be treated as proof the underlying values are
   equal: it is one collision away from returning another patient's record, and

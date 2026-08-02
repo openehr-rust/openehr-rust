@@ -12,7 +12,7 @@ it should be a deliberate, documented agreement and not a surprise.
 | `Id(255)` | `text` | `TEXT` | `VARCHAR(255)` | `VARCHAR(255)` | `nvarchar(255)` | `VARCHAR2(255 CHAR)` |
 | `Text(255)` | `text` | `TEXT` | `VARCHAR(255)` | `VARCHAR(255)` | `nvarchar(255)` | `VARCHAR2(255 CHAR)` |
 | `LongText` | `text` | `TEXT` | `LONGTEXT` | `LONGTEXT` | `nvarchar(max)` | `CLOB` |
-| `Json` | `jsonb` | `TEXT` | `JSON` | `JSON` | `nvarchar(max)` | `CLOB` |
+| `Json` | `text` | `TEXT` | `LONGTEXT` | `LONGTEXT` | `nvarchar(max)` | `CLOB` |
 | `Instant` | `text` | `TEXT` | `VARCHAR(64)` | `VARCHAR(64)` | `nvarchar(64)` | `VARCHAR2(64 CHAR)` |
 | `InstantUtc` | `timestamptz` | `INTEGER` | `DATETIME(6)` | `DATETIME(6)` | `datetimeoffset(7)` | `TIMESTAMP WITH TIME ZONE` |
 | `Int` | `bigint` | `INTEGER` | `BIGINT` | `BIGINT` | `bigint` | `NUMBER(19)` |

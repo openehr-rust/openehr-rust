@@ -53,6 +53,13 @@ impl Dialect for MariadbDialect {
         "MariaDB"
     }
 
+    // `ColTy::Json` and the general text arm now spell the same type, and they
+    // stay separate arms (`M3.43`). They coincide for unrelated reasons: one is
+    // "this engine has no reason to bound these", the other is "canonical JSON
+    // must return the bytes it was given". Merging them would delete the second
+    // reason and silently couple the two, so that changing the text arm would
+    // move the JSON column with it — which is how `D-08` happened in reverse.
+    #[allow(clippy::match_same_arms)]
     fn col_sql(&self, ty: ColTy) -> String {
         match ty {
             // Bounded, and the bound is load-bearing: InnoDB cannot index an
@@ -60,13 +67,20 @@ impl Dialect for MariadbDialect {
             // key or part of one.
             ColTy::Id(n) | ColTy::Text(n) => return format!("VARCHAR({n})"),
             ColTy::LongText => "LONGTEXT",
-            // `MariaDB`'s `JSON` is an alias for `LONGTEXT`, not a distinct
-            // binary type as in `MySQL`. The spelling is kept because it
-            // documents intent and because `json_valid()` and the `JSON_*`
-            // functions work against it; nothing here relies on binary storage,
-            // since the canonical bytes are regenerated from the parsed object
-            // rather than read back from the column.
-            ColTy::Json => "JSON",
+            // `LONGTEXT`, spelled out rather than written `JSON` (`M3.43`).
+            //
+            // `MariaDB`'s `JSON` is an alias for `LONGTEXT`, so this column
+            // always round-tripped canonical bytes and this change alters no
+            // stored value. The spelling changes because the old one was right
+            // *by inheritance*: it relied on a property of today's MariaDB
+            // rather than on the column's declared contract, and the identical
+            // spelling in `openehr-mysql` meant the opposite thing (`D-08`).
+            //
+            // Canonical JSON must come back as the bytes it went in as, because
+            // the chain's content digest is taken over them (`M3.16`). A type
+            // whose contract permits normalisation must not hold it, even where
+            // this release of this engine happens not to normalise.
+            ColTy::Json => "LONGTEXT",
             // 64 characters: the longest ISO 8601 form this crate accepts is a
             // date-time with fractional seconds and an offset, well under half
             // that. Bounded rather than TEXT so it can be indexed alongside the

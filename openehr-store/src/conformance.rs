@@ -190,10 +190,7 @@ pub fn run<S: Store>(store: &mut S) -> Result<()> {
     // built `ehr_status` and `ehr_access` with type `"EHR"`, the store read them
     // back as `VERSIONED_EHR_STATUS` and `VERSIONED_EHR_ACCESS`, and the
     // reference type changed silently on every round trip.
-    assert_eq!(
-        round_tripped, ehr,
-        "{engine}: an EHR did not round-trip"
-    );
+    assert_eq!(round_tripped, ehr, "{engine}: an EHR did not round-trip");
 
     // A second create must conflict rather than overwrite. Overwriting an EHR
     // silently rebases every version in it.
@@ -422,6 +419,30 @@ pub fn check_dialect<D: Dialect + ?Sized>(dialect: &D) {
         "{name}: unexpected statement count"
     );
 
+    // `M3.43`: canonical JSON must be held in a column that returns the bytes it
+    // was given. The chain's content digest is SHA-256 over those bytes
+    // (`M3.16`), so an engine that reorders keys or rewrites numbers makes the
+    // digest unrecomputable from storage — and MySQL's `JSON` did worse than
+    // that, rewriting a magnitude of `1.10` as `1.1` and losing the precision
+    // the value asserts (`D-08`, `lib:J9.13`).
+    //
+    // **This is a denylist, and a denylist is only as wide as its list.** It
+    // catches the two spellings that were actually wrong and any engine that
+    // later adopts them; it cannot catch a normalizing type nobody here has
+    // heard of. The check that does not depend on a list is the byte round-trip
+    // in `scripts/verify-schema.sh`, which puts canonical JSON into a real
+    // server and compares what comes back. This exists so the mistake is caught
+    // at `cargo test` rather than only where a container runs.
+    let json_column = dialect.col_sql(crate::ColTy::Json).to_ascii_lowercase();
+    for normalizing in ["jsonb", "json"] {
+        assert_ne!(
+            json_column, normalizing,
+            "{name}: ColTy::Json is `{json_column}`, a type whose contract permits \
+             reordering keys or rewriting numbers; canonical JSON must round-trip \
+             byte for byte (M3.43, D-08)"
+        );
+    }
+
     // A dialect that declares `Guard` must actually wrap the statement. The
     // default `guard` returns its input unchanged, so a dialect could declare a
     // guard, inherit the default, and emit bare non-idempotent DDL that reads as
@@ -593,7 +614,8 @@ pub fn check_quote<D: Dialect + ?Sized>(dialect: &D, identifier: &str) {
         unescaped.push(c);
     }
     assert_eq!(
-        unescaped, identifier,
+        unescaped,
+        identifier,
         "{}: quote({identifier:?}) does not round-trip",
         dialect.name()
     );

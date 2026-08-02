@@ -11,8 +11,8 @@
 use crate::error::Result;
 use openehr::base::iso8601;
 use openehr::rm::common::{Locatable as _, PartyProxy, Version};
-use openehr::security::audit_chain::{Chain, ChainKey};
 use openehr::rm::ehr::Composition;
+use openehr::security::audit_chain::{Chain, ChainKey};
 use serde::{Deserialize, Serialize};
 
 /// An ISO 8601 instant as stored: the exact text, plus a derived UTC value.
@@ -286,13 +286,16 @@ mod tests {
     use openehr::rm::ehr::Composition;
     use openehr::terminology::{audit_change_type, version_lifecycle_state};
 
-    fn version(build: impl FnOnce(OriginalVersion<Composition>) -> OriginalVersion<Composition>)
-    -> Version<Composition> {
+    fn version(
+        build: impl FnOnce(OriginalVersion<Composition>) -> OriginalVersion<Composition>,
+    ) -> Version<Composition> {
         let audit = AuditDetails::new(
             "ehr1.example.org",
             DvDateTime::new("2026-08-01T09:00:00Z").expect("literal"),
             audit_change_type::CREATION,
-            PartyIdentified::named("Dr A Nurse").expect("literal").into(),
+            PartyIdentified::named("Dr A Nurse")
+                .expect("literal")
+                .into(),
         )
         .expect("literal");
         let original = OriginalVersion::new(
@@ -320,7 +323,9 @@ mod tests {
             "ehr1.example.org",
             DvDateTime::new("2026-08-01T09:00:00Z").expect("literal"),
             audit_change_type::AMENDMENT,
-            PartyIdentified::named("Dr A Nurse").expect("literal").into(),
+            PartyIdentified::named("Dr A Nurse")
+                .expect("literal")
+                .into(),
         )
         .expect("literal")
         .with_description(
@@ -349,7 +354,10 @@ mod tests {
             row.audit_description.as_deref(),
             Some("corrected after telephone call with the lab"),
         );
-        assert_eq!(row.signature.as_deref(), Some("-----BEGIN PGP SIGNATURE-----"));
+        assert_eq!(
+            row.signature.as_deref(),
+            Some("-----BEGIN PGP SIGNATURE-----")
+        );
     }
 
     /// Absent is `NULL`, not `[]`.
@@ -384,9 +392,8 @@ mod tests {
     #[test]
     fn a_successor_links_to_its_predecessor() {
         let first = VersionRow::project(&version(|v| v), "c1", None, None).expect("projects");
-        let second =
-            VersionRow::project(&version(|v| v), "c1", Some(first.chain.digest), None)
-                .expect("projects");
+        let second = VersionRow::project(&version(|v| v), "c1", Some(first.chain.digest), None)
+            .expect("projects");
 
         assert_eq!(second.chain.previous, first.chain.digest);
         assert_eq!(

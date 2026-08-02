@@ -20,9 +20,18 @@ fn the_dialect_is_self_consistent() {
 #[test]
 fn the_ddl_is_this_engine_and_not_another() {
     let sql = ddl_script(&PostgresqlDialect);
+    // Was `assert!(sql.contains("jsonb"))` until `D-08`. `jsonb` reorders keys
+    // and reinserts whitespace — measured on PostgreSQL 18 — so the bytes the
+    // content digest was taken over cannot be read back out (`M3.43`).
     assert!(
-        sql.contains("jsonb"),
-        "PostgreSQL stores canonical JSON as jsonb"
+        !sql.contains("jsonb"),
+        "jsonb normalises canonical JSON, so the chain digest cannot be \
+         recomputed from storage (M3.43, D-08)"
+    );
+    assert!(
+        sql.lines()
+            .any(|line| line.contains("data_json") && line.contains("text")),
+        "canonical JSON must be held in a byte-preserving text column"
     );
     assert!(sql.contains("timestamptz"));
     assert!(!sql.contains("VARCHAR2"), "that is Oracle");

@@ -511,7 +511,12 @@ pub const COMPOSITION_INDEX: Table = Table {
 /// returns `Ok`, and the first commit fails on a column that is not there —
 /// success followed by an unexplained failure, which is the shape this project
 /// refuses everywhere else.
-pub const SCHEMA_VERSION: i64 = 3;
+///
+/// `4` since 2026-08-02: `ColTy::Json` moved off normalizing JSON column types
+/// (`M3.43`, `D-08`). No column was added or removed, but on `PostgreSQL` and
+/// `MySQL` the *type* changed, and a database built under `3` returns bytes the
+/// content digest cannot be recomputed from.
+pub const SCHEMA_VERSION: i64 = 4;
 
 /// The `schema_version` table: what shape this database is in.
 ///
