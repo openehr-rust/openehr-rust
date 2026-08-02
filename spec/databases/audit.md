@@ -302,11 +302,41 @@ from openEHR. Two reviews against primary sources have since run:
   checked. RM 1.1.0 confirmed as the current release, so `S1.2` is correct. One
   **High** finding: `D-07`.
 
+- **The RM invariants**, also from the BMM. The earlier note here said these
+  would need the published PDF because the BMM only *names* them. That was
+  wrong: the BMM carries the **expressions** —
+  `Owner_id_valid: owner_id.value.is_equal (uid.object_id.value)` — for 68 of
+  155 classes. No PDF was needed.
+
+  Nineteen invariants across the nine classes this layer depends on were checked
+  against the code. The result is not a simple pass count, because three
+  categories behave differently:
+
+  | Category | Invariants | Status |
+  | --- | --- | --- |
+  | Enforced, named in the code | `Lifecycle_state_valid`, `System_id_valid`, `Change_type_valid`, `Category_validity`, `Is_archetype_root`, `Setting_valid`, `Items_valid`, `Reason_valid` | ✅ |
+  | **Vacuous in Rust** | `Attestations_valid`, `Other_input_version_uids_valid`, `Participations_validity`, `Items_valid` (partly) — all of the form `X /= Void implies not X.is_empty` | not applicable: Rust has no Void-versus-empty distinction for a `Vec`, so an empty vector *is* the absent case and the rule cannot be violated |
+  | **Unenforced and undeclared** | `Territory_valid`, `Language_valid` | **`lib:A-19`** |
+
+  `A-19` is the finding. `COMPOSITION` requires `territory` to be a member of
+  `Code_set_id_countries` and `language` of `Code_set_id_languages`. The crate
+  checks `CODE_PHRASE` well-formedness only, so `ISO_639-1::zz` is accepted
+  although `zz` is not a language. These are code sets **openEHR names**, so
+  `lib:S1.10` — which excludes external terminologies like SNOMED CT — does not
+  cover them.
+
+  Now declared as `lib:S1.18` with the reason: both code sets are mutable, and a
+  table compiled into a library is wrong from the day a country changes.
+  Validating against a stale copy would reject conformant data, which the
+  crate's own `D3.5` reasoning calls the worse failure. Enforcement stays open.
+
+  Also noted, not findings: `VERSION.owner_id` is a derived function in the BMM
+  and the crate does not expose it, so `Owner_id_valid` has nothing to violate;
+  and `VERSIONED_OBJECT.Uid_validity` (`extension.is_empty`) is satisfied by
+  `HierObjectId` construction, which rejects an empty extension outright.
+
 What remains unreviewed is the rest of the RM — the data types, data structures,
-and EHR packages — and every *invariant*, which the BMM names (`Owner_id_valid`,
-`Preceding_version_uid_validity`, `Change_type_valid`, …) without stating. Those
-need the published PDF, and they are where the library's own four
-primary-source findings came from.
+and demographic packages — and the other 49 classes carrying invariants.
 
 **Found.** Every numbered section in this directory was imported from a FHIR
 specification and text-substituted, and §2 and §3 therefore required a **shredded

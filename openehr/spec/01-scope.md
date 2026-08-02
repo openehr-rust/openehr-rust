@@ -76,3 +76,29 @@ reader deciding whether to use this crate needs the reason more than the fact.
 - **S1.17** Where the current terminology disagrees with the older
   `openEHR/terminology` repository, the current one governs, and the divergence
   MUST be recorded where the codes are defined (see `src/terminology.rs`).
+
+- **S1.18** *Departure from `COMPOSITION.Territory_valid` and
+  `COMPOSITION.Language_valid`.* The crate MUST NOT validate `territory` against
+  ISO 3166-1 or `language` against ISO 639-1. It checks `CODE_PHRASE`
+  well-formedness only (`D3.5`), so `ISO_639-1::zz` is accepted although `zz` is
+  not a language.
+
+  **What openEHR requires.** RM 1.1.0 states both as invariants on `COMPOSITION`:
+  `code_set(Code_set_id_countries).has_code(territory)` and
+  `code_set(Code_set_id_languages).has_code(language)`. These are code sets
+  openEHR names, so `S1.10` — which excludes *external* terminologies like
+  SNOMED CT — does not cover them. This is a genuine departure and is declared
+  here because an undeclared one is a defect rather than a decision (`C0.12`,
+  `C0.14`).
+
+  **What survives.** Structural validity: the code is well-formed and names the
+  right terminology id. What is lost is membership — a caller may store a
+  syntactically valid code that denotes no country or language, and nothing here
+  will say so.
+
+  **Why declared rather than implemented.** Both code sets are closed, small, and
+  *mutable*: ISO 3166-1 gains and retires codes, and a table compiled into a
+  library is wrong from the day a country changes. Validating against a stale
+  copy would reject conformant data, which `D3.5`'s own reasoning calls the worse
+  failure. A deployment that needs the check should do it where the tables can be
+  updated. Recorded as `A-19`; implementing it remains open.
