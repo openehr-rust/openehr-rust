@@ -1,0 +1,57 @@
+# An HTTP service over the openEHR store.
+#
+# This crate is why `db:S1.7` was amended. The *core* still implements no
+# service: `openehr` and `openehr-store` have no HTTP, no runtime, and no
+# server, and that boundary is what keeps them embeddable. The service lives
+# out here, depends inward, and can be deleted without touching either.
+[package]
+name = "openehr-loco"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
+description = "openEHR HTTP service built on Loco, Axum, and Tokio"
+keywords = ["openehr", "ehr", "healthcare", "axum", "loco"]
+categories = ["web-programming::http-server"]
+repository = "https://github.com/openehr-rust/openehr-rust"
+readme = "README.md"
+# Not published while it is at conformance level nothing: no live run, no
+# tests against a served request. `W16.14` forbids publishing above a level,
+# and this crate has not earned one yet.
+publish = false
+
+[dependencies]
+# `default-features = false` is the load-bearing line.
+#
+# Loco's defaults include `with-db`, which pulls SeaORM, sea-orm-migration, and
+# sqlx. This repository already has a persistence layer — `openehr-store` and
+# its six dialects — built on a storage model that is deliberately *not*
+# shredded (`db:S1.5`). Taking Loco's would mean two persistence layers with
+# two ideas of what a record is, and the one Loco brings does not know what a
+# COMPOSITION is.
+#
+# So: no `with-db`, no `worker` (no queue), no `auth`. Authentication is the
+# deployment's (`db:S1.8`), and a JWT layer here would imply this service
+# establishes identity, which it does not.
+loco-rs = { version = "1.0.1", default-features = false, features = ["cli"] }
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+openehr = { path = "../openehr", version = "0.2.0" }
+openehr-store = { path = "../openehr-store", version = "0.2.0" }
+openehr-sqlite = { path = "../openehr-sqlite", version = "0.2.0" }
+# Loco's `Hooks` is an `#[async_trait]` trait, so implementing it needs the
+# same macro.
+async-trait = "0.1"
+
+[lints.rust]
+missing_docs = "deny"
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+
+[workspace]
