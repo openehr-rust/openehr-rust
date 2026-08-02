@@ -7,7 +7,7 @@ Not published, and it sits **outside the conformance ladder** — every rung the
 is defined by DDL, a `Store` implementation, or a database server, and this
 crate is none of those. So it states evidence instead of a level (`W0.32`).
 
-**Demonstrated.** 28 tests. `tests/http.rs` serves real requests through Loco's
+**Demonstrated.** 35 tests. `tests/http.rs` serves real requests through Loco's
 own router: `410` for a deleted composition against `404` for one that never
 existed, the history still readable behind that `410`, `401` on every clinical
 route without a token and an identical body whether or not the record exists,
@@ -16,7 +16,12 @@ the weak `ETag`, `_count`/`_offset`/`total` and the paging cap, `501` on
 first two were mutation-checked — the branch was disabled and the test went red.
 `src/auth.rs` covers key rotation, expiry, audience binding, the implicit
 assertion, a token naming nobody, a `v4.local` token offered as `v4.public`,
-and spoofed identity headers.
+and spoofed identity headers. `tests/tasks.rs` executes the **built binary** and
+reads its output.
+
+The server has also been booted by hand and answered `curl`: `/metadata` served,
+`401` with `WWW-Authenticate: Bearer` on a clinical route, and a refusal to start
+at all when `OPENEHR_PASETO_PUBLIC_KEYS` was wrong.
 
 **Not demonstrated.** No run against a real deployment, no concurrency
 behaviour, no TLS, and no engine other than SQLite.
@@ -92,14 +97,20 @@ inability. Commit a deleted version instead.
 ## Shape
 
 ```
+config/            development.yaml, test.yaml
 src/
-  app.rs           Hooks: routes, and before_run
+  main.rs          the binary
+  app.rs           Hooks: routes, before_run, and open_store
   auth.rs          PASETO v4.public verification
   controllers/     mod.rs owns the status-code mapping
   views.rs         what goes over the wire
-  initializers.rs
-  tasks.rs         checkpoint, as a task and not an endpoint
+  tasks.rs         checkpoint and verify — tasks, not endpoints
 ```
+
+There is no `initializers.rs`. It held one initializer whose `after_routes`
+returned the router unchanged while its doc comment described echoing a request
+id. Loco's own `request_id` middleware does that, it is switched on in
+`config/development.yaml`, and the header is visible on every response.
 
 **Stores are opened in `before_run`, not `boot`.** `boot` is not on the path
 `start` takes; initialising there left every request answering `503` while the
@@ -246,13 +257,47 @@ and give this service the public half:
 OPENEHR_SQLITE_PATH=openehr.sqlite3 \
 OPENEHR_PASETO_PUBLIC_KEYS=k4.public.… \
 OPENEHR_PASETO_AUDIENCE=openehr-loco \
-  cargo run
+  cargo run -- start
 ```
 
 ```sh
 curl -H 'Authorization: Bearer v4.public.…' \
   http://localhost:5150/openehr/v1/ehr/{ehr_id}
 ```
+
+This section said `cargo run` from the day the crate was written, and there was
+no `[[bin]]` target and no `config/`. It answered *"a bin target must be
+available"*, and nothing noticed because the tests built the router directly and
+never went near `boot`. Both now exist, and `tests/tasks.rs` executes the binary
+so the claim stays true.
+
+## Tasks
+
+```sh
+cargo loco task checkpoint container:<versioned-object-uid> [path:<db>]
+cargo loco task verify     container:<versioned-object-uid> [path:<db>]
+```
+
+`checkpoint` prints a count, a head digest, and the head version's identifier,
+and no clinical content — so it can be sent somewhere clinical data may not.
+That is the only arrangement in which it is worth anything: a checkpoint stored
+beside the data it attests to can be rewritten by whoever truncated the history
+(`M3.16c`).
+
+`verify` checks more than the chain links. It recomputes each version's content
+digest from the stored bytes, which is what catches a document edited in place
+while its chain columns were left alone (`M3.16d`). **It exits non-zero when the
+history is not intact**, including when it verified nothing — a sweep against a
+mistyped identifier must not report success for having checked an empty
+container.
+
+Both are tasks rather than endpoints. A verification endpoint answering "all
+fine" is only as trustworthy as the process serving it, and an attacker who has
+reached the database is one step from the process.
+
+`path:` names a database explicitly, which is how a **restored backup** gets
+checked — the copy an operator most wants verified, and never the one the
+running service has open.
 
 ## Licence
 

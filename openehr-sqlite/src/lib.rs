@@ -41,3 +41,16 @@ mod store;
 
 pub use dialect::SqliteDialect;
 pub use store::SqliteStore;
+
+/// The driver this crate is built on, re-exported.
+///
+/// `libsqlite3-sys` declares `links = "sqlite3"`, so exactly one version of it
+/// may exist in a dependency graph. A dependent that named `rusqlite` itself
+/// would have to keep its version constraint in step with this crate's or fail
+/// to resolve — a coupling that is invisible until it breaks, and that breaks
+/// at the next bump rather than at the change that caused it.
+///
+/// Re-exporting removes the choice. A caller needing raw SQL — to verify a
+/// backup, or to demonstrate that tampering is detected — reaches it through
+/// here and cannot mismatch.
+pub use rusqlite;

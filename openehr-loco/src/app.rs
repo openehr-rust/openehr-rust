@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use loco_rs::{
     Result,
-    app::{AppContext, Hooks, Initializer},
+    app::{AppContext, Hooks},
     bgworker::Queue,
     boot::{BootResult, StartMode, create_app},
     config::Config,
@@ -25,6 +25,44 @@ use crate::auth::{PasetoVerifier, SharedVerifier};
 /// engine: `SQLite` serialises writers anyway, and pretending otherwise with a
 /// pool would add contention somewhere less visible.
 pub type SharedOpenehrStore = Arc<Mutex<SqliteStore>>;
+
+/// Opens and installs the store.
+///
+/// Shared by [`Hooks::before_run`] and by [`crate::tasks`], because **a task
+/// does not get `before_run`** — `cli::main` builds the context and calls
+/// `run_task` directly, so a task reading the store out of `shared_store`
+/// finds nothing. One opener rather than two means the path and the install
+/// cannot drift between the server and the tools that inspect what it wrote.
+///
+/// # Errors
+///
+/// Returns [`loco_rs::Error::Message`] if the file cannot be opened or the
+/// schema cannot be installed — including when the database was built under a
+/// different schema version, which is refused rather than half-served
+/// (`db:O10.15`).
+pub fn open_store() -> Result<SqliteStore> {
+    open_store_at(std::path::Path::new(
+        &std::env::var("OPENEHR_SQLITE_PATH").unwrap_or_else(|_| "openehr.sqlite3".to_owned()),
+    ))
+}
+
+/// Opens and installs the store at an explicit path.
+///
+/// Separate from [`open_store`] so that a caller can name the database instead
+/// of setting a process-wide variable. That is what a task needs to verify a
+/// **restored backup** — the copy an operator most wants checked, and the one
+/// that is never at the path the running service uses (`db:O10.19`).
+///
+/// # Errors
+///
+/// As [`open_store`].
+pub fn open_store_at(path: &std::path::Path) -> Result<SqliteStore> {
+    let mut store = SqliteStore::open(path).map_err(|e| loco_rs::Error::Message(e.to_string()))?;
+    store
+        .install()
+        .map_err(|e| loco_rs::Error::Message(e.to_string()))?;
+    Ok(store)
+}
 
 /// The application.
 pub struct App;
@@ -79,20 +117,9 @@ impl Hooks for App {
         ctx.shared_store
             .insert::<SharedVerifier>(Arc::new(verifier));
 
-        let mut store = SqliteStore::open(std::path::Path::new(
-            &std::env::var("OPENEHR_SQLITE_PATH").unwrap_or_else(|_| "openehr.sqlite3".to_owned()),
-        ))
-        .map_err(|e| loco_rs::Error::Message(e.to_string()))?;
-        store
-            .install()
-            .map_err(|e| loco_rs::Error::Message(e.to_string()))?;
         ctx.shared_store
-            .insert::<SharedOpenehrStore>(Arc::new(Mutex::new(store)));
+            .insert::<SharedOpenehrStore>(Arc::new(Mutex::new(open_store()?)));
         Ok(())
-    }
-
-    async fn initializers(_ctx: &AppContext) -> Result<Vec<Box<dyn Initializer>>> {
-        Ok(vec![Box::new(crate::initializers::RequestIdInitializer)])
     }
 
     async fn connect_workers(_ctx: &AppContext, _queue: &Queue) -> Result<()> {
@@ -103,6 +130,7 @@ impl Hooks for App {
 
     fn register_tasks(tasks: &mut Tasks) {
         tasks.register(crate::tasks::Checkpoint);
+        tasks.register(crate::tasks::Verify);
     }
 }
 

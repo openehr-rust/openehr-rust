@@ -1,0 +1,45 @@
+# Development configuration.
+#
+# This file did not exist until 2026-08-02, which meant `cargo run` could not
+# boot even after a binary was added. See `src/main.rs`.
+
+logger:
+  enable: true
+  pretty_backtrace: true
+  level: info
+  format: compact
+
+server:
+  port: 5150
+  binding: localhost
+  host: http://localhost
+  middlewares:
+    # Loco's own, rather than the hand-written initializer this crate used to
+    # carry. That one had an empty `after_routes` and echoed nothing, while its
+    # doc comment described behaviour it did not have.
+    request_id:
+      enable: true
+    catch_panic:
+      enable: true
+    logger:
+      enable: true
+    timeout_request:
+      enable: true
+      timeout: 10000
+    limit_payload:
+      enable: true
+      # Compositions are documents and some are large, but not this large. An
+      # unbounded body is the same class of mistake as an uncapped `_count`.
+      body_limit: 8mb
+    # `etag` is Loco's If-None-Match handling over response bodies. It is off
+    # because this service issues its own **weak** ETag naming the version
+    # (`db:H5.9`), and a second, strong, body-derived tag on the same response
+    # would mean two ETags disagreeing about what "unchanged" means.
+    etag:
+      enable: false
+    # No `cors` block. A default-permissive CORS on a clinical record service
+    # would let any origin a clinician's browser visits read the record with
+    # their credentials. A deployment that needs it configures it deliberately.
+
+workers:
+  mode: ForegroundBlocking

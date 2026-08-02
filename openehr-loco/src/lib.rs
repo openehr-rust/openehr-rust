@@ -14,7 +14,9 @@
 //! no identity header standing in for a token, the weak `ETag`, paging and its
 //! cap, `501` on `DELETE`, and `503` rather than `404` when the store is
 //! absent. The `410`, the auth gate, and the header prohibition were each
-//! mutation-checked. [`auth`] is covered separately.
+//! mutation-checked. [`auth`] is covered separately, and `tests/tasks.rs`
+//! executes the built binary so that [`tasks`] cannot quietly become the empty
+//! body it used to be.
 //!
 //! **Not shown.** No real deployment, no concurrency, no TLS, no engine but
 //! `SQLite`. Not published.
@@ -72,6 +74,5 @@
 pub mod app;
 pub mod auth;
 pub mod controllers;
-pub mod initializers;
 pub mod tasks;
 pub mod views;

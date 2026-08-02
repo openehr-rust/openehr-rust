@@ -65,6 +65,13 @@ unsafe_code = "forbid"
 pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
+# `loco_rs::Error` is 128 bytes, so every fallible function in this crate trips
+# `result_large_err`. Boxing it would make these signatures disagree with every
+# `Hooks` and `Task` method they sit beside, which is a worse readability cost
+# than the one the lint is warning about — and the error type is not ours to
+# shrink. Allowed at the crate level rather than sprinkled, so the reason is
+# recorded once instead of six times.
+result_large_err = "allow"
 
 [workspace]
 
