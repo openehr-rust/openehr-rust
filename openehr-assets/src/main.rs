@@ -29,7 +29,7 @@
 //! fails CI rather than leaving a lie in the tree.
 
 use openehr_store::{ColTy, Dialect, TABLES, ddl_script};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -1033,6 +1033,42 @@ fn invariant_coverage(root: &Path) -> Asset {
     // register out of the spec means the report cannot drift from it.
     let declared =
         std::fs::read_to_string(root.join("openehr/spec/10-validation.md")).unwrap_or_default();
+
+    // `lib:L10.11`: the same for the other direction. An openEHR invariant the
+    // crate does not enforce must be declared, and the declaration must match
+    // what this report found.
+    //
+    // Both directions fail the build. A rule quietly abandoned appears here and
+    // not in the register; a rule quietly enforced appears in the register and
+    // not here. Either way the two documents disagree, and the one a reader
+    // trusts is whichever they opened.
+    let registered: BTreeSet<(String, String)> = declared
+        .lines()
+        .skip_while(|line| !line.starts_with("### Unenforced openEHR checks"))
+        .take_while(|line| !line.starts_with("### Crate-added checks"))
+        .filter_map(|line| {
+            let mut cells = line.split('|').map(str::trim);
+            let (class, invariant) = (cells.nth(1)?, cells.next()?);
+            let unquote = |c: &str| c.trim_matches('`').to_owned();
+            (class.starts_with('`') && invariant.starts_with('`'))
+                .then(|| (unquote(class), unquote(invariant)))
+        })
+        .collect();
+    let found: BTreeSet<(String, String)> = unnamed
+        .iter()
+        .filter(|(c, n)| dispositioned[&(c.as_str(), n.as_str())].0 == Disposition::Unenforced)
+        .cloned()
+        .collect();
+    assert_eq!(
+        found,
+        registered,
+        "\nthe unenforced invariants and `lib:L10.11`'s register disagree.\n\
+         In the report and not the register: {:?}\n\
+         In the register and not the report: {:?}\n\
+         Declare an abandoned rule, or delete a declaration for one now enforced.",
+        found.difference(&registered).collect::<Vec<_>>(),
+        registered.difference(&found).collect::<Vec<_>>()
+    );
     write_divergences(&mut body, &divergent, &declared);
     let _ = writeln!(body, "## Not named in the crate's source\n");
     let _ = writeln!(

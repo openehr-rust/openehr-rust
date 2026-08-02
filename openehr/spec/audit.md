@@ -849,11 +849,13 @@ invariants is now either cited by the crate, definitional, out of scope,
 enforced under another name, or unenforced **for a stated reason** — and the
 build fails if a new one appears with no answer.
 
-**Residual.** `EHR_ACCESS.Scheme_valid` is a departure this register records and
-the library specification does not yet declare. `C0.16` calls an undeclared
-departure a defect in its own right, so it needs a numbered requirement rather
-than a paragraph here. The same is true of the demographics exclusion noted
-above.
+**Residual.** None. Both departures this finding recorded are now declared:
+`S1.19` excludes the demographic repository the four `PARTY` graph invariants
+constrain, and `S1.20` declares the `EHR_ACCESS.Scheme_valid` departure. `L10.11`
+adds the register `L10.9` had only in the other direction — every openEHR
+invariant the crate does not enforce, with its reason — and `openehr-assets`
+fails the build when that register and the generated report disagree, in either
+direction.
 
 
 ## A-25 — the measurement was wrong, and wrong in the flattering direction

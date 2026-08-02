@@ -46,6 +46,55 @@ Requirement prefix: `L10`.
   for a different rule, and SHOULD avoid a name openEHR uses anywhere, so that a
   future openEHR release cannot silently collide with it.
 
+- **L10.11** *(added 2026-08-02)* An openEHR invariant the crate does **not**
+  enforce MUST be declared in the register below, with the reason. A rule that
+  is absent and undeclared is indistinguishable from one nobody noticed
+  (`C0.14`).
+
+  This is `L10.9`'s mirror. That one registers a rule openEHR does not state and
+  the crate enforces anyway; this one registers a rule openEHR states and the
+  crate does not. Both exist because the interesting cases are the ones where
+  the crate and the specification differ, and a difference nobody wrote down
+  reads as an oversight.
+
+  The register MUST agree with the **Not enforced** group of
+  [`assets/invariant-coverage.md`](../../assets/invariant-coverage.md), which is
+  generated. `openehr-assets` fails the build when the two disagree, so neither
+  can drift: a rule quietly abandoned appears in the report and not the
+  register, and a rule quietly enforced appears in the register and not the
+  report.
+
+### Unenforced openEHR checks
+
+Declared under `L10.11`. Ten of RM 1.1.0's 155 invariants, and none of them is
+merely undone.
+
+| Class | Invariant | Why not |
+| --- | --- | --- |
+| `COMPOSITION` | `Language_valid` | ISO 639 is not carried (`S1.18`) |
+| `COMPOSITION` | `Territory_valid` | ISO 3166 is not carried (`S1.18`) |
+| `DV_ENCAPSULATED` | `Charset_valid` | IANA character sets are not carried |
+| `DV_ENCAPSULATED` | `Language_valid` | ISO 639 is not carried |
+| `DV_MULTIMEDIA` | `Media_type_valid` | IANA media types are not carried |
+| `DV_TEXT` | `Encoding_valid` | IANA character sets are not carried |
+| `DV_TEXT` | `Language_valid` | ISO 639 is not carried |
+| `ENTRY` | `Encoding_valid` | IANA character sets are not carried |
+| `ENTRY` | `Language_valid` | ISO 639 is not carried |
+| `EHR_ACCESS` | `Scheme_valid` | an `EHR_ACCESS` may record no policy (`S1.20`) |
+
+Nine are one decision wearing five hats: the crate does not carry external code
+sets, so it cannot check a code against one. `S1.18` declares that for
+`COMPOSITION`, where openEHR names the code sets itself and `S1.10` therefore
+does not cover it; the other seven are the same departure on other classes.
+
+The tenth is `S1.20`.
+
+**What is *not* in this register.** The four demographic-graph invariants of
+`S1.19` are excluded rather than unenforced — the crate does not model the thing
+they constrain — and appear in the report's *out of scope* group. The
+distinction matters: an exclusion is answered by scope, an omission by this
+table.
+
 ### Crate-added checks
 
 Declared under `L10.9`. Each is a rule openEHR does not state for that class,

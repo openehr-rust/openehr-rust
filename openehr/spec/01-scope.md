@@ -102,3 +102,37 @@ reader deciding whether to use this crate needs the reason more than the fact.
   copy would reject conformant data, which `D3.5`'s own reasoning calls the worse
   failure. A deployment that needs the check should do it where the tables can be
   updated. Recorded as `A-19`; implementing it remains open.
+
+- **S1.19** The crate MUST NOT model a demographic **repository** — an object
+  store that can be asked, of a relationship, for its reverse. It models
+  demographic *values*: a `PARTY` holds its relationships, and nothing holds the
+  parties.
+
+  **What this makes unenforceable.** Four openEHR invariants constrain the
+  demographic graph rather than any one object:
+  `PARTY.Relationships_validity` and `PARTY_RELATIONSHIP.Source_valid` require a
+  relationship's source to be the party holding it;
+  `PARTY.Reverse_relationships_validity` and `PARTY_RELATIONSHIP.Target_valid`
+  require the repository to answer for the other end. None can be checked from a
+  value in hand, and this crate never has more than that.
+
+  Declared because the alternative is that four unenforced invariants look like
+  four oversights (`C0.14`). A deployment holding a demographic repository is
+  the layer that can check them, in the same way a deployment is the layer that
+  authenticates (`S1.14`).
+
+- **S1.20** *Departure from `EHR_ACCESS.Scheme_valid`.* The crate MUST allow an
+  `EHR_ACCESS` with **no** access-control settings, and therefore does not
+  enforce openEHR's requirement that its derived `scheme` be non-empty.
+
+  **What openEHR requires.** `scheme` is derived from the concrete `settings`
+  instance and `Scheme_valid` states `not scheme.is_empty`, so every
+  `EHR_ACCESS` must carry a policy.
+
+  **Why this departs.** "No access policy has been set" and "the policy is
+  deny-all" are different facts about a record, and a type that cannot express
+  the first forces every caller to assert the second. `EhrAccess::new` records
+  no policy deliberately, and a reader can tell the two apart. The cost is that
+  a record can exist with no policy, which a deployment MUST NOT read as
+  permission — `X11.24` already requires the fail-closed default, and this
+  departure is why that requirement matters.
