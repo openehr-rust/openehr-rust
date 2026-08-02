@@ -35,6 +35,7 @@ use openehr::{
     terminology::{audit_change_type, version_lifecycle_state},
 };
 use openehr_loco::{
+    access::{AccessLog, SharedAccessLog},
     app::{App, SharedOpenehrStore},
     auth::{PasetoVerifier, SharedVerifier},
 };
@@ -137,10 +138,17 @@ struct Served {
     router: Router,
     authorization: String,
     ehr_id: String,
+    paserk: String,
 }
 
 impl Served {
+    /// A service with read auditing **off**, which is the default and what most
+    /// of these tests are about.
     fn new() -> Self {
+        Self::with_log(AccessLog::off())
+    }
+
+    fn with_log(access_log: AccessLog) -> Self {
         let pair = AsymmetricKeyPair::<V4>::generate().expect("keypair");
         let mut paserk = String::new();
         pair.public.fmt(&mut paserk).expect("PASERK");
@@ -179,6 +187,8 @@ impl Served {
         ));
         ctx.shared_store
             .insert::<SharedOpenehrStore>(Arc::new(Mutex::new(store)));
+        ctx.shared_store
+            .insert::<SharedAccessLog>(Arc::new(access_log));
 
         Self {
             router: App::routes(&ctx)
@@ -186,6 +196,7 @@ impl Served {
                 .expect("router"),
             authorization: format!("Bearer {token}"),
             ehr_id: ehr_id.to_string(),
+            paserk,
         }
     }
 
@@ -767,4 +778,167 @@ async fn if_match_star_is_refused_because_it_names_nothing() {
     // `*` is satisfied by any current representation, which would let a caller
     // overwrite a version they have never seen.
     assert_eq!(status, StatusCode::PRECONDITION_REQUIRED, "{body}");
+}
+
+// --- who read what --------------------------------------------------------
+
+fn temp_log(tag: &str) -> std::path::PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("after the epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!("openehr-access-{tag}-{nanos}.jsonl"))
+}
+
+fn lines(path: &std::path::Path) -> Vec<serde_json::Value> {
+    std::fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("each line is one JSON record"))
+        .collect()
+}
+
+#[tokio::test]
+async fn every_read_route_records_who_read_what() {
+    let path = temp_log("all");
+    let served = Served::with_log(AccessLog::at(&path).expect("log"));
+    let ehr = served.ehr_id().to_owned();
+
+    // If a read route is ever added without a record_read call, this list and
+    // the recorded actions stop matching. That is the guard against the
+    // omission being reintroduced one handler at a time.
+    let expected = [
+        (format!("/openehr/v1/ehr/{ehr}"), "read_ehr"),
+        (served.composition(LIVE), "read"),
+        (format!("{}/_history", served.composition(LIVE)), "history"),
+        (
+            format!("{}/version/{LIVE}::{SYSTEM}::1", served.composition(LIVE)),
+            "vread",
+        ),
+        (
+            format!(
+                "/openehr/v1/ehr/{ehr}/composition?archetype_id=openEHR-EHR-COMPOSITION.encounter.v1"
+            ),
+            "search",
+        ),
+    ];
+    for (route, _) in &expected {
+        let (status, body, _) = served.get(route).await;
+        assert_eq!(status, StatusCode::OK, "{route}: {body}");
+    }
+
+    let recorded = lines(&path);
+    assert_eq!(recorded.len(), expected.len(), "{recorded:?}");
+    for (record, (_, action)) in recorded.iter().zip(expected.iter()) {
+        assert_eq!(record["action"], *action);
+        assert_eq!(record["subject"], "clinician-4417");
+        assert_eq!(record["outcome"], "ok");
+        assert!(record["at"].as_str().expect("at").contains('T'), "{record}");
+    }
+
+    let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
+async fn an_access_record_names_the_record_and_never_quotes_it() {
+    let path = temp_log("content");
+    let served = Served::with_log(AccessLog::at(&path).expect("log"));
+    let (status, body, _) = served.get(&served.composition(LIVE)).await;
+    assert_eq!(status, StatusCode::OK);
+    // The response carries the composition; the log must not.
+    assert!(body.contains("Encounter 1"), "the body should have content");
+
+    let text = std::fs::read_to_string(&path).expect("log");
+    assert!(text.contains(LIVE), "the record read must be named: {text}");
+    assert!(
+        !text.contains("Encounter"),
+        "an access log must not be a second copy of the data (M3.38): {text}"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
+async fn a_failed_lookup_is_recorded_too() {
+    let path = temp_log("probe");
+    let served = Served::with_log(AccessLog::at(&path).expect("log"));
+
+    let (absent, _, _) = served.get(&served.composition(ABSENT)).await;
+    assert_eq!(absent, StatusCode::NOT_FOUND);
+    let (gone, _, _) = served.get(&served.composition(GONE)).await;
+    assert_eq!(gone, StatusCode::GONE);
+
+    let recorded = lines(&path);
+    // Someone probing for records they cannot see is exactly what an
+    // investigation looks for, and a log of successes only would omit it.
+    assert_eq!(recorded[0]["outcome"], "not_found");
+    // `gone` rather than `ok`: who looked at a withdrawn record is a sharper
+    // question than who looked at a live one.
+    assert_eq!(recorded[1]["outcome"], "gone");
+
+    let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
+async fn a_read_that_cannot_be_recorded_is_not_served() {
+    // The guarantee, stated as a test: no clinical content leaves this service
+    // for an access that was not recorded (PR12.6). Simulated by an app whose
+    // access log was never installed, which is what a failed `before_run`
+    // leaves behind.
+    let served = Served::new();
+    let ctx =
+        AppContext::builder(Environment::Test, loco_rs::tests_cfg::config::test_config()).build();
+    ctx.shared_store.insert::<SharedVerifier>(Arc::new(
+        PasetoVerifier::new(&served.paserk, None, None, None).expect("verifier"),
+    ));
+    ctx.shared_store
+        .insert::<SharedOpenehrStore>(Arc::new(Mutex::new({
+            let mut store = SqliteStore::in_memory().expect("store");
+            store.install().expect("install");
+            store
+        })));
+
+    let router = App::routes(&ctx)
+        .to_router::<App>(ctx.clone(), Router::new())
+        .expect("router");
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri(served.composition(LIVE))
+                .header(header::AUTHORIZATION, &served.authorization)
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("infallible");
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn metadata_stops_calling_read_auditing_absent_once_it_is_on() {
+    let path = temp_log("metadata");
+
+    let off: serde_json::Value =
+        serde_json::from_str(&Served::new().get_anonymous("/openehr/v1/metadata").await.1)
+            .expect("json");
+    assert_eq!(off["records_reads"], false);
+    assert!(
+        serde_json::to_string(&off["not_implemented"])
+            .expect("json")
+            .contains("read auditing")
+    );
+
+    let served = Served::with_log(AccessLog::at(&path).expect("log"));
+    let on: serde_json::Value =
+        serde_json::from_str(&served.get_anonymous("/openehr/v1/metadata").await.1).expect("json");
+    assert_eq!(on["records_reads"], true);
+    // A fixed list would keep saying "not implemented" after a deployment
+    // turned it on, which is the stale claim this endpoint exists to avoid.
+    assert!(
+        !serde_json::to_string(&on["not_implemented"])
+            .expect("json")
+            .contains("read auditing")
+    );
+
+    let _ = std::fs::remove_file(&path);
 }

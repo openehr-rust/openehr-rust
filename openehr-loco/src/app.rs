@@ -15,6 +15,7 @@ use openehr_sqlite::SqliteStore;
 use openehr_store::Store as _;
 use std::sync::{Arc, Mutex};
 
+use crate::access::{AccessLog, SharedAccessLog};
 use crate::auth::{PasetoVerifier, SharedVerifier};
 
 /// The store, shared across requests.
@@ -117,6 +118,13 @@ impl Hooks for App {
             PasetoVerifier::from_env().map_err(|e| loco_rs::Error::Message(e.to_string()))?;
         ctx.shared_store
             .insert::<SharedVerifier>(Arc::new(verifier));
+
+        // Before the store, for the same reason as the verifier: a service
+        // configured to audit reads and unable to write the log must not reach
+        // a state where it holds an open database (`db:PR12.6`).
+        let access_log = AccessLog::from_env().map_err(loco_rs::Error::Message)?;
+        ctx.shared_store
+            .insert::<SharedAccessLog>(Arc::new(access_log));
 
         ctx.shared_store
             .insert::<SharedOpenehrStore>(Arc::new(Mutex::new(open_store()?)));

@@ -64,15 +64,16 @@
 //! # What it does not claim
 //!
 //! GDPR erasure is not implemented anywhere in this repository (`db:M3.18`), so
-//! no endpoint offers it. Read auditing is not implemented either
-//! (`db:PR12.5`), and verification makes that worth restating rather than
-//! quietly improving: this service now knows who is reading, verifies it on
-//! every request, and **discards it**. A deployment needing an access log must
-//! still provide one above this layer, and must not assume that requiring a
-//! token produced one.
+//! no endpoint offers it.
+//!
+//! Read auditing **is** implemented, and is off unless configured — see
+//! [`access`]. Requiring a token is still not the same as having an audit
+//! trail (`db:PR12.20`), so the metadata endpoint answers `records_reads`
+//! rather than leaving a caller to assume.
 
 #![forbid(unsafe_code)]
 
+pub mod access;
 pub mod app;
 pub mod auth;
 pub mod controllers;

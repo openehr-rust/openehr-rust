@@ -56,6 +56,7 @@ openehr-sqlite = { path = "../openehr-sqlite", version = "0.2.0" }
 # Loco's `Hooks` is an `#[async_trait]` trait, so implementing it needs the
 # same macro.
 async-trait = "0.1"
+time = { version = "0.3.55", features = ["formatting"] }
 
 [lints.rust]
 missing_docs = "deny"

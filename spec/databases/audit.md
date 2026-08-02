@@ -352,7 +352,7 @@ The gap is real; the misrepresentation is not.
 **Disposition.** Open. Closing it means either wiring the chain into the schema
 or recording a decision not to.
 
-### D-04 — Read access is not audited — **Medium, open**
+### D-04 — Read access is not audited — **Medium, fixed above the store**
 
 **Found.** `PR12.5` requires that a complete audit of access to clinical data
 record reads, not only writes. This layer records no reads at all.
@@ -362,10 +362,16 @@ changed, and an access investigation asks who *looked*. A deployment that
 assumed the history served the purpose would discover the gap during the
 investigation.
 
-**Disposition.** Open, and arguably out of scope for a storage layer — but
-`PR12.5` states it because the assumption is easy to make and expensive to be
-wrong about. A deployment needing read auditing must provide it above this
-layer.
+**Disposition.** *(2026-08-02 — **fixed above the store, still open in it**.)*
+`PR12.5` always said a deployment must provide read auditing above the storage
+layer. A layer above now exists: `openehr-loco` records every read before
+returning it, fails the read when it cannot, and reports in its metadata which
+of the two it is doing.
+
+The store still records nothing and still cannot. A principal exists at the
+service and nowhere below, so the finding stays open for anyone embedding
+`openehr-store` directly — which is the case `PR12.5` was written for and the
+one that has not changed.
 
 ## Closed
 

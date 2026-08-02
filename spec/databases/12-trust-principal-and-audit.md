@@ -173,10 +173,14 @@ of this.
 - **PR12.20** Requiring a token does **not** create a read audit trail, and
   documentation MUST NOT imply that it does.
 
-  This needs saying because verification makes the gap look closed. The service
-  now establishes who is reading, on every request, and then discards it
-  (`PR12.5`). The information exists and is not recorded — which is a stronger
-  statement than the original "this layer records no reads", and a worse one.
+  This needed saying because verification made the gap *look* closed while
+  making it worse: the service established who was reading, on every request,
+  and discarded it.
+
+  *(2026-08-02.)* It no longer discards it — but the requirement stands, because
+  auditing is opt-in. A deployment that has not configured a log still records
+  nothing, and requiring a token is still not the same as having an audit trail.
+  What changed is that the service now says which of the two it is (`PR12.5`).
 
 ## Attribution lives in the model
 
@@ -203,20 +207,61 @@ of this.
 
 ## Read access is not recorded
 
-- **PR12.5** *(amended — **not implemented**)* A complete audit of access to
-  clinical data requires recording **reads**, not only writes. This layer records
-  no reads.
+- **PR12.5** *(amended 2026-08-02 — **implemented in `openehr-loco`, not in the
+  store**)* A complete audit of access to clinical data requires recording
+  **reads**, not only writes.
 
-  A store that records only mutations cannot answer "who looked at this patient",
-  which is the question an access investigation actually asks. The gap is stated
-  here rather than left to be discovered: a deployment needing read auditing MUST
-  provide it above this layer, and MUST NOT assume the version history serves the
-  purpose.
+  A store that records only mutations cannot answer "who looked at this
+  patient", which is the question an access investigation actually asks. The
+  version history looks like an audit trail and is not one.
 
-- **PR12.6** *(amended — **not implemented**)* Were read auditing added, it would
-  need a stated durability mode — whether the access record commits before the
-  data is returned, or after. Recorded as a design constraint for that work, not
-  as a present capability.
+  This requirement always said a deployment must provide read auditing **above**
+  the storage layer, and that has not changed — what changed is that a layer
+  above now exists. `openehr-loco` records every read before returning it. The
+  store still records none, and still cannot: a principal exists at the service
+  and nowhere below, so an access column inside the store would be null for
+  every embedded user.
+
+  It is **opt-in**, and a service MUST report which it is doing rather than
+  leave a caller to assume. `openehr-loco` answers `records_reads` in its
+  metadata and lists read auditing among its absences only while it is off.
+
+- **PR12.6** *(amended 2026-08-02 — **stated and implemented**)* Read auditing
+  MUST state its durability mode. The mode is: **the access record is written
+  and flushed before any clinical content reaches the caller, and a read whose
+  record cannot be written is refused** with `503`.
+
+  The alternative — return first, record after — never blocks a read and loses
+  exactly the records an attacker most wants lost. A crash, a full disk, or a
+  revoked file handle between the response and the write leaves the access
+  unlogged and the data delivered. The guarantee worth having for an EHR is *no
+  unaudited access*, and it costs a synchronous append per read.
+
+  It follows that the recorder MUST be built before the store is opened, for the
+  same reason as the verifier (`PR12.16`): a service that cannot record must not
+  reach a state in which it holds an open database.
+
+  A deployment that cannot pay the cost turns auditing **off**, and is told by
+  the metadata endpoint that it is off. It does not get a quiet best-effort
+  version, because a log that is usually complete is one nobody can testify
+  from.
+
+- **PR12.22** An access record MUST name identifiers and MUST NOT carry content
+  (`M3.38`, `lib:X11.7a`).
+
+  An access log is shipped to a collector, indexed, retained on a schedule
+  nobody chose for PHI, and read by people who are not treating the patient. A
+  record naming *which* record was read is what an investigation needs; one
+  quoting what it said is a second copy of the data under weaker protection than
+  the first.
+
+- **PR12.23** A failed read MUST be recorded, with an outcome distinguishing it
+  from a successful one. Someone probing for records they cannot see is what an
+  investigation is looking for, and a log of successes only omits it.
+
+  `openehr-loco` distinguishes `ok`, `not_found`, `gone`, and `refused`. `gone`
+  is separate from `ok` because who looked at a **withdrawn** record is a
+  sharper question than who looked at a live one.
 
 ## Tamper evidence
 

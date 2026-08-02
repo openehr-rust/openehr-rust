@@ -41,6 +41,13 @@ pub struct Metadata {
     /// Stated so a caller learns the scheme by reading rather than by
     /// collecting a `401`. This is the only endpoint that does not require it.
     pub token_scheme: &'static str,
+    /// Whether reads are recorded.
+    ///
+    /// Stated because the answer changes with configuration, and a caller — or
+    /// an auditor — must not have to guess. `false` here is the honest form of
+    /// `db:PR12.5`; `true` means every read below was recorded before its body
+    /// was returned.
+    pub records_reads: bool,
     /// Capabilities this service does **not** provide, and why.
     pub not_implemented: Vec<Absence>,
 }

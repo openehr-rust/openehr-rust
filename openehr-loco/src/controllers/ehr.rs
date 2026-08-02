@@ -11,7 +11,7 @@ use openehr::rm::ehr::Ehr;
 use openehr_store::Store as _;
 
 use crate::auth::Principal;
-use crate::controllers::{status_for, store};
+use crate::controllers::{outcome_of, record_read, status_for, store};
 
 type Reply<T> = Result<(StatusCode, Json<T>), (StatusCode, String)>;
 
@@ -42,7 +42,7 @@ async fn create(
 /// Verified, then discarded — this layer records no reads (`db:PR12.5`).
 async fn read(
     State(ctx): State<AppContext>,
-    _principal: Principal,
+    principal: Principal,
     Path(ehr_id): Path<String>,
 ) -> Reply<Ehr> {
     let handle = store(&ctx)?;
@@ -55,7 +55,16 @@ async fn read(
     let id = ehr_id
         .parse()
         .map_err(|_| (StatusCode::BAD_REQUEST, "malformed ehr_id".to_owned()))?;
-    let ehr = guard.get_ehr(&id).map_err(|e| status_for(&e))?;
+    let found = guard.get_ehr(&id);
+    record_read(
+        &ctx,
+        &principal,
+        "read_ehr",
+        &ehr_id,
+        &ehr_id,
+        outcome_of(&found),
+    )?;
+    let ehr = found.map_err(|e| status_for(&e))?;
     Ok((StatusCode::OK, Json(ehr)))
 }
 

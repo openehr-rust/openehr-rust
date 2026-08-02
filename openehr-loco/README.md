@@ -7,7 +7,7 @@ Not published, and it sits **outside the conformance ladder** — every rung the
 is defined by DDL, a `Store` implementation, or a database server, and this
 crate is none of those. So it states evidence instead of a level (`W0.32`).
 
-**Demonstrated.** 42 tests. `tests/http.rs` serves real requests through Loco's
+**Demonstrated.** 47 tests. `tests/http.rs` serves real requests through Loco's
 own router: `410` for a deleted composition against `404` for one that never
 existed, the history still readable behind that `410`, `401` on every clinical
 route without a token and an identical body whether or not the record exists,
@@ -307,6 +307,41 @@ no `[[bin]]` target and no `config/`. It answered *"a bin target must be
 available"*, and nothing noticed because the tests built the router directly and
 never went near `boot`. Both now exist, and `tests/tasks.rs` executes the binary
 so the claim stays true.
+
+## Read auditing
+
+Off by default. `OPENEHR_ACCESS_LOG=<path>` turns it on, and `/metadata` answers
+`records_reads` either way so a caller never has to assume.
+
+A version history records what **changed**; an access investigation asks who
+**looked**. A clinician who opens a colleague's record and closes it again
+leaves no trace in a history of commits (`PR12.5`). Verification made that worse
+before it made it better: the service established who was calling on every
+request and threw it away (`PR12.20`).
+
+**The record is written and flushed before any clinical content reaches the
+caller, and a read whose record cannot be written is refused with `503`**
+(`PR12.6`). Return-first-record-after never blocks a read and loses exactly the
+records an attacker most wants lost — a crash or a full disk between the
+response and the write leaves the access unlogged and the data delivered. The
+guarantee worth having is *no unaudited access*, and it costs a synchronous
+append per read. A deployment that cannot pay that turns the log off and is told
+so, rather than getting a quiet best-effort version nobody can testify from.
+
+Records name identifiers and never content (`PR12.22`). An access log is shipped
+to a collector, indexed, and retained on a schedule nobody chose for PHI; one
+quoting what a record said is a second copy of the data under weaker protection
+than the first.
+
+Failed reads are recorded too, with `not_found`, `gone`, or `refused`
+(`PR12.23`) — someone probing for records they cannot see is what an
+investigation is looking for, and `gone` is kept separate from `ok` because who
+looked at a withdrawn record is a sharper question.
+
+```json
+{"at":"2026-08-02T13:36:25.119903Z","subject":"clinician-4417",
+ "action":"read","ehr":"87284370-…","target":"87284370-…","outcome":"ok"}
+```
 
 ## Tasks
 

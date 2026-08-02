@@ -14,7 +14,7 @@ use openehr_store::{Store as _, record::VersionRow};
 use serde::Deserialize;
 
 use crate::auth::Principal;
-use crate::controllers::{check_attribution, status_for, store};
+use crate::controllers::{check_attribution, outcome_of, record_read, status_for, store};
 use crate::views::{Page, VersionView};
 
 type Reply<T> = Result<(StatusCode, HeaderMap, Json<T>), (StatusCode, String)>;
@@ -114,15 +114,22 @@ pub(crate) fn lock<T>(
 /// `404` would tell a caller it never was.
 async fn read(
     State(ctx): State<AppContext>,
-    _principal: Principal,
-    Path((_ehr_id, uid)): Path<(String, String)>,
+    principal: Principal,
+    Path((ehr_id, uid)): Path<(String, String)>,
 ) -> Reply<VersionView> {
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
     let container = parse_id(&uid)?;
-    let row = guard
-        .latest_version(&container)
-        .map_err(|e| status_for(&e))?;
+    let found = guard.latest_version(&container);
+    // Deleted is its own outcome. An investigation asking who looked at a
+    // withdrawn record is asking a sharper question than who looked at a live
+    // one, and `not_found` would not distinguish the two.
+    let outcome = match &found {
+        Ok(row) if row.is_deleted => "gone",
+        other => outcome_of(other),
+    };
+    record_read(&ctx, &principal, "read", &ehr_id, &uid, outcome)?;
+    let row = found.map_err(|e| status_for(&e))?;
 
     if row.is_deleted {
         return Err((
@@ -144,15 +151,24 @@ async fn read(
 /// "this version recorded a deletion" is the answer.
 async fn vread(
     State(ctx): State<AppContext>,
-    _principal: Principal,
-    Path((_ehr_id, _uid, version_uid)): Path<(String, String, String)>,
+    principal: Principal,
+    Path((ehr_id, _uid, version_uid)): Path<(String, String, String)>,
 ) -> Reply<VersionView> {
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
     let id = version_uid
         .parse()
         .map_err(|_| (StatusCode::BAD_REQUEST, "malformed version uid".to_owned()))?;
-    let row = guard.get_version(&id).map_err(|e| status_for(&e))?;
+    let found = guard.get_version(&id);
+    record_read(
+        &ctx,
+        &principal,
+        "vread",
+        &ehr_id,
+        &version_uid,
+        outcome_of(&found),
+    )?;
+    let row = found.map_err(|e| status_for(&e))?;
     let head = headers(&row.uid);
     Ok((StatusCode::OK, head, Json(view(&row))))
 }
@@ -163,14 +179,23 @@ async fn vread(
 /// (`db:H5.12`).
 async fn history(
     State(ctx): State<AppContext>,
-    _principal: Principal,
-    Path((_ehr_id, uid)): Path<(String, String)>,
+    principal: Principal,
+    Path((ehr_id, uid)): Path<(String, String)>,
     Query(paging): Query<Paging>,
 ) -> Reply<Page<VersionView>> {
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
     let container = parse_id(&uid)?;
-    let all = guard.all_versions(&container).map_err(|e| status_for(&e))?;
+    let found = guard.all_versions(&container);
+    record_read(
+        &ctx,
+        &principal,
+        "history",
+        &ehr_id,
+        &uid,
+        outcome_of(&found),
+    )?;
+    let all = found.map_err(|e| status_for(&e))?;
     let (count, offset) = paging.resolve();
     let items = all.iter().skip(offset).take(count).map(view).collect();
     Ok((
@@ -191,7 +216,7 @@ async fn history(
 /// service executes no AQL and does not pretend to (`db:S1.6`).
 async fn search(
     State(ctx): State<AppContext>,
-    _principal: Principal,
+    principal: Principal,
     Path(ehr_id): Path<String>,
     Query(paging): Query<Paging>,
     Query(filter): Query<Search>,
@@ -199,9 +224,19 @@ async fn search(
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
     let id = parse_id(&ehr_id)?;
-    let rows = guard
-        .find_compositions_by_archetype(&id, &filter.archetype_id)
-        .map_err(|e| status_for(&e))?;
+    let found = guard.find_compositions_by_archetype(&id, &filter.archetype_id);
+    // The archetype filter is the target: it is design-time metadata, not
+    // content, so recording it says which *kind* of record was sought without
+    // quoting any of them (`db:M3.38`).
+    record_read(
+        &ctx,
+        &principal,
+        "search",
+        &ehr_id,
+        &filter.archetype_id,
+        outcome_of(&found),
+    )?;
+    let rows = found.map_err(|e| status_for(&e))?;
     let (count, offset) = paging.resolve();
     let items = rows
         .iter()

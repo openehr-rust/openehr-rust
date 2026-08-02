@@ -16,6 +16,7 @@ use openehr::rm::common::{PartyProxy, Version};
 use openehr::rm::ehr::Composition;
 use openehr_store::StoreError;
 
+use crate::access::{SharedAccessLog, access};
 use crate::app::SharedOpenehrStore;
 use crate::auth::Principal;
 
@@ -178,5 +179,53 @@ pub fn check_attribution(
              or a DV_IDENTIFIER whose id is the token subject (PR12.19)"
                 .to_owned(),
         )),
+    }
+}
+
+/// Records a read, and refuses it if the record cannot be written.
+///
+/// # Why the `?` on this is load-bearing
+///
+/// Every read handler calls this **before** returning clinical content, and
+/// propagates its error. That ordering is the whole guarantee (`db:PR12.6`):
+/// there is no path on which a body is served for an access that was not
+/// recorded. A handler that called this afterwards, or ignored the result,
+/// would leave the log looking complete while missing exactly the reads that
+/// happened as it failed.
+///
+/// A `503` rather than a `500`: the request is fine and the service is not
+/// currently able to serve it safely, which is a state a caller may retry and
+/// a load balancer should route around.
+///
+/// # Errors
+///
+/// `503` when the access record could not be written.
+pub fn record_read(
+    ctx: &AppContext,
+    principal: &Principal,
+    action: &str,
+    ehr: &str,
+    target: &str,
+    outcome: &str,
+) -> Result<(), (StatusCode, String)> {
+    let Some(log) = ctx.shared_store.get::<SharedAccessLog>() else {
+        // Absent means `before_run` has not finished. Reads must not be served
+        // ahead of the thing that records them.
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "the access log is not initialised".to_owned(),
+        ));
+    };
+    log.record(&access(principal, action, ehr, target, outcome))
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))
+}
+
+/// The outcome label for a store result, for [`record_read`].
+#[must_use]
+pub fn outcome_of<T>(result: &Result<T, openehr_store::StoreError>) -> &'static str {
+    match result {
+        Ok(_) => "ok",
+        Err(StoreError::NotFound { .. }) => "not_found",
+        Err(_) => "refused",
     }
 }
