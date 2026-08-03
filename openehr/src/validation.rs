@@ -1789,4 +1789,304 @@ mod tests {
                 .any(|v| v.invariant == "Range_is_simple")
         );
     }
+
+    /// The version envelope, checked here rather than only from the crates
+    /// that call it.
+    ///
+    /// `A-23` added this impl and its tests live in `openehr-loco` and
+    /// `openehr-sqlite`. `cargo mutants` runs the tests of the crate it
+    /// mutates, so replacing the whole `visit` body with `()` left `openehr`
+    /// green — the fix for a High finding, removable without this crate
+    /// noticing (`lib:A-09`).
+    #[test]
+    fn a_version_envelope_is_checked_on_data_that_arrived_as_json() {
+        // Deserialization never calls a constructor, which is the whole of
+        // `A-23`. Each of these is well-formed JSON and an impossible version.
+        let base = |lifecycle: &str, extra: &str| {
+            format!(
+                r#"{{
+                  "_type": "ORIGINAL_VERSION",
+                  "uid": {{"_type":"OBJECT_VERSION_ID","value":"87284370-2D4B-4E3D-A3F3-F303D2F4F34B::s::1"}},
+                  "lifecycle_state": {{"_type":"DV_CODED_TEXT","value":"x",
+                    "defining_code":{{"_type":"CODE_PHRASE","terminology_id":{{"value":"openehr"}},"code_string":"{lifecycle}"}}}},
+                  "commit_audit": {{"_type":"AUDIT_DETAILS","system_id":"s",
+                    "time_committed":{{"_type":"DV_DATE_TIME","value":"2026-08-01T09:00:00Z"}},
+                    "change_type":{{"_type":"DV_CODED_TEXT","value":"creation",
+                      "defining_code":{{"_type":"CODE_PHRASE","terminology_id":{{"value":"openehr"}},"code_string":"249"}}}},
+                    "committer":{{"_type":"PARTY_IDENTIFIED","name":"N"}}}},
+                  "contribution": {{"_type":"OBJECT_REF","namespace":"local","type":"EHR",
+                    "id":{{"_type":"HIER_OBJECT_ID","value":"87284370-2D4B-4E3D-A3F3-F303D2F4F34B"}}}}
+                  {extra}
+                }}"#
+            )
+        };
+        let parse = |json: &str| {
+            serde_json::from_str::<crate::rm::common::Version<crate::rm::ehr::Composition>>(json)
+                .expect("deserialization is lenient by design (J9.9)")
+        };
+        let reports = |json: &str| parse(json).validate();
+
+        // `Lifecycle_state_valid`: a code openEHR does not define.
+        assert!(
+            reports(&base("9999", ""))
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Lifecycle_state_valid")
+        );
+
+        // `Data_valid`: `complete` with no data. 532 is `complete`.
+        assert!(
+            reports(&base("532", ""))
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Data_valid")
+        );
+
+        // `Preceding_version_uid_validity`: version 1 naming a predecessor.
+        let with_predecessor = base(
+            "532",
+            r#", "preceding_version_uid": {"_type":"OBJECT_VERSION_ID","value":"87284370-2D4B-4E3D-A3F3-F303D2F4F34B::s::9"}"#,
+        );
+        assert!(
+            reports(&with_predecessor)
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Preceding_version_uid_validity")
+        );
+
+        // `validate_ok` must actually return `Err`, which nothing asserted —
+        // it could have returned `Ok(())` unconditionally.
+        assert!(parse(&base("9999", "")).validate_ok().is_err());
+
+        // And a deleted version with no data is the one legal absence. 523 is
+        // `deleted`; this is the case `Data_valid` exists to permit, so it must
+        // not be reported.
+        let deleted = parse(&base("523", ""));
+        assert!(
+            !deleted
+                .validate()
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Data_valid"),
+            "a deleted version may carry no data"
+        );
+    }
+
+    /// `EHR_ACCESS` and `PARTY` archetype-root checks.
+    ///
+    /// Both impls were added in the same sitting as this comment **with no
+    /// test at all** — the whole of each `visit` could be replaced with `()`
+    /// and nothing failed. Mutation testing found it; reading the diff had
+    /// not, including by the person who wrote it.
+    #[test]
+    fn an_ehr_access_and_a_party_must_be_archetype_roots() {
+        use crate::rm::demographic::{Party, PartyAttrs, PartyIdentity, Person};
+        use crate::security::access::EhrAccess;
+
+        let rooted = |archetype: &str| {
+            attrs("subject", archetype).with_archetype_details(
+                Archetyped::new(archetype, "1.1.0").expect("literal"),
+            )
+        };
+
+        let bare = EhrAccess::new(attrs("access", "at0000"));
+        assert!(
+            bare.validate()
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Is_archetype_root" && v.class == "EHR_ACCESS")
+        );
+        assert!(
+            EhrAccess::new(rooted("openEHR-EHR-EHR_ACCESS.generic.v1"))
+                .validate()
+                .is_empty()
+        );
+
+        let identity = PartyIdentity::new(
+            attrs("legal name", "at0001"),
+            crate::rm::data_structures::ItemStructure::Single(
+                crate::rm::data_structures::ItemSingle::new(
+                    attrs("name", "at0002"),
+                    Element::new(
+                        attrs("full name", "at0003"),
+                        DataValue::Text(DvText::new("A Patient").expect("literal")),
+                    ),
+                ),
+            ),
+        );
+        // A `PARTY` must carry a uid (`PARTY.Uid_mandatory`), which is a
+        // separate rule from being an archetype root and is already enforced
+        // in the constructor.
+        let person = |locatable: crate::rm::common::LocatableAttrs| {
+            let with_uid = locatable.with_uid(crate::base::UidBasedId::HierObjectId(
+                crate::base::HierObjectId::from_uid_str("6BA7B810-9DAD-11D1-80B4-00C04FD430C8")
+                    .expect("literal"),
+            ));
+            Party::Person(Person::new(
+                PartyAttrs::new(with_uid, vec![identity.clone()]).expect("literal"),
+            ))
+        };
+        assert!(
+            person(attrs("patient", "at0000"))
+                .validate()
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Is_archetype_root" && v.class == "PARTY")
+        );
+        assert!(
+            person(rooted("openEHR-DEMOGRAPHIC-PERSON.person.v1"))
+                .validate()
+                .is_empty()
+        );
+    }
+
+    /// Validation descends through a `SECTION` and through a `HISTORY`'s
+    /// events.
+    ///
+    /// `Section::visit`, `ContentItem::visit` and `Event::visit` could each be
+    /// replaced with `()` and nothing failed: every existing test puts its
+    /// entry directly in `content` and its element directly in a tree, so the
+    /// two nesting paths a real composition uses were never walked
+    /// (`lib:A-09`).
+    ///
+    /// A composition organised into sections is the ordinary case, not an edge
+    /// one, and an unreported violation inside a section is a document that
+    /// validates and is wrong.
+    #[test]
+    fn a_violation_nested_in_a_section_or_an_event_is_still_reported() {
+        use crate::rm::data_structures::{History, PointEvent};
+        use crate::rm::ehr::{ContentItem, Evaluation, Observation, Section};
+
+        // An element whose name is empty — `DV_TEXT.Valid_value`, the same
+        // violation the flat tests use, so only the *path* to it is new.
+        // Violations that a *constructor* permits, since the point is the path
+        // the walk takes and not the rule. An `ITEM_TABLE` whose rows have
+        // different widths breaks `Rows_regular`, and it is checked by
+        // validation rather than refused at construction.
+        let irregular = || -> crate::rm::data_structures::ItemStructure {
+            let cell = |node: &str| {
+                Element::new(attrs("cell", node), DataValue::Count(DvCount::new(1))).into()
+            };
+            crate::rm::data_structures::ItemTable::new(
+                attrs("table", "at0009"),
+                vec![
+                    Cluster::new(attrs("row 1", "at0010"), vec![cell("at0011")]).expect("literal"),
+                    Cluster::new(
+                        attrs("row 2", "at0012"),
+                        vec![cell("at0013"), cell("at0014")],
+                    )
+                    .expect("literal"),
+                ],
+            )
+            .into()
+        };
+        let entry_root = |archetype: &str| {
+            attrs("nested", archetype)
+                .with_archetype_details(Archetyped::new(archetype, "1.1.0").expect("literal"))
+        };
+
+        // Through a SECTION: composition -> section -> entry -> element.
+        let sectioned = composition().with_content(
+            Section::new(
+                attrs("Findings", "at0002"),
+                vec![ContentItem::Entry(
+                    Evaluation::new(
+                        entry_root("openEHR-EHR-EVALUATION.problem.v1"),
+                        entry_attrs(),
+                        irregular(),
+                    )
+                    .into(),
+                )],
+            )
+            .into(),
+        );
+        let report = sectioned.validate();
+        assert!(
+            report
+                .violations()
+                .iter()
+                .any(|v| v.path.contains("/items")),
+            "nothing inside the section was walked: {report}"
+        );
+
+        // Through an EVENT: observation -> history -> event -> element.
+        let observed = Observation::new(
+            entry_root("openEHR-EHR-OBSERVATION.blood_pressure.v2"),
+            entry_attrs(),
+            History::new(
+                attrs("Event Series", "at0001"),
+                DvDateTime::new("2026-07-31T09:00:00Z").expect("literal"),
+                vec![
+                    PointEvent::new(
+                        attrs("any event", "at0006"),
+                        DvDateTime::new("2026-07-31T09:15:00Z").expect("literal"),
+                        irregular(),
+                    )
+                    .into(),
+                ],
+                None,
+            )
+            .expect("literal"),
+        );
+        let report = Entry::from(observed).validate();
+        assert!(
+            report
+                .violations()
+                .iter()
+                .any(|v| v.path.contains("/events")),
+            "nothing inside the event was walked: {report}"
+        );
+    }
+
+    /// Every ordered data value has its `normal_status` checked, not just
+    /// `DV_QUANTITY`.
+    ///
+    /// `check_ordered` is reached through a `match` with one arm per ordered
+    /// variant, and deleting the `Count`, `Proportion`, `Ordinal` or `Scale`
+    /// arm changed nothing: every existing test used a quantity. A count with
+    /// a normal status outside openEHR's code set is a result a renderer shows
+    /// verbatim beside a number, and nothing was checking it (`lib:A-09`).
+    #[test]
+    fn a_bad_normal_status_is_reported_for_every_ordered_type() {
+        use crate::rm::data_types::{DvOrdinal, DvProportion, DvScale, ProportionKind};
+
+        // Not in the openEHR normal-statuses code set.
+        let bogus = || CodePhrase::new("openehr", "ZZ").expect("literal");
+        let symbol = || {
+            DvCodedText::new("symbol", CodePhrase::new("local", "at0001").expect("literal"))
+                .expect("literal")
+        };
+
+        let values = [
+            DataValue::Count(DvCount::new(1).with_normal_status(bogus())),
+            DataValue::Proportion(
+                DvProportion::new(1.0, 2.0, ProportionKind::Ratio)
+                    .expect("literal")
+                    .with_normal_status(bogus()),
+            ),
+            DataValue::Ordinal(DvOrdinal::new(1, symbol()).with_normal_status(bogus())),
+            DataValue::Scale(
+                DvScale::new(1.0, symbol())
+                    .expect("literal")
+                    .with_normal_status(bogus()),
+            ),
+            DataValue::Quantity(
+                DvQuantity::new(1.0, "mm[Hg]")
+                    .expect("literal")
+                    .with_normal_status(bogus()),
+            ),
+        ];
+
+        for value in values {
+            let kind = value.type_name();
+            let report = value.validate();
+            assert!(
+                report
+                    .violations()
+                    .iter()
+                    .any(|v| v.invariant == "Normal_status_validity"),
+                "{kind} did not have its normal_status checked: {report}"
+            );
+        }
+    }
 }

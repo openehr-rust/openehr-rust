@@ -467,6 +467,7 @@ an empty slice hashes nothing, builds an empty chain, and `verify` reports
 | `openehr-store/dialect.rs` | 25 of 27 | 5 | the shared generator is only run by the six engine crates |
 | `openehr-loco/auth.rs` | 0 of 6 | 0 | already covered; the module was written test-first with mutation checks |
 | `openehr-loco/controllers/` | 6 of 36 | 0 | an endpoint with no test at all, and the status mapping |
+| `openehr/validation.rs` | 25 of 115 | 9 | three whole `visit` bodies removable, two of them added the day before |
 
 `record.rs` is the one worth reading twice. A test called
 `the_attributes_that_used_to_be_dropped_are_persisted` existed, named for
@@ -492,6 +493,29 @@ string — a response claiming a digest of `""`, which a reader compares against
 witness and finds equal — and three arms of `status_for`, where a duplicate
 commit would answer `500` instead of `409` and tell a caller to retry when it
 should re-read.
+
+`validation.rs` is where this session's invariant work lives, so it is the run
+that matters most, and it found three `Validate` impls whose **entire body**
+could be replaced with `()` while `openehr` stayed green.
+
+- `Version<T>` — `A-23`'s fix. Its tests are in `openehr-loco` and
+  `openehr-sqlite`, so the remedy for a High finding was removable without this
+  crate noticing.
+- `EhrAccess` and `Party` — added the day before, **with no test at all**. Not
+  cross-crate coverage; none. Reading the diff had not shown it, including by
+  the person who wrote it.
+
+It also found that `Section`, `ContentItem` and `Event` could each stop
+descending: every test put its entry directly in `content` and its element
+directly in a tree, so the two nesting paths a real composition uses were never
+walked. And `check_ordered` ran only for `DV_QUANTITY` — a `DV_COUNT` with a
+normal status outside openEHR's code set is a result a renderer shows verbatim
+beside a number, and nothing checked it.
+
+Nine survive. Four are the `Range_is_simple` variant arms, which need a
+reference range whose endpoint is itself an ordered value carrying reference
+ranges; the rest are boolean operators and one boundary. Recorded rather than
+chased.
 
 `dialect.rs` stops at 5. The remainder are branch conditions needing a third and
 fourth test dialect for idempotence modes the schema does not currently use, and
