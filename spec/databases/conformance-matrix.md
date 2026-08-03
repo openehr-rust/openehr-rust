@@ -98,7 +98,7 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `M3.39`–`M3.42` digest is SHA-256, 32 raw bytes | • | `ColTy::Digest`, binary in all six dialects |
 | `O10.15` schema version recorded, mismatch refused | • | three states, all tested |
 | `M3.33` projection refuses a non-archetype-root | • | |
-| `M3.16d` content verified from the **stored bytes** | • | `tests/tamper.rs` edits a row through a second connection with the triggers dropped; mutation-checked |
+| `M3.16d` content verified from the **stored bytes** | • | `tests/tamper.rs` edits a row through a second connection with the triggers dropped; `integrity`'s own unit tests catch 15 of 15 viable mutants (`lib:A-09`) |
 | `M3.43` canonical JSON in a byte-preserving column | • | the store round-trips it; the per-engine claim is below |
 | `M3.34` anonymous committer stored as `NULL` | • | |
 

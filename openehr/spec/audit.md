@@ -431,11 +431,37 @@ caught a regression here.
 which is *safer* than what it does now, and pinning exact `Debug` output would
 freeze formatting for no benefit. Recorded rather than chased.
 
-**Residual.** One module of many. The run is not in CI: 80 mutants take two
-minutes for one file, and the whole crate would be hours. `T13.2` therefore
-stays **?** — what changed is that "not systematic" is now a measurement with a
-number rather than an impression, and the method is written down for the next
-module.
+**The blind spot, applied.** The cross-crate caveat above was then used as a
+lead rather than a footnote, on the most safety-critical code written this
+session: `openehr_store::integrity`, the detector `M3.16d` requires. Its tests
+all live in `openehr-sqlite/tests/tamper.rs`.
+
+| Run | Missed | Caught |
+| --- | --- | --- |
+| Before | **15 of 15 viable** | 0 |
+| After | 0 | **15** |
+
+Nothing in `openehr-store` caught anything. `is_breach` could return `true` for
+every verdict, `is_intact` either constant, the content-digest comparison could
+be inverted, and every match arm could be deleted, with that crate's suite
+green. The engine tests would have caught each — in another crate's job, after
+this one reported success.
+
+A conformance suite shared by engines is the right home for *engine* behaviour.
+This file is pure logic and needs no engine, and it now has seven unit tests
+beside it.
+
+**It also found dead code.** `verify_versions` began with an early return for an
+empty slice, which made the `ChainStatus::Empty` arm below unreachable —
+deleting that arm changed nothing, which is how the mutant survived. Removed:
+an empty slice hashes nothing, builds an empty chain, and `verify` reports
+`Empty`. One path instead of two saying the same thing.
+
+**Residual.** Two modules of many, and not in CI: 80 mutants take two minutes
+for one file, and a whole crate would be hours. `T13.2` stays **?** — what
+changed is that "not systematic" is a measurement with numbers rather than an
+impression, the method is written down, and its sharpest use so far was aiming
+it at code whose tests live somewhere else.
 
 ## A-11 — the Common Information Model was implemented from prose
 

@@ -188,9 +188,11 @@ fn hashed_bytes(row: &VersionRow) -> &[u8] {
 /// ```
 #[must_use]
 pub fn verify_versions(rows: &[VersionRow], keys: &[&ChainKey]) -> Integrity {
-    if rows.is_empty() {
-        return Integrity::Empty;
-    }
+    // No early return for an empty `rows`. There was one, and mutation testing
+    // showed it made the `ChainStatus::Empty` arm below unreachable: deleting
+    // that arm changed nothing. An empty slice hashes nothing, builds an empty
+    // chain, and `verify` reports `Empty` — one path instead of two saying the
+    // same thing (`lib:A-09`).
 
     // The check the library cannot make, made first: it is the one that finds
     // an edited record, and running it before the link walk means an altered
@@ -251,5 +253,186 @@ pub fn verify_versions(rows: &[VersionRow], keys: &[&ChainKey]) -> Integrity {
         // Required, because `ChainStatus` is `#[non_exhaustive]`. Never a pass
         // — see `Integrity::Unrecognised`.
         _ => Integrity::Unrecognised,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Breach, Integrity, verify_versions};
+    use crate::conformance::{sample_version, RECORD, SYSTEM};
+    use crate::record::VersionRow;
+    use openehr::security::Digest256;
+
+    /// Why these exist, when `openehr-sqlite/tests/tamper.rs` already drives
+    /// this module against a real database.
+    ///
+    /// Because it drives it from **another crate**. `cargo mutants` runs the
+    /// tests of the crate it mutates, and on this file it missed **15 of 15**
+    /// viable mutants: `is_breach` could return `true` for everything,
+    /// `is_intact` could return either constant, the content-digest comparison
+    /// could be inverted, and every match arm could be deleted, with
+    /// `openehr-store`'s suite green throughout.
+    ///
+    /// The engine tests would have caught each one — in a different crate's
+    /// job, after this crate had already reported success. A conformance suite
+    /// shared by engines is the right place for *engine* behaviour; this file
+    /// is pure logic and needs no engine (`lib:A-09`).
+    fn rows(n: u32) -> Vec<VersionRow> {
+        let mut previous = None;
+        let mut out = Vec::new();
+        for v in 1..=n {
+            let version = sample_version(v, (v > 1).then(|| v - 1), v * 5);
+            let row = VersionRow::project(&version, "c1", previous, None).expect("projects");
+            previous = Some(row.chain.digest);
+            out.push(row);
+        }
+        out
+    }
+
+    #[test]
+    fn an_untouched_history_is_unkeyed_rather_than_verified() {
+        let verdict = verify_versions(&rows(3), &[]);
+        // Not `Verified`: nothing signed these entries, and a report that said
+        // otherwise would claim a key backs them.
+        assert_eq!(verdict, Integrity::Unkeyed);
+        assert!(verdict.is_intact());
+        assert!(!verdict.is_breach());
+    }
+
+    #[test]
+    fn an_empty_container_is_neither_intact_nor_a_breach() {
+        let verdict = verify_versions(&[], &[]);
+        assert_eq!(verdict, Integrity::Empty);
+        // The asymmetry `is_intact` exists for: `!is_breach()` is **not** a
+        // licence to report a history as sound. Nothing was checked.
+        assert!(!verdict.is_breach());
+        assert!(!verdict.is_intact());
+    }
+
+    #[test]
+    fn an_edited_document_is_reported_as_altered_content() {
+        let mut rows = rows(3);
+        // The chain columns are left exactly as written, so every link matches
+        // and every digest recomputes. Only re-hashing the stored bytes finds
+        // this.
+        rows[1].data_json = Some(r#"{"altered":true}"#.to_owned());
+
+        match verify_versions(&rows, &[]) {
+            Integrity::Broken { at, uid, reason } => {
+                assert_eq!(reason, Breach::ContentAltered);
+                assert_eq!(at, 1);
+                assert_eq!(uid, format!("{RECORD}::{SYSTEM}::2"));
+            }
+            other => panic!("an edited document was not detected: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_deletion_hashes_as_null_rather_than_reporting_as_altered() {
+        // A version with no content hashed the canonical form of `null`.
+        // Getting this wrong would accuse every deleted version in every
+        // record — exactly the rows an investigation reads hardest.
+        let mut rows = rows(1);
+        rows[0].data_json = None;
+        rows[0].chain.content = *Digest256::of(b"null").as_bytes();
+        // The entry digest no longer matches its own pre-image, so the content
+        // check must pass and the *digest* check must be what fails.
+        match verify_versions(&rows, &[]) {
+            Integrity::Broken { reason, .. } => assert_eq!(reason, Breach::DigestMismatch),
+            other => panic!("expected a digest mismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_removed_version_breaks_the_link_rather_than_the_content() {
+        let mut rows = rows(3);
+        rows.remove(1);
+        match verify_versions(&rows, &[]) {
+            Integrity::Broken { at, reason, .. } => {
+                assert_eq!(reason, Breach::PreviousMismatch);
+                assert_eq!(at, 1);
+            }
+            other => panic!("a removed version was not detected: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_rewritten_entry_digest_is_reported_as_a_digest_mismatch() {
+        let mut rows = rows(2);
+        rows[0].chain.digest = [0u8; 32];
+        match verify_versions(&rows, &[]) {
+            Integrity::Broken { at, reason, .. } => {
+                assert_eq!(reason, Breach::DigestMismatch);
+                assert_eq!(at, 0);
+            }
+            other => panic!("a rewritten digest was not detected: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_tag_naming_a_key_this_process_does_not_hold_is_not_a_pass() {
+        let mut rows = rows(1);
+        rows[0].chain.tag_key_id = Some("k-unheld".to_owned());
+        rows[0].chain.tag_mac = Some([9u8; 32]);
+
+        match verify_versions(&rows, &[]) {
+            Integrity::UnknownKey { at, uid, key_id } => {
+                assert_eq!(at, 0);
+                assert_eq!(key_id, "k-unheld");
+                assert_eq!(uid, format!("{RECORD}::{SYSTEM}::1"));
+            }
+            other => panic!("expected UnknownKey, got {other:?}"),
+        }
+        // Not a breach and not intact: a check that could not be completed
+        // must not report as one that was.
+        let verdict = verify_versions(&rows, &[]);
+        assert!(!verdict.is_breach());
+        assert!(!verdict.is_intact());
+    }
+
+    /// A keyed history, and a keyed history whose tag was forged.
+    ///
+    /// Both `ChainStatus::Verified` and `BreakReason::TagMismatch` survived
+    /// mutation until this existed: every earlier test used an unkeyed chain,
+    /// so the two arms that only a **signed** history reaches were never taken.
+    #[test]
+    fn a_signed_history_verifies_and_a_forged_tag_does_not() {
+        use openehr::security::ChainKey;
+
+        let key = ChainKey::new("k1", vec![7u8; 32]).expect("key");
+        let signed = |n: u32| {
+            let mut previous = None;
+            let mut out = Vec::new();
+            for v in 1..=n {
+                let version = sample_version(v, (v > 1).then(|| v - 1), v * 5);
+                let row = VersionRow::project(&version, "c1", previous, Some(&key))
+                    .expect("projects");
+                previous = Some(row.chain.digest);
+                out.push(row);
+            }
+            out
+        };
+
+        // Signed and held: the only path to `Verified`.
+        let verdict = verify_versions(&signed(2), &[&key]);
+        assert_eq!(verdict, Integrity::Verified);
+        assert!(verdict.is_intact());
+        assert!(!verdict.is_breach());
+
+        // The tag rewritten under a key this process *does* hold. That is the
+        // strongest finding available: it means the edit was made by someone
+        // without the key and survived everything an unkeyed chain would catch.
+        let mut forged = signed(2);
+        forged[1].chain.tag_mac = Some([0u8; 32]);
+        match verify_versions(&forged, &[&key]) {
+            Integrity::Broken { at, reason, .. } => {
+                assert_eq!(reason, Breach::TagMismatch);
+                assert_eq!(at, 1);
+            }
+            other => panic!("a forged tag was not detected: {other:?}"),
+        }
+        // And a breach answers `is_breach`, which nothing had asserted in the
+        // true direction.
+        assert!(verify_versions(&forged, &[&key]).is_breach());
     }
 }
