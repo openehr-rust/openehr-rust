@@ -259,7 +259,7 @@ pub fn verify_versions(rows: &[VersionRow], keys: &[&ChainKey]) -> Integrity {
 #[cfg(test)]
 mod tests {
     use super::{Breach, Integrity, verify_versions};
-    use crate::conformance::{sample_version, RECORD, SYSTEM};
+    use crate::conformance::{RECORD, SYSTEM, sample_version};
     use crate::record::VersionRow;
     use openehr::security::Digest256;
 
@@ -405,8 +405,8 @@ mod tests {
             let mut out = Vec::new();
             for v in 1..=n {
                 let version = sample_version(v, (v > 1).then(|| v - 1), v * 5);
-                let row = VersionRow::project(&version, "c1", previous, Some(&key))
-                    .expect("projects");
+                let row =
+                    VersionRow::project(&version, "c1", previous, Some(&key)).expect("projects");
                 previous = Some(row.chain.digest);
                 out.push(row);
             }

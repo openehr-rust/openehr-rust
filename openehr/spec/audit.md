@@ -457,11 +457,36 @@ deleting that arm changed nothing, which is how the mutant survived. Removed:
 an empty slice hashes nothing, builds an empty chain, and `verify` reports
 `Empty`. One path instead of two saying the same thing.
 
-**Residual.** Two modules of many, and not in CI: 80 mutants take two minutes
+**Four modules, and the pattern holds.**
+
+| Module | Missed before | After | What the survivors were |
+| --- | --- | --- | --- |
+| `openehr/security/audit_chain.rs` | 40 of 67 | 1 | nothing had put a `Chain` through serde |
+| `openehr-store/integrity.rs` | **15 of 15** | 0 | every test was in `openehr-sqlite` |
+| `openehr-store/record.rs` | 4 of 6 | 0 | `M3.34` and half of `D-07` asserted on one side only |
+| `openehr-store/dialect.rs` | 25 of 27 | 5 | the shared generator is only run by the six engine crates |
+
+`record.rs` is the one worth reading twice. A test called
+`the_attributes_that_used_to_be_dropped_are_persisted` existed, named for
+`D-07`, and asserted two of the four attributes that finding restored — the two
+that do not go through `encode_if_any`. Replacing that function with `Ok(None)`
+dropped the other two and the test stayed green: the defect `D-07` is about,
+reachable again with one edit, under a test named after it.
+
+And `party_name` could return `Some("xyzzy")` for every party without failing
+anything, while `M3.34` — an anonymous committer stored as `NULL`, so that a
+privacy decision does not become a data-quality problem someone later cleans
+up — was marked **•** in the conformance matrix.
+
+`dialect.rs` stops at 5. The remainder are branch conditions needing a third and
+fourth test dialect for idempotence modes the schema does not currently use, and
+the two written cover what it does.
+
+**Residual.** Four modules of many, and not in CI: 80 mutants take two minutes
 for one file, and a whole crate would be hours. `T13.2` stays **?** — what
 changed is that "not systematic" is a measurement with numbers rather than an
-impression, the method is written down, and its sharpest use so far was aiming
-it at code whose tests live somewhere else.
+impression, the method is written down, and its sharpest use has been aiming it
+at code whose tests live in another crate.
 
 ## A-11 — the Common Information Model was implemented from prose
 

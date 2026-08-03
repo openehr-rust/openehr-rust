@@ -283,3 +283,219 @@ pub fn ddl_script<D: Dialect + ?Sized>(dialect: &D) -> String {
 pub fn column_sql<D: Dialect + ?Sized>(dialect: &D, column: &Column) -> String {
     dialect.col_sql(column.ty)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Dialect, Idempotence, ObjectKind, Placeholder, ddl_script};
+    use crate::schema::{ColTy, TABLES, Table};
+
+    /// The smallest thing that can be a dialect.
+    ///
+    /// Every default in this trait is exercised only by the six engine crates,
+    /// and `cargo mutants` runs the tests of the crate it mutates — so 25 of 27
+    /// viable mutants here survived `openehr-store`'s own suite, including
+    /// `ddl -> vec![]` and `terminator -> ""`. Each would fail every engine
+    /// crate's golden test, in another job, after this crate reported success
+    /// (`lib:A-09`).
+    ///
+    /// This crate is the engine-agnostic half. The shared generator can be
+    /// tested without an engine, and now is.
+    struct Minimal;
+
+    impl Dialect for Minimal {
+        fn name(&self) -> &'static str {
+            "minimal"
+        }
+        fn col_sql(&self, ty: ColTy) -> String {
+            match ty {
+                ColTy::Digest => "BLOB".to_owned(),
+                ColTy::Int | ColTy::Bool | ColTy::InstantUtc => "INTEGER".to_owned(),
+                _ => "TEXT".to_owned(),
+            }
+        }
+        fn quote(&self, identifier: &str) -> String {
+            format!("\"{identifier}\"")
+        }
+        fn placeholder(&self) -> Placeholder {
+            Placeholder::Question
+        }
+    }
+
+    #[test]
+    fn the_shared_generator_emits_a_statement_for_every_table_and_index() {
+        let statements = Minimal.ddl();
+        assert!(!statements.is_empty(), "no DDL was emitted");
+
+        // One CREATE TABLE per declared table, and the tables are the schema's
+        // — a dialect defines none of its own (`db:M3.22`).
+        for table in TABLES {
+            let quoted = Minimal.quote(table.name);
+            assert!(
+                statements
+                    .iter()
+                    .any(|s| s.starts_with("CREATE TABLE") && s.contains(&quoted)),
+                "{} has no CREATE TABLE",
+                table.name
+            );
+        }
+
+        // Indexes are separate statements unless the dialect inlines them.
+        assert_ne!(Minimal.index_idempotence(), Idempotence::Inline);
+        let expected: usize = TABLES.iter().map(|t| t.indexes.len()).sum();
+        assert_eq!(
+            statements
+                .iter()
+                .filter(|s| s.contains("CREATE INDEX") || s.contains("CREATE UNIQUE INDEX"))
+                .count(),
+            expected
+        );
+    }
+
+    #[test]
+    fn a_column_carries_its_quoted_name_and_its_engine_type() {
+        let version = TABLES
+            .iter()
+            .find(|t| t.name == "openehr_version")
+            .expect("the schema declares openehr_version");
+        let sql = Minimal.create_table(version);
+
+        assert!(sql.contains(&Minimal.quote("uid")), "{sql}");
+        // `ColTy::Digest` is the one that must not become text (`db:M3.40`).
+        assert!(sql.contains("BLOB"), "no digest column typed: {sql}");
+        assert!(sql.contains("TEXT"), "{sql}");
+    }
+
+    #[test]
+    fn the_terminator_ends_every_statement_in_the_script() {
+        // Statements span lines — a CREATE TABLE is many — so this counts
+        // terminators against statements rather than checking line endings.
+        let terminator = Minimal.terminator();
+        assert!(!terminator.is_empty(), "a statement needs an end");
+        let script = ddl_script(&Minimal);
+        assert_eq!(
+            script.matches(terminator).count(),
+            Minimal.ddl().len(),
+            "one terminator per statement"
+        );
+    }
+
+    #[test]
+    fn the_default_guard_is_the_identity_and_says_so() {
+        // A dialect declaring `Guard` and inheriting this default emits bare,
+        // non-idempotent DDL that *reads* as protected — which is what SQL
+        // Server and Oracle did until a live run exposed it. `check_dialect`
+        // refuses that combination; this pins the default it refuses.
+        let bare = "CREATE SOMETHING x";
+        assert_eq!(Minimal.guard(ObjectKind::Table, "x", bare), bare);
+        assert_eq!(Minimal.table_idempotence(), Idempotence::IfNotExists);
+    }
+
+    #[test]
+    fn append_only_is_not_emitted_by_a_dialect_that_declares_none() {
+        // The default is empty, and `check_dialect` is what refuses a dialect
+        // that inherits it while the schema marks tables append-only
+        // (`db:M3.36`). Asserted here so the default cannot quietly acquire a
+        // statement.
+        for table in TABLES {
+            assert!(Minimal.append_only_sql(table).is_empty());
+        }
+    }
+
+    /// A dialect that takes the *other* branch of every idempotence decision.
+    ///
+    /// `Minimal` declares `IfNotExists` for tables and inherits the default for
+    /// indexes, so half of `create_table` and `create_index` was never
+    /// executed — every `==` on an `Idempotence` survived mutation. Two
+    /// dialects are needed because the branches are mutually exclusive by
+    /// construction.
+    struct Guarded;
+
+    impl Dialect for Guarded {
+        fn name(&self) -> &'static str {
+            "guarded"
+        }
+        fn col_sql(&self, _ty: ColTy) -> String {
+            "TEXT".to_owned()
+        }
+        fn quote(&self, identifier: &str) -> String {
+            format!("[{identifier}]")
+        }
+        fn placeholder(&self) -> Placeholder {
+            Placeholder::Question
+        }
+        fn table_idempotence(&self) -> Idempotence {
+            Idempotence::Guard
+        }
+        fn index_idempotence(&self) -> Idempotence {
+            Idempotence::Inline
+        }
+        fn guard(&self, _kind: ObjectKind, name: &str, statement: &str) -> String {
+            format!("IF NOT PRESENT [{name}] BEGIN {statement} END")
+        }
+        fn append_only_sql(&self, table: &Table) -> Vec<String> {
+            vec![format!("LOCK {}", self.quote(table.name))]
+        }
+    }
+
+    #[test]
+    fn a_guarding_dialect_wraps_its_tables_and_inlines_its_indexes() {
+        let statements = Guarded.ddl();
+
+        // `Guard` means the statement is wrapped, and `IfNotExists` is not
+        // emitted — a dialect that declared `Guard` and inherited the identity
+        // default would emit bare DDL that reads as protected.
+        assert!(
+            statements
+                .iter()
+                .any(|s| s.starts_with("IF NOT PRESENT") && s.contains("CREATE TABLE")),
+            "tables were not guarded"
+        );
+        assert!(
+            !statements.iter().any(|s| s.contains("IF NOT EXISTS")),
+            "a guarding dialect emitted IF NOT EXISTS as well"
+        );
+
+        // `Inline` means no separate CREATE INDEX statements at all.
+        assert!(
+            !statements.iter().any(|s| s.contains("CREATE INDEX")),
+            "an inlining dialect emitted a separate index"
+        );
+
+        // And an append-only declaration reaches the script, for the
+        // append-only tables and no others (`db:M3.36`).
+        let locks: Vec<_> = statements
+            .iter()
+            .filter(|s| s.starts_with("LOCK"))
+            .collect();
+        assert_eq!(locks.len(), TABLES.iter().filter(|t| t.append_only).count());
+        assert!(locks.iter().any(|s| s.contains("openehr_version")));
+    }
+
+    #[test]
+    fn the_default_terminator_is_a_semicolon() {
+        // Asserted against a literal, not against `terminator()` — a test that
+        // compares a function with itself passes whatever the function says.
+        assert_eq!(Minimal.terminator(), ";");
+    }
+
+    #[test]
+    fn column_sql_is_the_dialect_type_for_that_column() {
+        let version = TABLES
+            .iter()
+            .find(|t| t.name == "openehr_version")
+            .expect("the schema declares openehr_version");
+        let uid = version
+            .columns
+            .iter()
+            .find(|c| c.name == "uid")
+            .expect("openehr_version has a uid");
+
+        // It renders the *type* and nothing else — nullability and the name
+        // belong to `create_table`. Asserted against `col_sql` so a wrapper
+        // that returned a constant fails, and against a literal so one that
+        // returned nothing does too.
+        assert_eq!(super::column_sql(&Minimal, uid), Minimal.col_sql(uid.ty));
+        assert_eq!(super::column_sql(&Minimal, uid), "TEXT");
+        assert!(Minimal.create_table(version).contains("NOT NULL"));
+    }
+}

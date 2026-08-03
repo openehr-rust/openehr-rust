@@ -349,6 +349,35 @@ mod tests {
         .with_signature("-----BEGIN PGP SIGNATURE-----")
         .into();
 
+        // The other two `D-07` attributes travel through `encode_if_any`, and
+        // this test asserted neither until mutation testing replaced that
+        // function with `Ok(None)` and nothing failed — the exact defect `D-07`
+        // is about, reachable again with one edit (`lib:A-09`).
+        let attested = openehr::rm::common::Attestation::new(
+            AuditDetails::new(
+                "ehr1.example.org",
+                DvDateTime::new("2026-08-01T10:00:00Z").expect("literal"),
+                audit_change_type::AMENDMENT,
+                PartyIdentified::named("Dr B Consultant")
+                    .expect("literal")
+                    .into(),
+            )
+            .expect("literal"),
+            Text::plain("countersigned").expect("literal"),
+            false,
+        );
+        let merged: openehr::base::ObjectVersionId =
+            format!("{}::other.example.org::1", crate::conformance::RECORD)
+                .parse()
+                .expect("literal");
+        let v: Version<Composition> = match v {
+            Version::Original(original) => original
+                .with_attestation(attested)
+                .with_other_input_version_uid(merged.clone())
+                .into(),
+            imported @ Version::Imported(_) => imported,
+        };
+
         let row = VersionRow::project(&v, "c1", None, None).expect("projects");
         assert_eq!(
             row.audit_description.as_deref(),
@@ -357,6 +386,68 @@ mod tests {
         assert_eq!(
             row.signature.as_deref(),
             Some("-----BEGIN PGP SIGNATURE-----")
+        );
+        assert!(
+            row.attestations_json
+                .as_deref()
+                .is_some_and(|j| j.contains("countersigned")),
+            "attestations were not persisted: {:?}",
+            row.attestations_json
+        );
+        assert!(
+            row.other_input_version_uids_json
+                .as_deref()
+                .is_some_and(|j| j.contains(&merged.to_string())),
+            "merged version ids were not persisted: {:?}",
+            row.other_input_version_uids_json
+        );
+    }
+
+    /// `M3.34`: an anonymous committer is `NULL`, and a named one is not.
+    ///
+    /// Both directions, because only one of them was covered anywhere and the
+    /// projection could return `Some("xyzzy")` for every party without a test
+    /// failing. `NULL` here means *deliberately anonymous*; a store writing
+    /// `"unknown"` would turn a privacy decision into a data-quality problem
+    /// somebody later tries to clean up.
+    #[test]
+    fn an_anonymous_committer_is_null_and_a_named_one_is_written() {
+        let with_committer = |party: openehr::rm::common::PartyProxy| {
+            let audit = AuditDetails::new(
+                "ehr1.example.org",
+                DvDateTime::new("2026-08-01T09:00:00Z").expect("literal"),
+                audit_change_type::CREATION,
+                party,
+            )
+            .expect("literal");
+            let v: Version<Composition> = OriginalVersion::new(
+                format!("{}::ehr1.example.org::1", crate::conformance::RECORD)
+                    .parse()
+                    .expect("literal"),
+                None,
+                version_lifecycle_state::COMPLETE,
+                Some(crate::conformance::sample_composition("Encounter")),
+                audit,
+                crate::conformance::sample_ehr().ehr_status().clone(),
+            )
+            .expect("literal")
+            .into();
+            VersionRow::project(&v, "c1", None, None)
+                .expect("projects")
+                .audit_committer_name
+        };
+
+        assert_eq!(
+            with_committer(
+                PartyIdentified::named("Dr A Nurse")
+                    .expect("literal")
+                    .into()
+            ),
+            Some("Dr A Nurse".to_owned())
+        );
+        assert_eq!(
+            with_committer(openehr::rm::common::PartySelf::anonymous().into()),
+            None
         );
     }
 
