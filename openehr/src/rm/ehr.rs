@@ -1620,6 +1620,7 @@ pub type Label = DvText;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::base::PartyRef;
     use crate::rm::common::{Archetyped, PartyIdentified, PartyRelated};
     use crate::rm::data_structures::{Element, ItemSingle};
     use crate::rm::data_types::{DataValue, DvCount};
@@ -1767,5 +1768,384 @@ mod tests {
         let deceased = status.set_modifiable(false);
         assert!(!deceased.is_active());
         assert!(deceased.is_queryable());
+    }
+
+    /// An `EHR_STATUS` reports the two flags that govern the whole record.
+    ///
+    /// `is_queryable` could answer `true` for every record and `is_modifiable`
+    /// could be a constant (`lib:A-09`). These are not descriptive fields.
+    /// `is_queryable = false` means the record must not appear in population
+    /// queries — a patient or organisation has excluded it — so an accessor
+    /// that always says `true` **discloses a record that opted out**, and
+    /// nothing downstream can tell.
+    ///
+    /// `is_modifiable = false` means no new content may be written. A constant
+    /// `true` there admits writes to a closed record; a constant `false`
+    /// refuses every write. Neither is detectable from the value alone, which
+    /// is why both directions are asserted here.
+    #[test]
+    fn an_ehr_status_reports_the_flags_that_govern_the_record() {
+        let status = |queryable: bool, modifiable: bool| {
+            EhrStatus::new(
+                attrs("status", "openEHR-EHR-EHR_STATUS.generic.v1"),
+                PartySelf::anonymous(),
+                queryable,
+                modifiable,
+            )
+        };
+
+        // All four combinations, so neither accessor can be a constant and
+        // neither can be answering the other's field.
+        for (queryable, modifiable) in [(true, true), (true, false), (false, true), (false, false)] {
+            let s = status(queryable, modifiable);
+            assert_eq!(s.is_queryable(), queryable, "queryable={queryable} modifiable={modifiable}");
+            assert_eq!(s.is_modifiable(), modifiable, "queryable={queryable} modifiable={modifiable}");
+            // `is_active` is derived from modifiability, not from queryability.
+            assert_eq!(s.is_active(), modifiable);
+        }
+
+        // The subject is reported as built, and a referenced subject is not the
+        // anonymous one.
+        let anonymous = status(true, true);
+        assert_eq!(anonymous.subject(), &PartySelf::anonymous());
+        let person = PartyRef::new(
+            "demographic",
+            "PERSON",
+            crate::base::ObjectId::HierObjectId(
+                crate::base::HierObjectId::from_uid_str("6BA7B810-9DAD-11D1-80B4-00C04FD430C8")
+                    .unwrap(),
+            ),
+        )
+        .unwrap();
+        let identified = EhrStatus::new(
+            attrs("status", "openEHR-EHR-EHR_STATUS.generic.v1"),
+            PartySelf::with_external_ref(person.clone()),
+            true,
+            true,
+        );
+        assert_eq!(identified.subject().external_ref(), Some(&person));
+        assert_ne!(identified.subject(), anonymous.subject());
+
+        // `other_details` is absent unless recorded.
+        assert_eq!(anonymous.other_details(), None);
+        let detailed = status(true, true).with_other_details(item_structure());
+        assert!(detailed.other_details().is_some());
+    }
+
+    /// A `COMPOSITION` distinguishes an event from a persistent record.
+    ///
+    /// `is_event` could answer `true` always (`lib:A-09`). The two kinds obey
+    /// different rules — openEHR's `Is_persistent_validity` requires an event
+    /// composition to carry a context and permits a persistent one to omit it —
+    /// so a constant reading makes every composition look like an encounter.
+    #[test]
+    fn a_composition_reports_whether_it_is_an_event_or_persistent() {
+        let event = composition();
+        assert!(event.is_event(), "an encounter is an event composition");
+        assert!(!event.is_persistent());
+
+        let persistent = Composition::new(
+            attrs("Problem list", "openEHR-EHR-COMPOSITION.problem_list.v1"),
+            terminology::composition_category::PERSISTENT,
+            PartyIdentified::named("Dr A Nurse").unwrap().into(),
+            en(),
+            CodePhrase::new("ISO_3166-1", "GB").unwrap(),
+        )
+        .unwrap();
+        assert!(persistent.is_persistent());
+        assert!(
+            !persistent.is_event(),
+            "a persistent composition was reported as an event"
+        );
+        // The two must disagree, so neither predicate can be a constant.
+        assert_ne!(event.is_event(), persistent.is_event());
+    }
+
+    /// The optional attributes of the entry and instruction classes.
+    ///
+    /// Twelve accessors could each answer nothing (`lib:A-09`). Two carry more
+    /// than their size suggests: `Activity::action_archetype_id` is the link
+    /// from an order to the action that fulfils it — `""` breaks the pairing
+    /// silently — and `ISM_TRANSITION`'s attributes are the care-flow state an
+    /// order is in, which is how "prescribed" is told from "dispensed".
+    #[test]
+    fn the_optional_attributes_of_an_entry_are_reported_as_recorded() {
+        // ENTRY: provider and other participations.
+        let bare = EntryAttrs::about_subject(en(), utf8());
+        assert_eq!(bare.provider(), None);
+        assert!(bare.other_participations().is_empty());
+
+        let provider: crate::rm::common::PartyProxy =
+            PartyIdentified::named("Dr A Nurse").unwrap().into();
+        let participation = crate::rm::common::Participation::new(
+            Text::Plain(crate::rm::data_types::DvText::new("witness").unwrap()),
+            PartyIdentified::named("Ms B Witness").unwrap().into(),
+        );
+        let full = EntryAttrs::about_subject(en(), utf8())
+            .with_provider(provider.clone())
+            .with_participation(participation);
+        assert_eq!(full.provider().and_then(PartyProxy::name), Some("Dr A Nurse"));
+        assert_eq!(full.other_participations().len(), 1);
+
+        // CARE_ENTRY: the guideline the care followed.
+        assert_eq!(CareEntryAttrs::default().guideline_id(), None);
+
+        // ACTIVITY: the action archetype it will be fulfilled by, and its
+        // optional timing.
+        let activity = Activity::new(
+            attrs("activity", "at0400"),
+            item_structure(),
+            "openEHR-EHR-ACTION.medication.v1",
+        )
+        .unwrap();
+        assert_eq!(
+            activity.action_archetype_id(),
+            "openEHR-EHR-ACTION.medication.v1",
+            "the link from an order to its action was lost"
+        );
+        assert_eq!(activity.timing(), None);
+        // An empty action archetype id is refused, which is what makes the
+        // accessor's answer meaningful (`Action_archetype_id_valid`).
+        assert!(Activity::new(attrs("activity", "at0400"), item_structure(), "").is_err());
+
+        // ISM_TRANSITION: the care-flow state.
+        let plain = IsmTransition::new(terminology::instruction_state::ACTIVE).unwrap();
+        assert_eq!(plain.transition(), None);
+        assert_eq!(plain.careflow_step(), None);
+        assert!(plain.reason().is_empty());
+        assert_eq!(
+            plain.current_state().defining_code().code_string(),
+            terminology::instruction_state::ACTIVE
+        );
+
+        // Populated, so no accessor may be a constant `None`. These three are
+        // how "prescribed" is told from "dispensed": the state is where the
+        // order *is*, the transition is what moved it there, and the careflow
+        // step is the local workflow name for that move.
+        let moved = IsmTransition::new(terminology::instruction_state::ACTIVE)
+            .unwrap()
+            .with_transition(terminology::instruction_transition::START)
+            .unwrap()
+            .with_careflow_step(
+                DvCodedText::new("dispensed", CodePhrase::new("local", "at0010").unwrap()).unwrap(),
+            )
+            .with_reason(Text::Plain(
+                crate::rm::data_types::DvText::new("stock available").unwrap(),
+            ));
+        assert_eq!(
+            moved.transition().map(|t| t.defining_code().code_string()),
+            Some(terminology::instruction_transition::START)
+        );
+        assert_eq!(
+            moved.careflow_step().map(crate::rm::data_types::DvCodedText::value),
+            Some("dispensed")
+        );
+        assert_eq!(moved.reason().len(), 1);
+        assert_eq!(moved.reason()[0].value(), "stock available");
+
+        // A transition code outside the group is refused.
+        assert!(
+            IsmTransition::new(terminology::instruction_state::ACTIVE)
+                .unwrap()
+                .with_transition("not-a-transition")
+                .is_err()
+        );
+
+        // ACTIVITY timing: an optional structured schedule.
+        let timed = Activity::new(
+            attrs("activity", "at0400"),
+            item_structure(),
+            "openEHR-EHR-ACTION.medication.v1",
+        )
+        .unwrap()
+        .with_timing(crate::rm::data_types::DvParsable::new("R2/2026-08-03/P1D", "ISO8601").unwrap());
+        assert_eq!(
+            timed.timing().map(crate::rm::data_types::DvParsable::value),
+            Some("R2/2026-08-03/P1D")
+        );
+
+        // CARE_ENTRY guideline: the protocol the care followed. It has no
+        // builder, so deserialization is the only path that reads it back.
+        let with_guideline: CareEntryAttrs = serde_json::from_str(
+            r#"{"guideline_id":{"namespace":"local","type":"GUIDELINE",
+                 "id":{"_type":"HIER_OBJECT_ID","value":"6BA7B810-9DAD-11D1-80B4-00C04FD430C8"}}}"#,
+        )
+        .expect("deserialize");
+        assert!(
+            with_guideline.guideline_id().is_some(),
+            "a recorded guideline was dropped"
+        );
+    }
+
+    /// A `FOLDER`'s contents, and an `EVENT_CONTEXT`'s optional attributes.
+    ///
+    /// Six accessors could each answer nothing (`lib:A-09`). A folder is a
+    /// directory over a record: reporting no items and no sub-folders makes a
+    /// populated directory look empty, which reads as "this patient has no
+    /// filed documents".
+    ///
+    /// `EVENT_CONTEXT.end_time` is the one with a rule behind it —
+    /// `End_time_valid` requires it to be at or after `start_time` — so a
+    /// constant `None` also hides whatever the constructor refused.
+    #[test]
+    fn a_folder_and_an_event_context_report_what_they_hold() {
+        let doc = |n: u32| {
+            ObjectRef::new(
+                "local",
+                "VERSIONED_COMPOSITION",
+                crate::base::ObjectId::HierObjectId(
+                    crate::base::HierObjectId::from_uid_str(&format!(
+                        "6BA7B810-9DAD-11D1-80B4-00C04FD430C{n:X}"
+                    ))
+                    .unwrap(),
+                ),
+            )
+            .unwrap()
+        };
+
+        let empty = Folder::new(attrs("root", "at0000"));
+        assert!(empty.items().is_empty());
+        assert!(empty.folders().is_empty());
+        assert_eq!(empty.details(), None);
+
+        let filed = Folder::new(attrs("root", "at0000"))
+            .with_item(doc(1))
+            .with_item(doc(2))
+            .with_folder(Folder::new(attrs("2026", "at0001")).with_item(doc(3)));
+        assert_eq!(filed.items().len(), 2, "filed documents were reported missing");
+        assert_eq!(filed.folders().len(), 1);
+        assert_eq!(filed.folders()[0].items().len(), 1, "a sub-folder was reported empty");
+
+        // `details` has no builder — it arrives only by deserialization — so
+        // this is the one path that reads it back at all.
+        let mut object = serde_json::to_value(&filed)
+            .expect("serialize")
+            .as_object()
+            .expect("an object")
+            .clone();
+        object.insert(
+            "details".to_owned(),
+            serde_json::to_value(item_structure()).expect("serialize"),
+        );
+        let revived: Folder =
+            serde_json::from_value(serde_json::Value::Object(object)).expect("deserialize");
+        assert!(revived.details().is_some(), "recorded folder details were dropped");
+        assert_eq!(revived.items().len(), 2);
+
+        // EVENT_CONTEXT: end time and other context are optional and reported
+        // as recorded.
+        let open = EventContext::new(
+            DvDateTime::new("2026-08-03T09:00:00Z").unwrap(),
+            terminology::setting::EMERGENCY_CARE,
+        )
+        .unwrap();
+        assert_eq!(open.end_time(), None);
+        assert_eq!(open.other_context(), None);
+
+        let closed = EventContext::new(
+            DvDateTime::new("2026-08-03T09:00:00Z").unwrap(),
+            terminology::setting::EMERGENCY_CARE,
+        )
+        .unwrap()
+        .with_end_time(DvDateTime::new("2026-08-03T10:30:00Z").unwrap())
+        .unwrap()
+        .with_other_context(item_structure());
+        assert_eq!(
+            closed.end_time().map(DvDateTime::as_str),
+            Some("2026-08-03T10:30:00Z")
+        );
+        assert!(closed.other_context().is_some());
+
+        // An end before the start is refused (`End_time_valid`) — an encounter
+        // that finished before it began.
+        assert!(
+            EventContext::new(
+                DvDateTime::new("2026-08-03T09:00:00Z").unwrap(),
+                terminology::setting::EMERGENCY_CARE,
+            )
+            .unwrap()
+            .with_end_time(DvDateTime::new("2026-08-03T08:00:00Z").unwrap())
+            .is_err()
+        );
+    }
+
+    /// The optional attributes of an `INSTRUCTION` and an `ACTION`.
+    ///
+    /// `expiry_time` says when an order stops being valid, and
+    /// `instruction_details` is the link from a performed action back to the
+    /// order it fulfils. Both accessors could answer `None` for every instance
+    /// (`lib:A-09`), which severs the order-to-action pairing silently — the
+    /// same failure as `Activity::action_archetype_id` from the other end.
+    #[test]
+    fn an_instruction_and_an_action_report_the_links_between_them() {
+        let activity = Activity::new(
+            attrs("activity", "at0400"),
+            item_structure(),
+            "openEHR-EHR-ACTION.medication.v1",
+        )
+        .unwrap();
+        let instruction = Instruction::new(
+            attrs("Order", "openEHR-EHR-INSTRUCTION.medication_order.v3"),
+            EntryAttrs::about_subject(en(), utf8()),
+            Text::Plain(crate::rm::data_types::DvText::new("Give 5mg at once").unwrap()),
+            vec![activity],
+        )
+        .unwrap();
+        assert_eq!(instruction.expiry_time(), None);
+
+        let expiring = Instruction::new(
+            attrs("Order", "openEHR-EHR-INSTRUCTION.medication_order.v3"),
+            EntryAttrs::about_subject(en(), utf8()),
+            Text::Plain(crate::rm::data_types::DvText::new("Give 5mg at once").unwrap()),
+            vec![Activity::new(
+                attrs("activity", "at0400"),
+                item_structure(),
+                "openEHR-EHR-ACTION.medication.v1",
+            )
+            .unwrap()],
+        )
+        .unwrap()
+        .with_expiry_time(DvDateTime::new("2026-08-10T09:00:00Z").unwrap());
+        assert_eq!(
+            expiring.expiry_time().map(DvDateTime::as_str),
+            Some("2026-08-10T09:00:00Z")
+        );
+
+        // ACTION: unlinked, then linked back to the instruction it fulfils.
+        let action = || {
+            Action::new(
+                attrs("Given", "openEHR-EHR-ACTION.medication.v1"),
+                EntryAttrs::about_subject(en(), utf8()),
+                DvDateTime::new("2026-08-03T10:00:00Z").unwrap(),
+                item_structure(),
+                IsmTransition::new(terminology::instruction_state::ACTIVE).unwrap(),
+            )
+        };
+        assert_eq!(action().instruction_details(), None);
+
+        let details = InstructionDetails::new(
+            LocatableRef::new(
+                "local",
+                "VERSIONED_COMPOSITION",
+                crate::base::UidBasedId::from(
+                    "6BA7B810-9DAD-11D1-80B4-00C04FD430C8"
+                        .parse::<crate::base::HierObjectId>()
+                        .unwrap(),
+                ),
+                Some("/content[at0001]".to_owned()),
+            )
+            .unwrap(),
+            "activity1",
+        )
+        .unwrap();
+        let linked = action().with_instruction_details(details);
+        assert!(
+            linked.instruction_details().is_some(),
+            "the link back to the order was lost"
+        );
+        assert_eq!(
+            linked.instruction_details().map(InstructionDetails::activity_id),
+            Some("activity1")
+        );
     }
 }

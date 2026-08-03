@@ -102,6 +102,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-30 | Low | AQL has no node-id predicate shorthand: `c[at0001]` is refused, not read as `archetype_node_id = 'at0001'` | open, pinned by a test |
 | A-31 | Medium | The invariant scanner paired **any** uppercase literal with a following identifier-shaped one, so eleven pairs that were never a citation — `ROLE._type`, `EHR_STATUS._type`, `ELEMENT.archetype_node_id` and eight more — stood in the committed divergence register | **fixed** — the two must be one call's arguments; 74 named is unchanged, so no real citation was lost |
 | A-32 | Medium | `Eq` on the ISO 8601 types is lexical while `PartialOrd` compares instants, so `11:00:00Z` and `12:00:00+01:00` order `Equal` and are not `==` — contrary to the standard library's requirement that the two agree | **declared** as `D3.18a` and pinned; not resolved, because both halves are load-bearing |
+| A-33 | Medium | The Gregorian leap rule was implemented **twice** — `base::iso8601` and `rm::data_structures` — byte-identical but for the fallback arm, and the second copy had never been run by any test | **fixed** — one implementation, `pub(crate)`; the interval-event arithmetic that used it is now tested against hand-computed dates |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
 | A-13 | Medium | One `IF NOT EXISTS` flag covered two statements MySQL treats differently | **fixed**, verified on MySQL 8.4 |
@@ -482,6 +483,7 @@ an empty slice hashes nothing, builds an empty chain, and `verify` reports
 | `openehr/aql.rs` + `openehr/path.rs` | **115 of 435** | 4, all equivalent | the query surface: fifty navigation-table arms, the whole path parser |
 | `openehr/base/iso8601.rs` + `object_id.rs` | **95 of 510** | 2 | `days_from_civil`, `DURATION` ordering, the offset parser, the identifier grammars |
 | `openehr/rm/common.rs` + `data_types/quantity.rs` | **72 of 386** | 1, equivalent | the change-control envelope's accessors, and the clinical markers |
+| `openehr/rm/ehr.rs` + `rm/data_structures.rs` | **59 of 313** | **0** | `EHR_STATUS`'s two flags, and a duplicated calendar (`A-33`) |
 
 `record.rs` is the one worth reading twice. A test called
 `the_attributes_that_used_to_be_dropped_are_persisted` existed, named for
@@ -742,6 +744,53 @@ with no data must be in the `DELETED` lifecycle state, `links` and
 `LocatableAttrs`, and `FEEDER_AUDIT.original_content` must be a
 `DV_ENCAPSULATED`. All three are invariants the crate enforces correctly and the
 test author did not know.
+
+**`rm/ehr.rs` and `rm/data_structures.rs` repeated the accessor pattern, and
+added two findings of their own.**
+
+*`EhrStatus::is_queryable` could answer `true` for every record.* That is not a
+descriptive field: `is_queryable = false` means the record must not appear in
+population queries, because a patient or organisation excluded it. An accessor
+that always says `true` **discloses a record that opted out**, and nothing
+downstream can detect it. `is_modifiable` was equally free in both directions —
+a constant `true` admits writes to a closed record, a constant `false` refuses
+every write. All four combinations are now asserted, so neither flag can be a
+constant nor be answering the other's field.
+
+*The Gregorian leap rule existed twice* — `base::iso8601` and
+`rm::data_structures`, byte-identical but for the fallback arm, and the second
+copy had never been run by any test. That is `W-01` one level down: a calendar
+rule fixed in one of two copies is a rule that disagrees with itself. Recorded
+as `A-33` and consolidated to one `pub(crate)` implementation rather than
+tested twice. The arithmetic that copy existed for —
+`IntervalEvent::interval_start_time`, which computes when a measurement window
+opened — had all fifteen of its mutants surviving, and is now tested against
+hand-computed dates including `1900-03-01` (the century exception) and
+`2000-03-01`.
+
+Three more worth naming. `Item::type_name` could return one wrong constant for
+both variants, and it is what goes into `_type` in canonical JSON — so a
+`CLUSTER` would deserialize as an `ELEMENT`, under a digest that still
+verifies. `ItemList::named_item`'s `==` could be `!=`, returning the first
+element that is *not* the one asked for; the method matches on runtime name
+rather than node id precisely because a list built from a repeating archetype
+node shares one node id across every item, so the test gives three elements the
+same `at0001`. And `History::is_period_consistent` must distinguish `None` from
+`Some(false)`: a series *declared* periodic whose samples are off the period
+will be resampled or graphed wrongly by anything that trusts the declaration.
+
+**A structural note.** Several optional attributes have **no builder at all** —
+`IntervalEvent::state`, `Folder::details`, `CareEntryAttrs::guideline_id`,
+`FeederAuditDetails::version_id`. The crate can read records it cannot
+construct. That is legitimate for round-tripping, but it means those paths are
+reachable only through deserialization, and a test that only builds objects
+will never touch them. Each is now covered through JSON.
+
+**Two of the survivors were gaps in the first round of tests, not in the code.**
+The seconds term of `subtract_seconds` survived because every event time in the
+new table ended `:00` — added to zero, `+` and `-` are the same. And
+`Folder::details` survived because only its absent case was asserted. Asserting
+`None` is half a test.
 
 `store.rs` produced the one that would have mattered most in production:
 `create_contribution` could return `Ok(())` **without inserting anything** and

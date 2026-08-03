@@ -129,6 +129,11 @@ warnings — keep it there.**
 - **`openehr` and `openehr-store` depend inward only.** A CI job reads the
   manifests, dev-dependencies included — a probe once added `openehr-store` as a
   dev-dependency of `openehr`, a cycle, and everything still built and passed.
+- **The Gregorian leap rule lives in exactly one place.** `iso8601::days_in_month`
+  is `pub(crate)` for that reason. It was copied into `rm::data_structures` once
+  already, and the copy — identical but for its fallback arm — was never run by
+  any test (`lib:A-33`). A calendar rule fixed in one of two copies is a rule
+  that disagrees with itself, which is `W-01` one level down.
 - **A path that resolves to nothing is not an error.** `Node::children` answers
   an attribute a class does not have with an empty vector, deliberately, so a
   wrong attribute is `NoMatch`. The consequence is that **deleting a match arm

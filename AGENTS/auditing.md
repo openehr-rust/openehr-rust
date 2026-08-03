@@ -165,6 +165,15 @@ Two things to know before believing a number:
   nobody noticed the getters were unread: a test that builds an object and
   asserts the constructor refused bad input never reads a field back. Round-trip
   what you build.
+- **Asserting `None` is half a test.** An optional accessor needs both cases:
+  a constant `None` passes every absent assertion. Several fields here have no
+  builder at all — `IntervalEvent::state`, `Folder::details`,
+  `CareEntryAttrs::guideline_id` — and are reachable only by deserializing
+  JSON, so a test that only constructs objects can never reach them.
+- **Zero is not a value.** The seconds term of `subtract_seconds` survived a
+  fresh table of thirteen dates because every event time in it ended `:00`:
+  added to zero, `+` and `-` are indistinguishable. Give each component a
+  distinct non-zero value.
 - **A survivor can be a proof, not a gap.** `Parser::integer`'s `v >= 0` guard
   could be replaced with `true` and nothing failed — because the lexer starts a
   number only at a digit and never emits a negative one, so the guard is

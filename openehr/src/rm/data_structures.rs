@@ -789,7 +789,7 @@ fn subtract_seconds(
                 m = 12;
                 y -= 1;
             }
-            d = days_in_month(y, m);
+            d = iso8601::days_in_month(y, m);
         }
     }
     let offset = time.offset().map(|o| o.to_string()).unwrap_or_default();
@@ -799,16 +799,6 @@ fn subtract_seconds(
         (remaining % 3600) / 60,
         remaining % 60
     ))
-}
-
-/// Days in a month, Gregorian.
-fn days_in_month(year: i32, month: u8) -> u8 {
-    match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        2 if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) => 29,
-        _ => 28,
-    }
 }
 
 /// Either kind of event.
@@ -1224,5 +1214,285 @@ mod tests {
         assert!(json.contains(r#""_type":"ITEM_SINGLE""#), "{json}");
         let back: ItemStructure = serde_json::from_str(&json).unwrap();
         assert_eq!(back, s);
+    }
+
+    /// An `INTERVAL_EVENT` reports where its measurement window started.
+    ///
+    /// Fifteen mutants lived in this arithmetic and the calendar it used
+    /// (`lib:A-09`): every term of the seconds total, the borrow loop that
+    /// steps back over a day boundary, and — until `lib:A-33` — a **second
+    /// copy** of the Gregorian leap rule that no test had ever run.
+    ///
+    /// `interval_start_time` is `time - width`: when a measurement began. A
+    /// borrow that steps the wrong way puts a clinical event on the wrong day,
+    /// which is the failure `R4.9` refuses to approximate for calendar widths
+    /// and must not commit for exact ones either.
+    ///
+    /// The expected values are calendar arithmetic done by hand, not by
+    /// running the function.
+    #[test]
+    fn an_interval_event_reports_when_its_window_opened() {
+        let event = |time: &str, width: &str| {
+            IntervalEvent::new(
+                attrs("summary", "at0100"),
+                DvDateTime::new(time).unwrap(),
+                ItemTree::new(attrs("data", "at0101"), Vec::new()).into(),
+                crate::rm::data_types::DvDuration::new(width).unwrap(),
+                terminology::event_math_function::MEAN,
+            )
+            .unwrap()
+        };
+        let start = |time: &str, width: &str| {
+            event(time, width)
+                .interval_start_time()
+                .unwrap_or_else(|e| panic!("{time} - {width}: {e}"))
+                .as_str()
+                .to_owned()
+        };
+
+        // Within the day: each component of the seconds total on its own, so
+        // no other term can carry the result.
+        //
+        // The event time itself must carry non-zero minutes *and* seconds, or
+        // the `+ minute` and `+ second` terms are added to zero and a `-` is
+        // indistinguishable. Every case below with a `:00:00` time leaves that
+        // term free, which is how the seconds term survived a first pass.
+        assert_eq!(start("2026-08-03T12:34:56Z", "PT1H"), "2026-08-03T11:34:56Z");
+        assert_eq!(start("2026-08-03T12:34:56Z", "PT30S"), "2026-08-03T12:34:26Z");
+        assert_eq!(start("2026-08-03T00:00:30Z", "PT1M"), "2026-08-02T23:59:30Z");
+        assert_eq!(start("2026-08-03T12:00:00Z", "PT1H"), "2026-08-03T11:00:00Z");
+        assert_eq!(start("2026-08-03T12:00:00Z", "PT30M"), "2026-08-03T11:30:00Z");
+        assert_eq!(start("2026-08-03T12:00:00Z", "PT45S"), "2026-08-03T11:59:15Z");
+        assert_eq!(start("2026-08-03T12:00:00Z", "PT0S"), "2026-08-03T12:00:00Z");
+
+        // Across a day boundary, which is the borrow loop.
+        assert_eq!(start("2026-08-03T00:30:00Z", "PT1H"), "2026-08-02T23:30:00Z");
+        assert_eq!(start("2026-08-03T12:00:00Z", "P1D"), "2026-08-02T12:00:00Z");
+        // Several days, so the loop runs more than once.
+        assert_eq!(start("2026-08-03T12:00:00Z", "P5D"), "2026-07-29T12:00:00Z");
+
+        // Across a month boundary — this is what `days_in_month` is for, and
+        // the length of the *previous* month is what matters.
+        assert_eq!(start("2026-08-01T12:00:00Z", "P1D"), "2026-07-31T12:00:00Z");
+        assert_eq!(start("2026-03-01T12:00:00Z", "P1D"), "2026-02-28T12:00:00Z");
+        // A leap year: 2024-02 has 29 days.
+        assert_eq!(start("2024-03-01T12:00:00Z", "P1D"), "2024-02-29T12:00:00Z");
+        // A century that is not a leap year: 1900-02 has 28. Dates of birth in
+        // 1900 are still in live records, and the copied rule that got this
+        // right was never run.
+        assert_eq!(start("1900-03-01T12:00:00Z", "P1D"), "1900-02-28T12:00:00Z");
+        // A century that is: 2000-02 has 29.
+        assert_eq!(start("2000-03-01T12:00:00Z", "P1D"), "2000-02-29T12:00:00Z");
+
+        // Across a year boundary.
+        assert_eq!(start("2026-01-01T00:30:00Z", "PT1H"), "2025-12-31T23:30:00Z");
+
+        // The offset is carried through unchanged — the arithmetic is in the
+        // value's own zone, so the wall-clock reading moves and the zone does
+        // not.
+        assert_eq!(
+            start("2026-08-03T00:30:00+02:00", "PT1H"),
+            "2026-08-02T23:30:00+02:00"
+        );
+
+        // A calendar width is refused rather than approximated (`R4.9`): one
+        // month before 31 March is 28 February, and no fixed number of seconds
+        // produces that.
+        assert!(event("2026-03-31T12:00:00Z", "P1M").interval_start_time().is_err());
+        assert!(event("2026-03-31T12:00:00Z", "P1Y").interval_start_time().is_err());
+        // As is a date with no time of day.
+        let dateless = IntervalEvent::new(
+            attrs("summary", "at0100"),
+            DvDateTime::new("2026-08-03").unwrap(),
+            ItemTree::new(attrs("data", "at0101"), Vec::new()).into(),
+            crate::rm::data_types::DvDuration::new("PT1H").unwrap(),
+            terminology::event_math_function::MEAN,
+        )
+        .unwrap();
+        assert!(dateless.interval_start_time().is_err());
+
+        // A negative width would put the start after the end
+        // (`Width_non_negative`).
+        assert!(
+            IntervalEvent::new(
+                attrs("summary", "at0100"),
+                DvDateTime::new("2026-08-03T12:00:00Z").unwrap(),
+                ItemTree::new(attrs("data", "at0101"), Vec::new()).into(),
+                crate::rm::data_types::DvDuration::new("-PT1H").unwrap(),
+                terminology::event_math_function::MEAN,
+            )
+            .is_err()
+        );
+
+        // The optional attributes report what was recorded, not a constant.
+        let plain = event("2026-08-03T12:00:00Z", "PT1H");
+        assert_eq!(plain.sample_count(), None);
+        assert_eq!(plain.state(), None);
+        let summarised = event("2026-08-03T12:00:00Z", "PT1H").with_sample_count(12);
+        assert_eq!(summarised.sample_count(), Some(12));
+
+        // `state` has no builder on an INTERVAL_EVENT — it arrives only by
+        // deserialization — so this is the one path that reads it back. It is
+        // not decoration: a summary taken while the subject was exercising is a
+        // different finding from the same numbers at rest.
+        let json = serde_json::to_value(&summarised).expect("serialize");
+        let mut with_state = json.as_object().expect("an object").clone();
+        with_state.insert(
+            "state".to_owned(),
+            serde_json::to_value(ItemStructure::from(ItemTree::new(
+                attrs("state", "at0102"),
+                Vec::new(),
+            )))
+            .expect("serialize"),
+        );
+        let revived: IntervalEvent =
+            serde_json::from_value(serde_json::Value::Object(with_state)).expect("deserialize");
+        assert!(revived.state().is_some(), "a recorded state was dropped");
+        assert_eq!(revived.sample_count(), Some(12));
+    }
+
+    /// The accessors on `ELEMENT`, `ITEM`, and `ITEM_LIST`.
+    ///
+    /// Nine mutants (`lib:A-09`). `Item::type_name` is what goes into `_type`
+    /// in canonical JSON, so one wrong constant makes a `CLUSTER` deserialize
+    /// as an `ELEMENT`; `archetype_node_id` is what every path predicate
+    /// matches on; and `named_item`'s `==` could be `!=`, returning the first
+    /// element that is *not* the one asked for.
+    #[test]
+    fn the_accessors_on_an_item_and_a_list_report_what_was_built() {
+        use crate::rm::common::Locatable as _;
+
+        // An absent value carries a flavour and, optionally, a reason. The two
+        // are different fields: "not measured" and "the cuff was too small".
+        let absent = Element::new_null(attrs("bp", "at0004"), "253").unwrap();
+        assert!(absent.is_null());
+        assert_eq!(absent.null_reason(), None);
+        let excused = Element::new_null(attrs("bp", "at0004"), "253")
+            .unwrap()
+            .with_null_reason(Text::Plain(
+                crate::rm::data_types::DvText::new("cuff too small").unwrap(),
+            ))
+            .unwrap();
+        assert_eq!(
+            excused.null_reason().map(Text::value),
+            Some("cuff too small")
+        );
+        // A reason on a valued element is refused (`Inv_null_reason_valid`),
+        // which is what makes the accessor's answer meaningful.
+        assert!(
+            count_element("x", 1)
+                .with_null_reason(Text::Plain(
+                    crate::rm::data_types::DvText::new("why").unwrap()
+                ))
+                .is_err()
+        );
+
+        // ITEM: the two variants must name themselves differently and report
+        // their own node id.
+        let element_item = Item::Element(count_element("systolic", 120));
+        let cluster_item = Item::Cluster(
+            Cluster::new(attrs("row", "at0500"), vec![Item::Element(count_element("cell", 1))])
+                .unwrap(),
+        );
+        assert_eq!(element_item.type_name(), "ELEMENT");
+        assert_eq!(cluster_item.type_name(), "CLUSTER");
+        assert_ne!(element_item.type_name(), cluster_item.type_name());
+        assert_eq!(element_item.archetype_node_id(), "at0001");
+        assert_eq!(cluster_item.archetype_node_id(), "at0500");
+
+        // ITEM_LIST: the count, and lookup by runtime name rather than node id.
+        let list = ItemList::new(
+            attrs("readings", "at0600"),
+            vec![
+                count_element("systolic", 120),
+                count_element("diastolic", 80),
+                count_element("pulse", 72),
+            ],
+        );
+        assert_eq!(list.item_count(), 3, "the list reported the wrong size");
+        assert_eq!(list.items().len(), list.item_count());
+        assert_eq!(ItemList::new(attrs("empty", "at0601"), Vec::new()).item_count(), 0);
+
+        // Every item shares `at0001`, so a lookup that matched the node id
+        // would return the first regardless — the name is what tells them
+        // apart, and a `!=` returns the wrong one rather than none.
+        let found = list.named_item("diastolic").expect("diastolic is in the list");
+        assert_eq!(found.name().value(), "diastolic");
+        assert_eq!(list.named_item("pulse").map(|e| e.name().value()), Some("pulse"));
+        assert!(list.named_item("nonesuch").is_none());
+    }
+
+    /// A `HISTORY` reports its duration and whether its events fall on the
+    /// declared period.
+    ///
+    /// Four mutants, including the guard that refuses a calendar period
+    /// (`lib:A-09`). `Some(false)` from `is_period_consistent` is a real
+    /// finding — a series declared periodic whose samples are not on the period
+    /// will be resampled or graphed wrongly by anything that trusts the
+    /// declaration — so the difference between `None` and `Some(false)` is the
+    /// whole point of the method.
+    #[test]
+    fn a_history_reports_its_duration_and_whether_its_period_holds() {
+        let event = |offset_minutes: u32| -> Event {
+            PointEvent::new(
+                attrs("sample", "at0700"),
+                DvDateTime::new(&format!("2026-08-03T09:{offset_minutes:02}:00Z")).unwrap(),
+                ItemTree::new(attrs("data", "at0701"), Vec::new()).into(),
+            )
+            .into()
+        };
+        let history = |events: Vec<Event>| {
+            History::new(
+                attrs("series", "at0702"),
+                DvDateTime::new("2026-08-03T09:00:00Z").unwrap(),
+                events,
+                None,
+            )
+            .unwrap()
+        };
+
+        // Duration: absent unless recorded.
+        let plain = history(vec![event(0)]);
+        assert_eq!(plain.duration(), None);
+        let timed = history(vec![event(0)])
+            .with_duration(crate::rm::data_types::DvDuration::new("PT30M").unwrap());
+        assert_eq!(timed.duration().map(|d| d.value().as_str()), Some("PT30M"));
+
+        // Not periodic: the question does not arise.
+        assert!(!plain.is_periodic());
+        assert_eq!(plain.is_period_consistent(), None);
+
+        // Periodic and consistent: every offset is a multiple of five minutes.
+        let consistent = history(vec![event(0), event(5), event(10)])
+            .with_period(crate::rm::data_types::DvDuration::new("PT5M").unwrap())
+            .unwrap();
+        assert!(consistent.is_periodic());
+        assert_eq!(consistent.is_period_consistent(), Some(true));
+
+        // Periodic and *not* consistent: one sample is off the grid. This must
+        // be `Some(false)`, not `None` — it is an answer, not an absence.
+        let inconsistent = history(vec![event(0), event(5), event(7)])
+            .with_period(crate::rm::data_types::DvDuration::new("PT5M").unwrap())
+            .unwrap();
+        assert_eq!(
+            inconsistent.is_period_consistent(),
+            Some(false),
+            "a series off its declared period was reported consistent"
+        );
+
+        // A calendar period has no fixed length in seconds, so the modulo is
+        // undefined and the answer is refused rather than approximated. Both
+        // halves of the guard matter, so months and years are checked apart.
+        for calendar in ["P1M", "P1Y"] {
+            let h = history(vec![event(0), event(5)])
+                .with_period(crate::rm::data_types::DvDuration::new(calendar).unwrap())
+                .unwrap();
+            assert!(h.is_periodic());
+            assert_eq!(
+                h.is_period_consistent(),
+                None,
+                "{calendar} was treated as a fixed number of seconds"
+            );
+        }
     }
 }

@@ -252,7 +252,15 @@ fn days_from_civil(year: i32, month: u8, day: u8) -> i64 {
 ///
 /// The century exceptions matter here: 1900 was not a leap year, and dates of
 /// birth in 1900 are still in live records.
-fn days_in_month(year: i32, month: u8) -> u8 {
+///
+/// `pub(crate)` because `rm::data_structures` needs it for interval-event
+/// arithmetic and used to carry **its own copy** — identical but for the
+/// fallback arm, and entirely untested (`lib:A-33`). One calendar, one place:
+/// a leap rule fixed in one of two copies is a rule that disagrees with itself.
+///
+/// Returns `0` for a month outside 1–12, which is not a length but a refusal;
+/// every caller must already have validated the month.
+pub(crate) fn days_in_month(year: i32, month: u8) -> u8 {
     match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
