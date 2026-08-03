@@ -875,4 +875,152 @@ mod tests {
         assert_eq!(Chain::new().verify(&[]), ChainStatus::Empty);
         assert!(!Chain::new().verify(&[]).is_fully_verified());
     }
+
+    /// A keyed chain survives JSON and still verifies.
+    ///
+    /// Nothing exercised the hex codecs at all until `A-09`'s first real
+    /// mutation run: `cargo mutants` over this file missed 40 of 67 viable
+    /// mutants, and the largest cluster was arithmetic inside
+    /// `hex_bytes`/`hex_vec` — every `*`, `/`, `%` and `+` in the decoder could
+    /// be replaced without a test noticing, because no test had ever put a
+    /// chain through serde.
+    ///
+    /// The digests and tags are what a chain *is*, so a codec that loses a
+    /// nibble loses the evidence.
+    #[test]
+    fn a_keyed_chain_round_trips_through_json() {
+        let key = ChainKey::new("k1", vec![7u8; 32]).unwrap();
+        let mut chain = Chain::new();
+        chain.append("v1", &"first", Some(&key)).unwrap();
+        chain.append("v2", &"second", Some(&key)).unwrap();
+
+        let json = serde_json::to_string(&chain).unwrap();
+        // Hex, not an array of bytes: the serialized form is meant to be read.
+        assert!(json.contains(&chain.head().to_hex()), "{json}");
+
+        let read: Chain = serde_json::from_str(&json).unwrap();
+        assert_eq!(read.entries(), chain.entries());
+        assert_eq!(read.len(), 2);
+        assert!(!read.is_empty());
+        assert_eq!(read.verify(&[&key]), ChainStatus::Verified);
+        assert_eq!(read.head(), chain.head());
+    }
+
+    /// Malformed hex is refused rather than decoded into something shorter.
+    ///
+    /// An odd-length string, and a non-hex digit. Both would otherwise produce
+    /// a digest of the wrong length, and a chain that verified against nothing.
+    #[test]
+    fn malformed_hex_is_refused() {
+        let key = ChainKey::new("k1", vec![7u8; 32]).unwrap();
+        let mut chain = Chain::new();
+        chain.append("v1", &"first", Some(&key)).unwrap();
+        let json = serde_json::to_string(&chain).unwrap();
+
+        let head = chain.head().to_hex();
+        for broken in [
+            head[..head.len() - 1].to_owned(),      // odd length
+            format!("{}zz", &head[..head.len() - 2]), // not hex
+        ] {
+            let corrupted = json.replace(&head, &broken);
+            assert!(
+                serde_json::from_str::<Chain>(&corrupted).is_err(),
+                "accepted {broken}"
+            );
+        }
+    }
+
+    /// A tag's key id is what routes verification to a key, so it has to
+    /// survive and it has to matter.
+    #[test]
+    fn a_tags_key_id_selects_the_key() {
+        let key = ChainKey::new("k1", vec![7u8; 32]).unwrap();
+        let mut chain = Chain::new();
+        chain.append("v1", &"first", Some(&key)).unwrap();
+        assert_eq!(chain.entries()[0].tag.as_ref().unwrap().key_id(), "k1");
+        assert_eq!(chain.entries()[0].tag.as_ref().unwrap().mac().len(), 32);
+
+        // Held under another name: the id is what fails to match, not the tag.
+        let renamed = ChainKey::new("k2", vec![7u8; 32]).unwrap();
+        assert!(matches!(
+            chain.verify(&[&renamed]),
+            ChainStatus::UnknownKey { key_id, .. } if key_id == "k1"
+        ));
+    }
+
+    /// The two constructors a store uses to rebuild a chain from its rows.
+    ///
+    /// Both were missed by mutation testing — replacing either with
+    /// `Default::default()` left this crate's suite green — because the only
+    /// callers are in `openehr-store`, and `cargo mutants` runs the tests of
+    /// the crate it is mutating. A cross-crate caller is not coverage of this
+    /// crate.
+    ///
+    /// The failure they guard is not subtle. A `resume_from` that forgot its
+    /// head links the next entry to genesis and starts a second history inside
+    /// one container; a `from_stored` that dropped its entries verifies as
+    /// `Empty`, which `openehr_store::integrity` treats as *not intact* — so
+    /// that one fails safe, and this one does not.
+    #[test]
+    fn a_chain_rebuilt_from_storage_keeps_what_it_was_given() {
+        let key = ChainKey::new("k1", vec![7u8; 32]).unwrap();
+        let mut written = Chain::new();
+        written.append("v1", &"first", Some(&key)).unwrap();
+        written.append("v2", &"second", Some(&key)).unwrap();
+
+        // `from_stored`: the entries come back, and verify.
+        let read = Chain::from_stored(written.entries().to_vec());
+        assert_eq!(read.entries(), written.entries());
+        assert_eq!(read.len(), 2);
+        assert_eq!(read.verify(&[&key]), ChainStatus::Verified);
+
+        // `resume_from`: an empty chain resumed at a head reports that head,
+        // not genesis, and the next entry links to it.
+        let head = written.head();
+        let mut resumed = Chain::resume_from(head);
+        assert_eq!(resumed.head(), head);
+        assert_ne!(head, Digest256::GENESIS);
+        resumed.append("v3", &"third", Some(&key)).unwrap();
+        assert_eq!(resumed.entries()[0].previous, head);
+    }
+
+    /// `is_fully_verified` answers for exactly one status.
+    ///
+    /// Missed by mutation testing in the `false` direction: nothing asserted a
+    /// **positive** answer, so a predicate that always said "not fully
+    /// verified" passed. That direction is the safe one, which is why it
+    /// survived — and why it needs a test rather than an argument.
+    #[test]
+    fn full_verification_is_claimed_for_one_status_only() {
+        let key = ChainKey::new("k1", vec![7u8; 32]).unwrap();
+        let mut keyed = Chain::new();
+        keyed.append("v1", &"first", Some(&key)).unwrap();
+        assert!(keyed.verify(&[&key]).is_fully_verified());
+
+        let mut unkeyed = Chain::new();
+        unkeyed.append("v1", &"first", None).unwrap();
+        assert!(!unkeyed.verify(&[]).is_fully_verified());
+        assert!(!Chain::new().verify(&[]).is_fully_verified());
+    }
+
+    /// A digest displays as its hex, and a checkpoint therefore carries one.
+    ///
+    /// Missed by mutation testing: replacing `Display` with `Ok(())` printed
+    /// nothing and no test noticed. That is not cosmetic — the checkpoint of
+    /// `db:M3.16c` exists to be published to a witness, and its entire value is
+    /// the digest in it. One that printed an empty digest would be accepted by
+    /// the witness and prove nothing later.
+    #[test]
+    fn a_digest_displays_as_hex_and_a_checkpoint_carries_it() {
+        let mut chain = Chain::new();
+        chain.append("v1", &"first", None).unwrap();
+        let head = chain.head();
+
+        let shown = head.to_string();
+        assert_eq!(shown, head.to_hex());
+        assert_eq!(shown.len(), 64);
+        assert!(shown.chars().all(|c| c.is_ascii_hexdigit()));
+
+        assert!(chain.checkpoint().contains(&shown));
+    }
 }

@@ -1,3 +1,8 @@
 target/
 tmp/
 .sota
+
+# cargo-mutants working directories: build logs and per-mutant diffs, thousands
+# of files per run. The result belongs in the audit register, not the tree.
+mutants.out/
+mutants.out.old/

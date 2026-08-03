@@ -371,7 +371,7 @@ Process requirements; they govern this specification rather than the code.
 | Id | Status | Evidence |
 | --- | --- | --- |
 | T13.1 | • | 222 of 276 requirements cite a test; 3 remain `?` and are named above |
-| T13.2 | ? | four checks in `tests/invariants.rs` were mutation-verified on 2026-08-01 (units, denominator, proportion precision, null omission) and one in `validation` (document order); the rest of the suite is not systematically mutation-tested — **A-09** |
+| T13.2 | ? | `cargo-mutants` over `security/audit_chain.rs`: 40 missed of 67 viable, then 1 after four tests were added — the largest gap was that nothing had ever put a `Chain` through serde. Roughly twenty more checks mutated by hand. Not in CI and not run over the other modules — **A-09** |
 | T13.3 | • | every test in `tests/guarantees.rs` states its failure mode |
 | T13.4 | • | `canonical_json` |
 | T13.5–T13.6 | • | `tests/guarantees.rs` |

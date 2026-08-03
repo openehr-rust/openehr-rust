@@ -108,3 +108,28 @@ no concurrency testing, no fuzzing, the library's own findings not re-verified.
 
 Keep that section honest and current. It is the part a later reader most needs
 and the part most likely to rot.
+
+## Mutation testing
+
+```sh
+cargo install cargo-mutants --locked
+cd openehr && cargo mutants --file src/<module>.rs -j 4
+```
+
+Run over one file at a time. Eighty mutants take two minutes; the whole crate
+would be hours, which is why this is not in CI.
+
+Read the result as a question, not a score. The first run over
+`security/audit_chain.rs` missed 40 of 67 viable mutants, and the answer was not
+"the tests are bad" — it was that **nothing had ever put a `Chain` through
+serde**, so every arithmetic operation in the hex codecs was free to change. Four
+tests took it to one survivor (`lib:A-09`).
+
+Two things to know before believing a number:
+
+- **`cargo mutants` runs the tests of the crate it mutates.** `Chain::from_stored`
+  survived being replaced with `Default::default()` because its only callers are
+  in `openehr-store`. A cross-crate test is not coverage of this crate.
+- **A survivor in the safe direction is not always worth chasing.** `Debug for
+  Mac` replaced with `Ok(())` prints nothing, which is safer than what it does.
+  Pinning exact `Debug` output would freeze formatting for no benefit.

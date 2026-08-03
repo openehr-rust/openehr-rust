@@ -397,6 +397,46 @@ today, and adding either is a supply-chain decision rather than a code change.
 
 ---
 
+
+**Amended 2026-08-03 — mutation testing, measured.** `T13.2` has said since it
+was written that mutation verification is "not systematic": four checks in
+`tests/invariants.rs` and one in `validation` had been mutated by hand, and the
+rest of the suite had not. This session added roughly fifteen more by hand, one
+per change, which is evidence and still not systematic.
+
+`cargo-mutants` was run over `security/audit_chain.rs` — the module carrying the
+tamper-evidence chain, and the one where a weak test is worth the most.
+
+| Run | Missed | Caught | Unviable |
+| --- | --- | --- | --- |
+| Before | **40** | 27 | 13 |
+| After | **1** | 66 | 13 |
+
+**What it found, which reading had not.** The largest cluster of survivors was
+arithmetic inside the hex codecs — every `*`, `/`, `%` and `+` in
+`hex_bytes`/`hex_vec` could be changed without a test noticing, because
+**nothing in the crate had ever put a `Chain` through serde**. A digest or a tag
+is what a chain *is*; a codec that drops a nibble drops the evidence. Four tests
+closed it: a keyed chain through JSON, malformed hex refused, key ids selecting
+keys, and a digest displaying as hex.
+
+**What it found about coverage itself.** `Chain::from_stored` and
+`Chain::resume_from` both survived being replaced with `Default::default()`,
+because their only callers are in `openehr-store` and `cargo mutants` runs the
+tests of the crate it mutates. A cross-crate caller is not coverage of this
+crate — the `openehr-sqlite` tamper tests exercise both paths and could not have
+caught a regression here.
+
+**The one survivor.** `Debug for Mac` replaced with `Ok(())` prints nothing,
+which is *safer* than what it does now, and pinning exact `Debug` output would
+freeze formatting for no benefit. Recorded rather than chased.
+
+**Residual.** One module of many. The run is not in CI: 80 mutants take two
+minutes for one file, and the whole crate would be hours. `T13.2` therefore
+stays **?** — what changed is that "not systematic" is now a measurement with a
+number rather than an impression, and the method is written down for the next
+module.
+
 ## A-11 — the Common Information Model was implemented from prose
 
 **Severity:** Medium. **Status:** fixed. **Requirements:** `M5.13a`, `M5.18a`,
