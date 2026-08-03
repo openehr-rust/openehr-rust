@@ -54,27 +54,16 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | `DV_PARSABLE` | `Value_valid` | yes | `Formalism_valid`, `Size_valid` |
 | `DV_PROPORTION` | `Parts_finite` | yes | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
 | `DV_TEXT` | `value` | **NO** | `Encoding_valid`, `Formatting_valid`, `Language_valid`, `Mappings_valid`, `Valid_value` |
-| `DV_URI` | `empty` | **NO** | `Value_valid` |
-| `EHR_STATUS` | `_type` | **NO** | `Is_archetype_root` |
-| `ELEMENT` | `archetype_node_id` | **NO** | `Inv_is_null_valid`, `Inv_null_flavour_indicated`, `Inv_null_flavour_valid`, `Inv_null_reason_valid` |
 | `ENTRY` | `Provider_valid` | **NO** | `Encoding_valid`, `Is_archetype_root`, `Language_valid`, `Other_participations_valid`, `Subject_validity` |
 | `ENTRY` | `Subject_valid` | **NO** | `Encoding_valid`, `Is_archetype_root`, `Language_valid`, `Other_participations_valid`, `Subject_validity` |
 | `EVENT` | `Time_after_origin` | yes | `Offset_validity1` |
 | `EVENT_CONTEXT` | `End_time_valid` | yes | `Participations_validity`, `Setting_valid`, `location_valid` |
 | `INSTRUCTION` | `Narrative_valid` | yes | `Activities_valid` |
 | `INTERVAL_EVENT` | `Width_non_negative` | yes | `Interval_start_time_valid`, `Math_function_validity` |
-| `INTERVAL_EVENT` | `_type` | **NO** | `Interval_start_time_valid`, `Math_function_validity` |
 | `ITEM_TABLE` | `Rows_regular` | yes | `Valid_structure` |
 | `ORIGINAL_VERSION` | `Data_valid` | yes | `Attestations_valid`, `Is_merged_validity`, `Other_input_version_uids_valid` |
 | `ORIGINAL_VERSION` | `Lifecycle_state_valid` | yes | `Attestations_valid`, `Is_merged_validity`, `Other_input_version_uids_valid` |
 | `PARTICIPATION` | `Performer_valid` | **NO** | `Function_valid`, `Mode_valid` |
-| `PARTY_IDENTIFIED` | `relationship` | **NO** | `Basic_validity`, `Identifiers_valid`, `Name_valid` |
-| `PARTY_RELATED` | `_type` | **NO** | `Relationship_valid` |
-| `REFERENCE_RANGE` | `primitive` | **NO** | `Range_is_simple` |
-| `ROLE` | `_type` | **NO** | `Capabilities_valid` |
-| `VERSIONED_COMPOSITION` | `Contributions_valid` | **NO** | `Archetype_node_id_valid`, `Persistent_validity` |
-| `VERSIONED_COMPOSITION` | `Directory_valid` | **NO** | `Archetype_node_id_valid`, `Persistent_validity` |
-| `VERSIONED_COMPOSITION` | `Folders_valid` | **NO** | `Archetype_node_id_valid`, `Persistent_validity` |
 
 ## Not named in the crate's source
 

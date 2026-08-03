@@ -25,7 +25,7 @@ Doctests count as tests: they compile and run in CI (`T13.8`).
 ## Totals
 
 Counted mechanically from the tables below, with every requirement id in
-`spec/*.md` checked to appear exactly once — **297 ids, 297 covered, none
+`spec/*.md` checked to appear exactly once — **299 ids, 299 covered, none
 missing**.
 
 A hand-written total in a file like this is a number nobody rechecks, and this
@@ -359,6 +359,8 @@ Process requirements; they govern this specification rather than the code.
 | Q12.8 | • | `path::tests::predicates_round_trip_through_display_in_long_form` |
 | Q12.9 | • | `aql::tests::the_canonical_blood_pressure_query_parses`, `…::aggregates_and_distinct_parse`, `…::not_contains_parses_and_keeps_its_negation`, `…::like_and_offset_parse` |
 | Q12.9a | • | `guarantees::aql_refuses_what_it_does_not_model_and_says_where_that_is_recorded` |
+| Q12.9b | • | declared limitation: no signed numeric literal — `aql::a_negative_numeric_literal_is_refused_rather_than_misread` (`A-27`) |
+| Q12.9c | • | declared limitation: no node-id predicate shorthand — `aql::only_a_dashed_and_dotted_word_standing_alone_is_an_archetype_id` (`A-30`) |
 | Q12.10 | — | no execution API exists |
 | Q12.11 | • | `aql::tests::keywords_are_case_insensitive` |
 | Q12.12 | • | `aql::tests::malformed_queries_report_an_offset` |
@@ -371,7 +373,7 @@ Process requirements; they govern this specification rather than the code.
 | Id | Status | Evidence |
 | --- | --- | --- |
 | T13.1 | • | 222 of 276 requirements cite a test; 3 remain `?` and are named above |
-| T13.2 | ? | `cargo-mutants` over four modules: `audit_chain` 40→1, `integrity` 15→0, `record` 4→0, `dialect` 25→5, `loco/auth` 0→0, `loco/controllers` 6→0, `validation` 25→9, `loco/access` 1→0, `sqlite/store` 9→1, `redact` 8→0, `access` 6→1, `canonical` 1→0. The recurring cause is code whose tests live in another crate, which `cargo mutants` does not run. Roughly twenty more checks mutated by hand. Not in CI, and most modules are untouched — **A-09** |
+| T13.2 | ? | `cargo-mutants` over four modules: `audit_chain` 40→1, `integrity` 15→0, `record` 4→0, `dialect` 25→5, `loco/auth` 0→0, `loco/controllers` 6→0, `validation` 25→9, `loco/access` 1→0, `sqlite/store` 9→1, `redact` 8→0, `access` 6→1, `canonical` 1→0, and the query surface `aql`+`path` **115→4**, the four remaining shown equivalent. The recurring cause is code whose tests live in another crate, which `cargo mutants` does not run. Roughly twenty more checks mutated by hand. Not in CI, and most modules are untouched — **A-09** |
 | T13.3 | • | every test in `tests/guarantees.rs` states its failure mode |
 | T13.4 | • | `canonical_json` |
 | T13.5–T13.6 | • | `tests/guarantees.rs` |

@@ -96,6 +96,11 @@ in the documentation, which is the class this register most exists to catch.
 | A-24 | Medium | The 75 unnamed RM invariants were undifferentiated, so a real gap was indistinguishable from a class deliberately not modelled | **classified** — 29 out of scope, 17 vacuous, 25 unenforced, 1 enforced-but-misnamed; the build now fails on an unclassified one. **Unenforced now 21**: the four `EHR` reference rules and the interval rename are fixed; two sub-findings open |
 | A-25 | High | The invariant-coverage count matched invariant **names** without their class, matched names in comments, and saw only two of the ways a rule is reported | **fixed** — matches the cited `(class, name)` pair through a real scanner; **83 named became 69**, and 24 invariants nobody had examined were revealed |
 | A-26 | Low | The conformance matrix boasted mechanical completeness — "291 ids, 291 covered, none missing" — and six requirements added afterwards had no row | **fixed** — 297 of 297, and CI re-derives the count on every push |
+| A-27 | Medium | AQL cannot express a **negative numeric literal** — `WHERE o/value/magnitude > -2.5` is refused at the lexer, and `Parser::integer`'s `v >= 0` guard is therefore unreachable | **declared** as `Q12.9b`; the parser gap is open |
+| A-28 | High | The query surface — `aql.rs` and `path.rs` — had **115 surviving mutants of 435**, the largest untested area in the crate; fifty of them were navigation-table arms whose loss turns a resolvable path into an empty result | **fixed** for the navigation table and the AQL parser; the count is in the `A-09` table |
+| A-29 | Medium | The four temporal data types carry `DV_ORDERED` attributes and implement `DvOrdered`, but `path.rs` reached them on five classes only — a normal range on a `DV_DATE` was unreachable by path, against `Q12.7a` | **fixed** — nine classes; found by a test written to kill a mutant |
+| A-30 | Low | AQL has no node-id predicate shorthand: `c[at0001]` is refused, not read as `archetype_node_id = 'at0001'` | open, pinned by a test |
+| A-31 | Medium | The invariant scanner paired **any** uppercase literal with a following identifier-shaped one, so eleven pairs that were never a citation — `ROLE._type`, `EHR_STATUS._type`, `ELEMENT.archetype_node_id` and eight more — stood in the committed divergence register | **fixed** — the two must be one call's arguments; 74 named is unchanged, so no real citation was lost |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
 | A-13 | Medium | One `IF NOT EXISTS` flag covered two statements MySQL treats differently | **fixed**, verified on MySQL 8.4 |
@@ -473,6 +478,7 @@ an empty slice hashes nothing, builds an empty chain, and `verify` reports
 | `openehr/security/redact.rs` | 8 of 33 | 0 | two of three redaction rule kinds had no test |
 | `openehr/security/access.rs` | 6 of 20 | 1 | the `EHR_ACCESS` accessors |
 | `openehr/security/canonical.rs` | 1 of 13 | 0 | nothing canonicalised an **array** |
+| `openehr/aql.rs` + `openehr/path.rs` | **115 of 435** | 4, all equivalent | the query surface: fifty navigation-table arms, the whole path parser |
 
 `record.rs` is the one worth reading twice. A test called
 `the_attributes_that_used_to_be_dropped_are_persisted` existed, named for
@@ -548,6 +554,53 @@ and would have cost a false finding in this register.
 Redaction also turned out to depend on shape rather than `_type`: this crate
 does not tag a bare `ELEMENT`, measured rather than assumed, so `is_element`'s
 structural fallback is the path every `ITEM_SINGLE` takes and was untested.
+
+**The query surface was the largest untested area in the crate** — 115
+survivors of 435, more than every other module measured so far put together
+(`A-28`). Three things came out of closing it, and only the first is a test.
+
+*Fifty were arms of the navigation table.* `Node::children` answers an
+attribute a class does not have with an empty vector, deliberately, so that a
+wrong attribute is `NoMatch` rather than an error. The consequence is that
+losing an arm is **silent**: the path stops resolving, an AQL query returns no
+rows, and an empty result set reads as "there is no such record". Two
+table-driven tests now state every navigable attribute of every data value and
+every structural node, which is also the first place a reader can see what the
+path language actually reaches.
+
+*Writing those fixtures found a defect the mutant only pointed at.*
+`ordered_attrs_of` listed five classes. The four temporal types implement
+`DvOrdered` and carry `OrderedAttrs` like any other, so a normal range on a
+`DV_DATE` was unreachable by path although the model held it — against
+`Q12.7a`, whose stated purpose is the query "results outside their own normal
+range" (`A-29`). The mutation report said one arm was untested; the fixture is
+what read the list.
+
+*Two survivors were proofs rather than gaps.* `Parser::integer`'s `v >= 0`
+could become `true` because it is unreachable: a numeric token starts only at an
+ASCII digit and `-` is not in the symbol table, so **AQL here cannot express a
+negative literal at all** (`A-27`, declared as `Q12.9b`). And no bracketed
+predicate may be a bare node id (`A-30`, `Q12.9c`) — which is what makes those
+cases evidence, because widening either `&&` in `Parser::predicate` accepts them
+*as archetype ids*, and `archetype_ids()` is what an authorisation check reads
+before a query runs (`Q12.13`).
+
+**Four survivors remain, and each was checked rather than left.** All four are
+equivalent mutants — no test could distinguish them — and the reason is recorded
+here because an unexplained survivor and an impossible one look identical in a
+report:
+
+| Survivor | Why no test can see it |
+| --- | --- |
+| `aql.rs:958` `v >= 0` → `true` | unreachable: the lexer never emits a negative integer (`A-27`) |
+| `path.rs:166` `\|\|` → `&&` | both `""` and `"/"` reach the same empty-segment result by the ordinary path; the early return is a shortcut, not a decision |
+| `path.rs:195` `+=` → `-=` | `i` is the index of `[`, and an empty attribute name is already refused, so `open >= 1` and the character before `[` is part of an attribute name — never a quote. The scan arrives at `open + 1` with the same state |
+| `path.rs:195` `+=` → `*=` | `i * 1 == i`: the scan starts at `[` instead of past it, and `[` is not a quote either |
+
+Each was confirmed by applying it and running a probe over the parser, not by
+reading. That is the same standard the rest of this register holds, and the one
+time it was skipped a survivor was nearly reported as a live PHI-disclosure bug
+(below).
 
 `store.rs` produced the one that would have mattered most in production:
 `create_contribution` could return `Ok(())` **without inserting anything** and

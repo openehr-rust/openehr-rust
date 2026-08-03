@@ -1380,4 +1380,353 @@ mod tests {
         let upper: AqlQuery = "SELECT c/uid FROM COMPOSITION c LIMIT 1".parse().unwrap();
         assert_eq!(lower, upper);
     }
+
+    /// A string literal's escape handling.
+    ///
+    /// The lexer's backslash branch — three lines of index arithmetic — could
+    /// have every one of its `+`s and `<`s changed with the suite green
+    /// (`lib:A-09`). It decides where a quoted literal *ends*, which in a query
+    /// language is the boundary that separates a value from syntax. `db:P6.8`
+    /// forbids interpolating a value into SQL precisely so that boundary is
+    /// never load-bearing downstream, but the parser still has to get it right
+    /// to report what the caller actually wrote.
+    #[test]
+    fn a_string_literal_carries_its_escapes() {
+        let value = |text: &str| -> String {
+            let q: AqlQuery = format!("SELECT c/uid FROM COMPOSITION c WHERE c/name/value = {text}")
+                .parse()
+                .unwrap_or_else(|e| panic!("{text}: {e}"));
+            match q.where_clause {
+                Some(Expr::Compare {
+                    rhs: Operand::Literal(Literal::String(v)),
+                    ..
+                }) => v,
+                other => panic!("{text} did not parse to a string literal: {other:?}"),
+            }
+        };
+
+        // An escaped quote does not end the literal, and the backslash is not
+        // kept. `i += 2` — a `-=` here loops forever, a `*=` skips the quote.
+        assert_eq!(value(r"'O\'Brien'"), "O'Brien");
+        // An escaped backslash is one backslash, and does not then escape the
+        // closing quote.
+        assert_eq!(value(r"'a\\b'"), r"a\b");
+        // A quote of the other kind needs no escape.
+        assert_eq!(value(r#""it's here""#), "it's here");
+        assert_eq!(value(r#"'say \"hi\"'"#), r#"say "hi""#);
+        // Empty, and a lone backslash at the very end of the input: the
+        // `i + 1 < bytes.len()` guard is what keeps this from indexing past
+        // the end, and nothing exercised it.
+        assert_eq!(value("''"), "");
+        assert!(
+            "SELECT c/uid FROM COMPOSITION c WHERE c/name/value = 'x\\"
+                .parse::<AqlQuery>()
+                .is_err(),
+            "a literal ending in a dangling backslash is unterminated"
+        );
+    }
+
+    /// A parameter name that runs to the end of the input.
+    ///
+    /// `while i < bytes.len() && …` scans the name; widening that bound to
+    /// `<=` indexes one past the end. Every existing query had something after
+    /// its last parameter, so the boundary was never reached.
+    #[test]
+    fn a_parameter_may_be_the_last_thing_in_a_query() {
+        let q: AqlQuery = "SELECT c/uid FROM COMPOSITION c WHERE c/uid/value = $uid"
+            .parse()
+            .unwrap();
+        assert_eq!(q.parameters(), vec!["uid"]);
+        // `$` with nothing after it names nothing, and must be refused rather
+        // than yielding an empty parameter name.
+        assert!("SELECT c/uid FROM COMPOSITION c WHERE c/uid/value = $"
+            .parse::<AqlQuery>()
+            .is_err());
+    }
+
+    /// `LIMIT` and `OFFSET` refuse a negative count — from the lexer.
+    ///
+    /// Written to test `Parser::integer`'s `v >= 0` guard, which mutation
+    /// testing could replace with `true` unnoticed. It turned out the guard
+    /// **cannot** be reached: a numeric token starts only at an ASCII digit and
+    /// `-` is not in the symbol table, so `Token::Integer` is never negative
+    /// and the refusal happens one layer earlier, at `unexpected character`.
+    ///
+    /// The guard stays. It is one comparison, and it is the layer that would
+    /// have to hold if the lexer ever learns a sign — which it should, because
+    /// no AQL query here can compare against a negative number at all
+    /// (`lib:A-27`). What this test pins is the *behaviour*: negative counts
+    /// are refused, positive ones are carried.
+    #[test]
+    fn a_negative_limit_or_offset_is_refused_rather_than_clamped() {
+        for text in [
+            "SELECT c/uid FROM COMPOSITION c LIMIT -5",
+            "SELECT c/uid FROM COMPOSITION c LIMIT 5 OFFSET -1",
+        ] {
+            // Refused, not clamped to 0. A `LIMIT 0` that the caller wrote as
+            // `-5` returns an empty result set that looks like an answer,
+            // which is the failure `db:P6.15` names.
+            assert!(text.parse::<AqlQuery>().is_err(), "accepted {text}");
+        }
+        let q: AqlQuery = "SELECT c/uid FROM COMPOSITION c LIMIT 5 OFFSET 10"
+            .parse()
+            .unwrap();
+        assert_eq!((q.limit, q.offset), (Some(5), Some(10)));
+    }
+
+    /// No numeric literal in a condition may be negative.
+    ///
+    /// A limitation, pinned so that it is a decision rather than a surprise
+    /// (`lib:A-27`). `WHERE o/value/magnitude > -2.5` is an ordinary clinical
+    /// condition — a base excess, a temperature difference, a scale scored
+    /// below zero — and this parser rejects it at the lexer.
+    ///
+    /// `Q12.9a` says a construct the crate does not model must be refused with
+    /// an error rather than parsed and ignored. It is refused. The error names
+    /// the character rather than the requirement, which is the part `A-27`
+    /// records as unfinished.
+    #[test]
+    fn a_negative_numeric_literal_is_refused_rather_than_misread() {
+        for text in [
+            "SELECT c/uid FROM COMPOSITION c WHERE c/v > -1",
+            "SELECT c/uid FROM COMPOSITION c WHERE c/v > -2.5",
+        ] {
+            let err = text.parse::<AqlQuery>().expect_err(text);
+            // Refused where the sign is, not silently read as a bare `1`.
+            assert_eq!(err.offset, text.find('-').unwrap(), "{}", err.reason);
+        }
+    }
+
+    /// An error reports where the query went wrong, not where it started.
+    ///
+    /// `Parser::offset` could return a constant `0` or `1` for every error in
+    /// the file and nothing failed. The offset is the whole value of the error
+    /// type — a caller shows it to whoever wrote the query.
+    #[test]
+    fn a_parse_error_points_at_the_token_that_failed() {
+        let text = "SELECT c/uid FROM COMPOSITION c WHERE";
+        let err = text.parse::<AqlQuery>().expect_err(text);
+        assert_eq!(
+            err.offset,
+            text.len(),
+            "running off the end reports the end, not 0"
+        );
+
+        // A bad token in the middle reports the middle. `LIMIT` wants an
+        // integer and gets a string.
+        let text = "SELECT c/uid FROM COMPOSITION c LIMIT 'five'";
+        let err = text.parse::<AqlQuery>().expect_err(text);
+        assert_eq!(err.offset, text.find('\'').unwrap());
+    }
+
+    /// A float literal is a distinct token from an integer.
+    ///
+    /// Deleting the `Token::Number` arm of `operand` left every test green:
+    /// nothing compared a path against a non-integer, although a magnitude is
+    /// the commonest thing an AQL condition compares.
+    #[test]
+    fn a_comparison_may_use_a_float_a_boolean_or_a_negative_number() {
+        let q: AqlQuery = "
+            SELECT o/value/magnitude
+            FROM COMPOSITION c CONTAINS OBSERVATION o
+            WHERE o/value/magnitude > 37.5
+                AND o/value/units = 'Cel'
+                AND o/deleted = false
+        "
+        .parse()
+        .unwrap();
+        let rendered = q.to_string();
+        for wanted in ["37.5", "'Cel'", "false"] {
+            assert!(rendered.contains(wanted), "{wanted} lost from {rendered}");
+        }
+        assert_eq!(rendered.parse::<AqlQuery>().unwrap(), q);
+    }
+
+    /// `NOT`, `MATCHES` and the comparison operators the parser recognises.
+    ///
+    /// Four comparison arms — `!=`, `<`, `<=`, and the `MATCHES` set loop —
+    /// could each be deleted without a test noticing. A dropped `!=` is not a
+    /// parse failure a caller sees; it is a *different query*.
+    #[test]
+    fn every_comparison_operator_and_matches_set_survives_a_round_trip() {
+        let q: AqlQuery = "
+            SELECT c/uid/value
+            FROM COMPOSITION c
+            WHERE c/a != 1 AND c/b < 2 AND c/c <= 3 AND c/d > 4 AND c/e >= 5
+                AND c/f LIKE 'x%'
+                AND NOT c/g = 6
+                AND c/category MATCHES {'433', '431', '451'}
+        "
+        .parse()
+        .unwrap();
+        let rendered = q.to_string();
+        for wanted in [
+            "c/a != 1", "c/b < 2", "c/c <= 3", "c/d > 4", "c/e >= 5",
+            "c/f LIKE 'x%'", "NOT ", "'433', '431', '451'",
+        ] {
+            assert!(rendered.contains(wanted), "{wanted} lost from {rendered}");
+        }
+        // The set kept all three members and their order — the separator's
+        // `i > 0` and the comma loop's `!` are both on this line.
+        assert_eq!(rendered.parse::<AqlQuery>().unwrap(), q);
+    }
+
+    /// A `WHERE` clause's paths are collected, and `check` uses them.
+    ///
+    /// `collect_paths` could return an empty vector and `walk_expr_paths` could
+    /// do nothing at all: `check` would then approve a query whose condition is
+    /// rooted at an alias `FROM` never bound, which is the exact defect
+    /// `check` is documented as catching.
+    #[test]
+    fn check_sees_an_unbound_alias_inside_every_shape_of_condition() {
+        for condition in [
+            "o/value = 1",
+            "NOT o/value = 1",
+            "c/uid = 1 AND o/value = 1",
+            "c/uid = 1 OR o/value = 1",
+            "o/value MATCHES {1, 2}",
+            "EXISTS o/value",
+        ] {
+            let text = format!("SELECT c/uid FROM COMPOSITION c WHERE {condition}");
+            let q: AqlQuery = text.parse().unwrap_or_else(|e| panic!("{condition}: {e}"));
+            let err = q
+                .check()
+                .expect_err(&format!("`{condition}` is rooted at unbound `o`"));
+            assert!(err.reason.contains('o'), "{}", err.reason);
+        }
+    }
+
+    /// A function call's arguments, and an `ORDER BY` with more than one term.
+    ///
+    /// Both are rendered by a loop whose `i > 0` separator was untested — one
+    /// argument and one sort key never exercise it, and every query in this
+    /// module had exactly one of each.
+    #[test]
+    fn a_rendering_separates_more_than_one_of_everything() {
+        let q: AqlQuery = "
+            SELECT max(o/value/magnitude, o/value/precision) AS peak
+            FROM COMPOSITION c CONTAINS OBSERVATION o
+            ORDER BY c/context/start_time DESC, c/uid/value ASC
+        "
+        .parse()
+        .unwrap();
+        let rendered = q.to_string();
+        assert!(
+            rendered.contains("MAX(o/value/magnitude, o/value/precision)"),
+            "arguments run together: {rendered}"
+        );
+        assert!(
+            rendered.contains("c/context/start_time DESC, c/uid/value"),
+            "sort keys run together: {rendered}"
+        );
+        assert_eq!(rendered.parse::<AqlQuery>().unwrap(), q);
+    }
+
+    /// An archetype shorthand is told apart from a condition by two facts.
+    ///
+    /// `w.contains('-') && w.contains('.')` and `looks_archetype &&
+    /// next_is_close`: widening either to `||` makes the parser read an
+    /// ordinary predicate as an archetype id, or the reverse. Both mattered and
+    /// neither was tested.
+    #[test]
+    fn a_predicate_is_an_archetype_only_when_it_looks_like_one_and_stands_alone() {
+        // The shorthand.
+        let q: AqlQuery = "SELECT c/uid FROM COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]"
+            .parse()
+            .unwrap();
+        assert_eq!(q.archetype_ids(), vec!["openEHR-EHR-COMPOSITION.encounter.v1"]);
+
+        // A path with a dot but no dash, followed by `=`: a condition, not an
+        // archetype. It must not be swallowed as an id.
+        let q: AqlQuery = "SELECT c/uid FROM COMPOSITION c[name.value = 'x']"
+            .parse()
+            .unwrap();
+        assert!(
+            q.archetype_ids().is_empty(),
+            "a condition was read as an archetype id"
+        );
+
+        // Something that looks like an archetype id but is compared rather
+        // than standing alone is also a condition.
+        let q: AqlQuery =
+            "SELECT c/uid FROM COMPOSITION c[archetype_node_id = 'openEHR-EHR-COMPOSITION.encounter.v1']"
+                .parse()
+                .unwrap();
+        assert!(q.archetype_ids().is_empty());
+    }
+
+    /// A bare alias, with no `/` after it, is a path.
+    ///
+    /// `ORDER BY c` and `EXISTS c` name the whole object rather than an
+    /// attribute of it. The lexer emits a `Word` rather than a `Path` for
+    /// those, and deleting that arm of `identified_path` — turning them into
+    /// "expected a path" — broke no test.
+    #[test]
+    fn a_bare_alias_is_a_path_to_the_whole_object() {
+        let q: AqlQuery = "SELECT c/uid FROM COMPOSITION c ORDER BY c"
+            .parse()
+            .unwrap();
+        assert_eq!(q.order_by[0].path.root, "c");
+        assert!(q.order_by[0].path.path.is_none());
+        q.check().expect("`c` is bound by FROM");
+
+        // And it is still checked: a bare alias `FROM` does not bind is the
+        // same defect `Q12.14` names, reached by a different route.
+        let q: AqlQuery = "SELECT c/uid FROM COMPOSITION c WHERE EXISTS o"
+            .parse()
+            .unwrap();
+        assert!(q.check().is_err(), "`o` is not bound by FROM");
+    }
+
+    /// Which bracketed predicates are archetype ids and which are conditions.
+    ///
+    /// `w.contains('-') && w.contains('.')` and `looks_archetype &&
+    /// next_is_close` were each free to become `||`. Widening the first makes
+    /// `c[at0001.1]` an archetype id; widening the second makes *any* lone word
+    /// one. Both mistakes are silent — `archetype_ids()` is what an
+    /// authorisation check reads before a query runs (`Q12.13`), so a word
+    /// promoted to an archetype id there is a permission decision made about
+    /// something that does not exist.
+    #[test]
+    fn only_a_dashed_and_dotted_word_standing_alone_is_an_archetype_id() {
+        let ids = |text: &str| -> Vec<String> {
+            text.parse::<AqlQuery>()
+                .unwrap_or_else(|e| panic!("{text}: {e}"))
+                .archetype_ids()
+                .into_iter()
+                .map(str::to_owned)
+                .collect()
+        };
+
+        assert_eq!(
+            ids("SELECT c/uid FROM COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]"),
+            vec!["openEHR-EHR-COMPOSITION.encounter.v1"]
+        );
+        // Everything else in brackets must be a *condition*. A bare word is
+        // refused, whether it has a dot, a dash, or neither — this parser has
+        // no node-id shorthand, so `c[at0001]` is an error rather than
+        // `archetype_node_id = 'at0001'` (`lib:A-30`).
+        //
+        // Refusal is what makes these cases evidence: widening either `&&` to
+        // `||` accepts them *as archetype ids*, and `archetype_ids()` is what
+        // an authorisation check reads before a query runs (`Q12.13`). A word
+        // promoted to an archetype id there is a permission decision made
+        // about something that does not exist.
+        for text in [
+            "SELECT c/uid FROM COMPOSITION c[at0001.1]", // a dot, no dash
+            "SELECT c/uid FROM COMPOSITION c[some-word]", // a dash, no dot
+            "SELECT c/uid FROM COMPOSITION c[at0001]",   // neither
+        ] {
+            assert!(
+                text.parse::<AqlQuery>().is_err(),
+                "{text} was accepted, and its predicate read as an archetype id"
+            );
+        }
+
+        // Looks like an archetype id but does not stand alone.
+        assert!(ids(
+            "SELECT c/uid FROM COMPOSITION c[archetype_node_id = 'openEHR-EHR-COMPOSITION.encounter.v1']"
+        )
+        .is_empty());
+    }
 }

@@ -129,6 +129,18 @@ warnings — keep it there.**
 - **`openehr` and `openehr-store` depend inward only.** A CI job reads the
   manifests, dev-dependencies included — a probe once added `openehr-store` as a
   dev-dependency of `openehr`, a cycle, and everything still built and passed.
+- **A path that resolves to nothing is not an error.** `Node::children` answers
+  an attribute a class does not have with an empty vector, deliberately, so a
+  wrong attribute is `NoMatch`. The consequence is that **deleting a match arm
+  from the navigation table is silent** — the path stops resolving and an AQL
+  query returns no rows, which reads as "no such record". Fifty such arms had no
+  test (`lib:A-28`). Add an attribute to `path.rs`, add a row to
+  `every_navigable_attribute_of_a_*_node_reaches_its_value`.
+- **AQL here cannot parse a negative number.** `WHERE o/value/magnitude > -2.5`
+  is refused at the lexer, because `-` also separates the parts of an archetype
+  id. Declared as `Q12.9b`, open as `lib:A-27`. Do not "fix" it by adding a sign
+  to the number scanner without deciding what `[openEHR-EHR-…]` means after an
+  operator.
 - **Every RM invariant is accounted for.** `openehr-assets` fails the build if
   one is neither cited by the crate nor dispositioned with a reason, and also if
   a disposition outlives the rule it explains (`lib:A-24`). Cite an invariant as

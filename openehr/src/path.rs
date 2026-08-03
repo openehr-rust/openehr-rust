@@ -692,7 +692,14 @@ fn data_value_children<'a>(value: &'a DataValue, attribute: &str) -> Vec<Node<'a
     vec![Node::Scalar(scalar)]
 }
 
-/// The `DV_ORDERED` attributes of a value, for the five classes that have them.
+/// The `DV_ORDERED` attributes of a value, for the nine classes that have them.
+///
+/// The four temporal types were missing here until `lib:A-29`. They implement
+/// [`DvOrdered`] and carry the attributes like any other, so a `DV_DATE` could
+/// hold a normal range that no path could reach — and `Q12.7a` requires
+/// navigation to reach them. "Results outside their own normal range" is the
+/// query that requirement exists for, and a due date or a gestational age is
+/// exactly the kind of value a clinician asks it about.
 fn ordered_attrs_of(value: &DataValue) -> Option<&OrderedAttrs> {
     Some(match value {
         DataValue::Ordinal(v) => v.ordered_attrs(),
@@ -700,6 +707,10 @@ fn ordered_attrs_of(value: &DataValue) -> Option<&OrderedAttrs> {
         DataValue::Quantity(v) => v.ordered_attrs(),
         DataValue::Count(v) => v.ordered_attrs(),
         DataValue::Proportion(v) => v.ordered_attrs(),
+        DataValue::Date(v) => v.ordered_attrs(),
+        DataValue::Time(v) => v.ordered_attrs(),
+        DataValue::DateTime(v) => v.ordered_attrs(),
+        DataValue::Duration(v) => v.ordered_attrs(),
         _ => return None,
     })
 }
@@ -1070,5 +1081,635 @@ mod tests {
         let printed = p.to_string();
         let reparsed: Path = printed.parse().unwrap();
         assert_eq!(reparsed, p);
+    }
+
+    /// Renders whatever a navigation step returned, so a table can state the
+    /// expected result as one string.
+    ///
+    /// A node that is not a scalar renders as its class name: the point of the
+    /// table below is *which attribute reaches what*, and re-asserting a
+    /// quantity's magnitude under `normal_range/lower` would only restate the
+    /// row above it.
+    fn rendered(nodes: &[Node<'_>]) -> String {
+        nodes
+            .iter()
+            .map(|n| match n {
+                Node::Scalar(s) => s.to_display_string(),
+                other => other.type_name().to_owned(),
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// Every attribute a `DATA_VALUE` can be navigated through, and what each
+    /// one reaches.
+    ///
+    /// This exists because mutation testing deleted **nineteen** arms of
+    /// `data_value_children` one at a time and the suite stayed green
+    /// (`lib:A-09`). A deleted arm does not error: `children` returns an empty
+    /// vector for an attribute a node does not have, which
+    /// [`Pathable::item_at_path`] reports as `NoMatch`. So the failure mode is
+    /// a query that silently finds nothing — the shape of defect `db:P6.15`
+    /// exists to forbid one level up, because "this patient has no systolic
+    /// reading" and "I could not follow the path" are different answers and
+    /// only one of them is true.
+    ///
+    /// Written as canonical JSON rather than constructors on purpose: it is
+    /// the form these values actually arrive in, and it keeps a row to a line.
+    // Long because it is a table; the alternative is several tables that each
+    // cover part of one function, which is how an arm gets missed.
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn every_navigable_attribute_of_a_data_value_reaches_its_value() {
+        const QUANTITY: &str = r#"{"_type":"DV_QUANTITY","magnitude":140.0,"units":"mm[Hg]","precision":1,
+            "normal_range":{"lower":{"_type":"DV_QUANTITY","magnitude":90.0,"units":"mm[Hg]"},
+                            "upper":{"_type":"DV_QUANTITY","magnitude":120.0,"units":"mm[Hg]"},
+                            "lower_unbounded":false,"upper_unbounded":false},
+            "normal_status":{"terminology_id":{"value":"openehr"},"code_string":"H"},
+            "other_reference_ranges":[{"meaning":{"value":"therapeutic"},
+                "range":{"lower":{"_type":"DV_QUANTITY","magnitude":80.0,"units":"mm[Hg]"},
+                          "lower_unbounded":false,"upper_unbounded":true}}]}"#;
+        const ORDINAL: &str = r#"{"_type":"DV_ORDINAL","value":2,
+            "symbol":{"value":"moderate","defining_code":{"terminology_id":{"value":"local"},"code_string":"at0003"}}}"#;
+        const SCALE: &str = r#"{"_type":"DV_SCALE","value":2.5,
+            "symbol":{"value":"often","defining_code":{"terminology_id":{"value":"local"},"code_string":"at0004"}}}"#;
+        const CODED: &str = r#"{"_type":"DV_CODED_TEXT","value":"female",
+            "defining_code":{"terminology_id":{"value":"local"},"code_string":"at0022"}}"#;
+        // Unbounded above, and `upper_included` therefore absent rather than
+        // false — the two are different facts (`crate::base::interval`).
+        const INTERVAL: &str = r#"{"_type":"DV_INTERVAL",
+            "lower":{"_type":"DV_COUNT","magnitude":1},"lower_included":true,
+            "lower_unbounded":false,"upper_unbounded":true}"#;
+
+        // The same `normal_status` on each of the other DV_ORDERED classes.
+        let ranged = |body: &str| {
+            format!(
+                r#"{{{body},"normal_status":{{"terminology_id":{{"value":"openehr"}},"code_string":"L"}}}}"#
+            )
+        };
+        let ordinal_ranged = ranged(
+            r#""_type":"DV_ORDINAL","value":1,"symbol":{"value":"mild","defining_code":{"terminology_id":{"value":"local"},"code_string":"at0002"}}"#,
+        );
+        let scale_ranged = ranged(
+            r#""_type":"DV_SCALE","value":1.0,"symbol":{"value":"rarely","defining_code":{"terminology_id":{"value":"local"},"code_string":"at0005"}}"#,
+        );
+        let count_ranged = ranged(r#""_type":"DV_COUNT","magnitude":3"#);
+        let proportion_ranged =
+            ranged(r#""_type":"DV_PROPORTION","numerator":1.0,"denominator":4.0,"type":0"#);
+        let (rd, rt, rdt, rdur) = (
+            ranged(r#""_type":"DV_DATE","value":"2026-08-03""#),
+            ranged(r#""_type":"DV_TIME","value":"09:30:00""#),
+            ranged(r#""_type":"DV_DATE_TIME","value":"2026-08-03T09:30:00Z""#),
+            ranged(r#""_type":"DV_DURATION","value":"P1D""#),
+        );
+        let (ranged_date, ranged_time, ranged_date_time, ranged_duration) =
+            (rd.as_str(), rt.as_str(), rdt.as_str(), rdur.as_str());
+        let (ranged_ordinal, ranged_scale, ranged_count, ranged_proportion) = (
+            ordinal_ranged.as_str(),
+            scale_ranged.as_str(),
+            count_ranged.as_str(),
+            proportion_ranged.as_str(),
+        );
+
+        let cases: &[(&str, &str, &str)] = &[
+            // DV_QUANTITY, and through it the three DV_ORDERED attributes that
+            // five classes share.
+            (QUANTITY, "magnitude", "140"),
+            (QUANTITY, "units", "mm[Hg]"),
+            (QUANTITY, "precision", "1"),
+            (QUANTITY, "normal_range", "DV_INTERVAL"),
+            (QUANTITY, "normal_status", "H"),
+            (QUANTITY, "other_reference_ranges", "REFERENCE_RANGE"),
+            (QUANTITY, "nonesuch", ""),
+            // The other four classes that carry the `DV_ORDERED` attributes.
+            // `ordered_attrs_of` maps each to the same shared block, and a
+            // deleted arm silently removes a class's reference ranges — the
+            // thing that tells a clinician whether a value is normal
+            // (`Q12.7a`). Testing only DV_QUANTITY left four unguarded.
+            (ranged_ordinal, "normal_status", "L"),
+            (ranged_scale, "normal_status", "L"),
+            (ranged_count, "normal_status", "L"),
+            (ranged_proportion, "normal_status", "L"),
+            // The four temporal types. They are `DV_ORDERED` too, and until
+            // `lib:A-29` a normal range on one of them was unreachable
+            // although the model carried it.
+            (ranged_date, "normal_status", "L"),
+            (ranged_time, "normal_status", "L"),
+            (ranged_date_time, "normal_status", "L"),
+            (ranged_duration, "normal_status", "L"),
+            // DV_COUNT, DV_ORDINAL, DV_SCALE, DV_PROPORTION.
+            (r#"{"_type":"DV_COUNT","magnitude":7}"#, "magnitude", "7"),
+            (ORDINAL, "value", "2"),
+            (ORDINAL, "symbol", "DV_CODED_TEXT"),
+            (SCALE, "value", "2.5"),
+            (SCALE, "symbol", "DV_CODED_TEXT"),
+            (
+                r#"{"_type":"DV_PROPORTION","numerator":1.0,"denominator":4.0,"type":0}"#,
+                "numerator",
+                "1",
+            ),
+            (
+                r#"{"_type":"DV_PROPORTION","numerator":1.0,"denominator":4.0,"type":0}"#,
+                "denominator",
+                "4",
+            ),
+            // The text and scalar values.
+            (r#"{"_type":"DV_BOOLEAN","value":true}"#, "value", "true"),
+            (r#"{"_type":"DV_TEXT","value":"free text"}"#, "value", "free text"),
+            (CODED, "value", "female"),
+            (CODED, "defining_code", "at0022"),
+            (r#"{"_type":"DV_DATE","value":"2026-08-03"}"#, "value", "2026-08-03"),
+            (r#"{"_type":"DV_TIME","value":"09:30:00"}"#, "value", "09:30:00"),
+            (
+                r#"{"_type":"DV_DATE_TIME","value":"2026-08-03T09:30:00Z"}"#,
+                "value",
+                "2026-08-03T09:30:00Z",
+            ),
+            (r#"{"_type":"DV_DURATION","value":"P1D"}"#, "value", "P1D"),
+            (
+                r#"{"_type":"DV_URI","value":"https://example.org/x"}"#,
+                "value",
+                "https://example.org/x",
+            ),
+            (
+                r#"{"_type":"DV_EHR_URI","value":"ehr://x/y"}"#,
+                "value",
+                "ehr://x/y",
+            ),
+            (
+                r#"{"_type":"DV_IDENTIFIER","id":"NHS-12345","issuer":"","assigner":"","type":""}"#,
+                "id",
+                "NHS-12345",
+            ),
+            // DV_INTERVAL as an ELEMENT's own value. The `*_unbounded` flags
+            // are derived and navigable anyway; `upper_included` is absent
+            // because there is no upper bound to include.
+            (INTERVAL, "lower", "DV_COUNT"),
+            (INTERVAL, "upper", ""),
+            (INTERVAL, "lower_included", "true"),
+            (INTERVAL, "upper_included", ""),
+            (INTERVAL, "lower_unbounded", "false"),
+            (INTERVAL, "upper_unbounded", "true"),
+        ];
+
+        for (json, attribute, want) in cases {
+            let value: DataValue = serde_json::from_str(json)
+                .unwrap_or_else(|e| panic!("fixture does not deserialize: {e}\n{json}"));
+            let got = rendered(&Node::DataValue(&value).children(attribute));
+            assert_eq!(
+                got, *want,
+                "navigating `{attribute}` reached {got:?}, wanted {want:?}"
+            );
+        }
+    }
+
+    /// Every attribute of every structural node, and what each one reaches.
+    ///
+    /// The companion to the data-value table above, and it exists for the same
+    /// reason: mutation testing deleted **twenty-nine** arms across
+    /// `Node::children`, `entry_children` and `item_structure_children`, one at
+    /// a time, and nothing failed (`lib:A-09`).
+    ///
+    /// The consequence of a deleted arm is worth stating plainly, because it is
+    /// not a crash. `children` answers an unknown attribute with an empty
+    /// vector — deliberately, so that a wrong attribute is `NoMatch` rather
+    /// than an error. So a lost arm turns a path that *should* resolve into a
+    /// path that finds nothing, and an AQL query returns no rows. That is the
+    /// clinically dangerous direction: an empty result set reads as "there is
+    /// no such record".
+    ///
+    /// `name` is checked on every one of them. It is the arm most likely to be
+    /// deleted as duplication — it appears eleven times — and it is the arm
+    /// every archetype predicate in a path depends on.
+    // Long because it builds one of every structural node before it can ask
+    // anything of them, and splitting the fixtures out would only move the
+    // lines somewhere the borrows do not reach. `Node::children` carries the
+    // same allow for the same reason.
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn every_navigable_attribute_of_a_structural_node_reaches_its_value() {
+        use crate::rm::data_structures::{Cluster, ItemList, ItemSingle, ItemTable};
+        use crate::rm::data_structures::Event;
+        use crate::rm::ehr::{
+            Action, AdminEntry, CareEntryAttrs, Evaluation, Instruction, IsmTransition, Section,
+        };
+
+        let entry_attrs = || {
+            EntryAttrs::about_subject(
+                CodePhrase::new("ISO_639-1", "en").unwrap(),
+                CodePhrase::new("IANA_character-sets", "UTF-8").unwrap(),
+            )
+        };
+        let element = |name: &str, node: &str, v: f64| {
+            Element::new(
+                attrs(name, node),
+                DataValue::Quantity(DvQuantity::new(v, "mm[Hg]").unwrap()),
+            )
+        };
+        let single = |name: &str| ItemSingle::new(attrs(name, "at0100"), element("s", "at0101", 1.0));
+
+        // --- COMPOSITION, SECTION -------------------------------------------
+        let composition = blood_pressure();
+        let coded_name = Text::Coded(
+            DvCodedText::new(
+                "Systolic",
+                CodePhrase::new("local", "at0004").unwrap(),
+            )
+            .unwrap(),
+        );
+        let section = Section::new(
+            attrs("Findings", "at0200"),
+            vec![crate::rm::ehr::ContentItem::Section(Section::new(
+                attrs("Nested", "at0201"),
+                vec![],
+            ))],
+        );
+
+        // --- the five ENTRY kinds -------------------------------------------
+        // OBSERVATION carries `state` and `protocol` as well as `data`; both
+        // are optional and both were unreachable-and-unnoticed.
+        let state = History::new(
+            attrs("State Series", "at0300"),
+            DvDateTime::new("2026-07-31T09:00:00Z").unwrap(),
+            vec![PointEvent::new(
+                attrs("state event", "at0301"),
+                DvDateTime::new("2026-07-31T09:05:00Z").unwrap(),
+                ItemTree::new(attrs("position", "at0302"), vec![]).into(),
+            )
+            .into()],
+            None,
+        )
+        .unwrap();
+        let observation = Observation::new(
+            attrs("Blood pressure", "openEHR-EHR-OBSERVATION.blood_pressure.v2"),
+            entry_attrs(),
+            History::new(
+                attrs("Event Series", "at0001"),
+                DvDateTime::new("2026-07-31T09:00:00Z").unwrap(),
+                vec![PointEvent::new(
+                    attrs("any event", "at0006"),
+                    DvDateTime::new("2026-07-31T09:15:00Z").unwrap(),
+                    ItemTree::new(attrs("bp", "at0003"), vec![]).into(),
+                )
+                .into()],
+                None,
+            )
+            .unwrap(),
+        )
+        .with_state(state)
+        .with_care_entry(CareEntryAttrs::default().with_protocol(single("protocol").into()));
+        let evaluation = Evaluation::new(
+            attrs("Problem", "openEHR-EHR-EVALUATION.problem_diagnosis.v1"),
+            entry_attrs(),
+            single("evaluation data").into(),
+        );
+        let admin = AdminEntry::new(
+            attrs("Admission", "openEHR-EHR-ADMIN_ENTRY.admission.v0"),
+            entry_attrs(),
+            single("admin data").into(),
+        );
+        let instruction = Instruction::new(
+            attrs("Order", "openEHR-EHR-INSTRUCTION.medication_order.v3"),
+            entry_attrs(),
+            Text::Plain(DvText::new("Give 5mg at once").unwrap()),
+            vec![crate::rm::ehr::Activity::new(
+                attrs("activity", "at0400"),
+                single("activity description").into(),
+                "openEHR-EHR-ACTION.medication.v1",
+            )
+            .unwrap()],
+        )
+        .unwrap();
+        let action = Action::new(
+            attrs("Given", "openEHR-EHR-ACTION.medication.v1"),
+            entry_attrs(),
+            DvDateTime::new("2026-07-31T10:00:00Z").unwrap(),
+            single("action description").into(),
+            IsmTransition::new("532").unwrap(),
+        );
+
+        // --- the four ITEM_STRUCTUREs, CLUSTER, ELEMENT ---------------------
+        let item_single = single("single");
+        let item_list = ItemList::new(attrs("list", "at0500"), vec![element("l", "at0501", 2.0)]);
+        let item_table = ItemTable::new(
+            attrs("table", "at0600"),
+            vec![Cluster::new(
+                attrs("row", "at0601"),
+                vec![Item::Element(element("cell", "at0602", 6.0))],
+            )
+            .unwrap()],
+        );
+        let item_tree = ItemTree::new(
+            attrs("tree", "at0700"),
+            vec![Item::Element(element("t", "at0701", 3.0))],
+        );
+        let cluster = Cluster::new(
+            attrs("cluster", "at0800"),
+            vec![Item::Element(element("c", "at0801", 4.0))],
+        )
+        .unwrap();
+        let valued = element("valued", "at0900", 5.0);
+        // An ELEMENT with no value and a reason there is none. `null_flavour`
+        // is the attribute that distinguishes "not measured" from "measured as
+        // nothing", and it was reachable by no test.
+        let absent = Element::new_null(attrs("absent", "at0901"), "253").unwrap();
+
+        // --- HISTORY, EVENT --------------------------------------------------
+        let history = History::new(
+            attrs("Series", "at1000"),
+            DvDateTime::new("2026-07-31T08:00:00Z").unwrap(),
+            vec![PointEvent::new(
+                attrs("point", "at1001"),
+                DvDateTime::new("2026-07-31T08:30:00Z").unwrap(),
+                item_single.clone().into(),
+            )
+            .into()],
+            Some(single("summary").into()),
+        )
+        .unwrap();
+        let event: Event = PointEvent::new(
+            attrs("point", "at1100"),
+            DvDateTime::new("2026-07-31T08:30:00Z").unwrap(),
+            item_single.clone().into(),
+        )
+        .into();
+        let event_with_state = PointEvent::new(
+            attrs("point", "at1101"),
+            DvDateTime::new("2026-07-31T08:35:00Z").unwrap(),
+            item_single.clone().into(),
+        )
+        .with_state(single("event state").into());
+
+        let observation_entry = Entry::Observation(observation);
+        let evaluation_entry = Entry::Evaluation(evaluation);
+        let admin_entry = Entry::AdminEntry(admin);
+        let instruction_entry = Entry::Instruction(instruction);
+        let action_entry = Entry::Action(action);
+        let single_structure: ItemStructure = item_single.clone().into();
+        let list_structure: ItemStructure = item_list.into();
+        let table_structure: ItemStructure = item_table.into();
+        let tree_structure: ItemStructure = item_tree.into();
+        let event_state: Event = event_with_state.into();
+
+        let cases: &[(Node<'_>, &str, &str)] = &[
+            (Node::Composition(&composition), "content", "OBSERVATION"),
+            (Node::Composition(&composition), "name", "DV_TEXT"),
+            (Node::Composition(&composition), "category", "DV_CODED_TEXT"),
+            (Node::Composition(&composition), "nonesuch", ""),
+            // Through a `name` and a `category`, one step further. A DV_TEXT
+            // name has no `defining_code`; a DV_CODED_TEXT category always
+            // has one. Nothing had ever navigated past a name.
+            (Node::Text(composition.name()), "value", "Encounter"),
+            (Node::Text(composition.name()), "defining_code", ""),
+            // A `name` that *is* coded. An archetype's node names are
+            // routinely coded, and this is the only way the `defining_code`
+            // arm of `Node::Text` is reached at all — the plain case above
+            // yields nothing whether the arm is there or not.
+            (Node::Text(&coded_name), "value", "Systolic"),
+            (Node::Text(&coded_name), "defining_code", "at0004"),
+            (Node::CodedText(composition.category()), "value", "event"),
+            (Node::CodedText(composition.category()), "defining_code", "433"),
+            (Node::Section(&section), "items", "SECTION"),
+            (Node::Section(&section), "name", "DV_TEXT"),
+            // The five ENTRY kinds. `name` is shared and comes last in the
+            // match, so every kind must still reach it.
+            (Node::Entry(&observation_entry), "data", "HISTORY"),
+            (Node::Entry(&observation_entry), "state", "HISTORY"),
+            (Node::Entry(&observation_entry), "protocol", "ITEM_SINGLE"),
+            (Node::Entry(&observation_entry), "name", "DV_TEXT"),
+            (Node::Entry(&evaluation_entry), "data", "ITEM_SINGLE"),
+            (Node::Entry(&evaluation_entry), "name", "DV_TEXT"),
+            (Node::Entry(&admin_entry), "data", "ITEM_SINGLE"),
+            (Node::Entry(&admin_entry), "name", "DV_TEXT"),
+            (Node::Entry(&instruction_entry), "narrative", "DV_TEXT"),
+            (Node::Entry(&instruction_entry), "activities", "ITEM_SINGLE"),
+            (Node::Entry(&instruction_entry), "name", "DV_TEXT"),
+            (Node::Entry(&action_entry), "description", "ITEM_SINGLE"),
+            (Node::Entry(&action_entry), "time", "2026-07-31T10:00:00Z"),
+            (Node::Entry(&action_entry), "name", "DV_TEXT"),
+            // An OBSERVATION has no `narrative`; an INSTRUCTION has no `data`.
+            // Both must be no-match, not a wrong node.
+            (Node::Entry(&observation_entry), "narrative", ""),
+            (Node::Entry(&instruction_entry), "data", ""),
+            // The four ITEM_STRUCTUREs. `item` and `items` are both accepted on
+            // an ITEM_SINGLE, which is a deliberate departure documented at the
+            // match arm.
+            (Node::ItemStructure(&single_structure), "item", "ELEMENT"),
+            (Node::ItemStructure(&single_structure), "items", "ELEMENT"),
+            (Node::ItemStructure(&single_structure), "name", "DV_TEXT"),
+            (Node::ItemStructure(&list_structure), "items", "ELEMENT"),
+            (Node::ItemStructure(&list_structure), "name", "DV_TEXT"),
+            (Node::ItemStructure(&table_structure), "rows", "CLUSTER"),
+            (Node::ItemStructure(&table_structure), "name", "DV_TEXT"),
+            (Node::ItemStructure(&tree_structure), "items", "ELEMENT"),
+            (Node::ItemStructure(&tree_structure), "name", "DV_TEXT"),
+            // A list has no rows and a table has no items.
+            (Node::ItemStructure(&list_structure), "rows", ""),
+            (Node::ItemStructure(&table_structure), "items", ""),
+            (Node::Cluster(&cluster), "items", "ELEMENT"),
+            (Node::Cluster(&cluster), "name", "DV_TEXT"),
+            (Node::Element(&valued), "value", "DV_QUANTITY"),
+            (Node::Element(&valued), "name", "DV_TEXT"),
+            (Node::Element(&valued), "null_flavour", ""),
+            (Node::Element(&absent), "value", ""),
+            (Node::Element(&absent), "null_flavour", "253"),
+            (Node::History(&history), "events", "POINT_EVENT"),
+            (Node::History(&history), "summary", "ITEM_SINGLE"),
+            (Node::History(&history), "origin", "2026-07-31T08:00:00Z"),
+            (Node::History(&history), "name", "DV_TEXT"),
+            (Node::Event(&event), "data", "ITEM_SINGLE"),
+            (Node::Event(&event), "time", "2026-07-31T08:30:00Z"),
+            (Node::Event(&event), "name", "DV_TEXT"),
+            (Node::Event(&event), "state", ""),
+            (Node::Event(&event_state), "state", "ITEM_SINGLE"),
+        ];
+
+        for (node, attribute, want) in cases {
+            let got = rendered(&node.children(attribute));
+            assert_eq!(
+                got,
+                *want,
+                "{}/{attribute} reached {got:?}, wanted {want:?}",
+                node.type_name()
+            );
+        }
+    }
+
+    /// The path parser's predicate scanner, and the offsets it reports.
+    ///
+    /// Fourteen mutants in `parse_path` survived (`lib:A-09`): every `+` and
+    /// `-` in the offset arithmetic, and the branch that tracks whether the
+    /// scanner is inside a quoted string. The scanner is what decides where a
+    /// predicate **ends** — a quoted name may legally contain `]`, and if the
+    /// quote tracking is wrong the predicate is truncated and the path silently
+    /// selects the wrong node, or none.
+    ///
+    /// `Q12.2` and `Q12.12` require the offset to say where parsing stopped.
+    /// Every offset here was free to be any other number.
+    #[test]
+    fn a_predicate_is_scanned_through_quotes_and_errors_report_where() {
+        // A quoted name containing the character that would otherwise close
+        // the predicate.
+        let p: Path = "/items['a]b']/value".parse().unwrap();
+        assert_eq!(p.segments().len(), 2);
+        assert_eq!(p.segments()[0].conditions, vec![Condition::Name("a]b".into())]);
+        // And with double quotes, which is the other branch of the same arm.
+        let p: Path = r#"/items["a]b"]/value"#.parse().unwrap();
+        assert_eq!(p.segments()[0].conditions, vec![Condition::Name("a]b".into())]);
+
+        // Offsets. `base` is the length of the leading `/` the parser strips,
+        // so the same malformed path with and without one must report offsets
+        // that differ by exactly one.
+        let offset_of = |text: &str| match text.parse::<Path>() {
+            Err(PathError::Malformed { offset, .. }) => offset,
+            other => panic!("{text} did not fail as malformed: {other:?}"),
+        };
+        assert_eq!(offset_of("/items[at0001"), 6, "unclosed `[` points at the `[`");
+        assert_eq!(offset_of("items[at0001"), 5, "without the leading slash");
+        assert_eq!(offset_of("/items/"), 7, "trailing `/` points past the end");
+        assert_eq!(offset_of("/items//value"), 7, "an empty attribute name");
+        assert_eq!(
+            offset_of("/items[at0001]x/value"),
+            14,
+            "a segment must be followed by `/`"
+        );
+        // A predicate whose contents are bad reports a position *inside* the
+        // brackets, not the start of the path.
+        assert_eq!(
+            offset_of("/items[bad/attr='x']"),
+            7,
+            "a bad predicate points just past the `[`"
+        );
+        // The same, one segment further in, so a mutated `+` shows up.
+        assert_eq!(offset_of("/content/items[bad/attr='x']"), 15);
+    }
+
+    /// A predicate holding more than one condition.
+    ///
+    /// `split_conjunctions` and `is_word_boundary` are eleven surviving
+    /// mutants between them. They decide where one condition ends and the next
+    /// begins, and they must not split inside a quoted value — a name
+    /// containing the word "and", or a comma, is ordinary text.
+    #[test]
+    fn conditions_are_split_on_and_and_comma_but_not_inside_a_name() {
+        let conditions = |text: &str| text.parse::<Path>().unwrap().segments()[0].conditions.clone();
+
+        // Both separators, and both together.
+        assert_eq!(
+            conditions("/items[archetype_node_id='at0004' and name/value='Systolic']"),
+            vec![
+                Condition::NodeId("at0004".into()),
+                Condition::Name("Systolic".into()),
+            ]
+        );
+        assert_eq!(
+            conditions("/items[archetype_node_id='at0004', name/value='Systolic']"),
+            vec![
+                Condition::NodeId("at0004".into()),
+                Condition::Name("Systolic".into()),
+            ]
+        );
+
+        // A quoted value containing a comma, and one containing ` and `. If
+        // the scanner splits inside the quotes it produces two conditions
+        // neither of which matches anything.
+        assert_eq!(
+            conditions("/items[name/value='Weight, standing']"),
+            vec![Condition::Name("Weight, standing".into())]
+        );
+        assert_eq!(
+            conditions("/items[name/value='Signs and symptoms']"),
+            vec![Condition::Name("Signs and symptoms".into())]
+        );
+
+        // `and` must be a whole word. A name beginning or ending with those
+        // three letters is not a separator — this is `is_word_boundary`, whose
+        // every operator survived mutation.
+        assert_eq!(
+            conditions("/items[name/value=band]"),
+            vec![Condition::Name("band".into())],
+            "`band` was split at its `and`"
+        );
+        assert_eq!(
+            conditions("/items[name/value=andy]"),
+            vec![Condition::Name("andy".into())],
+            "`andy` was split at its `and`"
+        );
+        // A predicate that is nothing but a separator. `is_word_boundary`'s
+        // `at + len` could become `at * len`, and the only inputs that tell
+        // the two apart are the short ones: at index 1 in a four-character
+        // predicate, `1 + 3 >= 4` holds and `1 * 3 >= 4` does not. So without
+        // this the arithmetic there is free.
+        assert!(
+            "/items[ and]".parse::<Path>().is_err(),
+            "a predicate of only a separator was accepted as a node id"
+        );
+
+        // `and` at the very end of the predicate is a boundary on both sides
+        // — the `at + len >= text.len()` arm — so it splits, and the empty
+        // term that leaves is refused rather than quietly dropped. Without
+        // that arm the whole thing parses as one condition named
+        // `'at0004' and`, which matches nothing and says nothing.
+        let err = "/items[archetype_node_id='at0004' and]"
+            .parse::<Path>()
+            .expect_err("a dangling `and` leaves an empty term");
+        assert!(
+            matches!(err, PathError::Malformed { reason, .. } if reason.contains("empty")),
+            "{err:?}"
+        );
+    }
+
+    /// Quote removal only strips a *matching* pair.
+    ///
+    /// Both halves of `unquote`'s condition survived being widened to `||`,
+    /// which would strip a lone leading quote and lose a character from a name
+    /// that legitimately starts or ends with one.
+    #[test]
+    fn a_value_is_unquoted_only_when_both_quotes_are_there() {
+        let name = |text: &str| match text.parse::<Path>().unwrap().segments()[0]
+            .conditions
+            .first()
+            .cloned()
+        {
+            Some(Condition::Name(v)) => v,
+            other => panic!("{text} did not yield a name: {other:?}"),
+        };
+        assert_eq!(name("/items[name/value='Systolic']"), "Systolic");
+        assert_eq!(name(r#"/items[name/value="Systolic"]"#), "Systolic");
+
+        // A quote at one end only. Both are written with a *balanced* pair
+        // inside the value, because the predicate scanner tracks quotes and an
+        // odd one makes the predicate unclosed before `unquote` ever sees it —
+        // so these are the only shapes that reach the condition at all.
+        //
+        // Stripping one side here would silently rename the node the path
+        // selects, and lose a character from the other end while doing it.
+        assert_eq!(name("/items[name/value='Sys'tolic]"), "'Sys'tolic");
+        assert_eq!(name("/items[name/value=Sys'tolic']"), "Sys'tolic'");
+    }
+
+    /// The empty path is the root, and `path_unique` counts.
+    ///
+    /// `is_root` could return `true` for every path, and `path_unique` could
+    /// return `Ok(false)` always — the answer a caller uses to decide whether a
+    /// path identifies one node or many.
+    #[test]
+    fn the_root_path_is_the_only_root_and_uniqueness_is_counted() {
+        for text in ["", "/", "  "] {
+            assert!(text.parse::<Path>().unwrap().is_root(), "{text:?}");
+        }
+        for text in ["/content", "/content/name/value"] {
+            assert!(!text.parse::<Path>().unwrap().is_root(), "{text:?}");
+        }
+
+        let c = blood_pressure();
+        // One node.
+        assert!(c.path_unique("/content").unwrap());
+        // Two: the systolic and diastolic elements under the same attribute.
+        let many = "/content/data/events/data/items";
+        assert_eq!(c.items_at_path(many).unwrap().len(), 2);
+        assert!(!c.path_unique(many).unwrap());
+        // None.
+        assert!(!c.path_unique("/content/nonesuch").unwrap());
     }
 }

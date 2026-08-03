@@ -117,7 +117,11 @@ cd openehr && cargo mutants --file src/<module>.rs -j 4
 ```
 
 Run over one file at a time. Eighty mutants take two minutes; the whole crate
-would be hours, which is why this is not in CI.
+would be hours, which is why **only the diff** is in CI. The `mutants` job in
+`.github/workflows/ci.yml` runs `--in-diff` against the pull request's base, so
+lines a change touches must be covered by a test that notices them changing.
+That job asserts nothing about the rest of the tree, and the `T13.2` row in each
+conformance matrix says so — do not cite it as though it did (`W0.3`).
 
 Read the result as a question, not a score. The first run over
 `security/audit_chain.rs` missed 40 of 67 viable mutants, and the answer was not
@@ -139,6 +143,19 @@ Two things to know before believing a number:
 - **Sometimes the answer is to delete.** `AccessLog::path` survived because it
   was a public accessor with no caller and a doc comment describing a use that
   did not exist. A test would have preserved it.
+- **Writing the test is what finds the bug.** The mutant on
+  `ordered_attrs_of` said one arm was untested. Building a fixture for each of
+  the classes it lists showed the list was wrong: the four temporal types
+  implement `DvOrdered` and carry `OrderedAttrs`, and none of them was there, so
+  a normal range on a `DV_DATE` was unreachable by path against `Q12.7a`
+  (`lib:A-29`). The mutant pointed at a line; the fixture is what read it.
+- **A survivor can be a proof, not a gap.** `Parser::integer`'s `v >= 0` guard
+  could be replaced with `true` and nothing failed — because the lexer starts a
+  number only at a digit and never emits a negative one, so the guard is
+  unreachable. The finding was not a missing test; it was that **AQL cannot
+  express a negative literal at all** (`lib:A-27`). Before writing a test for a
+  survivor, check whether the mutant is equivalent, and if it is, ask what the
+  code was defending against and whether that thing can happen.
 - **A survivor in the safe direction is not always worth chasing.** `Debug for
   Mac` replaced with `Ok(())` prints nothing, which is safer than what it does.
   Pinning exact `Debug` output would freeze formatting for no benefit.

@@ -218,7 +218,13 @@ fn regex_citations(source: &str) -> Vec<(String, String)> {
     // not by searching for `//`, because a first attempt at the latter
     // truncated `"https://…"` mid-literal and put every quote after it out of
     // phase — which silently *un*named forty rules that were fine.
-    let mut literals: Vec<String> = Vec::new();
+    // Each literal, and the source text between it and the one before. A
+    // citation's two arguments are separated by exactly a comma: that gap is
+    // what tells `invariant("ELEMENT", "Inv_null_valid")` apart from any
+    // uppercase literal that merely happens to precede an identifier-shaped
+    // one somewhere in the file (`lib:A-31`).
+    let mut literals: Vec<(String, String)> = Vec::new();
+    let mut gap = String::new();
     let mut chars = source.chars().peekable();
     let mut current: Option<String> = None;
     // Raw strings are skipped whole. The library carries 39 of them, mostly
@@ -231,6 +237,7 @@ fn regex_citations(source: &str) -> Vec<(String, String)> {
     // out of phase, which is the bug this scanner exists to have stopped
     // having.
     let mut previous = ' ';
+    #[allow(unused_assignments)]
     while let Some(c) = chars.next() {
         if current.is_none() && c == 'r' && !is_ident(previous) {
             let mut hashes = 0usize;
@@ -258,7 +265,9 @@ fn regex_citations(source: &str) -> Vec<(String, String)> {
                     buffer.push(escaped);
                 }
             }
-            (Some(_), '"') => literals.push(current.take().unwrap_or_default()),
+            (Some(_), '"') => {
+                literals.push((current.take().unwrap_or_default(), std::mem::take(&mut gap)));
+            }
             (Some(buffer), other) => buffer.push(other),
             // Outside: a quote opens one, and a slash may open a comment.
             (None, '"') => current = Some(String::new()),
@@ -281,13 +290,21 @@ fn regex_citations(source: &str) -> Vec<(String, String)> {
                 }
                 _ => {}
             },
-            (None, _) => {}
+            (None, other) => gap.push(other),
         }
     }
 
     let mut out = Vec::new();
     for pair in literals.windows(2) {
-        let (class, invariant) = (pair[0].as_str(), pair[1].as_str());
+        let (class, invariant) = (pair[0].0.as_str(), pair[1].0.as_str());
+        // The two must be one call's arguments. Without this, a table of test
+        // expectations — a row ending in `"ITEM_SINGLE"` above a row beginning
+        // with `"name"` — was read as `ITEM_SINGLE.name`, and eleven such
+        // phantoms reached the committed register before anyone looked
+        // (`lib:A-31`).
+        if pair[1].1.trim() != "," {
+            continue;
+        }
         if !class.is_empty()
             && class
                 .chars()
@@ -1337,5 +1354,52 @@ mod tests {
                 "{class}.{name} is dispositioned twice"
             );
         }
+    }
+
+    /// Two literals that are not one call's arguments are not a citation.
+    ///
+    /// The scanner matched **any** uppercase literal followed by an
+    /// identifier-shaped one, which is what let it read a helper's arguments
+    /// without an enumerated list of call forms (`lib:A-25`). The cost of that
+    /// generality was measured when a table of test expectations landed in
+    /// `path.rs`: a row ending `"ITEM_SINGLE"` above a row beginning `"name"`
+    /// became `ITEM_SINGLE.name`, and eleven such phantoms — `ROLE._type`,
+    /// `EHR_STATUS._type`, `ELEMENT.archetype_node_id` among them — were in
+    /// the committed register (`lib:A-31`).
+    ///
+    /// The fix keeps the generality and adds the one thing a citation always
+    /// has: the two literals are separated by a comma and nothing else.
+    #[test]
+    fn only_two_literals_in_one_argument_list_are_a_citation() {
+        // The real forms, including one split across lines.
+        assert_eq!(
+            regex_citations(r#"ParseError::invariant("ELEMENT", "Inv_null_valid")"#),
+            vec![("ELEMENT".to_owned(), "Inv_null_valid".to_owned())]
+        );
+        assert_eq!(
+            regex_citations("check_party(\n    p,\n    \"PARTY\",\n    \"Name_valid\",\n)"),
+            vec![("PARTY".to_owned(), "Name_valid".to_owned())]
+        );
+
+        // A table of expectations. Adjacent, but in different rows.
+        let table = r#"
+            let cases = &[
+                (Node::Entry(&instruction), "activities", "ITEM_SINGLE"),
+                (Node::Entry(&instruction), "name", "DV_TEXT"),
+            ];
+        "#;
+        assert!(
+            regex_citations(table).is_empty(),
+            "a test table was read as citations: {:?}",
+            regex_citations(table)
+        );
+
+        // A macro invocation followed later by an unrelated literal.
+        let macros = "impl_locatable!(Element, \"ELEMENT\");\nlet x = \"archetype_node_id\";";
+        assert!(
+            regex_citations(macros).is_empty(),
+            "{:?}",
+            regex_citations(macros)
+        );
     }
 }

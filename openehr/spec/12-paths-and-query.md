@@ -50,6 +50,26 @@ Requirement prefix: `Q12`.
   class extension, terminology-function subqueries — MUST be **refused with an
   error naming this requirement**, never parsed-and-ignored. A
   partially-understood query that looks fully understood is the failure mode.
+- **Q12.9b** *Limitation.* A numeric literal MUST NOT be required to carry a
+  sign, and the crate does not parse one: `-1` and `-2.5` are refused at the
+  lexer. This is a departure from `Q12.9`'s "comparison operators" in practice,
+  because a condition such as `WHERE o/value/magnitude > -2.5` is ordinary
+  clinical AQL — a base excess, a temperature difference, a scale scored below
+  zero — and cannot be written here at all.
+
+  It is recorded rather than fixed because the fix has a decision in it: `-` is
+  also the character that separates the parts of an archetype id, so a sign
+  cannot simply be added to the number scanner without deciding what
+  `[openEHR-EHR-COMPOSITION.encounter.v1]` means when it follows an operator.
+  See `A-27`.
+
+- **Q12.9c** *Limitation.* A bracketed predicate MUST be either the archetype
+  shorthand (`c[openEHR-EHR-COMPOSITION.encounter.v1]`) or a full condition.
+  There is no node-id shorthand: `c[at0001]` is refused rather than read as
+  `archetype_node_id = 'at0001'`. Recorded as `A-30`, and pinned by a test —
+  refusal is also what keeps a bare word from being reported as an archetype id
+  to the authorisation check of `Q12.13`.
+
 - **Q12.10** The crate MUST NOT execute AQL (`S1.5`), and no API may return
   anything shaped like a result set.
 - **Q12.11** Keywords MUST be case-insensitive.

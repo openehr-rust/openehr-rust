@@ -433,3 +433,107 @@ jobs:
           done
           [ "$bad" -eq 0 ] || exit 1
           echo "all eight crates declare the same five licences"
+
+  # `T13.2`: a test that cannot fail is not a test, and this repository has
+  # shipped several — the first property tests passed vacuously (`lib:A-17`),
+  # and a `compile_fail` doctest passed because the block never compiled for an
+  # unrelated reason. Both were found by mutating the code and watching the
+  # suite stay green.
+  #
+  # **Scoped to the diff, deliberately.** A full run is hours per crate — the
+  # measurement in `lib:A-09` was taken module by module by hand and is a
+  # point-in-time figure, not a standing guarantee. What this job asserts is
+  # narrower and affordable: *the lines this pull request changed* are covered
+  # by a test that notices when they change meaning. That is where untested
+  # code actually arrives.
+  #
+  # It does not assert the rest of the tree is mutation-clean. It is not. The
+  # `T13.2` row in each conformance matrix says so, and this job must not be
+  # cited as though it said otherwise (`W0.3`).
+  mutants:
+    name: changed lines are mutation-tested
+    runs-on: ubuntu-latest
+    # Needs a base to diff against. On a push to main there is no pull request
+    # and no meaningful diff scope, so the job does not run rather than running
+    # over nothing and reporting success (`C0.13`: a vacuous pass is worse than
+    # an absent one).
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [openehr, openehr-store, openehr-sqlite, openehr-loco]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ matrix.crate }}
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+
+      # `--relative` is load-bearing, and its absence fails **silently**.
+      # cargo-mutants resolves a diff's paths against the workspace it runs in,
+      # and every crate here is its own workspace. A diff naming
+      # `openehr-store/src/integrity.rs`, fed to a run inside `openehr-store/`,
+      # matches nothing: cargo-mutants prints "No mutants to filter" and exits
+      # **0**. Measured, not assumed — the wrong-prefix case was run to see
+      # which way it failed, and it fails green.
+      #
+      # So the paths must come out as `src/integrity.rs`, and the step after
+      # this one checks that they resolve rather than trusting that they did.
+      - name: Diff against the base
+        working-directory: ${{ matrix.crate }}
+        run: |
+          set -eu
+          git diff --relative "origin/${{ github.base_ref }}"...HEAD -- '*.rs' \
+            > /tmp/pr.diff
+          wc -l < /tmp/pr.diff | xargs echo "diff lines:"
+
+      # `--in-diff` mutates only lines the diff touched. `--test-workspace` is
+      # not used: each crate is its own workspace, which is the point.
+      #
+      # A survivor fails the job. The remedy is a test, or — where the mutant is
+      # genuinely equivalent — a `#[mutants::skip]` with the reason written next
+      # to it, which is the same standard the rest of the tree holds: a gap not
+      # written down reads as a pass (`W0.4`). A survivor is sometimes neither:
+      # `Parser::integer`'s unreachable guard turned out to be evidence of a
+      # missing feature rather than a missing test (`lib:A-27`).
+      - name: Mutate the changed lines
+        working-directory: ${{ matrix.crate }}
+        # The global `-D warnings` is dropped here on purpose. A mutant often
+        # leaves a variable unused, and under `-D warnings` that build fails —
+        # which cargo-mutants scores as *unviable*, not as caught. The check
+        # would quietly get weaker rather than louder, which is the failure
+        # mode this whole file exists to avoid.
+        env:
+          RUSTFLAGS: ""
+        run: |
+          set -eu
+          if ! grep -q '^+++ b/' /tmp/pr.diff; then
+            echo "no Rust changes in ${{ matrix.crate }}"
+            exit 0
+          fi
+
+          # Every path the diff names must exist relative to this crate. This
+          # is the check a mutant count cannot make: a diff whose changed lines
+          # are all comments or attributes legitimately yields zero mutants, so
+          # "zero" is not by itself evidence of anything. What is evidence is
+          # whether cargo-mutants is being handed paths it can resolve at all.
+          bad=0
+          for f in $(grep '^+++ b/' /tmp/pr.diff | sed 's|^+++ b/||'); do
+            [ "$f" = /dev/null ] && continue
+            [ -f "$f" ] || {
+              echo "::error::diff names $f, absent from ${{ matrix.crate }}/;"
+              echo "::error::--in-diff would match nothing and exit 0"
+              bad=1
+            }
+          done
+          [ "$bad" -eq 0 ] || exit 1
+
+          cargo mutants --in-diff /tmp/pr.diff -j 2 --timeout 300
