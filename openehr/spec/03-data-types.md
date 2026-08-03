@@ -103,6 +103,22 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
   match.
 - **D3.18** Times carrying UTC offsets MUST be normalised to UTC before
   comparison.
+- **D3.18a** *Declared inconsistency.* `Eq` on `Time`, `Date` and `DateTime` is
+  **lexical** — two values are equal when they were written the same way —
+  while `PartialOrd` compares instants under `D3.18`. So `11:00:00Z` and
+  `12:00:00+01:00` order `Equal` and are **not** `==`.
+
+  This contradicts the standard library's requirement that the two agree, and it
+  is declared rather than resolved because both halves are load-bearing and
+  neither moves without loss. Lexical equality is record identity: the text is
+  the stored value (`db:M3.28`), `.5` and `.50` are different strings a record
+  must round-trip, and `Hash` must agree with `Eq`. Instant ordering is what a
+  query needs.
+
+  **What a caller must not do:** treat the two as interchangeable. `dedup` after
+  `sort` keeps both spellings of one instant, because `dedup` uses `==`. Recorded
+  as `A-32` and pinned by
+  `iso8601::lexical_equality_and_instant_ordering_are_different_questions`.
 
 ## Quantities and proportions
 

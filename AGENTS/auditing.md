@@ -149,6 +149,16 @@ Two things to know before believing a number:
   implement `DvOrdered` and carry `OrderedAttrs`, and none of them was there, so
   a normal range on a `DV_DATE` was unreachable by path against `Q12.7a`
   (`lib:A-29`). The mutant pointed at a line; the fixture is what read it.
+- **Test the function, not only its caller.** `days_from_civil` is private and
+  its one caller differences two of its results — which cancels every constant
+  in it, so `- 719_468` could become `+ 719_468` undetected. Five survivors
+  outlived a nine-date table for that reason alone. A `#[cfg(test)]` module in
+  the same file can call a private function directly; do that when the caller
+  is lossy.
+- **An ordering test does not test scale.** Comparing `09:00:00` with
+  `09:01:00` cannot tell `m * 60_000` from `m + 60_000`: addition is monotonic,
+  so the ordering comes out the same. Only a pair crossing a component boundary
+  — `00:02:00` against `00:00:59` — pins the magnitude of a term.
 - **A survivor can be a proof, not a gap.** `Parser::integer`'s `v >= 0` guard
   could be replaced with `true` and nothing failed — because the lexer starts a
   number only at a digit and never emits a negative one, so the guard is

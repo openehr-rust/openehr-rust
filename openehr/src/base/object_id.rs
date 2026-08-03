@@ -1292,4 +1292,271 @@ mod tests {
         let branch: VersionTreeId = "3.2.9".parse().unwrap();
         assert_eq!(branch.next().to_string(), "3.2.10");
     }
+
+    /// A `VERSION_TREE_ID`'s three numbers, each refused at zero on its own
+    /// account, and each readable back.
+    ///
+    /// `trunk_version == 0 || branch_number == 0 || branch_version == 0` could
+    /// become `&&`, admitting `1.0.3` and `1.2.0`; and both branch accessors
+    /// could return a constant (`lib:A-09`). This identifier is the position of
+    /// a version in its tree, which the store enforces uniqueness on
+    /// (`ix_version_container_trunk`, `db:H5.10`), so an accessor that answers
+    /// a fixed number puts two different versions at one position.
+    #[test]
+    fn every_number_in_a_version_tree_id_is_read_and_none_may_be_zero() {
+        let v = VersionTreeId::branch(1, 2, 3).expect("1.2.3 is a branch");
+        assert_eq!(v.trunk_version(), 1);
+        assert_eq!(v.branch_number(), Some(2));
+        assert_eq!(v.branch_version(), Some(3));
+        assert!(v.is_branch());
+        assert_eq!(v.to_string(), "1.2.3");
+
+        // Different numbers in each position, so no accessor can answer from
+        // the wrong field and still look right.
+        let v = VersionTreeId::branch(7, 8, 9).unwrap();
+        assert_eq!(
+            (v.trunk_version(), v.branch_number(), v.branch_version()),
+            (7, Some(8), Some(9))
+        );
+
+        // Each zero refused separately: `&&` would accept two of these three.
+        for (t, n, ver) in [(0, 2, 3), (1, 0, 3), (1, 2, 0), (0, 0, 0)] {
+            assert!(
+                VersionTreeId::branch(t, n, ver).is_err(),
+                "{t}.{n}.{ver} was accepted"
+            );
+        }
+
+        // A trunk version has no branch, and says so rather than answering 1.
+        let trunk: VersionTreeId = "5".parse().unwrap();
+        assert_eq!(trunk.trunk_version(), 5);
+        assert_eq!(trunk.branch_number(), None);
+        assert_eq!(trunk.branch_version(), None);
+        assert!(!trunk.is_branch());
+    }
+
+    /// What a `VERSION_TREE_ID` refuses when parsed from text.
+    ///
+    /// `part.is_empty() || !all_digits` could become `&&`, accepting `1.x.3`;
+    /// and `part.len() > 1` could become `>=`, which rejects a legitimate `0`
+    /// prefix check on every single digit. A leading zero is refused because it
+    /// would not round-trip, and this identifier is stored as text.
+    #[test]
+    fn a_version_tree_id_refuses_what_would_not_round_trip() {
+        for text in ["1", "1.2.3", "10", "1.20.300"] {
+            let v: VersionTreeId = text.parse().unwrap_or_else(|e| panic!("{text}: {e}"));
+            assert_eq!(v.to_string(), text, "{text} did not round-trip");
+        }
+        for bad in [
+            "1.x.3",  // not a number
+            "1..3",   // empty component
+            "",       //
+            "01",     // leading zero
+            "1.02.3", //
+            "1.2.03",
+            "0",     // zero
+            "1.2",   // two components
+            "1.2.3.4",
+            "-1",
+        ] {
+            assert!(
+                bad.parse::<VersionTreeId>().is_err(),
+                "{bad} was accepted as a version tree id"
+            );
+        }
+    }
+
+    /// Every part of an `ARCHETYPE_ID`, and every way one is malformed.
+    ///
+    /// Three `||`s in the parser could become `&&` — admitting an empty
+    /// reference-model part, an empty domain concept, or a non-numeric version
+    /// component — and `domain_concept` could return a constant. The archetype
+    /// id is what an AQL query filters on (`db:P6.12`) and what an
+    /// authorisation check reads (`Q12.13`), so an accessor answering the wrong
+    /// string is a permission decision about the wrong archetype.
+    #[test]
+    fn an_archetype_id_is_read_in_full_and_refuses_each_malformation() {
+        let id: ArchetypeId = "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap();
+        assert_eq!(id.rm_originator(), "openEHR");
+        assert_eq!(id.rm_name(), "EHR");
+        assert_eq!(id.rm_entity(), "OBSERVATION");
+        assert_eq!(id.domain_concept(), "blood_pressure");
+        assert_eq!(id.concept_name(), "blood_pressure");
+        assert_eq!(id.to_string(), "openEHR-EHR-OBSERVATION.blood_pressure.v2");
+
+        // A specialised concept: `domain_concept` keeps the specialisation and
+        // `concept_name` drops it. Returning a constant makes these agree when
+        // they must not.
+        let id: ArchetypeId = "openEHR-EHR-COMPOSITION.progress_note-naturopathy.v1"
+            .parse()
+            .unwrap();
+        assert_eq!(id.domain_concept(), "progress_note-naturopathy");
+        assert_eq!(id.concept_name(), "progress_note");
+
+        for bad in [
+            "-EHR-OBSERVATION.x.v1",         // empty rm_originator
+            "openEHR--OBSERVATION.x.v1",     // empty rm_name
+            "openEHR-EHR-.x.v1",             // empty rm_entity
+            "openEHR-EHR-OBS!.x.v1",         // illegal character
+            "openEHR-EHR-OBSERVATION..v1",   // empty domain concept
+            "openEHR-EHR-OBSERVATION.x!.v1", // illegal character in it
+            "openEHR-EHR-OBSERVATION.x-.v1", // empty specialisation segment
+            "openEHR-EHR-OBSERVATION.-x.v1",
+            "openEHR-EHR-OBSERVATION.x.1",   // version lacks `v`
+            "openEHR-EHR-OBSERVATION.x.vx",  // version is not a number
+            "openEHR-EHR-OBSERVATION.x.v",   // empty version
+            "openEHR-EHR-OBSERVATION.x.v1.2.3.4",
+        ] {
+            assert!(
+                bad.parse::<ArchetypeId>().is_err(),
+                "{bad} was accepted as an archetype id"
+            );
+        }
+    }
+
+    /// An `OBJECT_ID` names its own class and prints its own value.
+    ///
+    /// `type_name` could return one wrong constant for every variant and
+    /// `Display` could print nothing, with no test failing. `type_name` is what
+    /// goes into `_type` in canonical JSON, so a wrong answer is a record that
+    /// deserializes as the wrong class — and canonical JSON is what every
+    /// digest in the system is taken over (`db:M3.16`).
+    #[test]
+    fn every_object_id_class_names_itself_and_round_trips_through_json() {
+        let cases: Vec<(ObjectId, &str, &str)> = vec![
+            (
+                ObjectId::HierObjectId("6BA7B810-9DAD-11D1-80B4-00C04FD430C8".parse().unwrap()),
+                "HIER_OBJECT_ID",
+                "6BA7B810-9DAD-11D1-80B4-00C04FD430C8",
+            ),
+            (
+                ObjectId::ObjectVersionId(
+                    "6BA7B810-9DAD-11D1-80B4-00C04FD430C8::example.org::1"
+                        .parse()
+                        .unwrap(),
+                ),
+                "OBJECT_VERSION_ID",
+                "6BA7B810-9DAD-11D1-80B4-00C04FD430C8::example.org::1",
+            ),
+            (
+                ObjectId::ArchetypeId("openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap()),
+                "ARCHETYPE_ID",
+                "openEHR-EHR-OBSERVATION.blood_pressure.v2",
+            ),
+            (
+                ObjectId::TemplateId("vital_signs.v1".parse().unwrap()),
+                "TEMPLATE_ID",
+                "vital_signs.v1",
+            ),
+            (
+                ObjectId::TerminologyId("SNOMED-CT".parse().unwrap()),
+                "TERMINOLOGY_ID",
+                "SNOMED-CT",
+            ),
+            (
+                ObjectId::GenericId(GenericId::new("12345", "NHS").unwrap()),
+                "GENERIC_ID",
+                "12345",
+            ),
+        ];
+
+        let mut seen: Vec<&str> = Vec::new();
+        for (id, type_name, text) in &cases {
+            assert_eq!(id.type_name(), *type_name);
+            assert_eq!(id.to_string(), *text, "{type_name} printed the wrong value");
+            assert_eq!(id.value(), *text);
+            seen.push(type_name);
+
+            // Through canonical JSON and back, which is the `_type` field's
+            // only purpose: a `GENERIC_ID` also needs its `scheme`, and the
+            // arm reading that key could be deleted unnoticed.
+            let json = serde_json::to_string(id).expect("serialize");
+            assert!(json.contains(type_name), "{type_name} missing from {json}");
+            let back: ObjectId = serde_json::from_str(&json).expect(&json);
+            assert_eq!(&back, id, "{type_name} did not round-trip: {json}");
+        }
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(seen.len(), cases.len(), "two classes share a `_type`");
+
+        // A `GENERIC_ID` without its scheme is refused rather than defaulted.
+        assert!(
+            serde_json::from_str::<ObjectId>(r#"{"_type":"GENERIC_ID","value":"12345"}"#).is_err(),
+            "a GENERIC_ID with no scheme was accepted"
+        );
+        // And an unknown `_type` is refused rather than inferred.
+        assert!(
+            serde_json::from_str::<ObjectId>(r#"{"_type":"XYZZY","value":"12345"}"#).is_err()
+        );
+    }
+
+    /// Only a `HIER_OBJECT_ID` carries an extension.
+    ///
+    /// `UidBasedId::extension` could answer `Some("xyzzy")` for both variants.
+    #[test]
+    fn only_a_hier_object_id_carries_an_extension() {
+        let plain: UidBasedId = "6BA7B810-9DAD-11D1-80B4-00C04FD430C8".parse().unwrap();
+        assert_eq!(plain.extension(), None);
+
+        let with_ext: UidBasedId = "6BA7B810-9DAD-11D1-80B4-00C04FD430C8::extension"
+            .parse()
+            .unwrap();
+        assert_eq!(with_ext.extension(), Some("extension"));
+
+        let version: UidBasedId = "6BA7B810-9DAD-11D1-80B4-00C04FD430C8::example.org::1"
+            .parse()
+            .unwrap();
+        assert_eq!(version.extension(), None, "an OBJECT_VERSION_ID has none");
+    }
+
+    /// Two version ids name the same versioned object when their object ids
+    /// agree, whatever else differs.
+    ///
+    /// `same_object_as` could return `true` unconditionally (`lib:A-09`). It is
+    /// the question "are these two versions of one record", and answering yes
+    /// for two unrelated records merges two patients' histories.
+    #[test]
+    fn two_version_ids_name_the_same_object_only_when_their_object_ids_agree() {
+        let id = |s: &str| s.parse::<ObjectVersionId>().unwrap();
+        let a = id("87284370-2D4B-4E3D-A3F3-F303D2F4F34B::a.example::1");
+
+        // Same object, different creating system and different version: still
+        // the same record. This is the case the doc comment shows.
+        assert!(a.same_object_as(&id("87284370-2D4B-4E3D-A3F3-F303D2F4F34B::b.example::2")));
+        assert!(a.same_object_as(&a));
+
+        // A different object id, with the system and version identical, so
+        // only the part that matters differs.
+        assert!(
+            !a.same_object_as(&id("6BA7B810-9DAD-11D1-80B4-00C04FD430C8::a.example::1")),
+            "two unrelated records were called versions of one"
+        );
+    }
+
+    /// Each malformation of a `VERSION_TREE_ID` is refused *for its own
+    /// reason*.
+    ///
+    /// Two guards here survived mutation while the values stayed rejected: a
+    /// non-numeric part is caught again by `parse`, and a bare `0` is caught
+    /// again by the zero check. So refusal alone cannot tell the guards apart —
+    /// only the reason can, and the reason is what a caller is shown when their
+    /// identifier is refused.
+    #[test]
+    fn each_malformed_version_tree_id_is_refused_for_its_own_reason() {
+        let reason = |text: &str| {
+            text.parse::<VersionTreeId>()
+                .expect_err(text)
+                .reason
+        };
+        assert_eq!(reason("1.x.3"), "not a number");
+        assert_eq!(reason("1..3"), "not a number", "an empty part is not a number");
+        assert_eq!(reason("01"), "leading zero would not round-trip");
+        assert_eq!(reason("1.02.3"), "leading zero would not round-trip");
+        // A single `0` is not a leading-zero problem — it is one digit — and
+        // must be refused as a version number instead.
+        assert_eq!(reason("0"), "trunk_version is 0");
+        assert_eq!(reason("1.2"), "expected `trunk` or `trunk.branch_number.branch_version`");
+        // Larger than a u32.
+        assert_eq!(reason("4294967296"), "number does not fit in u32");
+    }
 }

@@ -25,7 +25,7 @@ Doctests count as tests: they compile and run in CI (`T13.8`).
 ## Totals
 
 Counted mechanically from the tables below, with every requirement id in
-`spec/*.md` checked to appear exactly once — **299 ids, 299 covered, none
+`spec/*.md` checked to appear exactly once — **300 ids, 300 covered, none
 missing**.
 
 A hand-written total in a file like this is a number nobody rechecks, and this
@@ -148,6 +148,7 @@ Process requirements; they govern this specification rather than the code.
 | D3.16 | • | `quantity::tests::ordinals_from_different_terminologies_do_not_compare` |
 | D3.17 | • | `invariants::proportions_of_different_kinds_do_not_compare` |
 | D3.18 | • | `iso8601::tests::offsets_normalise_before_comparison` |
+| D3.18a | • | declared inconsistency: `Eq` is lexical, `PartialOrd` compares instants — `iso8601::tests::lexical_equality_and_instant_ordering_are_different_questions` (`A-32`) |
 | D3.19 | • | `quantity::tests::non_finite_magnitudes_are_refused` |
 | D3.19a | doc | declared narrowing; recorded here and in §3 |
 | D3.20, D3.20a | • | `quantity::tests::precision_accepts_the_unlimited_sentinel`; `validation::tests::the_unlimited_precision_sentinel_validates` |
@@ -373,7 +374,7 @@ Process requirements; they govern this specification rather than the code.
 | Id | Status | Evidence |
 | --- | --- | --- |
 | T13.1 | • | 222 of 276 requirements cite a test; 3 remain `?` and are named above |
-| T13.2 | ? | `cargo-mutants` over four modules: `audit_chain` 40→1, `integrity` 15→0, `record` 4→0, `dialect` 25→5, `loco/auth` 0→0, `loco/controllers` 6→0, `validation` 25→9, `loco/access` 1→0, `sqlite/store` 9→1, `redact` 8→0, `access` 6→1, `canonical` 1→0, and the query surface `aql`+`path` **115→4**, the four remaining shown equivalent. The recurring cause is code whose tests live in another crate, which `cargo mutants` does not run. Roughly twenty more checks mutated by hand. Not in CI, and most modules are untouched — **A-09** |
+| T13.2 | ? | `cargo-mutants` over four modules: `audit_chain` 40→1, `integrity` 15→0, `record` 4→0, `dialect` 25→5, `loco/auth` 0→0, `loco/controllers` 6→0, `validation` 25→9, `loco/access` 1→0, `sqlite/store` 9→1, `redact` 8→0, `access` 6→1, `canonical` 1→0, and the query surface `aql`+`path` **115→4**, the four remaining shown equivalent; `iso8601`+`object_id` **95→2**, both remaining shown harmless. The recurring cause is code whose tests live in another crate, which `cargo mutants` does not run. Roughly twenty more checks mutated by hand. Not in CI, and most modules are untouched — **A-09** |
 | T13.3 | • | every test in `tests/guarantees.rs` states its failure mode |
 | T13.4 | • | `canonical_json` |
 | T13.5–T13.6 | • | `tests/guarantees.rs` |
