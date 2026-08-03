@@ -526,4 +526,51 @@ mod tests {
         };
         assert!(!settings.decide(&write).is_permit());
     }
+
+    /// The accessors an `EHR_ACCESS` exposes, and the group list it keeps.
+    ///
+    /// `scheme()` could return `None`, `Some("")` or `Some("xyzzy")` and
+    /// nothing failed; so could `settings()`, and `with_group_ref` could drop
+    /// every group it was given. `scheme` is the attribute openEHR's
+    /// `Scheme_valid` constrains and `lib:S1.20` declares a departure from, so
+    /// a reader who wants to know what policy is in force asks it — and until
+    /// now it could have answered anything (`lib:A-09`).
+    #[test]
+    fn an_ehr_access_reports_the_policy_it_holds() {
+        let attrs = |name: &str, node: &str| {
+            crate::rm::common::LocatableAttrs::named(name, node).expect("literal")
+        };
+
+        // No policy recorded: both accessors say so, and `S1.20` is why that
+        // state exists at all — "unset" is not "deny all", and the decision
+        // below still denies.
+        let bare = EhrAccess::new(attrs("access", "at0000"));
+        assert!(bare.settings().is_none());
+        assert!(bare.scheme().is_none());
+
+        let group = |id: &str| {
+            AccessGroupRef::new(
+                "local",
+                crate::base::ObjectId::HierObjectId(
+                    crate::base::HierObjectId::from_uid_str(id).expect("literal"),
+                ),
+            )
+            .expect("literal")
+        };
+        let groups = GroupSettings::default()
+            .with_group_ref(group("6BA7B810-9DAD-11D1-80B4-00C04FD430C8"))
+            .with_group_ref(group("3F2504E0-4F89-11D3-9A0C-0305E82C3301"));
+        // Serialising is how a dropped group becomes visible without an
+        // accessor for the list.
+        let shown = serde_json::to_string(&groups).expect("json");
+        assert!(shown.contains("6BA7B810"), "a group reference was dropped: {shown}");
+        assert!(shown.contains("3F2504E0"), "a group reference was dropped: {shown}");
+
+        let configured =
+            EhrAccess::new(attrs("access", "at0000")).with_settings(groups.clone().into());
+        assert!(configured.settings().is_some());
+        let scheme = configured.scheme().expect("a configured access has a scheme");
+        assert!(!scheme.is_empty(), "openEHR's Scheme_valid wants a name");
+        assert_eq!(scheme, AccessControlSettings::from(groups).scheme());
+    }
 }

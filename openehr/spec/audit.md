@@ -470,6 +470,9 @@ an empty slice hashes nothing, builds an empty chain, and `verify` reports
 | `openehr/validation.rs` | 25 of 115 | 9 | three whole `visit` bodies removable, two of them added the day before |
 | `openehr-loco/access.rs` | 1 of 4 | 0 | a public accessor with no caller |
 | `openehr-sqlite/store.rs` | 9 of 28 | 1 | `create_contribution` could write nothing |
+| `openehr/security/redact.rs` | 8 of 33 | 0 | two of three redaction rule kinds had no test |
+| `openehr/security/access.rs` | 6 of 20 | 1 | the `EHR_ACCESS` accessors |
+| `openehr/security/canonical.rs` | 1 of 13 | 0 | nothing canonicalised an **array** |
 
 `record.rs` is the one worth reading twice. A test called
 `the_attributes_that_used_to_be_dropped_are_persisted` existed, named for
@@ -518,6 +521,33 @@ Nine survive. Four are the `Range_is_simple` variant arms, which need a
 reference range whose endpoint is itself an ordered value carrying reference
 ranges; the rest are boolean operators and one boundary. Recorded rather than
 chased.
+
+The security modules produced two findings worth naming, and one methodological
+correction.
+
+**Redaction had one rule kind tested of three.** Every test used
+`RedactionRule::node_id`, so the arms matching by **name** and by **archetype
+root** could each be inverted with the suite green. Redaction is the
+PHI-withholding mechanism (`X11.24`, `X11.25`); two thirds of its vocabulary
+unexercised is not a coverage statistic but a rule nobody has watched work.
+
+**Nothing canonicalised an array.** The separator's `i > 0` could become
+`i < 0` — emitting no commas, producing `[1 2 3]` — and no test noticed. A
+`COMPOSITION` is arrays most of the way down, and every digest in the system is
+taken over these bytes (`db:M3.16`), so a broken separator breaks the chain and
+the checkpoint together.
+
+**The correction.** A survivor in `matches_element` looked like a live
+PHI-disclosure bug, so it was reproduced by hand — and the hand-applied mutation
+*did* fail the suite, which suggested `cargo mutants` was reporting falsely.
+It was not. The mutation was on line 262, which is the `Name` arm; the
+hand-edit had changed the `NodeId` arm on the line above. The tool was right and
+the reproduction was wrong. Checking that before writing it up cost ten minutes
+and would have cost a false finding in this register.
+
+Redaction also turned out to depend on shape rather than `_type`: this crate
+does not tag a bare `ELEMENT`, measured rather than assumed, so `is_element`'s
+structural fallback is the path every `ITEM_SINGLE` takes and was untested.
 
 `store.rs` produced the one that would have mattered most in production:
 `create_contribution` could return `Ok(())` **without inserting anything** and

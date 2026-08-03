@@ -471,3 +471,221 @@ fn a_forged_tag_is_refused() {
     ));
 }
 
+/// Redaction has three rule kinds. Two of them had no test at all.
+///
+/// Every existing redaction test used `RedactionRule::node_id`, so the arms
+/// matching by **name** and by **archetype root** could each be inverted with
+/// the suite green (`lib:A-09`). Redaction is the PHI-withholding mechanism
+/// (`X11.24`, `X11.25`); two thirds of its vocabulary being unexercised is not
+/// a coverage statistic, it is a rule nobody has watched work.
+#[test]
+fn every_redaction_rule_kind_withholds_what_it_names() {
+    let masked = |rule: RedactionRule| {
+        let (redacted, count) = Redactor::new()
+            .with_rule(rule)
+            .redact_counting(&composition_containing(MARKER))
+            .unwrap();
+        let json = serde_json::to_string(&redacted).unwrap();
+        (json.contains(MARKER), count.masked)
+    };
+
+    // By node id — the one that was covered.
+    assert_eq!(masked(RedactionRule::node_id("at0011")), (false, 1));
+
+    // By runtime name. The fixture's element is named "HIV status", and a
+    // deployment withholding by name is withholding what a clinician sees.
+    assert_eq!(masked(RedactionRule::name("HIV status")), (false, 1));
+
+    // By archetype root: everything under the entry, not one element.
+    assert_eq!(
+        masked(RedactionRule::archetype_root(
+            "openEHR-EHR-EVALUATION.problem.v1"
+        )),
+        (false, 1)
+    );
+
+    // And a rule that names nothing withholds nothing — the direction that
+    // catches an inverted comparison, which would mask every element *except*
+    // the one asked for.
+    assert_eq!(masked(RedactionRule::node_id("at9999")), (true, 0));
+    assert_eq!(masked(RedactionRule::name("Blood pressure")), (true, 0));
+    assert_eq!(
+        masked(RedactionRule::archetype_root("openEHR-EHR-OBSERVATION.other.v1")),
+        (true, 0)
+    );
+}
+
+/// The count says how much, and the rules are the ones that were given.
+#[test]
+fn a_redaction_count_reports_numbers_and_the_rules_are_kept() {
+    let redactor = Redactor::new()
+        .with_rule(RedactionRule::node_id("at0011"))
+        .with_rule(RedactionRule::name("something else"));
+    assert_eq!(redactor.rules().len(), 2, "a rule was dropped");
+
+    let (_, count) = redactor
+        .redact_counting(&composition_containing(MARKER))
+        .unwrap();
+    assert_eq!(count.masked, 1);
+    assert!(count.examined >= count.masked);
+
+    // `Display` could render nothing at all: a report saying how much was
+    // withheld is the point of counting, and an empty one reads as "none".
+    let shown = count.to_string();
+    assert!(shown.contains('1'), "no number in {shown:?}");
+    assert!(!shown.contains("HIV"), "a count must not name what it withheld");
+}
+
+/// Redaction tells an ELEMENT from a CLUSTER by **shape**, not by `_type`.
+///
+/// This crate does not emit `_type` on an `ELEMENT` — measured, not assumed —
+/// so the structural fallback in `is_element` is not a corner case for foreign
+/// documents. It is the path every composition here takes.
+///
+/// Its three negative conditions were untested: a node with `items`, `rows` or
+/// `content` is a container and not a leaf. Deleting any of them lets a
+/// `CLUSTER` be treated as an element, which for a redactor means masking a
+/// whole branch as though it were one value — or counting it as examined when
+/// nothing looked inside (`lib:A-09`).
+#[test]
+fn redaction_distinguishes_a_leaf_from_a_branch_by_shape() {
+    use openehr::rm::data_structures::{Cluster, Item, ItemTree};
+
+    let leaf = |name: &str, node: &str, text: &str| {
+        Item::Element(Element::new(
+            at(name, node),
+            DataValue::Text(DvText::new(text).unwrap()),
+        ))
+    };
+    // A tree holding one element and one cluster of two elements: three leaves
+    // and two branches.
+    let tree = ItemTree::new(
+        at("tree", "at0001"),
+        vec![
+            leaf("Top", "at0020", "top"),
+            Item::Cluster(
+                Cluster::new(
+                    at("Group", "at0021"),
+                    vec![leaf("Inner A", "at0022", "a"), leaf("Inner B", "at0023", "b")],
+                )
+                .unwrap(),
+            ),
+        ],
+    );
+    let evaluation = Evaluation::new(
+        at("Problem", "openEHR-EHR-EVALUATION.problem.v1").with_archetype_details(
+            openehr::rm::common::Archetyped::new("openEHR-EHR-EVALUATION.problem.v1", "1.1.0")
+                .unwrap(),
+        ),
+        EntryAttrs::about_subject(
+            CodePhrase::new("ISO_639-1", "en").unwrap(),
+            CodePhrase::new("IANA_character-sets", "UTF-8").unwrap(),
+        ),
+        tree.into(),
+    );
+    let composition = Composition::new(
+        at("Encounter", "openEHR-EHR-COMPOSITION.encounter.v1").with_archetype_details(
+            openehr::rm::common::Archetyped::new("openEHR-EHR-COMPOSITION.encounter.v1", "1.1.0")
+                .unwrap(),
+        ),
+        composition_category::EVENT,
+        PartyIdentified::named("Dr A Nurse").unwrap().into(),
+        CodePhrase::new("ISO_639-1", "en").unwrap(),
+        CodePhrase::new("ISO_3166-1", "GB").unwrap(),
+    )
+    .unwrap()
+    .with_content(evaluation.into());
+
+    // Three leaves, and only three. A cluster counted as examined means the
+    // shape test let a branch through.
+    let (_, count) = Redactor::new()
+        .with_rule(RedactionRule::node_id("at9999"))
+        .redact_counting(&composition)
+        .unwrap();
+    assert_eq!(count.examined, 3, "a branch was counted as a leaf");
+    assert_eq!(count.masked, 0);
+
+    // And a rule naming the cluster masks nothing: it is not an element, so
+    // there is no value to withhold and no branch to flatten.
+    let (redacted, count) = Redactor::new()
+        .with_rule(RedactionRule::node_id("at0021"))
+        .redact_counting(&composition)
+        .unwrap();
+    assert_eq!(count.masked, 0, "a cluster was masked as though it were a value");
+    let json = serde_json::to_string(&redacted).unwrap();
+    assert!(json.contains('a') && json.contains('b'), "the branch survived");
+
+    // A rule naming a leaf inside the cluster masks exactly that one.
+    let (_, count) = Redactor::new()
+        .with_rule(RedactionRule::node_id("at0022"))
+        .redact_counting(&composition)
+        .unwrap();
+    assert_eq!(count.masked, 1);
+}
+
+/// The shape test is reached for an `ITEM_SINGLE`, whose element is a bare
+/// field and carries no `_type`.
+///
+/// `is_element` checks `_type` first and falls back to shape. Inside an
+/// `Item` enum an element is tagged, so the fallback never runs; as
+/// `ITEM_SINGLE`'s `item` field it is untagged, and the fallback is the only
+/// thing that recognises it.
+///
+/// The condition tested here is `value` **or** `null_flavour`: an element
+/// carrying a value and no null flavour is still an element. Turning that into
+/// `and` makes redaction stop recognising ordinary values — it would withhold
+/// nothing and report nothing, which is the worst failure a redactor has
+/// (`lib:A-09`, `X11.24`).
+#[test]
+fn an_untagged_element_is_still_recognised_and_withheld() {
+    use openehr::rm::data_structures::ItemSingle;
+
+    let composition = Composition::new(
+        at("Encounter", "openEHR-EHR-COMPOSITION.encounter.v1").with_archetype_details(
+            openehr::rm::common::Archetyped::new("openEHR-EHR-COMPOSITION.encounter.v1", "1.1.0")
+                .unwrap(),
+        ),
+        composition_category::EVENT,
+        PartyIdentified::named("Dr A Nurse").unwrap().into(),
+        CodePhrase::new("ISO_639-1", "en").unwrap(),
+        CodePhrase::new("ISO_3166-1", "GB").unwrap(),
+    )
+    .unwrap()
+    .with_content(
+        Evaluation::new(
+            at("Problem", "openEHR-EHR-EVALUATION.problem.v1").with_archetype_details(
+                openehr::rm::common::Archetyped::new("openEHR-EHR-EVALUATION.problem.v1", "1.1.0")
+                    .unwrap(),
+            ),
+            EntryAttrs::about_subject(
+                CodePhrase::new("ISO_639-1", "en").unwrap(),
+                CodePhrase::new("IANA_character-sets", "UTF-8").unwrap(),
+            ),
+            ItemSingle::new(
+                at("single", "at0030"),
+                Element::new(
+                    at("HIV status", "at0031"),
+                    DataValue::Text(DvText::new(MARKER).unwrap()),
+                ),
+            )
+            .into(),
+        )
+        .into(),
+    );
+
+    // Untagged in the JSON, so only the shape test can find it.
+    let raw = serde_json::to_string(&composition).unwrap();
+    assert!(raw.contains(MARKER));
+    assert!(
+        !raw.contains(r#""at0031","_type":"ELEMENT""#),
+        "the element is expected to be untagged here"
+    );
+
+    let (redacted, count) = Redactor::new()
+        .with_rule(RedactionRule::node_id("at0031"))
+        .redact_counting(&composition)
+        .unwrap();
+    assert_eq!(count.masked, 1, "an untagged element was not recognised");
+    assert!(!serde_json::to_string(&redacted).unwrap().contains(MARKER));
+}
+

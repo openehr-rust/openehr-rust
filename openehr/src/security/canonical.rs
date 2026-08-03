@@ -161,4 +161,36 @@ mod tests {
         let v = json!({"a": 1, "Z": 2});
         assert_eq!(to_canonical_string(&v).unwrap(), r#"{"Z":2,"a":1}"#);
     }
+
+    /// Arrays: separated, and in the order given.
+    ///
+    /// Nothing canonicalised an array until mutation testing replaced the
+    /// separator's `i > 0` with `i < 0` — which emits no commas at all,
+    /// producing `[1 2 3]` — and no test noticed (`lib:A-09`).
+    ///
+    /// This is not a corner. A `COMPOSITION` is arrays most of the way down —
+    /// `content`, `items`, `events`, `attestations` — and every digest in the
+    /// system is taken over these bytes (`db:M3.16`), so a broken separator
+    /// breaks the chain and the checkpoint together.
+    #[test]
+    fn an_array_is_separated_and_keeps_its_order() {
+        assert_eq!(to_canonical_string(&json!([])).unwrap(), "[]");
+        assert_eq!(to_canonical_string(&json!([1])).unwrap(), "[1]");
+        assert_eq!(to_canonical_string(&json!([1, 2, 3])).unwrap(), "[1,2,3]");
+
+        // `J9.12`: array order is **preserved**, unlike object keys, which are
+        // sorted. A canonicaliser that sorted both would silently reorder
+        // `content`, and the clinical record is a sequence.
+        assert_eq!(
+            to_canonical_string(&json!(["b", "a", "c"])).unwrap(),
+            r#"["b","a","c"]"#
+        );
+
+        // Nested, and mixed with objects, because that is what a composition
+        // actually is.
+        assert_eq!(
+            to_canonical_string(&json!([{"z": 1, "a": [2, 3]}, []])).unwrap(),
+            r#"[{"a":[2,3],"z":1},[]]"#
+        );
+    }
 }
