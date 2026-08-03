@@ -481,6 +481,7 @@ an empty slice hashes nothing, builds an empty chain, and `verify` reports
 | `openehr/security/canonical.rs` | 1 of 13 | 0 | nothing canonicalised an **array** |
 | `openehr/aql.rs` + `openehr/path.rs` | **115 of 435** | 4, all equivalent | the query surface: fifty navigation-table arms, the whole path parser |
 | `openehr/base/iso8601.rs` + `object_id.rs` | **95 of 510** | 2 | `days_from_civil`, `DURATION` ordering, the offset parser, the identifier grammars |
+| `openehr/rm/common.rs` + `data_types/quantity.rs` | **72 of 386** | 1, equivalent | the change-control envelope's accessors, and the clinical markers |
 
 `record.rs` is the one worth reading twice. A test called
 `the_attributes_that_used_to_be_dropped_are_persisted` existed, named for
@@ -680,6 +681,67 @@ declared as `D3.18a` rather than fixed, because both halves are load-bearing —
 the text *is* the stored value (`db:M3.28`), `.5` and `.50` must round-trip, and
 `Hash` must agree with `Eq` — and a caller who sorts and then `dedup`s a
 collection of times gets both spellings of one instant.
+
+**The Reference Model classes failed a third way: nothing read them back.**
+Almost every survivor in `rm/common.rs` was an *accessor returning a
+constant*. The constructors here are thorough — `Basic_validity`,
+`Data_valid`, `System_id_valid`, `Versions_valid` are all enforced on the way
+in — but a getter could answer `None`, `""` or `"xyzzy"` on the way out and the
+suite stayed green.
+
+That matters more in this module than it would elsewhere, because these are the
+fields the store projects into columns and the audit chain is taken over. A
+lying accessor produces a record that reads back wrong **while its digest still
+verifies**, because the digest is computed from the stored bytes and not from
+what an accessor says about them (`db:M3.16d`).
+
+The ones worth naming:
+
+| Accessor | A constant answer means |
+| --- | --- |
+| `AuditDetails::is_deletion` | every version looks logically deleted |
+| `OriginalVersion::data` | the same, from the other side: absent data *is* how a deletion is recorded |
+| `Version::is_deleted` | as above, at the envelope |
+| `VersionedObject::has_version_at_time` | a record existed before it did — the query `db:P6.11` requires |
+| `PartyIdentified::identifiers`, `external_ref` | a party that satisfies `Basic_validity` reads as anonymous |
+| `Contribution::versions` | a change set that changed nothing, contradicting `Versions_valid` |
+
+**`quantity.rs` was worse in kind if not in number,** because its survivors
+carry clinical meaning rather than structure:
+
+- `MagnitudeStatus` — the `<` / `>` / `~` marker. `as_str` could return one
+  wrong constant for all six variants and three `parse` arms could be deleted.
+  Confusing `<` with `>` inverts what a result *means* while leaving the number
+  correct: a below-detection-limit reading becomes a measured one.
+- `ReferenceRange::contains` — a constant `true` reports every result as within
+  its normal range. This is the machinery `A-01` already found rules missing
+  from; the membership test underneath was equally unwatched.
+- `DvScale::is_strictly_comparable_to` — `D3.16`. Answering `true` lets a
+  pain-scale 2 order against a sedation-scale 2 as though they measured the
+  same thing.
+- `accuracy_is_percent` — a constant makes `±5` read as `±5%`; on a magnitude
+  of 200 those differ by an order of magnitude.
+- `ProportionKind::from_i32` — openEHR encodes the kind as a bare integer, so a
+  deleted arm silently reinterprets `1/2` between a half, fifty percent, and
+  one-in-two.
+
+One survivor remains and it is the mutant writing itself: `PartySelf::anonymous`
+replaced by `Default::default()` is the same code, because that is the whole
+body of the function. The last real one was subtler — the tests read
+`Version::attestations` through the enum but never `OriginalVersion::attestations`
+on the concrete type, which is a *different accessor* that could still answer
+nothing. Testing the wrapper is not testing what it wraps.
+
+Note the denominator: 149 of 386 mutants here were **unviable**, meaning they
+did not compile. That is generic and macro-generated code, and it makes the
+usable sample 237 rather than 386 — worth knowing before reading 72 as a rate.
+
+Three of the tests written for this were wrong before the code was: a version
+with no data must be in the `DELETED` lifecycle state, `links` and
+`feeder_audit` are defaults on the `Locatable` trait rather than on
+`LocatableAttrs`, and `FEEDER_AUDIT.original_content` must be a
+`DV_ENCAPSULATED`. All three are invariants the crate enforces correctly and the
+test author did not know.
 
 `store.rs` produced the one that would have mattered most in production:
 `create_contribution` could return `Ok(())` **without inserting anything** and

@@ -159,6 +159,12 @@ Two things to know before believing a number:
   `09:01:00` cannot tell `m * 60_000` from `m + 60_000`: addition is monotonic,
   so the ordering comes out the same. Only a pair crossing a component boundary
   — `00:02:00` against `00:00:59` — pins the magnitude of a term.
+- **Validating on the way in is not testing the way out.** Almost every
+  survivor in `rm/common.rs` was an accessor returning a constant. The
+  constructors there enforce their invariants thoroughly, which is exactly why
+  nobody noticed the getters were unread: a test that builds an object and
+  asserts the constructor refused bad input never reads a field back. Round-trip
+  what you build.
 - **A survivor can be a proof, not a gap.** `Parser::integer`'s `v >= 0` guard
   could be replaced with `true` and nothing failed — because the lexer starts a
   number only at a digit and never emits a negative one, so the guard is

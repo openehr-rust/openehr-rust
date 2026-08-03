@@ -1900,6 +1900,7 @@ pub type NodeRef = LocatableRef;
 mod tests {
     use super::*;
     use crate::base::{HierObjectId, ObjectId};
+    use crate::rm::data_types::DvText;
 
     fn audit(code: &str) -> AuditDetails {
         AuditDetails::new(
@@ -2193,5 +2194,448 @@ mod tests {
         assert!(vo.version_at_time(&local).is_none());
         let utc = DvDateTime::new("2026-07-31T10:00:00Z").unwrap();
         assert!(vo.version_at_time(&utc).is_some());
+    }
+
+    /// An `AUDIT_DETAILS` reports every field it was built with.
+    ///
+    /// Seven mutants lived in these accessors (`lib:A-09`): `system_id` could
+    /// answer `""` or `"xyzzy"`, `description` could answer `None`, and
+    /// `is_creation`/`is_deletion` could each be a constant.
+    ///
+    /// This is the provenance every committed version carries — who changed
+    /// what, when, and on whose system — and it is inside the hash chain
+    /// (`db:M3.16`). An accessor that lies produces a record that reads back
+    /// wrong while the digest still verifies, because the digest is taken over
+    /// the stored bytes and not over what the accessor says about them.
+    #[test]
+    fn audit_details_report_the_change_they_record() {
+        let a = audit(terminology::audit_change_type::CREATION)
+            .with_description(Text::Plain(DvText::new("initial commit").unwrap()));
+
+        assert_eq!(a.system_id(), "ehr1.example.org");
+        assert_eq!(a.time_committed().as_str(), "2026-07-31T09:15:00Z");
+        assert_eq!(a.change_type_code(), terminology::audit_change_type::CREATION);
+        assert_eq!(a.description().map(Text::value), Some("initial commit"));
+        assert_eq!(a.committer().name(), Some("Dr A Nurse"));
+
+        // The two predicates are derived from the code, and each must answer
+        // for itself: a creation is not a deletion.
+        assert!(a.is_creation());
+        assert!(!a.is_deletion());
+
+        let deleted = audit(terminology::audit_change_type::DELETED);
+        assert!(deleted.is_deletion());
+        assert!(!deleted.is_creation(), "a deletion was reported as a creation");
+
+        // A third code is neither, so neither predicate may be a constant.
+        let amended = audit(terminology::audit_change_type::AMENDMENT);
+        assert!(!amended.is_creation());
+        assert!(!amended.is_deletion());
+
+        // No description is absent rather than empty — "no reason was given"
+        // and "the reason was blank" are different records.
+        assert_eq!(audit(terminology::audit_change_type::CREATION).description(), None);
+
+        // A system id is required, because an audit with no system says
+        // nothing about where the change came from (`System_id_valid`).
+        assert!(
+            AuditDetails::new(
+                "",
+                DvDateTime::new("2026-07-31T09:15:00Z").unwrap(),
+                terminology::audit_change_type::CREATION,
+                PartyIdentified::named("Dr A Nurse").unwrap().into(),
+            )
+            .is_err()
+        );
+    }
+
+    /// An `ORIGINAL_VERSION` reports its content, its attestations, and
+    /// whether it was merged.
+    ///
+    /// `data` could answer `None` for every version — which is how a deleted
+    /// version is represented, so a constant `None` makes every version look
+    /// deleted. `is_merged` could be a constant or have its `!` dropped.
+    #[test]
+    fn an_original_version_reports_its_content_and_provenance() {
+        let (_, owner) = versioned();
+        let id = |v: u32| -> ObjectVersionId {
+            format!("87284370-2D4B-4E3D-A3F3-F303D2F4F34B::ehr1.example.org::{v}")
+                .parse()
+                .unwrap()
+        };
+
+        let v = OriginalVersion::new(
+            id(1),
+            None,
+            terminology::version_lifecycle_state::COMPLETE,
+            Some("content".to_owned()),
+            audit(terminology::audit_change_type::CREATION),
+            owner.clone(),
+        )
+        .unwrap();
+
+        assert_eq!(v.uid(), &id(1));
+        assert_eq!(v.data(), Some(&"content".to_owned()));
+        assert_eq!(v.commit_audit().system_id(), "ehr1.example.org");
+        assert_eq!(v.contribution(), &owner);
+        assert!(v.attestations().is_empty());
+        // No other input version uids means it was not merged.
+        assert!(!v.is_merged());
+
+        // A version carrying another input version *is* a merge.
+        let merged = OriginalVersion::new(
+            id(2),
+            Some(id(1)),
+            terminology::version_lifecycle_state::COMPLETE,
+            Some("merged".to_owned()),
+            audit(terminology::audit_change_type::AMENDMENT),
+            owner.clone(),
+        )
+        .unwrap()
+        .with_other_input_version_uid(id(1));
+        assert!(merged.is_merged(), "a version with another input is a merge");
+        assert_eq!(merged.data(), Some(&"merged".to_owned()));
+
+        // A deleted version carries no data, and that is what distinguishes
+        // it — so `data()` must report the difference rather than a constant.
+        let deleted = OriginalVersion::new(
+            id(3),
+            Some(id(2)),
+            // A version with no data must say it is deleted (`Data_valid`);
+            // that pairing is what makes an absent `data` meaningful.
+            terminology::version_lifecycle_state::DELETED,
+            None::<String>,
+            audit(terminology::audit_change_type::DELETED),
+            owner,
+        )
+        .unwrap();
+        assert_eq!(deleted.data(), None);
+        assert!(deleted.commit_audit().is_deletion());
+    }
+
+    /// A `VERSIONED_OBJECT` reports the versions it holds and which was
+    /// current when.
+    ///
+    /// `all_versions` could answer an empty slice and `has_version_at_time`
+    /// could answer a constant (`lib:A-09`). "Was there a version of this
+    /// record at that time" is the query `db:P6.11` requires a store to serve,
+    /// and a constant `true` says yes for a record that did not yet exist.
+    #[test]
+    fn a_versioned_object_reports_its_history_and_what_was_current_when() {
+        let (mut vo, owner) = versioned();
+        vo.commit(version(1, None, &owner, terminology::audit_change_type::CREATION))
+            .unwrap();
+        vo.commit(version(
+            2,
+            Some(1),
+            &owner,
+            terminology::audit_change_type::AMENDMENT,
+        ))
+        .unwrap();
+
+        assert_eq!(vo.version_count(), 2);
+        assert_eq!(vo.all_versions().len(), 2, "the history was reported empty");
+        assert_eq!(vo.latest_version().and_then(Version::data), Some(&"content 2".to_owned()));
+
+        // Both commits are at 09:15:00, so a time before them has no version
+        // and a time after them has one. A constant answer cannot be right for
+        // both.
+        let before: DvDateTime = "2026-07-31T09:00:00Z".parse().unwrap();
+        let after: DvDateTime = "2026-07-31T10:00:00Z".parse().unwrap();
+        assert!(
+            !vo.has_version_at_time(&before),
+            "a version was reported before the record existed"
+        );
+        assert!(vo.has_version_at_time(&after));
+        assert!(vo.version_at_time(&before).is_none());
+        assert!(vo.version_at_time(&after).is_some());
+    }
+
+    /// A party reports the name, identifiers and reference it was built with.
+    ///
+    /// Eight mutants lived in these accessors (`lib:A-09`). `identifiers`
+    /// could answer an empty slice and `external_ref` could answer `None` for
+    /// every party — which is who the patient, the composer, or the committer
+    /// *is*. `PARTY_IDENTIFIED.Basic_validity` exists because a party with none
+    /// of the three identifies nobody; an accessor that hides two of them
+    /// leaves a record that satisfies the invariant and reads as anonymous.
+    #[test]
+    fn a_party_reports_every_way_it_identifies_someone() {
+        let nhs = DvIdentifier::new("943-476-5919").unwrap();
+        let person = PartyRef::new(
+            "demographic",
+            "PERSON",
+            ObjectId::HierObjectId(
+                HierObjectId::from_uid_str("6BA7B810-9DAD-11D1-80B4-00C04FD430C8").unwrap(),
+            ),
+        )
+        .unwrap();
+
+        let full = PartyIdentified::new(
+            Some("Dr A Nurse".to_owned()),
+            vec![nhs.clone()],
+            Some(person.clone()),
+        )
+        .unwrap();
+        assert_eq!(full.name(), Some("Dr A Nurse"));
+        assert_eq!(full.identifiers(), &[nhs.clone()][..]);
+        assert_eq!(full.external_ref(), Some(&person));
+
+        // Each of the three alone is enough to identify someone, and each must
+        // be readable — so no accessor may be constant across these.
+        let by_name = PartyIdentified::named("Dr A Nurse").unwrap();
+        assert_eq!(by_name.name(), Some("Dr A Nurse"));
+        assert!(by_name.identifiers().is_empty());
+        assert_eq!(by_name.external_ref(), None);
+
+        let by_id = PartyIdentified::new(None, vec![nhs.clone()], None).unwrap();
+        assert_eq!(by_id.name(), None);
+        assert_eq!(by_id.identifiers(), &[nhs][..]);
+
+        let by_ref = PartyIdentified::new(None, Vec::new(), Some(person.clone())).unwrap();
+        assert_eq!(by_ref.external_ref(), Some(&person));
+
+        // None of the three: refused (`Basic_validity`). An empty name is
+        // refused separately (`Name_valid`).
+        assert!(PartyIdentified::new(None, Vec::new(), None).is_err());
+        assert!(PartyIdentified::named("").is_err());
+
+        // Through the proxy, which is what an audit and a composition hold.
+        let proxy: PartyProxy = full.into();
+        assert_eq!(proxy.name(), Some("Dr A Nurse"));
+        assert_eq!(proxy.identifiers().len(), 1);
+        assert_eq!(proxy.external_ref(), Some(&person));
+        assert!(!proxy.is_subject(), "an identified party is not the subject");
+
+        // `PARTY_SELF` is the subject of the record. Anonymous carries no
+        // reference; the other constructor carries one, and the accessor must
+        // tell them apart.
+        let anonymous = PartySelf::anonymous();
+        assert_eq!(anonymous.external_ref(), None);
+        let known = PartySelf::with_external_ref(person.clone());
+        assert_eq!(known.external_ref(), Some(&person));
+        assert_ne!(anonymous, known);
+
+        let self_proxy: PartyProxy = anonymous.into();
+        assert!(self_proxy.is_subject(), "PARTY_SELF is the subject of the record");
+        assert_eq!(self_proxy.name(), None);
+        assert!(self_proxy.identifiers().is_empty());
+    }
+
+    /// A locatable reports its uid, links, and feeder audit.
+    ///
+    /// All three accessors could answer nothing (`lib:A-09`). The feeder audit
+    /// is the provenance of imported data — which system sent it, when, and as
+    /// what — and a `LINK` is the relation between two records. Both are
+    /// optional in openEHR, so a constant "absent" is indistinguishable from
+    /// the common case and nothing downstream notices.
+    #[test]
+    fn a_locatable_reports_its_identity_links_and_provenance() {
+        let bare = LocatableAttrs::named("Encounter", "at0000").unwrap();
+        assert_eq!(bare.archetype_node_id(), "at0000");
+        assert_eq!(bare.uid(), None);
+
+        let uid = UidBasedId::from("6BA7B810-9DAD-11D1-80B4-00C04FD430C8"
+            .parse::<HierObjectId>()
+            .unwrap());
+        let link = Link::new(
+            Text::Plain(DvText::new("follow-up").unwrap()),
+            Text::Plain(DvText::new("issue").unwrap()),
+            DvEhrUri::new("ehr://example.org/records/1").unwrap(),
+        );
+        let feeder = FeederAudit::new(
+            FeederAuditDetails::new("lab.example.org")
+                .unwrap()
+                .with_time("2026-07-30T08:00:00Z".parse().unwrap()),
+        )
+        .with_originating_item_id(DvIdentifier::new("LAB-7").unwrap());
+
+        let attrs = LocatableAttrs::named("Encounter", "at0000")
+            .unwrap()
+            .with_uid(uid.clone())
+            .with_link(link.clone())
+            .with_feeder_audit(feeder);
+        assert_eq!(attrs.uid(), Some(&uid));
+
+        // `links` and `feeder_audit` are defaults on the `Locatable` trait, so
+        // they are only reachable through a concrete class.
+        let full = crate::rm::data_structures::Element::new(
+            attrs,
+            DataValue::Text(DvText::new("value").unwrap()),
+        );
+        assert_eq!(Locatable::uid(&full), Some(&uid));
+        assert_eq!(full.links(), &[link][..]);
+        let audit = full.feeder_audit().expect("a feeder audit was recorded");
+        assert_eq!(audit.originating_system_audit().system_id(), "lab.example.org");
+        assert_eq!(
+            audit.originating_system_audit().time().map(DvDateTime::as_str),
+            Some("2026-07-30T08:00:00Z")
+        );
+        assert_eq!(audit.originating_system_item_ids().len(), 1);
+        // No original content was kept, and that is different from keeping an
+        // empty one.
+        assert_eq!(audit.original_content(), None);
+
+        // `version_id` has no builder — it arrives only by deserialization —
+        // so this is the one path that reads it back at all.
+        let details: FeederAuditDetails = serde_json::from_str(
+            r#"{"system_id":"lab.example.org","version_id":"rev-42"}"#,
+        )
+        .expect("deserialize");
+        assert_eq!(details.version_id(), Some("rev-42"));
+        assert_eq!(details.system_id(), "lab.example.org");
+        assert_eq!(details.time(), None);
+        // And absent when it was not sent.
+        let plain = FeederAuditDetails::new("lab.example.org").unwrap();
+        assert_eq!(plain.version_id(), None);
+    }
+
+    /// The remaining optional attributes of the change-control envelope.
+    ///
+    /// Nine accessors could each answer nothing (`lib:A-09`). `is_deleted` is
+    /// the one that matters most — a constant `true` reports every version as
+    /// logically deleted — and the collections are the ones that go quiet:
+    /// an empty `attestations` or `versions` is indistinguishable from the
+    /// common case, so nothing downstream notices.
+    #[test]
+    fn the_optional_parts_of_a_version_and_its_contribution_are_reported() {
+        let (_, owner) = versioned();
+        let id = |v: u32| -> ObjectVersionId {
+            format!("87284370-2D4B-4E3D-A3F3-F303D2F4F34B::ehr1.example.org::{v}")
+                .parse()
+                .unwrap()
+        };
+        let attestation = Attestation::new(
+            audit(terminology::audit_change_type::ATTESTATION),
+            Text::Plain(DvText::new("countersigned").unwrap()),
+            false,
+        );
+
+        let original = OriginalVersion::new(
+            id(1),
+            None,
+            terminology::version_lifecycle_state::COMPLETE,
+            Some("content".to_owned()),
+            audit(terminology::audit_change_type::CREATION),
+            owner.clone(),
+        )
+        .unwrap()
+        .with_attestation(attestation.clone())
+        .with_other_input_version_uid(id(1));
+
+        // Read on the concrete `ORIGINAL_VERSION` as well as through the
+        // `VERSION` enum: they are separate accessors, and testing only the
+        // enum leaves the concrete one free to answer nothing.
+        assert_eq!(original.attestations().len(), 1, "an attestation was dropped");
+        assert_eq!(
+            original.attestations()[0].reason().value(),
+            "countersigned"
+        );
+
+        let live: Version<String> = original.into();
+        assert!(!live.is_deleted(), "a complete version was reported deleted");
+        assert_eq!(live.attestations().len(), 1, "an attestation was dropped");
+        assert_eq!(live.other_input_version_uids(), &[id(1)][..]);
+
+        let deleted: Version<String> = OriginalVersion::new(
+            id(2),
+            Some(id(1)),
+            terminology::version_lifecycle_state::DELETED,
+            None::<String>,
+            audit(terminology::audit_change_type::DELETED),
+            owner.clone(),
+        )
+        .unwrap()
+        .into();
+        assert!(deleted.is_deleted());
+        // Both must be answerable, so `is_deleted` cannot be a constant.
+        assert_ne!(live.is_deleted(), deleted.is_deleted());
+        // And an unattested version says so rather than reporting one.
+        assert!(deleted.attestations().is_empty());
+
+        // A CONTRIBUTION lists the versions it committed. Reporting none makes
+        // a change set that changed nothing, which `Versions_valid` forbids at
+        // construction — so an empty accessor contradicts the invariant.
+        let contribution = Contribution::new(
+            HierObjectId::from_uid_str("6BA7B810-9DAD-11D1-80B4-00C04FD430C8").unwrap(),
+            vec![id(1), id(2)],
+            audit(terminology::audit_change_type::CREATION),
+        )
+        .unwrap();
+        assert_eq!(contribution.versions(), &[id(1), id(2)][..]);
+        assert_eq!(contribution.audit().system_id(), "ehr1.example.org");
+        assert!(
+            Contribution::new(
+                HierObjectId::from_uid_str("6BA7B810-9DAD-11D1-80B4-00C04FD430C8").unwrap(),
+                Vec::new(),
+                audit(terminology::audit_change_type::CREATION),
+            )
+            .is_err(),
+            "a contribution with no versions was accepted"
+        );
+    }
+
+    /// The optional attributes of an `ARCHETYPED`, a `PARTICIPATION` and a
+    /// `FEEDER_AUDIT`.
+    ///
+    /// Each accessor could answer `None` for every instance. A template id
+    /// says which template shaped the data; a participation's time says *when*
+    /// someone took part, which is not the same as when the record was
+    /// committed; and the original content is the pre-conversion form an
+    /// import kept.
+    #[test]
+    fn optional_attributes_are_absent_only_when_they_were_not_recorded() {
+        // ARCHETYPED: with and without a template.
+        let bare = Archetyped::new("openEHR-EHR-COMPOSITION.encounter.v1", "1.1.0").unwrap();
+        assert_eq!(bare.template_id(), None);
+        assert_eq!(bare.rm_version(), "1.1.0");
+        let templated = Archetyped::new("openEHR-EHR-COMPOSITION.encounter.v1", "1.1.0")
+            .unwrap()
+            .with_template("vital_signs.v1")
+            .unwrap();
+        assert_eq!(
+            templated.template_id().map(ToString::to_string),
+            Some("vital_signs.v1".to_owned())
+        );
+
+        // PARTICIPATION: a time interval is optional and distinct from the
+        // commit time.
+        let performer: PartyProxy = PartyIdentified::named("Dr A Nurse").unwrap().into();
+        let p = Participation::new(
+            Text::Plain(DvText::new("performer").unwrap()),
+            performer.clone(),
+        );
+        assert_eq!(p.time(), None);
+        let window = Interval::closed(
+            DvDateTime::new("2026-07-31T09:00:00Z").unwrap(),
+            DvDateTime::new("2026-07-31T09:30:00Z").unwrap(),
+        )
+        .unwrap();
+        let timed = Participation::new(
+            Text::Plain(DvText::new("performer").unwrap()),
+            performer,
+        )
+        .with_time(window.clone());
+        assert_eq!(timed.time(), Some(&window));
+
+        // FEEDER_AUDIT: the original content an import kept, if any.
+        let plain = FeederAudit::new(FeederAuditDetails::new("lab.example.org").unwrap());
+        assert_eq!(plain.original_content(), None);
+        // Must be a DV_ENCAPSULATED (`Original_content_encapsulated`): the
+        // point is to keep the pre-conversion payload, not a description of it.
+        let original = DataValue::Parsable(
+            crate::rm::data_types::DvParsable::new("OBX|1|NM|...", "HL7v2").unwrap(),
+        );
+        let kept = FeederAudit::new(FeederAuditDetails::new("lab.example.org").unwrap())
+            .with_original_content(original.clone())
+            .unwrap();
+        assert_eq!(kept.original_content(), Some(&original));
+
+        // PARTY_SELF: `anonymous` is the default shape, so a mutant replacing
+        // it with `Default::default()` is only visible beside a non-default
+        // one.
+        let anonymous = PartySelf::anonymous();
+        assert_eq!(anonymous.external_ref(), None);
+        assert_eq!(anonymous, PartySelf::default());
     }
 }

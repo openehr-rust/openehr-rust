@@ -1111,4 +1111,379 @@ mod tests {
         assert!(DvQuantity::new(f64::NAN, "mg").is_err());
         assert!(DvQuantity::new(f64::INFINITY, "mg").is_err());
     }
+
+    /// Every `magnitude_status` marker, in both directions, and through JSON.
+    ///
+    /// `as_str` could return `""` or one wrong constant for every variant, and
+    /// three arms of `parse` could each be deleted, with nothing failing
+    /// (`lib:A-09`). This is the marker that says a result is `<0.1` rather
+    /// than `0.1` — a below-detection-limit reading and a measured one — and
+    /// openEHR constrains it as `DV_QUANTIFIED.Magnitude_status_valid`.
+    ///
+    /// Confusing `<` with `>` inverts the clinical meaning of a value while
+    /// leaving the number correct, which is the kind of defect nothing
+    /// downstream can detect.
+    #[test]
+    fn every_magnitude_status_marker_round_trips_through_its_encoding() {
+        let all = [
+            (MagnitudeStatus::Equal, "="),
+            (MagnitudeStatus::LessThan, "<"),
+            (MagnitudeStatus::GreaterThan, ">"),
+            (MagnitudeStatus::LessOrEqual, "<="),
+            (MagnitudeStatus::GreaterOrEqual, ">="),
+            (MagnitudeStatus::Approximate, "~"),
+        ];
+
+        let mut encodings = Vec::new();
+        for (status, text) in all {
+            assert_eq!(status.as_str(), text, "{status:?} encoded wrongly");
+            assert_eq!(
+                MagnitudeStatus::parse(text).expect(text),
+                status,
+                "{text} parsed to the wrong marker"
+            );
+            encodings.push(text);
+        }
+        // No two markers share an encoding, which a constant `as_str` would
+        // make true of all six.
+        encodings.sort_unstable();
+        encodings.dedup();
+        assert_eq!(encodings.len(), all.len(), "two markers encode the same");
+
+        // Only `=` is exact. `<0.1` is not a measurement of 0.1.
+        assert!(MagnitudeStatus::Equal.is_exact());
+        for (status, text) in all {
+            if status != MagnitudeStatus::Equal {
+                assert!(!status.is_exact(), "{text} was treated as exact");
+            }
+        }
+
+        // Anything outside the six is refused, not defaulted to `=`.
+        for bad in ["", "==", "=<", "≤", "!=", "less", " <"] {
+            assert!(
+                MagnitudeStatus::parse(bad).is_err(),
+                "{bad:?} was accepted as a magnitude status"
+            );
+        }
+
+        // And through canonical JSON, which is where the marker actually
+        // travels and what the content digest is taken over (`db:M3.16`).
+        for (status, text) in all {
+            let q = DvQuantity::new(0.1, "mg/L")
+                .unwrap()
+                .with_magnitude_status(status);
+            let json = serde_json::to_string(&q).expect("serialize");
+            assert!(
+                json.contains(&format!(r#""magnitude_status":"{text}""#)),
+                "{status:?} missing from {json}"
+            );
+            let back: DvQuantity = serde_json::from_str(&json).expect(&json);
+            assert_eq!(back.magnitude_status(), Some(status), "{json}");
+        }
+
+        // A quantity with no marker says so, rather than reporting `=`:
+        // "no status was recorded" and "the value is exact" are different
+        // records, and openEHR makes the attribute optional for that reason.
+        let plain = DvQuantity::new(0.1, "mg/L").unwrap();
+        assert_eq!(plain.magnitude_status(), None);
+    }
+
+    /// A reference range decides whether a value is inside it.
+    ///
+    /// `ReferenceRange::contains` could return a constant `true` or `false`
+    /// with nothing failing (`lib:A-09`), and the `DvOrdered` accessors for
+    /// `normal_range` and `other_reference_ranges` could return nothing at all.
+    ///
+    /// This is the machinery that tells a clinician a result is abnormal.
+    /// `lib:A-01` already found `Normal_range_and_status_consistency` missing
+    /// here; the membership test underneath it was equally unwatched. A
+    /// constant `false` reports every result as outside its normal range, and a
+    /// constant `true` reports none of them — the second being the dangerous
+    /// direction.
+    #[test]
+    fn a_reference_range_says_which_values_are_inside_it() {
+        let mg = |v: f64| DataValue::Quantity(DvQuantity::new(v, "mmol/l").unwrap());
+        let normal = Interval::closed(mg(3.5), mg(5.5)).unwrap();
+        let range = ReferenceRange::new(DvText::new("normal").unwrap(), normal.clone());
+
+        assert_eq!(range.meaning().value(), "normal");
+        // Inside, on both bounds, and outside each end. A constant answer
+        // cannot get all five right.
+        assert!(range.contains(&mg(4.0)), "a mid-range value is inside");
+        assert!(range.contains(&mg(3.5)), "a closed lower bound is inside");
+        assert!(range.contains(&mg(5.5)), "a closed upper bound is inside");
+        assert!(!range.contains(&mg(3.4)), "below the range is outside");
+        assert!(!range.contains(&mg(5.6)), "above the range is outside");
+
+        // A value that is not comparable with the bounds is not inside —
+        // different units are not a smaller number (`D3.15`).
+        let other_units = DataValue::Quantity(DvQuantity::new(4.0, "mg/dL").unwrap());
+        assert!(
+            !range.contains(&other_units),
+            "a value in different units was reported as within range"
+        );
+
+        // Through a DV_ORDERED: the accessors must return what was built, and
+        // `is_abnormal` is derived from the normal range.
+        let low = DvQuantity::new(2.0, "mmol/l")
+            .unwrap()
+            .with_normal_range(normal.clone())
+            .with_other_reference_range(range.clone());
+        assert_eq!(low.normal_range(), Some(&normal));
+        assert_eq!(low.other_reference_ranges().len(), 1);
+        assert_eq!(low.other_reference_ranges()[0].meaning().value(), "normal");
+        assert_eq!(low.is_abnormal(), Some(true), "2.0 is below 3.5");
+
+        let ok = DvQuantity::new(4.0, "mmol/l")
+            .unwrap()
+            .with_normal_range(normal);
+        assert_eq!(ok.is_abnormal(), Some(false), "4.0 is within 3.5–5.5");
+
+        // With no normal range there is no answer, rather than "normal".
+        // "Nobody recorded a range" and "the value is fine" are different
+        // facts, and only one of them is safe to show.
+        let unranged = DvQuantity::new(4.0, "mmol/l").unwrap();
+        assert_eq!(unranged.is_abnormal(), None);
+        assert_eq!(unranged.normal_range(), None);
+        assert!(unranged.other_reference_ranges().is_empty());
+    }
+
+    /// Two `DV_SCALE` values compare only when they sit on the same scale.
+    ///
+    /// `is_strictly_comparable_to` could return a constant, its `==` could be
+    /// `!=`, and `partial_cmp`'s `!` could be deleted — five mutants, none
+    /// caught (`lib:A-09`). `D3.16` states the rule and its reason: an ordinal
+    /// or scale value of 2 on a pain scale and 2 on a sedation scale are
+    /// unrelated numbers that happen to be equal.
+    ///
+    /// Answering `true` unconditionally is the dangerous direction: it makes
+    /// two unrelated assessments comparable, and 3-on-one-scale then sorts
+    /// above 2-on-another as though the severities were the same measure.
+    #[test]
+    fn two_scale_values_compare_only_within_one_terminology() {
+        let scale = |value: f64, terminology: &str, code: &str, rubric: &str| {
+            DvScale::new(
+                value,
+                DvCodedText::new(rubric, CodePhrase::new(terminology, code).unwrap()).unwrap(),
+            )
+            .unwrap()
+        };
+
+        let pain_2 = scale(2.0, "local", "at0002", "moderate pain");
+        let pain_3 = scale(3.0, "local", "at0003", "severe pain");
+        let sedation_2 = scale(2.0, "SNOMED-CT", "72641008", "moderately sedated");
+
+        // Same terminology: comparable, and ordered by value.
+        assert!(pain_2.is_strictly_comparable_to(&pain_3));
+        assert!(pain_2 < pain_3);
+        assert_eq!(pain_2.partial_cmp(&pain_2), Some(Ordering::Equal));
+
+        // Different terminologies: not comparable, whatever the numbers say.
+        assert!(
+            !pain_2.is_strictly_comparable_to(&sedation_2),
+            "two unrelated scales were called comparable"
+        );
+        assert_eq!(
+            pain_2.partial_cmp(&sedation_2),
+            None,
+            "a pain score was ordered against a sedation score"
+        );
+        assert_eq!(pain_3.partial_cmp(&sedation_2), None);
+        // And symmetrically.
+        assert_eq!(sedation_2.partial_cmp(&pain_2), None);
+    }
+
+    /// A quantity reports the units annotations it was given.
+    ///
+    /// `units_system` and `units_display_name` could each answer `None`, `""`
+    /// or `"xyzzy"` for every quantity. They are what say *which* `mg` — the
+    /// UCUM system and the label a clinician reads — and `D3.15` makes the
+    /// units string the whole basis of comparability.
+    #[test]
+    fn a_quantity_reports_the_units_annotations_it_carries() {
+        let plain = DvQuantity::new(5.0, "mg").unwrap();
+        assert_eq!(plain.units(), "mg");
+        // Absent, not empty: nothing was recorded.
+        assert_eq!(plain.units_system(), None);
+        assert_eq!(plain.units_display_name(), None);
+
+        let annotated = DvQuantity::new(5.0, "mg")
+            .unwrap()
+            .with_units_system("http://unitsofmeasure.org")
+            .with_units_display_name("milligram");
+        assert_eq!(annotated.units(), "mg");
+        assert_eq!(annotated.units_system(), Some("http://unitsofmeasure.org"));
+        assert_eq!(annotated.units_display_name(), Some("milligram"));
+
+        // The annotations do not change what the value *is*, so a quantity
+        // with them still compares with one without (`D3.15` is about `units`).
+        assert!(plain.is_strictly_comparable_to(&annotated));
+    }
+
+    /// A quantity's accuracy, and whether it is a percentage.
+    ///
+    /// `accuracy` could answer `Some(-1.0)` for every quantity and
+    /// `accuracy_is_percent` could answer a constant (`lib:A-09`). The second
+    /// is the one that matters: `±5` and `±5%` are different claims about the
+    /// same measurement, and on a magnitude of 200 they differ by an order of
+    /// magnitude. `lib:A-01` already found two of the accuracy *rules* wrong;
+    /// reading the values back was equally unwatched.
+    #[test]
+    fn accuracy_says_how_much_and_whether_it_is_a_percentage() {
+        let plain = DvQuantity::new(200.0, "mg").unwrap();
+        // Absent, not zero: no accuracy was recorded, which is not a claim of
+        // perfect accuracy.
+        assert_eq!(plain.accuracy(), None);
+        assert_eq!(plain.accuracy_is_percent(), None);
+
+        let absolute = DvQuantity::new(200.0, "mg")
+            .unwrap()
+            .with_accuracy(5.0, false)
+            .unwrap();
+        assert_eq!(absolute.accuracy(), Some(5.0));
+        assert_eq!(absolute.accuracy_is_percent(), Some(false));
+
+        let percent = DvQuantity::new(200.0, "mg")
+            .unwrap()
+            .with_accuracy(5.0, true)
+            .unwrap();
+        assert_eq!(percent.accuracy(), Some(5.0));
+        assert_eq!(
+            percent.accuracy_is_percent(),
+            Some(true),
+            "±5% was reported as ±5"
+        );
+
+        // The two are different records even though the number matches, which
+        // is the whole reason the flag exists.
+        assert_ne!(absolute, percent);
+
+        // Zero accuracy is allowed absolutely and refused as a percentage
+        // (`Accuracy_is_percent_validity`), and a percentage outside 0–100 is
+        // refused (`Accuracy_validity`).
+        assert!(DvQuantity::new(1.0, "mg").unwrap().with_accuracy(0.0, false).is_ok());
+        assert!(DvQuantity::new(1.0, "mg").unwrap().with_accuracy(0.0, true).is_err());
+        assert!(DvQuantity::new(1.0, "mg").unwrap().with_accuracy(101.0, true).is_err());
+        assert!(DvQuantity::new(1.0, "mg").unwrap().with_accuracy(-1.0, true).is_err());
+        // Absolute accuracy may legitimately exceed 100 — it is not a percent.
+        assert!(DvQuantity::new(1.0, "mg").unwrap().with_accuracy(101.0, false).is_ok());
+    }
+
+    /// A `DV_COUNT` orders by magnitude and carries its own status marker.
+    ///
+    /// `partial_cmp` could return `None` for every pair — making counts
+    /// unorderable — and `magnitude_status` could answer `None` always. A count
+    /// of `>50` is not a count of 50; that marker is how "at least fifty" is
+    /// recorded (`db:P6.16` calls range a search kind, and this is the value
+    /// such a search compares).
+    #[test]
+    fn counts_order_by_magnitude_and_keep_their_status_marker() {
+        assert!(DvCount::new(1) < DvCount::new(2));
+        assert!(DvCount::new(-1) < DvCount::new(0));
+        assert_eq!(
+            DvCount::new(5).partial_cmp(&DvCount::new(5)),
+            Some(Ordering::Equal)
+        );
+
+        assert_eq!(DvCount::new(50).magnitude(), 50);
+        assert_eq!(DvCount::new(50).magnitude_status(), None);
+        let at_least = DvCount::new(50).with_magnitude_status(MagnitudeStatus::GreaterThan);
+        assert_eq!(at_least.magnitude_status(), Some(MagnitudeStatus::GreaterThan));
+        assert_eq!(at_least.magnitude(), 50);
+        assert_ne!(at_least, DvCount::new(50), "`>50` is not `50`");
+    }
+
+    /// Every `DV_PROPORTION` kind, and the parts and precision it reports.
+    ///
+    /// Two arms of `from_i32` could be deleted, `numerator` could answer `1.0`
+    /// for every proportion, `precision` could answer `Some(0)`, and the
+    /// precision guard's `<` could be `<=` (`lib:A-09`).
+    ///
+    /// The kind is the difference between `1/2` meaning a half, fifty percent,
+    /// and one-in-two — openEHR encodes it as a bare integer, so a deleted arm
+    /// silently reinterprets a stored value. `A-01` already found rules in this
+    /// class taken from secondary sources and wrong.
+    #[test]
+    fn every_proportion_kind_and_part_is_reported_as_recorded() {
+        let all = [
+            (0, ProportionKind::Ratio, false),
+            (1, ProportionKind::Unitary, false),
+            (2, ProportionKind::Percent, false),
+            (3, ProportionKind::Fraction, true),
+            (4, ProportionKind::IntegerFraction, true),
+        ];
+
+        let mut codes = Vec::new();
+        for (code, kind, integral) in all {
+            assert_eq!(kind.as_i32(), code, "{kind:?} encoded wrongly");
+            assert_eq!(
+                ProportionKind::from_i32(code).expect("in range"),
+                kind,
+                "{code} decoded to the wrong kind"
+            );
+            assert_eq!(
+                kind.requires_integral(),
+                integral,
+                "{kind:?} disagrees about whole numbers"
+            );
+            codes.push(code);
+        }
+        codes.sort_unstable();
+        codes.dedup();
+        assert_eq!(codes.len(), all.len(), "two kinds share an encoding");
+
+        // Outside 0–4 is refused, not defaulted to `Ratio` (`Type_validity`).
+        for bad in [-1, 5, 100] {
+            assert!(ProportionKind::from_i32(bad).is_err(), "{bad} was accepted");
+        }
+
+        // The parts are reported as given, and the two must be told apart —
+        // `numerator` answering a constant makes 1/4 and 3/4 the same record.
+        let quarter = DvProportion::new(1.0, 4.0, ProportionKind::Ratio).unwrap();
+        let three_quarters = DvProportion::new(3.0, 4.0, ProportionKind::Ratio).unwrap();
+        assert!((quarter.numerator() - 1.0).abs() < f64::EPSILON);
+        assert!((three_quarters.numerator() - 3.0).abs() < f64::EPSILON);
+        assert!((quarter.denominator() - 4.0).abs() < f64::EPSILON);
+        assert_eq!(quarter.kind(), ProportionKind::Ratio);
+        assert_ne!(quarter, three_quarters);
+
+        // Precision: absent unless recorded, so a constant `Some(0)` would
+        // claim every proportion was recorded as whole numbers.
+        assert_eq!(quarter.precision(), None);
+        let two_dp = DvProportion::new(1.0, 3.0, ProportionKind::Ratio)
+            .unwrap()
+            .with_precision(2)
+            .unwrap();
+        assert_eq!(two_dp.precision(), Some(2));
+
+        // `-1` is unlimited precision and is the lowest legal value; the guard
+        // is `< -1`, so `-1` must be accepted and `-2` refused. Widening it to
+        // `<=` rejects the one value openEHR uses to mean "as written".
+        let unlimited = DvProportion::new(1.0, 3.0, ProportionKind::Ratio)
+            .unwrap()
+            .with_precision(DvQuantity::UNLIMITED_PRECISION)
+            .unwrap();
+        assert_eq!(unlimited.precision(), Some(-1));
+        assert!(
+            DvProportion::new(1.0, 3.0, ProportionKind::Ratio)
+                .unwrap()
+                .with_precision(-2)
+                .is_err()
+        );
+
+        // Precision `0` claims whole numbers, so it is refused where the parts
+        // are not integral (`Precision_validity`).
+        assert!(
+            DvProportion::new(1.5, 3.0, ProportionKind::Ratio)
+                .unwrap()
+                .with_precision(0)
+                .is_err()
+        );
+        assert!(
+            DvProportion::new(1.0, 3.0, ProportionKind::Ratio)
+                .unwrap()
+                .with_precision(0)
+                .is_ok()
+        );
+    }
 }
