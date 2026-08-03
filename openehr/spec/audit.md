@@ -468,6 +468,8 @@ an empty slice hashes nothing, builds an empty chain, and `verify` reports
 | `openehr-loco/auth.rs` | 0 of 6 | 0 | already covered; the module was written test-first with mutation checks |
 | `openehr-loco/controllers/` | 6 of 36 | 0 | an endpoint with no test at all, and the status mapping |
 | `openehr/validation.rs` | 25 of 115 | 9 | three whole `visit` bodies removable, two of them added the day before |
+| `openehr-loco/access.rs` | 1 of 4 | 0 | a public accessor with no caller |
+| `openehr-sqlite/store.rs` | 9 of 28 | 1 | `create_contribution` could write nothing |
 
 `record.rs` is the one worth reading twice. A test called
 `the_attributes_that_used_to_be_dropped_are_persisted` existed, named for
@@ -516,6 +518,27 @@ Nine survive. Four are the `Range_is_simple` variant arms, which need a
 reference range whose endpoint is itself an ordered value carrying reference
 ranges; the rest are boolean operators and one boundary. Recorded rather than
 chased.
+
+`store.rs` produced the one that would have mattered most in production:
+`create_contribution` could return `Ok(())` **without inserting anything** and
+the entire suite passed, because nothing reads a contribution back and no later
+operation depends on the row. A change set that silently vanished takes the
+attribution of every version in it — `db:PR12.10` keeps a contribution's audit
+distinct from its versions' precisely so one act can be traced across several
+changes. It also found the untested half of `db:O10.16`: an **empty** database
+predating the version table is treated as fresh, and only the populated half was
+covered, so the comparison could have been `>=` and a fresh install refused.
+
+`access.rs` produced the opposite kind of result — one survivor, and the right
+answer was to **delete** rather than test. `AccessLog::path` was a public
+accessor with no caller, carrying a doc comment describing a use that did not
+exist. A log's location is the deployment's to know.
+
+Two runs needed `--in-place`: `openehr-sqlite` dev-depends on its five sibling
+engine crates so one test can compare all six dialects (`W-01`), and
+`cargo mutants` copies a crate to a temporary directory where those relative
+paths do not resolve. Worth knowing before concluding a crate cannot be
+measured.
 
 `dialect.rs` stops at 5. The remainder are branch conditions needing a third and
 fourth test dialect for idempotence modes the schema does not currently use, and

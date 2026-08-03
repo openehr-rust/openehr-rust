@@ -130,6 +130,15 @@ Two things to know before believing a number:
 - **`cargo mutants` runs the tests of the crate it mutates.** `Chain::from_stored`
   survived being replaced with `Default::default()` because its only callers are
   in `openehr-store`. A cross-crate test is not coverage of this crate.
+- **Some crates need `--in-place`.** `openehr-sqlite` dev-depends on its five
+  sibling engine crates so one test can compare all six dialects (`W-01`), and
+  `cargo mutants` copies a crate to a temporary directory where `../openehr-mariadb`
+  does not resolve. It reports "cargo build failed in an unmutated tree", which
+  reads like the crate is broken. `--in-place` mutates the real tree and
+  restores it, and takes no `-j`.
+- **Sometimes the answer is to delete.** `AccessLog::path` survived because it
+  was a public accessor with no caller and a doc comment describing a use that
+  did not exist. A test would have preserved it.
 - **A survivor in the safe direction is not always worth chasing.** `Debug for
   Mac` replaced with `Ok(())` prints nothing, which is safer than what it does.
   Pinning exact `Debug` output would freeze formatting for no benefit.

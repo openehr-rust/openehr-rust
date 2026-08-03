@@ -412,3 +412,138 @@ fn a_truncated_chain_verifies_clean_and_only_the_checkpoint_notices() {
         "a checkpoint published before the truncation must not match after it"
     );
 }
+
+/// A contribution is actually written, and declaring one twice conflicts.
+///
+/// `create_contribution` could return `Ok(())` without inserting anything and
+/// the whole suite passed: nothing reads a contribution back, and no later
+/// operation depends on the row existing. Found by mutation testing
+/// (`lib:A-09`).
+///
+/// A change set that silently vanished would take the attribution of every
+/// version in it — `db:PR12.10` keeps a contribution's audit distinct from its
+/// versions' precisely so one act can be traced across several changes.
+#[test]
+fn a_contribution_is_persisted_and_cannot_be_declared_twice() {
+    let mut store = SqliteStore::in_memory().expect("store");
+    store.install().expect("install");
+    let ehr = conformance::sample_ehr();
+    let ehr_id = ehr.ehr_id().clone();
+    store.create_ehr(&ehr).expect("ehr");
+
+    let uid = "7C2E4B90-1A3D-4E58-9F6B-0D8C7A5E4B31";
+    let contribution = conformance::sample_contribution(uid, &[1]);
+    store
+        .create_contribution(&ehr_id, &contribution)
+        .expect("first declaration");
+
+    // The row is there. Asserted directly, because the `Store` trait offers no
+    // way to read a contribution back — which is why the no-op survived.
+    let count: i64 = store
+        .connection()
+        .query_row(
+            "SELECT count(*) FROM openehr_contribution WHERE uid = ?1",
+            [uid],
+            |row| row.get(0),
+        )
+        .expect("query");
+    assert_eq!(count, 1, "the contribution was not written");
+
+    // And a second declaration of the same change set conflicts rather than
+    // overwriting: one act, one contribution.
+    assert!(
+        matches!(
+            store.create_contribution(&ehr_id, &contribution),
+            Err(openehr_store::StoreError::Conflict { .. })
+        ),
+        "a duplicate contribution was accepted"
+    );
+}
+
+/// An **empty** database predating the version table installs; a populated one
+/// is refused.
+///
+/// `db:O10.16` turns on exactly this distinction — the absence of a version
+/// means "new" or "older than versioning", and the two are told apart by
+/// whether the database holds anything. The populated half was tested; the
+/// empty half was not, so the comparison could have been `>=` and a fresh
+/// pre-versioning database would have been refused for holding nothing.
+#[test]
+fn an_empty_database_predating_the_version_table_still_installs() {
+    let mut store = SqliteStore::in_memory().expect("store");
+    store.install().expect("install");
+    // Remove the version record, leaving the tables and no rows: a database
+    // installed by a build older than versioning, never written to.
+    store
+        .connection()
+        .execute("DELETE FROM openehr_schema_version", [])
+        .expect("delete");
+
+    store
+        .install()
+        .expect("an empty database has nothing to lose and is treated as fresh");
+
+    // With a record in it, the same absence means something else entirely.
+    store
+        .connection()
+        .execute("DELETE FROM openehr_schema_version", [])
+        .expect("delete");
+    store.create_ehr(&conformance::sample_ehr()).expect("ehr");
+    assert!(
+        matches!(
+            store.install(),
+            Err(openehr_store::StoreError::SchemaVersionMismatch { found: 0, .. })
+        ),
+        "a populated database with no version was treated as fresh"
+    );
+}
+
+/// The checkpoint carries a real digest, and the store names itself.
+///
+/// `hex32` could render every checkpoint digest as an empty string, and
+/// `engine()` could return `""`, with the whole suite green. Both are
+/// evidence-bearing: a checkpoint is published to a witness precisely so a
+/// later truncation can be noticed (`db:M3.16c`), and one carrying no digest
+/// is accepted and proves nothing. An error that does not name its engine
+/// sends a reader to the wrong crate.
+#[test]
+fn a_checkpoint_carries_a_real_digest_and_the_store_names_itself() {
+    let mut store = SqliteStore::in_memory().expect("store");
+    store.install().expect("install");
+    assert_eq!(store.engine(), "SQLite");
+
+    let ehr = conformance::sample_ehr();
+    let ehr_id = ehr.ehr_id().clone();
+    store.create_ehr(&ehr).expect("ehr");
+    let contribution = "22222222-3333-4444-5555-666666666666";
+    store
+        .create_contribution(
+            &ehr_id,
+            &conformance::sample_contribution(contribution, &[1]),
+        )
+        .expect("contribution");
+    store
+        .commit_composition(
+            &ehr_id,
+            &conformance::sample_version(1, None, 5),
+            contribution,
+        )
+        .expect("commit");
+
+    let container = openehr::base::HierObjectId::from_uid_str(conformance::RECORD).expect("uid");
+    let checkpoint = store.chain_checkpoint(&container).expect("checkpoint");
+
+    // The head digest, in full, and matching what the row actually holds.
+    let head = store.latest_version(&container).expect("head");
+    let expected = head.chain.digest.iter().fold(String::new(), |mut acc, b| {
+        use std::fmt::Write as _;
+        let _ = write!(acc, "{b:02x}");
+        acc
+    });
+    assert_eq!(expected.len(), 64);
+    assert!(
+        checkpoint.contains(&expected),
+        "the checkpoint carries no digest: {checkpoint}"
+    );
+    assert_ne!(expected, "0".repeat(64), "that is the genesis digest");
+}

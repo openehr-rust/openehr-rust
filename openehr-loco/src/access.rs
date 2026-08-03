@@ -44,7 +44,7 @@
 
 use std::fs::{File, OpenOptions};
 use std::io::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
@@ -96,8 +96,14 @@ pub struct Access<'a> {
 #[derive(Debug)]
 pub struct AccessLog {
     /// `None` when auditing is off.
+    ///
+    /// The path is deliberately **not** kept. It was, behind an accessor with
+    /// no caller and a doc comment describing a use that did not exist —
+    /// mutation testing found it by replacing the accessor with `None` and
+    /// nothing failing (`lib:A-09`). A log's location is the deployment's to
+    /// know; this type's business is whether it is recording and whether the
+    /// write succeeded.
     file: Option<Mutex<File>>,
-    path: Option<PathBuf>,
 }
 
 impl AccessLog {
@@ -109,10 +115,7 @@ impl AccessLog {
     /// service configured to audit reads and unable to must not serve them.
     pub fn from_env() -> Result<Self, String> {
         match std::env::var(LOG_VAR) {
-            Err(_) => Ok(Self {
-                file: None,
-                path: None,
-            }),
+            Err(_) => Ok(Self { file: None }),
             Ok(path) => Self::at(Path::new(&path)),
         }
     }
@@ -125,10 +128,7 @@ impl AccessLog {
     /// arrive at it.
     #[must_use]
     pub const fn off() -> Self {
-        Self {
-            file: None,
-            path: None,
-        }
+        Self { file: None }
     }
 
     /// Opens an access log at a path.
@@ -149,7 +149,6 @@ impl AccessLog {
             .map_err(|e| format!("{LOG_VAR} at {} cannot be appended to: {e}", path.display()))?;
         Ok(Self {
             file: Some(Mutex::new(file)),
-            path: Some(path.to_path_buf()),
         })
     }
 
@@ -157,12 +156,6 @@ impl AccessLog {
     #[must_use]
     pub const fn is_recording(&self) -> bool {
         self.file.is_some()
-    }
-
-    /// The path being written, for the metadata endpoint to *not* disclose.
-    #[must_use]
-    pub fn path(&self) -> Option<&Path> {
-        self.path.as_deref()
     }
 
     /// Records one access, flushing before it returns.
