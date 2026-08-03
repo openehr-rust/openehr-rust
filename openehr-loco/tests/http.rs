@@ -991,3 +991,106 @@ async fn a_version_that_never_went_through_the_constructor_is_still_checked() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert!(body.contains("Preceding_version_uid_validity"), "{body}");
 }
+
+// --- the status-code mapping, and the endpoint nothing exercised ------------
+
+#[tokio::test]
+async fn a_contribution_can_be_declared_and_is_required_before_a_commit() {
+    // `contribution::routes` could return no routes at all and every test
+    // passed: the endpoint was added and never called. Found by mutation
+    // testing (`lib:A-09`).
+    let served = Served::new();
+    let declared = "5B8C3A21-9E4D-4F70-B2C1-7A6E5D4C3B2A";
+    let body = serde_json::to_vec(&conformance::sample_contribution(declared, &[1]))
+        .expect("json");
+
+    let (status, text, _) = served
+        .send(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/openehr/v1/ehr/{}/contribution", served.ehr_id()))
+                .header(header::AUTHORIZATION, &served.authorization)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.clone()))
+                .expect("request"),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{text}");
+
+    // Declaring it twice conflicts rather than overwriting: a change set is a
+    // record of one act, and a second act is a second contribution.
+    let (again, _, _) = served
+        .send(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/openehr/v1/ehr/{}/contribution", served.ehr_id()))
+                .header(header::AUTHORIZATION, &served.authorization)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .expect("request"),
+        )
+        .await;
+    assert_eq!(again, StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn a_version_view_carries_a_full_chain_digest() {
+    // `hex` could render every digest as an empty string and nothing noticed.
+    // A response claiming a chain digest of "" is the same failure as a
+    // checkpoint printing none: a reader compares it against a witness and
+    // finds them equal.
+    let served = Served::new();
+    let (status, body, _) = served.get(&served.composition(LIVE)).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let digest = serde_json::from_str::<serde_json::Value>(&body).expect("json")["chain_digest"]
+        .as_str()
+        .expect("a chain digest")
+        .to_owned();
+    assert_eq!(digest.len(), 64, "not a SHA-256: {digest}");
+    assert!(digest.chars().all(|c| c.is_ascii_hexdigit()), "{digest}");
+    assert_ne!(digest, "0".repeat(64), "the genesis digest is not an entry's");
+}
+
+#[test]
+fn every_store_error_maps_to_a_distinct_status() {
+    // The mapping is what this crate is *for* (`db:S1.19`), and three of its
+    // arms could be deleted with every test still passing — a duplicate commit
+    // answering `500` instead of `409` tells a caller to retry when it should
+    // re-read.
+    use openehr_loco::controllers::status_for;
+    use openehr_store::StoreError;
+
+    let cases = [
+        (
+            StoreError::NotFound { kind: "version", id: "x".to_owned() },
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            StoreError::Conflict { kind: "ehr", id: "x".to_owned() },
+            StatusCode::CONFLICT,
+        ),
+        (
+            StoreError::Unsupported {
+                engine: "e",
+                what: "w",
+                spec_ref: "db:S1.11",
+            },
+            StatusCode::NOT_IMPLEMENTED,
+        ),
+        (
+            StoreError::SchemaVersionMismatch { found: 3, expected: 4 },
+            StatusCode::SERVICE_UNAVAILABLE,
+        ),
+        (
+            StoreError::Engine { engine: "e", message: "m".to_owned() },
+            StatusCode::INTERNAL_SERVER_ERROR,
+        ),
+    ];
+    for (error, expected) in cases {
+        let (status, message) = status_for(&error);
+        assert_eq!(status, expected, "{error:?}");
+        assert!(!message.is_empty(), "a caller needs to be told why");
+    }
+}
+

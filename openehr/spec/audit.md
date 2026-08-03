@@ -465,6 +465,8 @@ an empty slice hashes nothing, builds an empty chain, and `verify` reports
 | `openehr-store/integrity.rs` | **15 of 15** | 0 | every test was in `openehr-sqlite` |
 | `openehr-store/record.rs` | 4 of 6 | 0 | `M3.34` and half of `D-07` asserted on one side only |
 | `openehr-store/dialect.rs` | 25 of 27 | 5 | the shared generator is only run by the six engine crates |
+| `openehr-loco/auth.rs` | 0 of 6 | 0 | already covered; the module was written test-first with mutation checks |
+| `openehr-loco/controllers/` | 6 of 36 | 0 | an endpoint with no test at all, and the status mapping |
 
 `record.rs` is the one worth reading twice. A test called
 `the_attributes_that_used_to_be_dropped_are_persisted` existed, named for
@@ -477,6 +479,19 @@ And `party_name` could return `Some("xyzzy")` for every party without failing
 anything, while `M3.34` — an anonymous committer stored as `NULL`, so that a
 privacy decision does not become a data-quality problem someone later cleans
 up — was marked **•** in the conformance matrix.
+
+`openehr-loco` is the counter-example that makes the pattern legible. `auth.rs`
+missed **nothing** on the first run — it is the one module written test-first,
+with a mutation check per guarantee. The controllers missed six, and the
+sharpest was `contribution::routes` returning `Default::default()`: an endpoint
+added earlier this session, wired into the router, documented in the README, and
+**never called by a test**. Every other test passed with it removed.
+
+The other two were the `hex` helper rendering every chain digest as an empty
+string — a response claiming a digest of `""`, which a reader compares against a
+witness and finds equal — and three arms of `status_for`, where a duplicate
+commit would answer `500` instead of `409` and tell a caller to retry when it
+should re-read.
 
 `dialect.rs` stops at 5. The remainder are branch conditions needing a third and
 fourth test dialect for idempotence modes the schema does not currently use, and
