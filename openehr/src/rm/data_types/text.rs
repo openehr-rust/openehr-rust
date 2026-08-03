@@ -808,4 +808,161 @@ mod tests {
         // (`A-20`).
         assert_eq!(e.reason, "Valid_value");
     }
+
+    /// A `CODE_PHRASE` reports its preferred term and renders as
+    /// `terminology::code`.
+    ///
+    /// `preferred_term` could answer `None`, `""` or `"xyzzy"` for every
+    /// phrase, and `Display` could print nothing (`lib:A-09`). The rendered
+    /// form is what ADL and error messages show a reader, so a blank `Display`
+    /// is silent everywhere it appears.
+    #[test]
+    fn a_code_phrase_reports_its_preferred_term_and_renders_itself() {
+        let bare = CodePhrase::new("ISO_639-1", "en").unwrap();
+        assert_eq!(bare.preferred_term(), None);
+        assert_eq!(bare.to_string(), "ISO_639-1::en");
+
+        let annotated = CodePhrase::new("SNOMED-CT", "38341003")
+            .unwrap()
+            .with_preferred_term("Hypertensive disorder");
+        assert_eq!(annotated.preferred_term(), Some("Hypertensive disorder"));
+        assert_eq!(annotated.to_string(), "SNOMED-CT::38341003");
+
+        // Two different codes must render differently — a constant Display
+        // makes every code look the same in an error message.
+        let other = CodePhrase::new("SNOMED-CT", "271737000").unwrap();
+        assert_ne!(annotated.to_string(), other.to_string());
+    }
+
+    /// Every `MappingMatch` kind, told apart by `TermMapping`'s three
+    /// predicates.
+    ///
+    /// Five mutants here (`lib:A-09`): each predicate could be a constant, and
+    /// two of the three `==` comparisons could be `!=`. A `TermMapping` records
+    /// how a coded term relates to a mapped-to term in another terminology —
+    /// broader, equivalent, or narrower — and getting that wrong silently
+    /// changes what an ICD-10 crosswalk claims about a SNOMED CT code.
+    #[test]
+    fn every_mapping_match_is_reported_by_exactly_one_predicate() {
+        let mapping = |kind: MappingMatch| {
+            TermMapping::new(CodePhrase::new("ICD10", "I10").unwrap(), kind)
+        };
+
+        let cases = [
+            (MappingMatch::Broader, [true, false, false]),
+            (MappingMatch::Equivalent, [false, true, false]),
+            (MappingMatch::Narrower, [false, false, true]),
+            (MappingMatch::Unknown, [false, false, false]),
+        ];
+        for (kind, [broader, equivalent, narrower]) in cases {
+            let m = mapping(kind);
+            assert_eq!(m.is_broader(), broader, "{kind:?}");
+            assert_eq!(m.is_equivalent(), equivalent, "{kind:?}");
+            assert_eq!(m.is_narrower(), narrower, "{kind:?}");
+            assert_eq!(m.match_kind(), kind);
+            assert_eq!(m.target().code_string(), "I10");
+        }
+
+        // The purpose is optional and reported as recorded.
+        assert_eq!(mapping(MappingMatch::Equivalent).purpose(), None);
+        let with_purpose = mapping(MappingMatch::Equivalent).with_purpose(
+            DvCodedText::new("clinical", CodePhrase::new("local", "at0001").unwrap()).unwrap(),
+        );
+        assert_eq!(with_purpose.purpose().map(DvCodedText::value), Some("clinical"));
+    }
+
+    /// A `DV_TEXT`'s optional attributes, and its rendering.
+    ///
+    /// Six accessors could each answer nothing, and `Display` could print
+    /// nothing (`lib:A-09`). `hyperlink` has no builder — the deprecated
+    /// attribute arrives only by deserialization, which is the one path that
+    /// reads it back.
+    #[test]
+    fn a_dv_text_reports_every_attribute_it_was_built_with() {
+        let bare = DvText::new("systolic blood pressure").unwrap();
+        assert_eq!(bare.to_string(), "systolic blood pressure");
+        assert_eq!(bare.language(), None);
+        assert_eq!(bare.encoding(), None);
+        assert_eq!(bare.formatting(), None);
+        assert_eq!(bare.hyperlink(), None);
+        assert!(bare.mappings().is_empty());
+
+        let en = CodePhrase::new("ISO_639-1", "en").unwrap();
+        let utf8 = CodePhrase::new("IANA_character-sets", "UTF-8").unwrap();
+        let full = DvText::new("systolic blood pressure")
+            .unwrap()
+            .with_language(en.clone())
+            .with_encoding(utf8.clone())
+            .with_formatting("plain")
+            .unwrap()
+            .with_mapping(TermMapping::new(
+                CodePhrase::new("SNOMED-CT", "271649006").unwrap(),
+                MappingMatch::Equivalent,
+            ));
+        assert_eq!(full.language(), Some(&en));
+        assert_eq!(full.encoding(), Some(&utf8));
+        assert_eq!(full.formatting(), Some("plain"));
+        assert_eq!(full.mappings().len(), 1, "a mapping was dropped");
+
+        // The hyperlink has no builder; deserialization is the only path.
+        let json = serde_json::to_value(&full).expect("serialize");
+        let mut object = json.as_object().expect("an object").clone();
+        object.insert(
+            "hyperlink".to_owned(),
+            serde_json::to_value(crate::rm::data_types::DvUri::new("https://example.org/x").unwrap())
+                .expect("serialize"),
+        );
+        let revived: DvText =
+            serde_json::from_value(serde_json::Value::Object(object)).expect("deserialize");
+        assert!(revived.hyperlink().is_some(), "a recorded hyperlink was dropped");
+
+        // Two different values must render differently.
+        assert_ne!(bare.to_string(), DvText::new("diastolic blood pressure").unwrap().to_string());
+    }
+
+    /// A `DV_CODED_TEXT` renders as its plain value and carries the mappings
+    /// it was built with; a `Text` renders whichever form it wraps.
+    #[test]
+    fn a_coded_text_renders_its_value_and_keeps_its_mappings() {
+        let coded = DvCodedText::new(
+            "hypertension",
+            CodePhrase::new("SNOMED-CT", "38341003").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(coded.to_string(), "hypertension");
+        assert!(coded.mappings().is_empty());
+
+        let mapped = DvCodedText::new(
+            "hypertension",
+            CodePhrase::new("SNOMED-CT", "38341003").unwrap(),
+        )
+        .unwrap()
+        .with_mapping(TermMapping::new(
+            CodePhrase::new("ICD10", "I10").unwrap(),
+            MappingMatch::Broader,
+        ));
+        assert_eq!(mapped.mappings().len(), 1);
+
+        let plain: Text = Text::Plain(DvText::new("free text").unwrap());
+        let as_coded: Text = Text::Coded(coded);
+        assert_eq!(plain.to_string(), "free text");
+        assert_eq!(as_coded.to_string(), "hypertension");
+        assert_ne!(plain.to_string(), as_coded.to_string());
+    }
+
+    /// A `DV_PARAGRAPH` reports every line it holds.
+    ///
+    /// `items` could answer an empty slice for every paragraph (`lib:A-09`),
+    /// which silently discards every line but the first read elsewhere.
+    #[test]
+    fn a_paragraph_reports_every_line() {
+        let lines = vec![
+            DvText::new("first line").unwrap(),
+            DvText::new("second line").unwrap(),
+        ];
+        let paragraph = DvParagraph::new(lines.clone()).unwrap();
+        assert_eq!(paragraph.items().len(), 2, "a line was dropped");
+        assert_eq!(paragraph.items()[0].value(), "first line");
+        assert_eq!(paragraph.items()[1].value(), "second line");
+    }
 }

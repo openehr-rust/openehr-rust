@@ -306,6 +306,19 @@ impl DvMultimedia {
         }
     }
 
+    /// The attributes every `DV_ENCAPSULATED` carries — `charset` and
+    /// `language`.
+    ///
+    /// Added by `lib:A-34`. Both were serialized, deserialized and preserved
+    /// across a round trip, and **unreadable**: `EncapsulatedAttrs` is exported
+    /// but nothing returned one, so a caller holding this value could not ask
+    /// what character set or language it declared. Data kept and not reachable
+    /// is data nobody can act on.
+    #[must_use]
+    pub fn encapsulated(&self) -> &EncapsulatedAttrs {
+        &self.encapsulated
+    }
+
     /// The media type.
     #[must_use]
     pub fn media_type(&self) -> &CodePhrase {
@@ -413,6 +426,19 @@ impl DvParsable {
         })
     }
 
+    /// The attributes every `DV_ENCAPSULATED` carries — `charset` and
+    /// `language`.
+    ///
+    /// Added by `lib:A-34`. Both were serialized, deserialized and preserved
+    /// across a round trip, and **unreadable**: `EncapsulatedAttrs` is exported
+    /// but nothing returned one, so a caller holding this value could not ask
+    /// what character set or language it declared. Data kept and not reachable
+    /// is data nobody can act on.
+    #[must_use]
+    pub fn encapsulated(&self) -> &EncapsulatedAttrs {
+        &self.encapsulated
+    }
+
     /// The content.
     #[must_use]
     pub fn value(&self) -> &str {
@@ -500,6 +526,225 @@ mod tests {
         assert_eq!(
             ours.integrity_check_algorithm.unwrap().code_string(),
             "SHA-256"
+        );
+    }
+
+    /// Every outcome `verify_integrity` can report, and both digest algorithms.
+    ///
+    /// `is_verified` could answer `false` always and the `SHA-512` arm could be
+    /// deleted (`lib:A-09`). Both fail *safe* — an unverified reading and an
+    /// `UnsupportedAlgorithm` are refusals, not false assurances — but the enum
+    /// exists precisely to keep five different answers apart, and two of them
+    /// collapsing into one is how "we never checked" starts reading like "we
+    /// checked and it was fine" in the opposite direction.
+    ///
+    /// `lib:A-22` already found `Integrity_check_validity` reported for the
+    /// wrong rule here. This is the check itself.
+    #[test]
+    fn every_integrity_outcome_is_distinguished_and_both_digests_verify() {
+        let png = || CodePhrase::new("IANA_media-types", "image/png").unwrap();
+        let data = b"\x89PNG\r\n\x1a\nclinical imagery".to_vec();
+
+        // Passed: the digest this crate writes verifies against the data it
+        // covers.
+        let sealed = DvMultimedia::inline(png(), data.clone()).with_sha256_integrity();
+        assert_eq!(sealed.verify_integrity(), IntegrityCheck::Passed);
+        assert!(sealed.verify_integrity().is_verified());
+
+        // NotRecorded: no digest at all. This is *not* a pass, which is the
+        // distinction the enum exists to force.
+        let unsealed = DvMultimedia::inline(png(), data.clone());
+        assert_eq!(unsealed.verify_integrity(), IntegrityCheck::NotRecorded);
+        assert!(
+            !unsealed.verify_integrity().is_verified(),
+            "an unchecked value was reported as verified"
+        );
+
+        // NoInlineData: a digest with nothing to check it against.
+        let external = DvMultimedia::external(png(), DvUri::new("https://example.org/x.png").unwrap());
+        assert_eq!(external.verify_integrity(), IntegrityCheck::NotRecorded);
+
+        // The remaining outcomes need a digest this crate would not write, so
+        // they arrive by deserialization — which is also the path a stored
+        // record takes.
+        let rebuilt = |algorithm: &str, digest: &[u8], with_data: bool| -> DvMultimedia {
+            let mut o = serde_json::to_value(DvMultimedia::inline(png(), data.clone()))
+                .expect("serialize")
+                .as_object()
+                .expect("an object")
+                .clone();
+            o.insert(
+                "integrity_check".to_owned(),
+                serde_json::Value::String(super::base64::encode(digest)),
+            );
+            o.insert(
+                "integrity_check_algorithm".to_owned(),
+                serde_json::to_value(
+                    CodePhrase::new("openehr_integrity_check_algorithms", algorithm).unwrap(),
+                )
+                .expect("serialize"),
+            );
+            if !with_data {
+                o.remove("data");
+            }
+            serde_json::from_value(serde_json::Value::Object(o)).expect("deserialize")
+        };
+
+        // SHA-512 verifies. Deleting its arm turns a genuine check into
+        // `UnsupportedAlgorithm` — a refusal rather than a pass, but a record
+        // that was verifiable is then reported as unverifiable forever.
+        let sha512 = sha2::Sha512::digest(&data).to_vec();
+        assert_eq!(
+            rebuilt("SHA-512", &sha512, true).verify_integrity(),
+            IntegrityCheck::Passed,
+            "a SHA-512 integrity check did not verify"
+        );
+
+        // Failed: a digest that does not match. This is the tamper finding.
+        let mut wrong = sha512.clone();
+        wrong[0] ^= 0xFF;
+        assert_eq!(
+            rebuilt("SHA-512", &wrong, true).verify_integrity(),
+            IntegrityCheck::Failed
+        );
+        assert!(!rebuilt("SHA-512", &wrong, true).verify_integrity().is_verified());
+
+        // NoInlineData: a digest, no data.
+        assert_eq!(
+            rebuilt("SHA-512", &sha512, false).verify_integrity(),
+            IntegrityCheck::NoInlineData
+        );
+
+        // UnsupportedAlgorithm: named, understood to be a real algorithm, not
+        // implemented here. Deliberately not `Failed` — reporting a dependency
+        // gap as tampering burns an incident response.
+        assert_eq!(
+            rebuilt("SHA-1", &sha512, true).verify_integrity(),
+            IntegrityCheck::UnsupportedAlgorithm
+        );
+
+        // Only `Passed` is a positive assurance, so no two outcomes may agree
+        // with it.
+        for outcome in [
+            IntegrityCheck::NotRecorded,
+            IntegrityCheck::NoInlineData,
+            IntegrityCheck::Failed,
+            IntegrityCheck::UnsupportedAlgorithm,
+        ] {
+            assert!(!outcome.is_verified(), "{outcome:?} claimed verification");
+        }
+        assert!(IntegrityCheck::Passed.is_verified());
+    }
+
+    /// The inline payload and the encapsulated attributes are reported as
+    /// recorded.
+    ///
+    /// `data` could answer `None`, an empty slice, or a single zero byte for
+    /// every value (`lib:A-09`) — and `verify_integrity` reads the same field,
+    /// so a lying accessor and a passing digest are not the same guarantee.
+    /// `charset` and `language` are the two attributes `DV_ENCAPSULATED`'s
+    /// unenforced invariants concern (`L10.11`), so what they report is what a
+    /// reader has to go on.
+    #[test]
+    fn the_payload_and_encapsulated_attributes_are_reported() {
+        let png = CodePhrase::new("IANA_media-types", "image/png").unwrap();
+        let data = b"\x89PNG\r\n\x1a\n".to_vec();
+
+        let inline = DvMultimedia::inline(png.clone(), data.clone());
+        assert_eq!(inline.data(), Some(&data[..]));
+        assert_eq!(inline.uri(), None);
+        assert_eq!(inline.media_type(), &png);
+
+        let external = DvMultimedia::external(
+            png.clone(),
+            DvUri::new("https://example.org/x.png").unwrap(),
+        );
+        assert_eq!(external.data(), None, "an external value has no payload");
+        assert!(external.uri().is_some());
+
+        // Two different payloads must read back differently — a constant
+        // accessor makes every image the same image.
+        let other = DvMultimedia::inline(png, b"GIF89a".to_vec());
+        assert_ne!(inline.data(), other.data());
+
+        // Alternate text and thumbnail: absent unless recorded, and reported
+        // as given otherwise. A thumbnail is itself a DV_MULTIMEDIA — smaller,
+        // but still the same duty to not lie about its own content.
+        let png2 = CodePhrase::new("IANA_media-types", "image/png").unwrap();
+        assert_eq!(DvMultimedia::inline(png2.clone(), data.clone()).alternate_text(), None);
+        let captioned = DvMultimedia::inline(png2.clone(), data.clone())
+            .with_alternate_text("chest X-ray, PA view");
+        assert_eq!(captioned.alternate_text(), Some("chest X-ray, PA view"));
+
+        // `thumbnail` has no builder; deserialization is the only path.
+        let thumb = DvMultimedia::inline(png2.clone(), b"thumb-bytes".to_vec());
+        let mut object = serde_json::to_value(DvMultimedia::inline(png2, data))
+            .expect("serialize")
+            .as_object()
+            .expect("an object")
+            .clone();
+        object.insert(
+            "thumbnail".to_owned(),
+            serde_json::to_value(&thumb).expect("serialize"),
+        );
+        let with_thumb: DvMultimedia =
+            serde_json::from_value(serde_json::Value::Object(object)).expect("deserialize");
+        assert!(with_thumb.thumbnail().is_some(), "a recorded thumbnail was dropped");
+        assert_eq!(
+            with_thumb.thumbnail().and_then(DvMultimedia::data),
+            Some(&b"thumb-bytes"[..])
+        );
+
+        // The encapsulated attributes: absent unless recorded, and reported as
+        // given when they are. They arrive by deserialization.
+        let bare: DvParsable = DvParsable::new("x", "ISO8601").unwrap();
+        assert_eq!(bare.encapsulated().charset(), None);
+        assert_eq!(bare.encapsulated().language(), None);
+
+        // DV_MULTIMEDIA carries the same attrs through its own accessor —
+        // a distinct field from DV_PARSABLE's, and `EncapsulatedAttrs` is
+        // `#[derive(Default)]`, so asserting only the absent case here cannot
+        // tell a real accessor from one replaced with a leaked default (both
+        // report `None`). It has to be checked populated.
+        let plain_media = DvMultimedia::inline(
+            CodePhrase::new("IANA_media-types", "image/png").unwrap(),
+            b"x".to_vec(),
+        );
+        assert_eq!(plain_media.encapsulated().charset(), None);
+
+        let mut object = serde_json::to_value(&plain_media)
+            .expect("serialize")
+            .as_object()
+            .expect("an object")
+            .clone();
+        object.insert(
+            "charset".to_owned(),
+            serde_json::to_value(
+                CodePhrase::new("IANA_character-sets", "UTF-8").unwrap(),
+            )
+            .expect("serialize"),
+        );
+        let charset_set: DvMultimedia =
+            serde_json::from_value(serde_json::Value::Object(object)).expect("deserialize");
+        assert_eq!(
+            charset_set.encapsulated().charset().map(CodePhrase::code_string),
+            Some("UTF-8"),
+            "a recorded charset was dropped by DvMultimedia::encapsulated"
+        );
+
+        let annotated: DvParsable = serde_json::from_str(
+            r#"{"value":"x","formalism":"ISO8601",
+                "charset":{"terminology_id":{"value":"IANA_character-sets"},"code_string":"UTF-8"},
+                "language":{"terminology_id":{"value":"ISO_639-1"},"code_string":"en"}}"#,
+        )
+        .expect("deserialize");
+        assert_eq!(
+            annotated.encapsulated().charset().map(CodePhrase::code_string),
+            Some("UTF-8")
+        );
+        assert_eq!(
+            annotated.encapsulated().language().map(CodePhrase::code_string),
+            Some("en")
         );
     }
 }

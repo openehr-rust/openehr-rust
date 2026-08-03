@@ -317,4 +317,75 @@ mod tests {
         assert!(Interval::closed(60_i32, 100).unwrap().contains(&100));
         assert!(!Interval::open(60_i32, 100).unwrap().contains(&100));
     }
+
+    /// `contains` uses the strict comparison on an open bound, not just at the
+    /// boundary.
+    ///
+    /// `open_and_closed_ends_differ_at_the_boundary` above only checks the
+    /// value *equal to* the excluded bound, which cannot tell `value < hi` from
+    /// `value > hi`: both exclude 100 from `open(60, 100)`. A value strictly
+    /// between the bounds is what tells the two comparisons apart, and it was
+    /// never checked (`lib:A-09`). This is the membership test
+    /// `ReferenceRange::contains` delegates to, so a flipped comparison here
+    /// silently inverts which results read as abnormal.
+    #[test]
+    fn contains_uses_the_right_comparison_on_both_sides_of_an_open_bound() {
+        let open = Interval::open(60_i32, 100).unwrap();
+        assert!(open.contains(&61));
+        assert!(open.contains(&99));
+        assert!(!open.contains(&60), "the excluded lower bound was included");
+        assert!(!open.contains(&100), "the excluded upper bound was included");
+        assert!(!open.contains(&30), "below the range was reported inside it");
+        assert!(!open.contains(&130), "above the range was reported inside it");
+
+        let closed = Interval::closed(60_i32, 100).unwrap();
+        assert!(closed.contains(&60));
+        assert!(closed.contains(&100));
+        assert!(closed.contains(&80));
+        assert!(!closed.contains(&59));
+        assert!(!closed.contains(&101));
+
+        // Unbounded on one side: only the bounded side constrains.
+        let at_least = Interval::at_least(10_i32).unwrap();
+        assert!(at_least.contains(&10));
+        assert!(at_least.contains(&1_000_000));
+        assert!(!at_least.contains(&9));
+
+        let at_most = Interval::at_most(10_i32).unwrap();
+        assert!(at_most.contains(&10));
+        assert!(at_most.contains(&-1_000_000));
+        assert!(!at_most.contains(&11));
+    }
+
+    /// The `*_unbounded` and `*_included` accessors report what the interval
+    /// actually holds.
+    ///
+    /// `lower_unbounded`/`upper_unbounded` could each be a constant, and
+    /// `lower_included`/`upper_included` could too — five mutants
+    /// (`lib:A-09`). These are the attributes `Q12.7a` requires a path to
+    /// reach, and `Q12.7b` requires them navigable even though they are
+    /// derived: a reader asking whether a range is open at one end must get a
+    /// real answer.
+    #[test]
+    fn unbounded_and_included_are_reported_for_each_shape() {
+        let closed = Interval::closed(60_i32, 100).unwrap();
+        assert!(!closed.lower_unbounded());
+        assert!(!closed.upper_unbounded());
+        assert_eq!(closed.lower_included(), Some(true));
+        assert_eq!(closed.upper_included(), Some(true));
+
+        let open = Interval::open(60_i32, 100).unwrap();
+        assert_eq!(open.lower_included(), Some(false));
+        assert_eq!(open.upper_included(), Some(false));
+
+        let at_least = Interval::at_least(10_i32).unwrap();
+        assert!(!at_least.lower_unbounded());
+        assert!(at_least.upper_unbounded(), "an open-ended range was reported bounded");
+        assert_eq!(at_least.upper(), None);
+
+        let at_most = Interval::at_most(10_i32).unwrap();
+        assert!(at_most.lower_unbounded(), "an open-started range was reported bounded");
+        assert!(!at_most.upper_unbounded());
+        assert_eq!(at_most.lower(), None);
+    }
 }

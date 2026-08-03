@@ -103,6 +103,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-31 | Medium | The invariant scanner paired **any** uppercase literal with a following identifier-shaped one, so eleven pairs that were never a citation — `ROLE._type`, `EHR_STATUS._type`, `ELEMENT.archetype_node_id` and eight more — stood in the committed divergence register | **fixed** — the two must be one call's arguments; 74 named is unchanged, so no real citation was lost |
 | A-32 | Medium | `Eq` on the ISO 8601 types is lexical while `PartialOrd` compares instants, so `11:00:00Z` and `12:00:00+01:00` order `Equal` and are not `==` — contrary to the standard library's requirement that the two agree | **declared** as `D3.18a` and pinned; not resolved, because both halves are load-bearing |
 | A-33 | Medium | The Gregorian leap rule was implemented **twice** — `base::iso8601` and `rm::data_structures` — byte-identical but for the fallback arm, and the second copy had never been run by any test | **fixed** — one implementation, `pub(crate)`; the interval-event arithmetic that used it is now tested against hand-computed dates |
+| A-34 | Medium | `DV_ENCAPSULATED`'s `charset` and `language` were preserved across a round trip and **unreadable** — `EncapsulatedAttrs` is exported but no type returned one, so a caller holding a `DV_MULTIMEDIA` or `DV_PARSABLE` could not ask what it declared | **fixed** — an `encapsulated()` accessor on both; found because the two accessors had no reachable caller to test |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
 | A-13 | Medium | One `IF NOT EXISTS` flag covered two statements MySQL treats differently | **fixed**, verified on MySQL 8.4 |
@@ -484,6 +485,7 @@ an empty slice hashes nothing, builds an empty chain, and `verify` reports
 | `openehr/base/iso8601.rs` + `object_id.rs` | **95 of 510** | 2 | `days_from_civil`, `DURATION` ordering, the offset parser, the identifier grammars |
 | `openehr/rm/common.rs` + `data_types/quantity.rs` | **72 of 386** | 1, equivalent | the change-control envelope's accessors, and the clinical markers |
 | `openehr/rm/ehr.rs` + `rm/data_structures.rs` | **59 of 313** | **0** | `EHR_STATUS`'s two flags, and a duplicated calendar (`A-33`) |
+| `openehr/rm/data_types/{text,encapsulated,basic}.rs` + `base/interval.rs` | **53 of 228** | **3, all equivalent** | `EncapsulatedAttrs` was unreachable (`A-34`); `Interval::contains`'s strict comparison |
 
 `record.rs` is the one worth reading twice. A test called
 `the_attributes_that_used_to_be_dropped_are_persisted` existed, named for
@@ -791,6 +793,33 @@ The seconds term of `subtract_seconds` survived because every event time in the
 new table ended `:00` — added to zero, `+` and `-` are the same. And
 `Folder::details` survived because only its absent case was asserted. Asserting
 `None` is half a test.
+
+**The last four `openehr` modules turned up one accessor that did not exist at
+all.** `lib:A-34`: `DV_ENCAPSULATED`'s `charset` and `language` were preserved
+across a round trip and **unreadable**. `EncapsulatedAttrs` is exported and both
+its accessors exist, but neither `DvMultimedia` nor `DvParsable` returned one —
+a caller holding either type had no way to ask what character set or language
+it declared. This was not found by reading; it was found by trying to write a
+test and discovering there was nowhere to call it from. Fixed with an
+`encapsulated()` accessor on both types.
+
+`Interval::contains`'s strict-exclusive-bound comparison (`value < hi`) had
+survived becoming `value > hi`, because the only existing test checked the
+value *equal to* the excluded bound — which both comparisons reject identically.
+A value strictly inside the range is what tells them apart, and this is the
+membership test `ReferenceRange::contains` delegates to (found closing
+`rm/common.rs` two rounds earlier), so a flipped comparison here silently
+inverts which results read as abnormal.
+
+The rest repeated the now-familiar pattern: `DvIdentifier`'s `id_type`,
+`issuer`, `assigner` (the fields that route a national identifier to the right
+authority's namespace), `TermMapping`'s three predicates (`is_broader`,
+`is_equivalent`, `is_narrower` — what an ICD-10 crosswalk claims about a
+mapped SNOMED CT code), and several `Display` impls that could print nothing.
+
+Three survivors remain in `base64::{encode,decode}`, where `|` could become
+`^`: both operators agree because the implementation always assembles bits
+into disjoint, non-overlapping ranges, which is what the algorithm is.
 
 `store.rs` produced the one that would have mattered most in production:
 `create_contribution` could return `Ok(())` **without inserting anything** and

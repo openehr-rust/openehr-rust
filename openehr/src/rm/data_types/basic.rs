@@ -192,6 +192,7 @@ impl core::fmt::Display for DvIdentifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::text::CodePhrase;
 
     #[test]
     fn display_never_reveals_the_identifier() {
@@ -210,5 +211,69 @@ mod tests {
     #[test]
     fn an_empty_identifier_is_refused() {
         assert!(DvIdentifier::new("").is_err());
+    }
+
+    /// A `DV_BOOLEAN` and a `DV_STATE` report the value they were built with.
+    ///
+    /// `DvBoolean::value` could answer `true` always, and `DvState::is_terminal`
+    /// could too (`lib:A-09`). A state machine that always reports itself
+    /// non-terminal never stops, and one that always reports terminal stops
+    /// after the first transition.
+    #[test]
+    fn a_boolean_and_a_state_report_what_they_were_built_with() {
+        assert!(DvBoolean::new(true).value());
+        assert!(!DvBoolean::new(false).value());
+
+        let code = CodePhrase::openehr("532").unwrap();
+        let ongoing = DvState::new(
+            DvCodedText::new("active", code.clone()).unwrap(),
+            false,
+        );
+        assert!(!ongoing.is_terminal());
+        let ended = DvState::new(DvCodedText::new("completed", code).unwrap(), true);
+        assert!(ended.is_terminal(), "a terminal state was reported ongoing");
+        assert_ne!(ongoing.is_terminal(), ended.is_terminal());
+        assert_eq!(ongoing.value().value(), "active");
+    }
+
+    /// A `DV_IDENTIFIER` reports every part it was built with, and its
+    /// `Display` deliberately withholds the value itself.
+    ///
+    /// Six accessors could each answer `None`, `""` or `"xyzzy"` for every
+    /// identifier (`lib:A-09`). This class carries a patient's NHS number or
+    /// equivalent, and `id_type`/`issuer`/`assigner` are what tell one national
+    /// identifier scheme from another — an accessor that lies here misroutes an
+    /// identifier to the wrong authority's namespace.
+    #[test]
+    fn a_dv_identifier_reports_every_part_but_never_formats_the_id_itself() {
+        let bare = DvIdentifier::new("943-476-5919").unwrap();
+        assert_eq!(bare.id(), "943-476-5919");
+        assert_eq!(bare.id_type(), None);
+        assert_eq!(bare.issuer(), None);
+        assert_eq!(bare.assigner(), None);
+
+        let full = DvIdentifier::new("943-476-5919")
+            .unwrap()
+            .with_type("NHS Number")
+            .with_issuer("NHS")
+            .with_assigner("NHS Digital");
+        assert_eq!(full.id_type(), Some("NHS Number"));
+        assert_eq!(full.issuer(), Some("NHS"));
+        assert_eq!(full.assigner(), Some("NHS Digital"));
+
+        // Display renders the type and issuer, never the id — and two
+        // different identifiers of the same type must not be told apart by
+        // their rendering, which is the whole point of withholding it.
+        assert_eq!(full.to_string(), "NHS Number issued by NHS");
+        let other_id = DvIdentifier::new("111-222-3333")
+            .unwrap()
+            .with_type("NHS Number")
+            .with_issuer("NHS");
+        assert_eq!(full.to_string(), other_id.to_string());
+        assert_eq!(bare.to_string(), DvIdentifier::new("000-000-0000").unwrap().to_string());
+
+        // Type alone, no issuer.
+        let typed_only = DvIdentifier::new("x").unwrap().with_type("Passport");
+        assert_eq!(typed_only.to_string(), "Passport");
     }
 }

@@ -174,6 +174,20 @@ Two things to know before believing a number:
   fresh table of thirteen dates because every event time in it ended `:00`:
   added to zero, `+` and `-` are indistinguishable. Give each component a
   distinct non-zero value.
+- **Checking `None` twice is not two tests.** The first fix for
+  `DvMultimedia::encapsulated` asserted only the absent case, which a mutant
+  returning a leaked `Default::default()` also satisfies — `EncapsulatedAttrs`
+  derives `Default`, and its default is all-`None`. The mutation run caught
+  this immediately; trust it over a test that merely compiles and passes.
+- **A survivor with no way to write a test is the strongest finding, not a
+  blocker.** `EncapsulatedAttrs::charset`/`language` existed and worked; the
+  problem was that nothing returned an `EncapsulatedAttrs` to call them on.
+  When a mutant resists every test you try, check whether the code under test
+  is actually reachable before concluding the test is hard (`lib:A-34`).
+- **A boundary-only test cannot tell `<` from `>`.** `open_and_closed_ends_
+  differ_at_the_boundary` checked the value equal to an excluded bound, which
+  both `value < hi` and `value > hi` reject identically. A value strictly
+  *inside* the range is what a strict comparison needs to prove itself against.
 - **A survivor can be a proof, not a gap.** `Parser::integer`'s `v >= 0` guard
   could be replaced with `true` and nothing failed — because the lexer starts a
   number only at a digit and never emits a negative one, so the guard is
