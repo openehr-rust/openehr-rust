@@ -363,6 +363,76 @@ jobs:
           sys.exit(bad)
           PY
 
+      # The library audit register's summary paragraph said "Seventeen
+      # findings" while the table beneath it listed thirty-five, for as long
+      # as findings kept being appended without anyone re-deriving the
+      # headline. A hand count next to a table is exactly the kind of claim
+      # `db:D-09` (below) exists to catch one level down — a boast the file
+      # can quietly stop matching.
+      - name: The audit summary counts itself correctly
+        run: |
+          python3 - <<'PY'
+          import re, sys, pathlib
+          text = pathlib.Path("openehr/spec/audit.md").read_text()
+
+          # Split each candidate line on `|` directly rather than matching the
+          # whole row with one regex: `\s*` matches a newline, so a regex
+          # anchored on one row's opening `|` can walk `\s*` straight into the
+          # *next* row and silently absorb it — found by testing this check
+          # against the file it checks and getting 18 rows instead of 35.
+          rows = []
+          for line in text.splitlines():
+              if not re.match(r"^\| A-\d+ \| (High|Medium|Low) \|", line):
+                  continue
+              cells = [c.strip() for c in line.strip().strip("|").split("|")]
+              if len(cells) >= 4:
+                  rows.append((cells[1], cells[-1]))
+          if not rows:
+              sys.exit("::error::no A-NN summary rows found in openehr/spec/audit.md")
+
+          total = len(rows)
+          by_severity = {"High": 0, "Medium": 0, "Low": 0}
+          fixed = 0
+          for severity, status in rows:
+              by_severity[severity] += 1
+              if "**fixed**" in status or "**classified**" in status:
+                  fixed += 1
+          open_ = total - fixed
+
+          claimed = re.search(
+              r"\*\*(\d+) findings, (\d+) in the table below: (\d+) High, "
+              r"(\d+) Medium, (\d+) Low\. (\d+) fixed or classified, (\d+) open\.\*\*",
+              re.sub(r"\s+", " ", text),
+          )
+          if not claimed:
+              sys.exit(
+                  "::error::the audit summary paragraph's fixed-form sentence "
+                  "was not found — did its wording change? Update this check "
+                  "and the sentence together."
+              )
+          n1, n2, high, medium, low, claimed_fixed, claimed_open = (
+              int(x) for x in claimed.groups()
+          )
+
+          computed = {
+              "findings (first count)": (n1, total),
+              "findings (second count)": (n2, total),
+              "High": (high, by_severity["High"]),
+              "Medium": (medium, by_severity["Medium"]),
+              "Low": (low, by_severity["Low"]),
+              "fixed or classified": (claimed_fixed, fixed),
+              "open": (claimed_open, open_),
+          }
+          bad = 0
+          for label, (claimed_n, actual_n) in computed.items():
+              if claimed_n != actual_n:
+                  bad = 1
+                  print(f"::error::{label}: paragraph says {claimed_n}, table has {actual_n}")
+          if not bad:
+              print(f"{total} findings, {fixed} fixed/classified, {open_} open — paragraph agrees")
+          sys.exit(bad)
+          PY
+
       # `db:D-09`: the matrix marked two requirements satisfied and listed the
       # same two as absent, in one file, for a day. The file that says "where
       # this disagrees with a crate's documentation, trust this" was disagreeing

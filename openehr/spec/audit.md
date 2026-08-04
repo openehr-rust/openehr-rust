@@ -15,10 +15,16 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-Seventeen findings: two High (**A-15**, **A-16**), eight Medium (**A-01**,
-**A-03**, **A-06**, **A-11**, **A-12**, **A-13**, **A-14**, **A-17**) and seven
-Low. **Twelve are fixed** — A-01, A-03, A-04, A-06, A-07, A-11, A-12, A-13,
-A-14, A-15, A-16, A-17 — three of them with a residual recorded. **A-09**
+**35 findings, 35 in the table below: 5 High, 21 Medium, 9 Low. 27 fixed or
+classified, 8 open.** These counts are checked against the table by CI
+(`claims` / *the audit summary counts itself correctly*) — if this paragraph
+and the table disagree, the table is correct (`W0.3`: never claim more than is
+verified), and the check should have failed. Every one of the 8 open findings
+is open by a stated reason rather than by omission: **A-02** and **A-08** are
+declared departures the crate does not intend to close; **A-05**, **A-10**,
+**A-30** and **A-35** are recorded limitations or residuals with the reasoning
+for leaving them written beside them; **A-19** and **A-27** are declared
+departures (`S1.18`, `Q12.9b`) whose *enforcement* remains open work. **A-09**
 (no property-based testing) is closed: `tests/properties.rs` covers the laws, and
 `openehr-fuzz` now drives five targets over the parsers — ISO 8601, the
 identifier grammars, AQL, paths, and canonical-JSON deserialization — run in CI
