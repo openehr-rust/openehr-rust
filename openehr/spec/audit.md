@@ -488,6 +488,8 @@ an empty slice hashes nothing, builds an empty chain, and `verify` reports
 | `openehr/rm/data_types/{text,encapsulated,basic}.rs` + `base/interval.rs` | **53 of 228** | **3, all equivalent** | `EncapsulatedAttrs` was unreachable (`A-34`); `Interval::contains`'s strict comparison |
 | `openehr/rm/demographic.rs` + `terminology.rs` + `base/{object_ref,uid}.rs` | **49 of 148** | **0** | `ObjectRef::is_local`, `Role::was_held_on` — closes `openehr`'s measurable surface |
 | five engine crates: `src/lib.rs` (`postgresql`, `mysql`, `mariadb`, `mssql`, `oracle`) | 20 of 59 | **0** | `Dialect::name` and `append_only_sql` were unchecked in all five |
+| `openehr-sqlite/dialect.rs` | 2 of 10 | **0** | `Dialect::name`, same as the five above |
+| `openehr-loco/app.rs` + `tasks.rs` + `views.rs` | 4 of 25 | 1, structural | `App::before_run` never installed anything under test — see below |
 
 `record.rs` is the one worth reading twice. A test called
 `the_attributes_that_used_to_be_dropped_are_persisted` existed, named for
@@ -896,6 +898,38 @@ that silently started emitting MySQL types has no test here that would catch
 it structurally beyond the type-spelling assertions already present). Adding
 the same `name`/`append_only_sql` test to all five is a step toward that parity,
 not the whole of it.
+
+**`openehr-sqlite/dialect.rs` had the identical `name()` gap** the five
+schema-only crates did, confirming the pattern is about the trait method's one
+call site, not about any one crate's test discipline.
+
+**`openehr-loco`'s `App::before_run` never actually ran in a test.**
+`before_run` is the fail-closed startup path the module's own doc comment
+singles out — a service that started without a working verifier would serve an
+entire EHR to anyone who asked, with a green health check and no symptom
+(`db:PR12.16`) — and `tests/http.rs` builds its router against a hand-populated
+`AppContext`, bypassing `before_run` (and the whole `Hooks` trait) entirely. A
+version that did nothing at all would have failed no test in this crate.
+
+Testing it directly needs three environment variables (`PasetoVerifier::
+from_env`, `AccessLog::from_env`, `OPENEHR_SQLITE_PATH`), and setting a
+process environment variable has required `unsafe` since Rust's 2024 edition —
+which this crate forbids outright (`unsafe_code = "forbid"`), with no local
+override, by design. So the fix was a split, not a test-only workaround:
+`before_run` now does three `from_env()` calls and one `?`-propagated error
+each, then hands the results to a new private `install`, which does the part
+with a consequence — putting the verifier, the access log, and the store into
+`ctx.shared_store`. `install` takes its three arguments directly and is fully
+tested.
+
+**One survivor remains, and it is `before_run`'s own body**, not `install`'s:
+the whole function could still be replaced with `Ok(())`, skipping all three
+`from_env()` calls and the call to `install`. Closing it would mean either the
+forbidden env-var mutation, or spawning the compiled binary as a long-running
+server subprocess and managing its lifecycle from the test — disproportionate
+for three lines whose only content is `?`-propagating three independently-
+tested constructors into a function that is itself tested. Recorded rather
+than forced.
 
 `store.rs` produced the one that would have mattered most in production:
 `create_contribution` could return `Ok(())` **without inserting anything** and

@@ -170,3 +170,27 @@ fn every_dialect_enforces_append_only_in_the_schema() {
         }
     }
 }
+
+/// Every dialect names itself, and no two share a name.
+///
+/// `Dialect::name()` is used only inside `openehr_store::conformance`'s panic
+/// messages — never compared against anything — so it could return `""` for
+/// every one of the six engines and nothing would notice (`lib:A-09`). This is
+/// the one place all six dialects are already assembled to be checked
+/// together, so it is also where two engines sharing a name would first be
+/// visible: a diagnostic that can't tell `PostgreSQL`'s failure from `Oracle`'s is
+/// worse than one that fails to run at all.
+#[test]
+fn every_dialect_names_itself_and_no_two_share_a_name() {
+    let names: Vec<&str> = all().iter().map(|d| d.name()).collect();
+    assert_eq!(
+        names,
+        vec!["PostgreSQL", "SQLite", "MySQL", "MariaDB", "SQL Server", "Oracle"]
+    );
+
+    let mut sorted = names.clone();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(sorted.len(), names.len(), "two dialects share a name: {names:?}");
+}
+
