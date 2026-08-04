@@ -19,36 +19,38 @@ publish a crate with an open finding against its claims (`W0.21`).
 
 ## State today
 
-**Last verified against crates.io on 2026-08-02.** All eight publishable crates
-are live at **0.2.0**.
+**Last verified against crates.io on 2026-08-02; local crates bumped to 0.3.0
+on 2026-08-04, not yet published.** All eight publishable crates are live at
+**0.2.0** on crates.io.
 
 | Crate | crates.io | Local |
 | --- | --- | --- |
-| `openehr` | 0.1.0, 0.1.1, **0.2.0** | 0.2.0 |
-| `openehr-store` | 0.1.1, **0.2.0** | 0.2.0 |
-| `openehr-sqlite` | 0.1.1, **0.2.0** | 0.2.0 |
-| `openehr-postgresql` | 0.1.1, **0.2.0** | 0.2.0 |
-| `openehr-mysql` | 0.1.1, **0.2.0** | 0.2.0 |
-| `openehr-mariadb` | 0.1.1, **0.2.0** | 0.2.0 |
-| `openehr-mssql` | 0.1.1, **0.2.0** | 0.2.0 |
-| `openehr-oracle` | 0.1.1, **0.2.0** | 0.2.0 |
+| `openehr` | 0.1.0, 0.1.1, **0.2.0** | 0.3.0 |
+| `openehr-store` | 0.1.1, **0.2.0** | 0.3.0 |
+| `openehr-sqlite` | 0.1.1, **0.2.0** | 0.3.0 |
+| `openehr-postgresql` | 0.1.1, **0.2.0** | 0.3.0 |
+| `openehr-mysql` | 0.1.1, **0.2.0** | 0.3.0 |
+| `openehr-mariadb` | 0.1.1, **0.2.0** | 0.3.0 |
+| `openehr-mssql` | 0.1.1, **0.2.0** | 0.3.0 |
+| `openehr-oracle` | 0.1.1, **0.2.0** | 0.3.0 |
 
 `openehr-loco`, `openehr-assets`, and the seven fuzz crates are `publish = false`
-and are not on crates.io.
+and are not on crates.io. `openehr-loco`'s own version moves in lockstep with
+the published crates for consistency (0.3.0 locally) even though it is never
+itself published.
 
 This table was wrong until 2026-08-02. It said seven of the eight were "not
 published" and that the next version was 0.1.1, long after 0.2.0 had gone out —
 a table an agent would have acted on, in the file that exists to stop a bad
-publish.
+publish. If this row disagrees with `git log` or with crates.io itself, trust
+those, not this file.
 
 ## The tree has moved past what is published
 
-**The local 0.2.0 and the published 0.2.0 are not the same software.** Twenty-five
-commits separate them, and the local crates were never version-bumped because
-publishing was deliberately paused.
-
-That matters more than a stale number, because several of those commits are
-**breaking**:
+**The local 0.3.0 and the published 0.2.0 are not the same software.** Several
+of the commits separating them are **breaking**, catalogued in full in
+[`CHANGELOG.md`](../CHANGELOG.md); summarised here for the publishing decision
+they drive:
 
 | Change | Why it breaks |
 | --- | --- |
@@ -57,6 +59,7 @@ That matters more than a stale number, because several of those commits are
 | Nine chain columns on `openehr_version` | `db:D-07`. Absent at 0.2.0. |
 | `ColTy::Digest` added | `ColTy` is deliberately not `#[non_exhaustive]`, so this breaks any external `Dialect` implementation at compile time — by design. |
 | `OriginalVersion::new` refuses what it accepted | `lib:A-23`. A first version naming a predecessor, or a successor naming none, now fails to construct. |
+| `Date`/`Time`/`DateTime`/`Duration` lost `PartialOrd`/`Ord` | `lib:A-32`. `Eq` on these was lexical while `PartialOrd` was semantic, contradicting the standard library's requirement that the two agree. `<`, `.partial_cmp()`, `.min()`/`.max()`, `sort()` on these four types no longer compile; call the new `.semantic_cmp()` instead. Does not touch `DvDate`/`DvTime`/`DvDateTime`/`DvDuration`, whose own `PartialOrd` is unchanged. |
 
 So the next release is **0.3.0**, not 0.2.1. Cargo treats `0.2.x` as compatible
 with `0.2.0`, and shipping any of the above as a patch would break a dependent

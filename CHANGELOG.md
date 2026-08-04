@@ -1,0 +1,65 @@
+# Changelog
+
+Covers the eight published crates as a set: `openehr`, `openehr-store`,
+`openehr-sqlite`, `openehr-postgresql`, `openehr-mysql`, `openehr-mariadb`,
+`openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
+together.
+
+## 0.3.0
+
+**Breaking.** No migration path exists or is planned before 1.0
+(`db:O10.14`). A deployment on 0.2.0 exports its data, upgrades, recreates the
+schema, and reloads.
+
+- **`SCHEMA_VERSION` now exists, and is `4`.** A database written by 0.2.0
+  records no schema version at all. `Store::install()` now refuses to open a
+  *populated* database that has none, rather than guessing which schema it
+  is (`db:O10.16`). A fresh, empty database installs normally.
+- **`ColTy::Json` moved off `jsonb` (PostgreSQL) and `JSON` (MySQL) onto a
+  byte-preserving text type** (`db:M3.43`, `db:D-08`). Both prior types
+  normalise on the way in — reordering object keys, and on MySQL rewriting a
+  magnitude of `1.10` as `1.1` — which changes the bytes a content digest was
+  taken over. A database created under 0.2.0 has columns of the old type and
+  already-normalised content; it cannot be upgraded in place.
+- **Nine columns added to `openehr_version`**, carrying the tamper-evident
+  hash chain (`db:D-07`). Absent from the 0.2.0 schema.
+- **`ColTy::Digest` added.** `ColTy` is deliberately not `#[non_exhaustive]`,
+  so any `Dialect` implementation outside this repository fails to compile
+  against 0.3.0 until it handles the new variant — intentional, not an
+  oversight.
+- **`OriginalVersion::new` refuses input it previously accepted**
+  (`lib:A-23`): a first version naming a preceding version, or a
+  non-first version naming none, is now a construction error rather than a
+  silently inconsistent value.
+- **`Date`, `Time`, `DateTime`, and `Duration` no longer implement
+  `PartialOrd`/`Ord`** (`openehr::base::iso8601`; `lib:A-32`). `Eq` on these
+  types is lexical — two values are equal only when written the same way —
+  while chronological (or, for `Duration`, length) order compares what the
+  value denotes, and Rust requires `PartialOrd` to agree with `Eq` wherever
+  it is implemented. It cannot, for either of these types, without giving up
+  something load-bearing (record identity for `Eq`, or the query the ordering
+  exists for), so the trait impl is gone rather than left contradicting
+  itself. Callers using `<`, `<=`, `.partial_cmp()`, `.min()`, `.max()`, or
+  `sort()` directly on these four types call the new inherent method
+  `.semantic_cmp(&self, other: &Self) -> Option<core::cmp::Ordering>`
+  instead. **This does not affect** `DvDate`, `DvTime`, `DvDateTime`, or
+  `DvDuration` in `openehr::rm::data_types` — their own `PartialOrd` impls are
+  unchanged and still work with `<` and friends; only the four bare ISO 8601
+  types lost the trait.
+
+**Fixed**, not breaking:
+
+- A normal range on a `DV_DATE`, `DV_TIME`, `DV_DATE_TIME`, or `DV_DURATION`
+  was silently unreachable by path and never contributed to `is_abnormal()`
+  — the four temporal types were missing from the internal list of classes
+  carrying `DV_ORDERED` attributes, despite implementing it (`lib:A-29`).
+  They now behave as documented; no signature changed.
+
+See [`spec/audit.md`](spec/audit.md) and [`openehr/spec/audit.md`](openehr/spec/audit.md)
+for the full findings this release closes, and
+[`AGENTS/publishing.md`](AGENTS/publishing.md) for the publishing process
+itself.
+
+## 0.2.0 and earlier
+
+Not tracked here. See the git history and crates.io.
