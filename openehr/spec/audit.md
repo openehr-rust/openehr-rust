@@ -487,6 +487,7 @@ an empty slice hashes nothing, builds an empty chain, and `verify` reports
 | `openehr/rm/ehr.rs` + `rm/data_structures.rs` | **59 of 313** | **0** | `EHR_STATUS`'s two flags, and a duplicated calendar (`A-33`) |
 | `openehr/rm/data_types/{text,encapsulated,basic}.rs` + `base/interval.rs` | **53 of 228** | **3, all equivalent** | `EncapsulatedAttrs` was unreachable (`A-34`); `Interval::contains`'s strict comparison |
 | `openehr/rm/demographic.rs` + `terminology.rs` + `base/{object_ref,uid}.rs` | **49 of 148** | **0** | `ObjectRef::is_local`, `Role::was_held_on` — closes `openehr`'s measurable surface |
+| five engine crates: `src/lib.rs` (`postgresql`, `mysql`, `mariadb`, `mssql`, `oracle`) | 20 of 59 | **0** | `Dialect::name` and `append_only_sql` were unchecked in all five |
 
 `record.rs` is the one worth reading twice. A test called
 `the_attributes_that_used_to_be_dropped_are_persisted` existed, named for
@@ -854,6 +855,47 @@ And four `demographic.rs` accessors — `Capability::time_validity`,
 `PartyRelationship::details`, `PartyAttrs::details`, `Role::time_validity` —
 had only their absent case asserted, the same "asserting `None` is half a
 test" mistake recorded during the `rm/ehr.rs` round.
+
+**Mutation testing then moved outside `openehr` for the first time, into
+`openehr-store` and the five schema-level engine crates.** `openehr-store`'s
+`schema.rs`, `store.rs` and `error.rs` turned out to have almost no mutable
+surface: `schema.rs` is the shared table layout declared as `const` data plus
+six tests asserting invariants over it, `store.rs` is a bare trait with no
+method bodies, and `error.rs` is thiserror-derived enums. `conformance.rs` —
+the actual logic, the suite every engine runs — was deliberately not measured
+*from this crate*, because nothing in `openehr-store`'s own test target calls
+it; it is a library function the engine crates consume as a dev-dependency,
+and mutating it here would report "untested" for code that `openehr-sqlite`'s
+own run already exercises. Recorded rather than silently skipped.
+
+**Every one of the five schema-level dialects — `postgresql`, `mysql`,
+`mariadb`, `mssql`, `oracle` — had the same two blind spots**, and finding them
+identical five times is itself the finding: `Dialect::name()` is used only
+inside `conformance::check_dialect`'s panic messages, never compared against
+anything, so it could return `""` in every dialect and nothing would notice.
+And `append_only_sql` — the SQL enforcing `V8.10`, the rule the whole
+change-control model rests on — is asserted **structurally** by the existing
+golden `tests/ddl.rs` (does the DDL contain this table, this index, this
+quoting) but never checked for containing an actual refusal. A generator that
+emitted an empty trigger body would have passed every existing test in all
+five crates.
+
+Fixing it also exposed why the five differ: PostgreSQL and Oracle emit one
+trigger covering both operations; MySQL and MariaDB emit two, because
+`SIGNAL` cannot name more than one triggering event; SQL Server uses `INSTEAD
+OF` rather than `AFTER`, so the refusal happens before anything is written.
+Oracle's `terminator()` — the SQL*Plus block marker `
+/`, not `;` — was
+equally unchecked and is now pinned alongside it.
+
+`openehr-mariadb`'s `tests/ddl.rs` is more thorough than its four siblings',
+because it is the crate `W-01` was found in — the copy-of-MySQL defect — and
+was hardened afterward. The other four never received the same treatment even
+though the same risk applies to each of them individually (an Oracle crate
+that silently started emitting MySQL types has no test here that would catch
+it structurally beyond the type-spelling assertions already present). Adding
+the same `name`/`append_only_sql` test to all five is a step toward that parity,
+not the whole of it.
 
 `store.rs` produced the one that would have mattered most in production:
 `create_contribution` could return `Ok(())` **without inserting anything** and

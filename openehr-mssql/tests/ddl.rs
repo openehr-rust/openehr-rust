@@ -57,3 +57,23 @@ fn every_table_and_index_is_emitted() {
         }
     }
 }
+
+/// The dialect names itself, and its append-only trigger names both the
+/// mutation it refuses and the table it protects.
+///
+/// `name` could return `""` or a wrong constant, and `append_only_sql`
+/// could return an empty or nonsense string, with nothing failing
+/// (`lib:A-09`) — the generated SQL is asserted against structurally
+/// elsewhere in this file, but never against its own stated purpose: that it
+/// actually refuses `UPDATE` and `DELETE`. Engine detail: INSTEAD OF, so the refusal happens before anything is written.
+#[test]
+fn the_dialect_names_itself_and_the_trigger_refuses_both_mutations() {
+    assert_eq!(MssqlDialect.name(), "SQL Server");
+
+    let sql = MssqlDialect.append_only_sql(&openehr_store::schema::VERSION).join("\n");
+    assert!(sql.contains("INSTEAD OF UPDATE, DELETE"), "{sql}");
+    assert!(sql.contains("THROW 50000"), "{sql}");
+    assert!(sql.contains(openehr_store::schema::VERSION.name), "{sql}");
+    assert!(sql.contains("openEHR V8.10"), "{sql}");
+}
+

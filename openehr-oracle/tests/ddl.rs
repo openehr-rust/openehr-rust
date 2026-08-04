@@ -90,3 +90,35 @@ fn no_identifier_is_too_long_for_oracle() {
         "the schema shrank unexpectedly; only {checked} names checked"
     );
 }
+
+/// The dialect names itself, and its append-only trigger names both the
+/// mutation it refuses and the table it protects.
+///
+/// `name` could return `""` or a wrong constant, and `append_only_sql`
+/// could return an empty or nonsense string, with nothing failing
+/// (`lib:A-09`) — the generated SQL is asserted against structurally
+/// elsewhere in this file, but never against its own stated purpose: that it
+/// actually refuses `UPDATE` and `DELETE`. Engine detail: one trigger, PL/SQL `raise_application_error`.
+#[test]
+fn the_dialect_names_itself_and_the_trigger_refuses_both_mutations() {
+    assert_eq!(OracleDialect.name(), "Oracle");
+
+    let sql = OracleDialect.append_only_sql(&openehr_store::schema::VERSION).join("\n");
+    assert!(sql.contains("BEFORE UPDATE OR DELETE"), "{sql}");
+    assert!(sql.contains("raise_application_error"), "{sql}");
+    assert!(sql.contains(openehr_store::schema::VERSION.name), "{sql}");
+    assert!(sql.contains("openEHR V8.10"), "{sql}");
+}
+
+/// Every statement ends `\n/`, the SQL*Plus block terminator, not `;`.
+///
+/// `terminator` could return `""` or nonsense with nothing failing
+/// (`lib:A-09`): every statement here is a PL/SQL block, and a bare `;`
+/// submits only as far as the block's first inner semicolon.
+#[test]
+fn statements_terminate_with_the_sqlplus_block_marker() {
+    assert_eq!(OracleDialect.terminator(), "\n/");
+    let sql = ddl_script(&OracleDialect);
+    assert!(sql.contains("\n/"), "{sql}");
+}
+
