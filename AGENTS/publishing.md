@@ -19,38 +19,37 @@ publish a crate with an open finding against its claims (`W0.21`).
 
 ## State today
 
-**Last verified against crates.io on 2026-08-02; local crates bumped to 0.3.0
-on 2026-08-04, not yet published.** All eight publishable crates are live at
-**0.2.0** on crates.io.
+**Published 2026-08-04.** All eight publishable crates are live at **0.3.0**
+on crates.io, in the order below, and local matches published.
 
 | Crate | crates.io | Local |
 | --- | --- | --- |
-| `openehr` | 0.1.0, 0.1.1, **0.2.0** | 0.3.0 |
-| `openehr-store` | 0.1.1, **0.2.0** | 0.3.0 |
-| `openehr-sqlite` | 0.1.1, **0.2.0** | 0.3.0 |
-| `openehr-postgresql` | 0.1.1, **0.2.0** | 0.3.0 |
-| `openehr-mysql` | 0.1.1, **0.2.0** | 0.3.0 |
-| `openehr-mariadb` | 0.1.1, **0.2.0** | 0.3.0 |
-| `openehr-mssql` | 0.1.1, **0.2.0** | 0.3.0 |
-| `openehr-oracle` | 0.1.1, **0.2.0** | 0.3.0 |
+| `openehr` | 0.1.0, 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
+| `openehr-store` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
+| `openehr-sqlite` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
+| `openehr-postgresql` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
+| `openehr-mysql` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
+| `openehr-mariadb` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
+| `openehr-mssql` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
+| `openehr-oracle` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
 
 `openehr-loco`, `openehr-assets`, and the seven fuzz crates are `publish = false`
 and are not on crates.io. `openehr-loco`'s own version moves in lockstep with
 the published crates for consistency (0.3.0 locally) even though it is never
 itself published.
 
-This table was wrong until 2026-08-02. It said seven of the eight were "not
-published" and that the next version was 0.1.1, long after 0.2.0 had gone out —
-a table an agent would have acted on, in the file that exists to stop a bad
-publish. If this row disagrees with `git log` or with crates.io itself, trust
-those, not this file.
+This table was wrong until 2026-08-02, and again briefly during the 0.3.0
+bump — it said seven of the eight were "not published" and that the next
+version was 0.1.1, long after 0.2.0 had gone out, in the file that exists to
+stop a bad publish. If this row disagrees with `git log` or with crates.io
+itself, trust those, not this file.
 
-## The tree has moved past what is published
+## What 0.3.0 changed, for anyone still on 0.2.0
 
-**The local 0.3.0 and the published 0.2.0 are not the same software.** Several
-of the commits separating them are **breaking**, catalogued in full in
-[`CHANGELOG.md`](../CHANGELOG.md); summarised here for the publishing decision
-they drive:
+Published and local agree again as of 2026-08-04. This section is now a
+historical record of what the 0.3.0 release changed, kept for anyone
+upgrading from a published 0.2.0 — catalogued in full in
+[`CHANGELOG.md`](../CHANGELOG.md), summarised here for the decision it drove:
 
 | Change | Why it breaks |
 | --- | --- |
@@ -61,9 +60,9 @@ they drive:
 | `OriginalVersion::new` refuses what it accepted | `lib:A-23`. A first version naming a predecessor, or a successor naming none, now fails to construct. |
 | `Date`/`Time`/`DateTime`/`Duration` lost `PartialOrd`/`Ord` | `lib:A-32`. `Eq` on these was lexical while `PartialOrd` was semantic, contradicting the standard library's requirement that the two agree. `<`, `.partial_cmp()`, `.min()`/`.max()`, `sort()` on these four types no longer compile; call the new `.semantic_cmp()` instead. Does not touch `DvDate`/`DvTime`/`DvDateTime`/`DvDuration`, whose own `PartialOrd` is unchanged. |
 
-So the next release is **0.3.0**, not 0.2.1. Cargo treats `0.2.x` as compatible
-with `0.2.0`, and shipping any of the above as a patch would break a dependent
-on `cargo update`.
+That is why the release was **0.3.0**, not 0.2.1: cargo treats `0.2.x` as
+compatible with `0.2.0`, and shipping any of the above as a patch would have
+broken a dependent on `cargo update`.
 
 **There is no migration for the schema change and there will not be one before
 1.0** (`db:O10.14`). A deployment on published 0.2.0 exports, recreates, and
@@ -92,8 +91,8 @@ verifies the package builds — including its tests — so the five must be
 resolvable. Publish them first and the ordering problem disappears; there is no
 cycle.
 
-**This ordering is not advisory — cargo enforces it.** As of 2026-08-01, only
-`openehr` packages successfully; the other seven fail with:
+**This ordering is not advisory — cargo enforces it.** Publish out of order and
+a dependent fails with:
 
 ```
 error: failed to prepare local package for uploading
@@ -102,12 +101,13 @@ Caused by:
   candidate versions found which didn't match: 0.2.0
 ```
 
-That is the expected state, not a defect: every crate depends on `openehr`
-0.3.0, and crates.io still has only 0.2.0. Each crate becomes packageable as
-soon as its dependencies are published. Do not "fix" it by loosening a version
-requirement to `0.2` — that would let a crate resolve against the *published*
-0.2.0 rather than the local path, so the workspace would test something other
-than what it ships.
+That was the actual state through most of 2026-08-01: only `openehr` packaged
+successfully, and the other seven waited on it. Each crate becomes packageable
+as soon as its dependencies are published — which is what happened on
+2026-08-04, in this file's documented order. Do not "fix" the error by
+loosening a version requirement to `0.2` — that would let a crate resolve
+against an older *published* version rather than the local path, so the
+workspace would test something other than what it ships.
 
 Allow a minute between publishes for the index to update.
 
@@ -134,8 +134,8 @@ directory ships if the crate's docs cite it — `openehr`'s rustdoc cites
 `spec/01-scope.md`, and a link into a file that is not in the package is a
 dangling reference for everyone reading on docs.rs.
 
-Verified 2026-08-01: `openehr` ships 68 files including all 18 `spec/*.md` and
-its five examples, so those citations resolve. `openehr-store` cites
+Verified 2026-08-04: `openehr` packages 67 files including all 18 `spec/*.md`
+and its five examples, so those citations resolve. `openehr-store` cites
 `spec/conformance.md`, which likewise ships.
 
 ## Checks specific to this repository
