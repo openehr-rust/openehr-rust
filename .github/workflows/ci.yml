@@ -481,9 +481,11 @@ jobs:
           PY
           echo "no requirement is both satisfied and absent"
 
-      # W0.22-W0.23: one licence expression across all eight crates, and
-      # LICENSE.md as the only licence file. Shipping the full text of some
-      # licences and not others privileges those and understates the grant.
+      # W0.22-W0.23: one licence expression across the eight published crates
+      # plus `openehr-loco` (unpublished, but distributed as source and worth
+      # the same clarity), and LICENSE.md as the only licence file. Shipping
+      # the full text of some licences and not others privileges those and
+      # understates the grant.
       - name: Licence expression is harmonized
         run: |
           set -eu
@@ -502,7 +504,7 @@ jobs:
             done
           done
           [ "$bad" -eq 0 ] || exit 1
-          echo "all eight crates declare the same five licences"
+          echo "all nine checked crates declare the same five licences"
 
   # `T13.2`: a test that cannot fail is not a test, and this repository has
   # shipped several — the first property tests passed vacuously (`lib:A-17`),

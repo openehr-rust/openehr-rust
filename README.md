@@ -404,7 +404,11 @@ coverage it does not have is worse than a small one.
 | UCUM unit conversion | a wrong conversion is a thousand-fold dosing error |
 | External terminology lookup | needs a terminology server; codes are carried opaquely |
 | HL7 `GTS`/`PIVL` timing evaluation | a partial timing engine is right most of the time |
-| REST service, CLI | out of scope; nothing here builds either |
+
+This table is the **library's** scope. `openehr-loco` (above) is a separate,
+optional, unpublished crate that puts a narrow REST API in front of the store —
+it does not change what the library itself implements, and does not add
+archetype validation, AQL execution, or any of the rest of this table.
 
 Where openEHR defines an operation these crates do not implement, they return an
 explicit `Unsupported` error naming the specification section that records the

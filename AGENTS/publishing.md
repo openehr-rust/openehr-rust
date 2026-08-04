@@ -68,8 +68,6 @@ reloads. Say that in the release notes rather than leaving it to be discovered.
 
 ## Order
 
-## Order
-
 Dependencies must exist on crates.io before the crates that depend on them. Path
 dependencies here all carry a `version`, so cargo will look them up.
 

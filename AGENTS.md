@@ -106,10 +106,14 @@ arm64, and the Oracle images need registry authentication. Both crates stay at
 
 | Job | Covers |
 | --- | --- |
-| `test` | clippy, tests, and docs for each of the eight crates separately — one `--workspace` invocation would silently miss one, since each crate is its own workspace |
+| `test` | clippy, tests, and docs for each of the nine crates separately (the eight published crates plus `openehr-loco`) — one `--workspace` invocation would silently miss one, since each crate is its own workspace |
 | `examples` | the five runnable tutorials |
 | `schema` | `verify-schema.sh` against real PostgreSQL, MySQL, and MariaDB containers |
-| `claims` | that mssql and oracle still claim only Dialect, and that all eight crates declare the same five licences |
+| `assets` | `openehr-assets` regenerates the committed DDL/schema files and fails the build if a committed one is stale |
+| `fuzz` | a short regression run of every fuzz target — a crash, panic, or abort fails the build; this is a gate, not a campaign |
+| `layering` | `openehr` and `openehr-store` depend inward only, including dev-dependencies |
+| `claims` | that mssql and oracle still claim only Dialect, that the library matrix covers every requirement exactly once, that the conformance matrix does not contradict itself, that the audit summary counts itself correctly, and that the eight published crates plus `openehr-loco` declare the same five licences |
+| `mutants` | pull requests only: `cargo-mutants --in-diff` against the PR's changed lines, per crate touched — see [`AGENTS/auditing.md`](AGENTS/auditing.md) |
 
 Two rules it follows, both from the specification rather than habit: the schema
 jobs **fail rather than skip** without a container runtime (`C0.13`), and they

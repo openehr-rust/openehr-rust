@@ -16,12 +16,23 @@ surviving because of the second.
 documents; running finds the ones where both documents agree and both are wrong —
 which is the class that survives.
 
+**This applies to a check you just wrote, too.** A CI check added to verify
+`spec/audit.md`'s summary counts itself matched a hand count of 35 findings
+against a table of 35 — until it was run against the file it was meant to
+check and reported 18. `\s*` in the row-matching regex matched the newline
+between two table rows, so a pattern anchored on one row's opening `|` walked
+`\s*` straight into the *next* row and silently absorbed it. A check that
+passes on the first file you hand it has been run once, which is not evidence
+it is correct — feed it a case you know should fail before you trust a case
+where it says pass.
+
 A worked pass, in the order that has actually found things here:
 
 ```sh
 # 1. Does it build and test clean?
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \
-         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle; do
+         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
+         openehr-loco openehr-assets; do
   (cd "$d" && cargo test --quiet && cargo clippy --all-targets --quiet) \
     || echo "FAIL $d"
 done

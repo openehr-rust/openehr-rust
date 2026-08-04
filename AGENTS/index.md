@@ -22,16 +22,22 @@ specifications decide what must be true (`W0.2`):
 
 ## The one-paragraph version
 
-Fourteen crates, each its own Cargo workspace. `openehr` is the Reference Model.
-`openehr-store` holds everything about persistence that is not a SQL spelling —
-the five-table schema, the projection onto rows, the commit rules, and the
-conformance suite. Six engine crates each supply one `Dialect`, owning exactly
-four things: type spellings, identifier quoting, placeholder style, and
-append-only enforcement. Only `openehr-sqlite` also has a `Store`. Seven fuzz harnesses drive the properties — six over the dialects and
-`openehr-fuzz` over the Reference Model parsers; all are `publish = false`.
+Seventeen crates, each its own Cargo workspace. `openehr` is the Reference
+Model. `openehr-store` holds everything about persistence that is not a SQL
+spelling — the five-table schema, the projection onto rows, the commit rules,
+and the conformance suite. Six engine crates each supply one `Dialect`, owning
+exactly four things: type spellings, identifier quoting, placeholder style,
+and append-only enforcement. Only `openehr-sqlite` also has a `Store`.
+`openehr-loco` puts an HTTP API in front of it, outside the conformance
+ladder (`W0.32`). `openehr-assets` regenerates the committed DDL/schema files
+and fails the build if one is stale. Seven fuzz harnesses drive the
+properties — six over the dialects and `openehr-fuzz` over the Reference
+Model parsers.
 
-The eight publishable crates are live on crates.io at **0.2.0**. Each engine
-crate carries a dialect annex at `spec/14-<engine>-dialect.md`.
+The eight publishable crates (`openehr`, `openehr-store`, and the six dialect
+crates) are live on crates.io at **0.2.0**; the other nine — `openehr-loco`,
+`openehr-assets`, and the seven fuzz harnesses — are `publish = false`. Each
+engine crate carries a dialect annex at `spec/14-<engine>-dialect.md`.
 
 ## The failure this architecture is shaped by
 

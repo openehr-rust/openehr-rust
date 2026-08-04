@@ -107,7 +107,11 @@ trace, and a paging alert at once.
 | UCUM unit conversion | a wrong conversion is a thousand-fold dosing error |
 | External terminology lookup | needs a terminology server; codes are carried opaquely |
 | HL7 `GTS`/`PIVL` timing evaluation | a partial timing engine produces a dosing schedule that is right most of the time |
-| REST service, CLI | out of scope; nothing here builds either |
+
+This is the **library's** scope. `openehr-loco` is a separate, optional,
+unpublished crate putting a narrow REST API in front of the store — it adds no
+archetype validation, AQL execution, or anything else in this table; see its
+own README.
 
 Where an operation is defined and not implemented, the code returns an
 `Unsupported` error naming the spec section that records the exclusion. It never

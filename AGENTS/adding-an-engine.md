@@ -39,12 +39,18 @@ emit another engine's schema, because it does not own the schema.
 
 Its own workspace, matching the others:
 
+Match the *current* version the rest of the workspace is on — read it from a
+sibling dialect crate's `Cargo.toml` rather than copying the number below,
+which will drift. As of this writing that is `0.2.0` locally, with `0.3.0` the
+next release (`AGENTS/publishing.md`); a new crate's own version starts wherever
+the others are, not at `0.1.x`.
+
 ```toml
 [workspace]
 
 [package]
 name = "openehr-<engine>"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.90"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
@@ -55,8 +61,8 @@ repository = "https://github.com/openehr-rust/openehr-rust"
 readme = "README.md"
 
 [dependencies]
-openehr = { path = "../openehr", version = "0.1.1" }
-openehr-store = { path = "../openehr-store", version = "0.1.1" }
+openehr = { path = "../openehr", version = "0.2.0" }
+openehr-store = { path = "../openehr-store", version = "0.2.0" }
 serde_json = { version = "1", features = ["preserve_order"] }
 
 [lints.rust]
@@ -169,5 +175,6 @@ live run backs it.
 - [ ] `spec/14-<engine>-dialect.md` written, marked **proposed** (`X15.6`).
 - [ ] `openehr-<engine>-fuzz` crate with `quote` and `col_sql` targets, seeded,
       wired into CI, and `publish = false`.
-- [ ] `LICENSE.md` present; licence expression matches the other seven (`W0.22`).
+- [ ] `LICENSE.md` present; licence expression matches the other published
+      crates — currently eight (`W0.22`).
 - [ ] `cargo clippy --all-targets` clean at pedantic.
