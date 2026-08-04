@@ -111,8 +111,9 @@ than either alone.
 
 ## What is in this repository
 
-**Fifteen crates**, each its own Cargo workspace: eight that are published, and
-seven fuzz harnesses that are not.
+**Seventeen crates**, each its own Cargo workspace: eight that are published,
+and nine that are not — `openehr-loco`, `openehr-assets`, and seven fuzz
+harnesses.
 
 ### The published crates
 
@@ -131,6 +132,15 @@ The [conformance matrix](databases/conformance-matrix.md) is the detailed
 version of that last column and is the one to trust.
 
 All eight are on crates.io at **0.2.0**.
+
+### The service and tooling crates
+
+Not published, and not on the conformance ladder — see `W0.32` above.
+
+| Crate | Role |
+| --- | --- |
+| [`openehr-loco`](../openehr-loco) | HTTP API server over `openehr-sqlite`, on Axum and Loco |
+| [`openehr-assets`](../openehr-assets) | regenerates the committed schema/DDL assets; fails the build if one is stale |
 
 ### The fuzz crates
 
