@@ -486,6 +486,7 @@ an empty slice hashes nothing, builds an empty chain, and `verify` reports
 | `openehr/rm/common.rs` + `data_types/quantity.rs` | **72 of 386** | 1, equivalent | the change-control envelope's accessors, and the clinical markers |
 | `openehr/rm/ehr.rs` + `rm/data_structures.rs` | **59 of 313** | **0** | `EHR_STATUS`'s two flags, and a duplicated calendar (`A-33`) |
 | `openehr/rm/data_types/{text,encapsulated,basic}.rs` + `base/interval.rs` | **53 of 228** | **3, all equivalent** | `EncapsulatedAttrs` was unreachable (`A-34`); `Interval::contains`'s strict comparison |
+| `openehr/rm/demographic.rs` + `terminology.rs` + `base/{object_ref,uid}.rs` | **49 of 148** | **0** | `ObjectRef::is_local`, `Role::was_held_on` — closes `openehr`'s measurable surface |
 
 `record.rs` is the one worth reading twice. A test called
 `the_attributes_that_used_to_be_dropped_are_persisted` existed, named for
@@ -820,6 +821,39 @@ mapped SNOMED CT code), and several `Display` impls that could print nothing.
 Three survivors remain in `base64::{encode,decode}`, where `|` could become
 `^`: both operators agree because the implementation always assembles bits
 into disjoint, non-overlapping ranges, which is what the algorithm is.
+
+**The last four `openehr` modules closed out the crate's measurable surface,
+and repeated the accessor pattern once more.** `terminology.rs` — the code-set
+lookups everything else depends on — came through with **zero** survivors,
+consistent with being exercised by every other module's tests.
+
+The two worth naming: `ObjectRef::is_local` could be a constant or have its
+comparison inverted. This is the flag an access-control decision reads first —
+a reference into this system's own identifier space is one the system can
+resolve and enforce policy on; a foreign one is not. And `Role::was_held_on`
+could answer a constant — the predicate behind "was this person the on-call
+registrar at the time?", where a wrong answer is a wrongly attributed
+signature. It joins `Capability::was_valid_on`, already tested, as the same
+question asked of a role rather than a credential.
+
+Also closed: `Party::type_name` — one wrong constant for any of the five
+variants would deserialize a `PERSON` as an `ORGANISATION` under a digest that
+still verifies — and `Uuid`'s `Hash`, which could be replaced with a no-op.
+`Hash` has to agree with the type's hand-written case-insensitive `PartialEq`,
+or a `HashSet` keyed on an `OBJECT_ID` silently gains a duplicate entry per
+case spelling of what is really one identity; the test proves the point with
+an actual `HashSet`.
+
+**Two of the survivors from the first pass were gaps in the tests, not the
+code, and both repeat lessons from earlier in this register.** The first
+`Uuid::hash` test used a `HashSet` and could not distinguish a real hash from a
+no-op: `HashSet` correctness only requires equal keys to hash equal, so a
+constant hash is pathological but not wrong, and lookup still works via `Eq`.
+Fixed by hashing through `DefaultHasher` directly and comparing the digests.
+And four `demographic.rs` accessors — `Capability::time_validity`,
+`PartyRelationship::details`, `PartyAttrs::details`, `Role::time_validity` —
+had only their absent case asserted, the same "asserting `None` is half a
+test" mistake recorded during the `rm/ehr.rs` round.
 
 `store.rs` produced the one that would have mattered most in production:
 `create_contribution` could return `Ok(())` **without inserting anything** and

@@ -366,4 +366,80 @@ mod tests {
         );
         assert!("".parse::<Uid>().is_err());
     }
+
+    /// An `IsoOid` renders as its own text and splits into its arcs.
+    ///
+    /// `Display` could print nothing (`lib:A-09`), which is silent everywhere
+    /// an OID appears in an error message or a rendered path.
+    #[test]
+    fn an_iso_oid_renders_itself_and_splits_into_arcs() {
+        let oid: IsoOid = "1.3.6.1.4.1".parse().unwrap();
+        assert_eq!(oid.to_string(), "1.3.6.1.4.1");
+        assert_eq!(oid.arcs().collect::<Vec<_>>(), ["1", "3", "6", "1", "4", "1"]);
+        let other: IsoOid = "2.16.840".parse().unwrap();
+        assert_ne!(oid.to_string(), other.to_string());
+    }
+
+    /// A `Uuid`'s `Hash` agrees with its case-insensitive `PartialEq`.
+    ///
+    /// `Hash` could be replaced with a no-op (`lib:A-09`). Two UUIDs differing
+    /// only in case already compare equal — that is the whole point of the
+    /// hand-written `PartialEq` — so `Hash` must agree, or a `HashSet`/
+    /// `HashMap` keyed on an `OBJECT_ID` silently gains a duplicate entry per
+    /// case spelling of what is really one identity.
+    #[test]
+    fn a_uuids_hash_agrees_with_its_case_insensitive_equality() {
+        use core::hash::{Hash, Hasher};
+        use std::collections::hash_map::DefaultHasher;
+
+        let lower: Uuid = "6ba7b810-9dad-11d1-80b4-00c04fd430c8".parse().unwrap();
+        let upper: Uuid = "6BA7B810-9DAD-11D1-80B4-00C04FD430C8".parse().unwrap();
+        assert_eq!(lower, upper);
+        assert_eq!(lower.to_string(), "6ba7b810-9dad-11d1-80b4-00c04fd430c8");
+        assert_ne!(lower.to_string(), upper.to_string(), "text is preserved lexically");
+
+        let digest = |u: &Uuid| {
+            let mut h = DefaultHasher::new();
+            u.hash(&mut h);
+            h.finish()
+        };
+
+        // The property `Hash` must have: equal values hash equal. A HashSet
+        // cannot distinguish this from a no-op `hash` — every key still lands
+        // correctly via `Eq` even if every bucket is the same one, so testing
+        // set membership alone is not a test of `Hash` at all. Calling the
+        // hasher directly is.
+        assert_eq!(digest(&lower), digest(&upper));
+
+        // And the no-op mutant is caught here: two UUIDs that are genuinely
+        // different must not hash identically under a real implementation
+        // (not guaranteed by the `Hash` contract in general, but true for this
+        // one, and false for `hash` replaced with `()`, which hashes nothing
+        // and gives every value the hasher's untouched initial state).
+        let other: Uuid = "6BA7B810-9DAD-11D1-80B4-00C04FD430C9".parse().unwrap();
+        assert_ne!(lower, other);
+        assert_ne!(digest(&lower), digest(&other), "hash was a no-op");
+
+        let mut set = std::collections::HashSet::new();
+        set.insert(lower);
+        set.insert(upper);
+        set.insert(other);
+        assert_eq!(set.len(), 2, "the same UUID in two cases was stored as two entries");
+    }
+
+    /// An `InternetId` reports its dot-separated labels and renders itself.
+    ///
+    /// `labels` could answer an empty iterator or a single wrong label
+    /// (`lib:A-09`), and `Display` could print nothing.
+    #[test]
+    fn an_internet_id_reports_its_labels_and_renders_itself() {
+        let id: InternetId = "ehr1.nhs.uk".parse().unwrap();
+        assert_eq!(id.labels().collect::<Vec<_>>(), ["ehr1", "nhs", "uk"]);
+        assert_eq!(id.to_string(), "ehr1.nhs.uk");
+        assert_eq!(id.as_str(), "ehr1.nhs.uk");
+
+        let single: InternetId = "localhost".parse().unwrap();
+        assert_eq!(single.labels().collect::<Vec<_>>(), ["localhost"]);
+        assert_ne!(single.to_string(), id.to_string());
+    }
 }

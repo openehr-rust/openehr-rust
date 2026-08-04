@@ -437,4 +437,126 @@ mod tests {
             LocatableRef::new("local", "COMPOSITION", uid, Some("content[0]".into())).unwrap();
         assert_eq!(with_slash.uri(), without.uri());
     }
+
+    /// An `OBJECT_REF` reports every attribute it was built with, and knows
+    /// its own locality.
+    ///
+    /// `is_local` had three surviving mutants (`lib:A-09`): the comparison
+    /// could invert or become a constant. This is the flag an access-control
+    /// decision reads first — a reference into this system's own identifier
+    /// space is one this system can resolve and enforce policy on; a foreign
+    /// one is not. `namespace` and `type_name` could also each answer a
+    /// constant, and `Display` could print nothing.
+    #[test]
+    fn an_object_ref_reports_its_locality_and_every_field() {
+        let uid = HierObjectId::from_uid_str("6BA7B810-9DAD-11D1-80B4-00C04FD430C8").unwrap();
+        let local = ObjectRef::new(
+            "local",
+            "VERSIONED_COMPOSITION",
+            ObjectId::HierObjectId(uid.clone()),
+        )
+        .unwrap();
+        assert!(local.is_local());
+        assert_eq!(local.namespace(), "local");
+        assert_eq!(local.type_name(), "VERSIONED_COMPOSITION");
+        assert_eq!(local.to_string(), format!("local:{uid}"));
+
+        // A different namespace is not local, and a different type name must
+        // read back as itself and not as the first reference's.
+        let foreign = ObjectRef::new(
+            "other.example.org",
+            "EHR",
+            ObjectId::HierObjectId(uid.clone()),
+        )
+        .unwrap();
+        assert!(
+            !foreign.is_local(),
+            "a reference into a foreign namespace was reported local"
+        );
+        assert_ne!(foreign.namespace(), local.namespace());
+        assert_ne!(foreign.type_name(), local.type_name());
+        assert_ne!(foreign.to_string(), local.to_string());
+
+        // An empty type name is refused.
+        assert!(ObjectRef::new("local", "", ObjectId::HierObjectId(uid)).is_err());
+    }
+
+    /// A `PARTY_REF` is constrained to the demographic classes, and reports
+    /// them back.
+    ///
+    /// `namespace` and `type_name` could each be a constant, and `Display`
+    /// could print nothing. `PERMITTED_TYPES` is enforced at construction
+    /// (`lib:S1.x`-adjacent: a wrong reference should fail to compile a valid
+    /// record, not need fixing later), so what the accessor reports is exactly
+    /// what the constructor already checked.
+    #[test]
+    fn a_party_ref_is_constrained_and_reports_what_it_was_built_with() {
+        let uid = HierObjectId::from_uid_str("6BA7B810-9DAD-11D1-80B4-00C04FD430C8").unwrap();
+        for class in PartyRef::PERMITTED_TYPES {
+            let r = PartyRef::new("demographic", class, ObjectId::HierObjectId(uid.clone()))
+                .unwrap_or_else(|e| panic!("{class}: {e}"));
+            assert_eq!(r.type_name(), class, "a permitted class was misreported");
+        }
+        let r = PartyRef::new("demographic", "PERSON", ObjectId::HierObjectId(uid.clone())).unwrap();
+        assert_eq!(r.namespace(), "demographic");
+        assert_eq!(r.to_string(), format!("demographic:{uid}"));
+
+        let other = PartyRef::new("registry", "ORGANISATION", ObjectId::HierObjectId(uid.clone())).unwrap();
+        assert_ne!(other.namespace(), r.namespace());
+        assert_ne!(other.type_name(), r.type_name());
+        assert_ne!(other.to_string(), r.to_string());
+
+        // A class outside the demographic model does not compile a valid
+        // reference — a `COMPOSITION` is not a party.
+        assert!(PartyRef::new("demographic", "COMPOSITION", ObjectId::HierObjectId(uid)).is_err());
+    }
+
+    /// A `LOCATABLE_REF` reports its namespace and type, and its `Display`
+    /// prints the full URI.
+    ///
+    /// `namespace` and `type_name` could each be a constant, and `Display`
+    /// could print nothing — this is the reference an `ATTESTATION` uses to
+    /// point at one `ELEMENT` rather than a whole `COMPOSITION`, so a wrong
+    /// namespace or type points the attestation at the wrong record.
+    #[test]
+    fn a_locatable_ref_reports_its_fields_and_renders_its_uri() {
+        let id = UidBasedId::from(
+            "6BA7B810-9DAD-11D1-80B4-00C04FD430C8"
+                .parse::<HierObjectId>()
+                .unwrap(),
+        );
+        let r = LocatableRef::new(
+            "local",
+            "VERSIONED_COMPOSITION",
+            id.clone(),
+            Some("/content[at0001]".to_owned()),
+        )
+        .unwrap();
+        assert_eq!(r.namespace(), "local");
+        assert_eq!(r.type_name(), "VERSIONED_COMPOSITION");
+        assert_eq!(r.path(), Some("/content[at0001]"));
+        assert_eq!(r.to_string(), r.uri());
+        assert!(r.to_string().contains("/content[at0001]"));
+
+        let other = LocatableRef::new("local", "EHR", id, None).unwrap();
+        assert_ne!(other.type_name(), r.type_name());
+        assert_ne!(other.to_string(), r.to_string());
+    }
+
+    /// An `ACCESS_GROUP_REF` always names `ACCESS_GROUP`, whatever the mutant
+    /// says.
+    ///
+    /// `namespace` and `type_name` could each be a constant, and `Display`
+    /// could print nothing. This is what `EHR_ACCESS.GroupSettings` names a
+    /// group of subjects by (`lib:A-09` and the `access.rs` round earlier).
+    #[test]
+    fn an_access_group_ref_reports_its_namespace_and_fixed_type() {
+        let uid = HierObjectId::from_uid_str("6BA7B810-9DAD-11D1-80B4-00C04FD430C8").unwrap();
+        let group = AccessGroupRef::new("local", ObjectId::HierObjectId(uid.clone())).unwrap();
+        assert_eq!(group.namespace(), "local");
+        assert_eq!(group.type_name(), "ACCESS_GROUP");
+
+        let other = AccessGroupRef::new("registry", ObjectId::HierObjectId(uid)).unwrap();
+        assert_ne!(other.namespace(), group.namespace());
+    }
 }

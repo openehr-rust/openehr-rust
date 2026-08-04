@@ -703,6 +703,7 @@ mod tests {
         // period is unanswered, and answering yes is how an unregistered
         // signature passes review.
         assert_eq!(capability.was_valid_on(&when), None);
+        assert_eq!(capability.time_validity(), None);
 
         let dated = capability.with_time_validity(
             Interval::closed(
@@ -712,6 +713,7 @@ mod tests {
             .unwrap(),
         );
         assert_eq!(dated.was_valid_on(&when), Some(true));
+        assert!(dated.time_validity().is_some(), "a recorded validity was dropped");
     }
 
     #[test]
@@ -735,5 +737,313 @@ mod tests {
             .unwrap(),
         );
         assert!(Party::Role(role).actor().is_none());
+    }
+
+    /// A `PARTY_IDENTITY`'s purpose is taken from its `name`.
+    ///
+    /// `purpose` could answer `""` or `"xyzzy"` for every identity
+    /// (`lib:A-09`), which is the field that tells a legal identity from a
+    /// preferred name or an alias — the same person can carry all three, and a
+    /// constant purpose makes them indistinguishable.
+    #[test]
+    fn a_party_identity_reports_its_purpose_from_its_name() {
+        let legal = PartyIdentity::new(
+            LocatableAttrs::named("legal identity", "at0001").unwrap(),
+            identity().details().clone(),
+        );
+        assert_eq!(legal.purpose(), "legal identity");
+
+        let alias = PartyIdentity::new(
+            LocatableAttrs::named("alias", "at0001").unwrap(),
+            identity().details().clone(),
+        );
+        assert_eq!(alias.purpose(), "alias");
+        assert_ne!(legal.purpose(), alias.purpose());
+    }
+
+    /// A `CONTACT`'s time validity and addresses are reported as recorded,
+    /// and `PARTY_RELATIONSHIP`'s optional attributes arrive by
+    /// deserialization.
+    ///
+    /// `Contact::time_validity`, `PartyRelationship::details` and
+    /// `::time_validity` could each answer `None` for every instance
+    /// (`lib:A-09`); the last two have no builder, so JSON is the only path
+    /// that reaches them.
+    #[test]
+    fn a_contact_and_a_relationship_report_their_optional_attributes() {
+        let addr = Address::new(
+            LocatableAttrs::named("home address", "at0001").unwrap(),
+            identity().details().clone(),
+        );
+
+        let bare = Contact::new(LocatableAttrs::named("home", "at0001").unwrap(), vec![addr.clone()])
+            .unwrap();
+        assert_eq!(bare.time_validity(), None);
+        assert_eq!(bare.addresses().len(), 1);
+
+        let period = Interval::closed(
+            DvDate::new("2015-01-01").unwrap(),
+            DvDate::new("2020-12-31").unwrap(),
+        )
+        .unwrap();
+        let dated =
+            Contact::new(LocatableAttrs::named("home", "at0001").unwrap(), vec![addr])
+                .unwrap()
+                .with_time_validity(period.clone());
+        assert_eq!(dated.time_validity(), Some(&period));
+
+        // PARTY_RELATIONSHIP: no builder for `details` or `time_validity`.
+        let bare_rel = PartyRelationship::new(
+            LocatableAttrs::named("next of kin", "at0001").unwrap(),
+            PartyRef::new(
+                "demographic",
+                "PERSON",
+                ObjectId::HierObjectId(
+                    HierObjectId::from_uid_str("87284370-2D4B-4E3D-A3F3-F303D2F4F34B").unwrap(),
+                ),
+            )
+            .unwrap(),
+            PartyRef::new(
+                "demographic",
+                "PERSON",
+                ObjectId::HierObjectId(
+                    HierObjectId::from_uid_str("11111111-2222-3333-4444-555555555555").unwrap(),
+                ),
+            )
+            .unwrap(),
+        );
+        assert_eq!(bare_rel.details(), None);
+        assert_eq!(bare_rel.time_validity(), None);
+        assert_eq!(bare_rel.source().namespace(), "demographic");
+        assert_ne!(bare_rel.source().id(), bare_rel.target().id());
+
+        let json = serde_json::to_value(&bare_rel).expect("serialize");
+        let mut object = json.as_object().expect("an object").clone();
+        object.insert(
+            "time_validity".to_owned(),
+            serde_json::to_value(&period).expect("serialize"),
+        );
+        let with_validity: PartyRelationship =
+            serde_json::from_value(serde_json::Value::Object(object)).expect("deserialize");
+        assert!(
+            with_validity.time_validity().is_some(),
+            "a recorded relationship validity was dropped"
+        );
+
+        object = serde_json::to_value(&bare_rel)
+            .expect("serialize")
+            .as_object()
+            .expect("an object")
+            .clone();
+        object.insert(
+            "details".to_owned(),
+            serde_json::to_value(identity().details()).expect("serialize"),
+        );
+        let with_details: PartyRelationship =
+            serde_json::from_value(serde_json::Value::Object(object)).expect("deserialize");
+        assert!(
+            with_details.details().is_some(),
+            "recorded relationship details were dropped"
+        );
+    }
+
+    /// `PARTY`'s collections — identities, contacts, and relationships — are
+    /// reported in full, and `ACTOR`'s languages and roles are too.
+    ///
+    /// Six accessors could each answer an empty slice (`lib:A-09`), which
+    /// silently discards every contact address or relationship but the
+    /// constructor's own required first identity.
+    #[test]
+    fn party_and_actor_attributes_report_every_element_they_hold() {
+        let contact = Contact::new(
+            LocatableAttrs::named("home", "at0001").unwrap(),
+            vec![Address::new(
+                LocatableAttrs::named("home address", "at0002").unwrap(),
+                identity().details().clone(),
+            )],
+        )
+        .unwrap();
+        let relationship = PartyRelationship::new(
+            LocatableAttrs::named("next of kin", "at0002").unwrap(),
+            PartyRef::new(
+                "demographic",
+                "PERSON",
+                ObjectId::HierObjectId(
+                    HierObjectId::from_uid_str("87284370-2D4B-4E3D-A3F3-F303D2F4F34B").unwrap(),
+                ),
+            )
+            .unwrap(),
+            PartyRef::new(
+                "demographic",
+                "PERSON",
+                ObjectId::HierObjectId(
+                    HierObjectId::from_uid_str("11111111-2222-3333-4444-555555555555").unwrap(),
+                ),
+            )
+            .unwrap(),
+        );
+
+        let attrs = PartyAttrs::new(
+            attrs_with_uid("Person", "openEHR-DEMOGRAPHIC-PERSON.person.v1"),
+            vec![identity()],
+        )
+        .unwrap()
+        .with_contact(contact)
+        .with_relationship(relationship);
+        assert_eq!(attrs.identities().len(), 1);
+        assert_eq!(attrs.contacts().len(), 1, "a contact was dropped");
+        assert_eq!(attrs.relationships().len(), 1, "a relationship was dropped");
+        assert_eq!(attrs.details(), None);
+        let json = serde_json::to_value(&attrs).expect("serialize");
+        let mut object = json.as_object().expect("an object").clone();
+        object.insert(
+            "details".to_owned(),
+            serde_json::to_value(identity().details()).expect("serialize"),
+        );
+        let with_details: PartyAttrs =
+            serde_json::from_value(serde_json::Value::Object(object)).expect("deserialize");
+        assert!(with_details.details().is_some(), "recorded party details were dropped");
+
+        let bare_actor = ActorAttrs::default();
+        assert!(bare_actor.languages().is_empty());
+        assert!(bare_actor.roles().is_empty());
+
+        let role_ref = PartyRef::new(
+            "demographic",
+            "ROLE",
+            ObjectId::HierObjectId(
+                HierObjectId::from_uid_str("22222222-3333-4444-5555-666666666666").unwrap(),
+            ),
+        )
+        .unwrap();
+        let full_actor = ActorAttrs::default()
+            .with_language(DvText::new("en").unwrap())
+            .with_role(role_ref.clone());
+        assert_eq!(full_actor.languages().len(), 1, "a language was dropped");
+        assert_eq!(full_actor.roles().len(), 1, "a role was dropped");
+        assert_eq!(full_actor.roles()[0], role_ref);
+    }
+
+    /// A `ROLE` reports its capabilities and whether it was held on a given
+    /// date.
+    ///
+    /// `capabilities` could answer an empty slice, `time_validity` could
+    /// answer `None`, `was_held_on` could answer a constant, and
+    /// `rm_type_name` could return the wrong string (`lib:A-09`). This is the
+    /// question "was this person the on-call registrar at the time?", and a
+    /// wrong answer here is a wrongly attributed signature.
+    #[test]
+    fn a_role_reports_its_capabilities_and_whether_it_was_held_on_a_date() {
+        let capability = Capability::new(
+            LocatableAttrs::named("GMC registration", "at0001").unwrap(),
+            identity().details().clone(),
+        );
+        let performer = PartyRef::new(
+            "demographic",
+            "PERSON",
+            ObjectId::HierObjectId(
+                HierObjectId::from_uid_str("11111111-2222-3333-4444-555555555555").unwrap(),
+            ),
+        )
+        .unwrap();
+        let party = PartyAttrs::new(
+            attrs_with_uid("consultant cardiologist", "openEHR-DEMOGRAPHIC-ROLE.role.v1"),
+            vec![identity()],
+        )
+        .unwrap();
+
+        let unrecorded = Role::new(party.clone(), performer.clone());
+        assert!(unrecorded.capabilities().is_empty());
+        assert_eq!(unrecorded.time_validity(), None);
+        // Not Some(false) either: silence must not resolve to an answer in
+        // either direction.
+        let when = DvDate::new("2019-06-01").unwrap();
+        assert_eq!(unrecorded.was_held_on(&when), None);
+        assert_eq!(Locatable::rm_type_name(&unrecorded), "ROLE");
+
+        let period = Interval::closed(
+            DvDate::new("2015-01-01").unwrap(),
+            DvDate::new("2020-12-31").unwrap(),
+        )
+        .unwrap();
+        let held = Role::new(party, performer)
+            .with_capability(capability)
+            .with_time_validity(period.clone());
+        assert_eq!(held.capabilities().len(), 1, "a capability was dropped");
+        assert_eq!(held.time_validity(), Some(&period), "a recorded validity was dropped");
+        assert_eq!(held.was_held_on(&when), Some(true));
+        let outside = DvDate::new("2025-01-01").unwrap();
+        assert_eq!(
+            held.was_held_on(&outside),
+            Some(false),
+            "outside the recorded period was reported held"
+        );
+    }
+
+    /// `Party::type_name` names each of the five variants correctly, and
+    /// `Party::actor` is `None` only for `ROLE`.
+    ///
+    /// `type_name` could return one wrong constant for every variant, and it
+    /// is what goes into `_type` in canonical JSON — so a `PERSON` would
+    /// deserialize as an `ORGANISATION` under a digest that still verifies.
+    #[test]
+    fn every_party_kind_names_itself_and_only_a_role_has_no_actor() {
+        let party_of = |class: &str, node: &str| {
+            PartyAttrs::new(attrs_with_uid(class, node), vec![identity()]).unwrap()
+        };
+        let cases: Vec<(Party, &str)> = vec![
+            (
+                Party::Person(Person::new(party_of(
+                    "Person",
+                    "openEHR-DEMOGRAPHIC-PERSON.person.v1",
+                ))),
+                "PERSON",
+            ),
+            (
+                Party::Organisation(Organisation::new(party_of(
+                    "Organisation",
+                    "openEHR-DEMOGRAPHIC-ORGANISATION.organisation.v1",
+                ))),
+                "ORGANISATION",
+            ),
+            (
+                Party::Group(Group::new(party_of(
+                    "Group",
+                    "openEHR-DEMOGRAPHIC-GROUP.group.v1",
+                ))),
+                "GROUP",
+            ),
+            (
+                Party::Agent(Agent::new(party_of(
+                    "Agent",
+                    "openEHR-DEMOGRAPHIC-AGENT.agent.v1",
+                ))),
+                "AGENT",
+            ),
+        ];
+
+        let mut seen = Vec::new();
+        for (party, class) in &cases {
+            assert_eq!(party.type_name(), *class);
+            assert!(party.actor().is_some(), "{class} should be an actor");
+            seen.push(*class);
+        }
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(seen.len(), cases.len(), "two party kinds share a type name");
+
+        let role = Party::Role(Role::new(
+            party_of("Role", "openEHR-DEMOGRAPHIC-ROLE.role.v1"),
+            PartyRef::new(
+                "demographic",
+                "PERSON",
+                ObjectId::HierObjectId(
+                    HierObjectId::from_uid_str("11111111-2222-3333-4444-555555555555").unwrap(),
+                ),
+            )
+            .unwrap(),
+        ));
+        assert_eq!(role.type_name(), "ROLE");
+        assert!(role.actor().is_none(), "a ROLE was reported as an ACTOR");
     }
 }
