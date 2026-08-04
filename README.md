@@ -41,6 +41,8 @@ assert_eq!(back, composition);
 | [`openehr-mariadb`](openehr-mariadb) | MariaDB 11.4 dialect | **Schema** |
 | [`openehr-mssql`](openehr-mssql) | SQL Server dialect | **Dialect** |
 | [`openehr-oracle`](openehr-oracle) | Oracle Database dialect | **Dialect** |
+| [`openehr-loco`](openehr-loco) | An HTTP API server over `openehr-sqlite`, on Axum and Loco | not on the ladder |
+| [`openehr-assets`](openehr-assets) | Regenerates the committed DDL/schema files; fails the build if they are stale | tooling |
 
 **Levels are claims about what has been verified**, not about what has been
 written:
@@ -52,6 +54,11 @@ written:
   shared conformance suite passing.
 - **Verified** — Store, re-checked in CI on every commit. `openehr-sqlite` is
   here; it is the only crate at Store level and so the only one eligible.
+
+`openehr-loco` is **outside this ladder entirely**: every rung on it is defined
+by DDL, a `Store` implementation, or a database server, and an HTTP service is
+none of those (`W0.32`). It states evidence instead of a level — see
+[its own README](openehr-loco/README.md).
 
 Full definitions in [`spec/index.md`](spec/index.md); current status in
 [`openehr-store/spec/conformance.md`](openehr-store/spec/conformance.md).
@@ -258,6 +265,30 @@ Needs `podman` or `docker`. It provisions the engine, applies the DDL, applies i
 **again** to prove idempotence, seeds a row, and confirms the append-only tables
 refuse `UPDATE` and `DELETE` with that row present and intact afterwards.
 
+## An HTTP service, if you want one
+
+None of the above talks HTTP. [`openehr-loco`](openehr-loco) is a separate,
+optional, **not published** crate that puts a RESTful API in front of
+`openehr-sqlite`: PASETO `v4.public` bearer auth (verify-only — this service
+never signs), `410 Gone` for a deleted composition against `404` for one that
+never existed, `403`/`422` split for "not the committer" against "the committer
+cannot be identified", and `If-Match` concurrency control. 53 tests, including
+`tests/http.rs` serving real requests through Loco's own router.
+
+It depends on the storage crates; nothing depends on it, and deleting it changes
+nothing else (`S1.7`). Its job is narrow by design — translate HTTP to store
+calls and get the status codes right — and it adds no clinical behaviour of its
+own. Details, and what it does not yet demonstrate, are in
+[its own README](openehr-loco/README.md).
+
+```sh
+cd openehr-loco
+OPENEHR_SQLITE_PATH=openehr.sqlite3 \
+OPENEHR_PASETO_PUBLIC_KEYS=k4.public.… \
+  cargo run -- start
+# fails closed with no server if the key is missing — see its README
+```
+
 ## How openEHR is stored, and why it is not shredded
 
 FHIR fixes the shape of a `Patient` at specification time, so you can generate a
@@ -383,14 +414,18 @@ openehr-store/             engine-agnostic persistence
   scripts/verify-schema.sh Dialect -> Schema verification
 openehr-<engine>/          one Dialect each; sqlite also has a Store
   spec/14-<engine>-dialect.md   that dialect's annex and departures
+openehr-loco/              HTTP API server, outside the conformance ladder; not published
+openehr-assets/            regenerates committed DDL/schema files; not published
 openehr-fuzz/              fuzz harness for the RM parsers; not published
 openehr-<engine>-fuzz/     fuzz harness per dialect; not published
   fuzz_targets/, corpus/   17 targets in all, committed seed corpora
 .github/workflows/ci.yml   test, examples, schema, fuzz, claims
 ```
 
-Fifteen crates, **each its own Cargo workspace** — run cargo from inside a
-crate directory. Eight are published; the seven fuzz harnesses are not.
+Seventeen crates, **each its own Cargo workspace** — run cargo from inside a
+crate directory. Eight are published (`openehr`, `openehr-store`, and the six
+dialect crates); the other nine — `openehr-loco`, `openehr-assets`, and the
+seven fuzz harnesses — are not.
 
 ## Contributing
 
@@ -402,7 +437,8 @@ Read [`AGENTS.md`](AGENTS.md), and [`AGENTS/`](AGENTS/index.md) for topic guides
 
 ```sh
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \
-         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle; do
+         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
+         openehr-loco openehr-assets; do
   (cd "$d" && cargo test --quiet && cargo clippy --all-targets --quiet) \
     || echo "FAIL $d"
 done
