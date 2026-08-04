@@ -94,8 +94,15 @@ macro_rules! temporal {
             /// Inherits the partial order of the underlying ISO 8601 type: two
             /// values of different precision whose known components agree are
             /// **not** ordered.
+            ///
+            /// This wrapper's own `Eq` (derived) is still lexical while this
+            /// is semantic, which is the same `lib:A-32` divergence the inner
+            /// type declares — kept exactly as it already behaved. Only the
+            /// inner type's comparison stopped being a `PartialOrd` impl
+            /// (`Date::semantic_cmp` and siblings), so it is called by name
+            /// here rather than through the trait.
             fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-                self.value.partial_cmp(&other.value)
+                self.value.semantic_cmp(&other.value)
             }
         }
 

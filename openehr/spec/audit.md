@@ -101,9 +101,10 @@ in the documentation, which is the class this register most exists to catch.
 | A-29 | Medium | The four temporal data types carry `DV_ORDERED` attributes and implement `DvOrdered`, but `path.rs` reached them on five classes only — a normal range on a `DV_DATE` was unreachable by path, against `Q12.7a` | **fixed** — nine classes; found by a test written to kill a mutant |
 | A-30 | Low | AQL has no node-id predicate shorthand: `c[at0001]` is refused, not read as `archetype_node_id = 'at0001'` | open, pinned by a test |
 | A-31 | Medium | The invariant scanner paired **any** uppercase literal with a following identifier-shaped one, so eleven pairs that were never a citation — `ROLE._type`, `EHR_STATUS._type`, `ELEMENT.archetype_node_id` and eight more — stood in the committed divergence register | **fixed** — the two must be one call's arguments; 74 named is unchanged, so no real citation was lost |
-| A-32 | Medium | `Eq` on the ISO 8601 types is lexical while `PartialOrd` compares instants, so `11:00:00Z` and `12:00:00+01:00` order `Equal` and are not `==` — contrary to the standard library's requirement that the two agree | **declared** as `D3.18a` and pinned; not resolved, because both halves are load-bearing |
+| A-32 | Medium | `Eq` on the ISO 8601 types was lexical while `PartialOrd` compared instants, so `11:00:00Z` and `12:00:00+01:00` ordered `Equal` and were not `==` — contrary to the standard library's requirement that the two agree | **fixed** — `PartialOrd`/`Ord` removed from `Date`, `Time`, `DateTime`, `Duration`; semantic ordering is now the plain method `semantic_cmp`, so no trait contract applies |
 | A-33 | Medium | The Gregorian leap rule was implemented **twice** — `base::iso8601` and `rm::data_structures` — byte-identical but for the fallback arm, and the second copy had never been run by any test | **fixed** — one implementation, `pub(crate)`; the interval-event arithmetic that used it is now tested against hand-computed dates |
 | A-34 | Medium | `DV_ENCAPSULATED`'s `charset` and `language` were preserved across a round trip and **unreadable** — `EncapsulatedAttrs` is exported but no type returned one, so a caller holding a `DV_MULTIMEDIA` or `DV_PARSABLE` could not ask what it declared | **fixed** — an `encapsulated()` accessor on both; found because the two accessors had no reachable caller to test |
+| A-35 | Medium | `DvDate`, `DvTime`, `DvDateTime`, `DvDuration` and `DataValue` have the same lexical-`Eq`-versus-semantic-`PartialOrd` shape `A-32` fixed at the base `iso8601` layer — found while fixing `A-32` and left alone because closing it would mean either the same trait-removal treatment rippling through `Interval<T>`'s `T: PartialOrd` bound everywhere it is instantiated (`Interval<DvDate>`, `Interval<DataValue>`, `Interval<i32>`, …), or a narrower fix scoped to just these types | open |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
 | A-13 | Medium | One `IF NOT EXISTS` flag covered two statements MySQL treats differently | **fixed**, verified on MySQL 8.4 |
@@ -681,14 +682,29 @@ spellings, not by reading — every result was identical. The other is a serde
 pinning that text would freeze a message for no benefit, the same judgement
 already recorded for `Debug for Mac`.
 
-**Writing those tests found `A-32`**, which is not a coverage gap at all: `Eq`
-on these types is derived and lexical while `PartialOrd` normalises to UTC, so
-`11:00:00Z` and `12:00:00+01:00` order `Equal` and are not `==`. That
-contradicts the standard library's requirement that the two agree. It is
-declared as `D3.18a` rather than fixed, because both halves are load-bearing —
-the text *is* the stored value (`db:M3.28`), `.5` and `.50` must round-trip, and
-`Hash` must agree with `Eq` — and a caller who sorts and then `dedup`s a
-collection of times gets both spellings of one instant.
+**Writing those tests found `A-32`**, which was not a coverage gap at all: `Eq`
+on these types is derived and lexical while `PartialOrd` normalised to UTC, so
+`11:00:00Z` and `12:00:00+01:00` ordered `Equal` and were not `==`. That
+contradicted the standard library's requirement that the two agree. First
+recorded as `D3.18a` and left declared rather than fixed, on the reasoning that
+both halves were load-bearing — the text *is* the stored value (`db:M3.28`),
+`.5` and `.50` must round-trip, and `Hash` must agree with `Eq` — and a caller
+who sorted and then `dedup`ed a collection of times got both spellings of one
+instant.
+
+**Later fixed properly, once asked to be:** `PartialOrd`/`Ord` do not have to
+exist for a type at all, and removing them from `Date`, `Time`, `DateTime` and
+`Duration` costs nothing that mattered — nobody needs `<` on a bare ISO 8601
+value to compile, only the *comparison itself* to be available. Semantic
+ordering is now the inherent method `semantic_cmp`, which returns the same
+`Option<Ordering>` as before under a name that does not claim to be `Ord`. The
+RM-level wrapper types (`DvDate`, `DvTime`, `DvDateTime`, `DvDuration`) keep
+their own `PartialOrd` impls unchanged — they now delegate to `semantic_cmp`
+internally rather than to the removed trait method — so `Interval<DvDate>`,
+`ReferenceRange`, and everything built on `DvOrdered` kept compiling and kept
+behaving identically. Those wrapper types have the same lexical-`Eq`-versus-
+semantic-order shape one layer up and were not touched; that is a sibling gap,
+not this one, and is left for whoever next has reason to look at it.
 
 **The Reference Model classes failed a third way: nothing read them back.**
 Almost every survivor in `rm/common.rs` was an *accessor returning a

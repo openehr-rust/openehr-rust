@@ -109,7 +109,7 @@ fn what_it_does() -> Result<(), Box<dyn std::error::Error>> {
 fn refuse_rather_than_guess() -> Result<(), Box<dyn std::error::Error>> {
     let may: Date = "2024-05".parse()?;
     let may_17: Date = "2024-05-17".parse()?;
-    assert_eq!(may.partial_cmp(&may_17), None); // May which day?
+    assert_eq!(may.semantic_cmp(&may_17), None); // May which day?
 
     let mg = DvQuantity::new(5.0, "mg")?;
     let ml = DvQuantity::new(5.0, "mL")?;

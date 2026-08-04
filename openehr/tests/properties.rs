@@ -192,7 +192,7 @@ proptest! {
         let a = DateTime::from_str(&s).unwrap();
         let b = DateTime::from_str(&a.to_string()).unwrap();
         prop_assert_eq!(a.as_str(), b.as_str());
-        prop_assert_eq!(a.partial_cmp(&b), Some(Ordering::Equal));
+        prop_assert_eq!(a.semantic_cmp(&b), Some(Ordering::Equal));
     }
 }
 
@@ -249,7 +249,7 @@ proptest! {
     #[test]
     fn comparison_is_reflexive(s in narrow_datetime_text()) {
         let a = DateTime::from_str(&s).unwrap();
-        prop_assert_eq!(a.partial_cmp(&a), Some(Ordering::Equal));
+        prop_assert_eq!(a.semantic_cmp(&a), Some(Ordering::Equal));
     }
 
     /// Antisymmetry: reversing the operands reverses the answer, and an
@@ -259,8 +259,8 @@ proptest! {
     /// passes reflexivity and fails this.
     #[test]
     fn comparison_is_antisymmetric((a, b) in two_datetimes()) {
-        let forward = a.partial_cmp(&b);
-        let backward = b.partial_cmp(&a);
+        let forward = a.semantic_cmp(&b);
+        let backward = b.semantic_cmp(&a);
         prop_assert_eq!(forward, backward.map(Ordering::reverse));
     }
 
@@ -278,9 +278,9 @@ proptest! {
             DateTime::from_str(&y).unwrap(),
             DateTime::from_str(&z).unwrap(),
         );
-        if a.partial_cmp(&b) == Some(Ordering::Less)
-            && b.partial_cmp(&c) == Some(Ordering::Less)
-            && let Some(ord) = a.partial_cmp(&c)
+        if a.semantic_cmp(&b) == Some(Ordering::Less)
+            && b.semantic_cmp(&c) == Some(Ordering::Less)
+            && let Some(ord) = a.semantic_cmp(&c)
         {
             prop_assert_eq!(ord, Ordering::Less, "a < b < c but not a < c");
         }
@@ -309,13 +309,13 @@ proptest! {
         let month: Date = format!("{y:04}-{m:02}").parse().unwrap();
         let day: Date = format!("{y:04}-{m:02}-{d:02}").parse().unwrap();
 
-        prop_assert_eq!(year.partial_cmp(&month), None, "year vs month in that year");
-        prop_assert_eq!(month.partial_cmp(&day), None, "month vs day in that month");
-        prop_assert_eq!(year.partial_cmp(&day), None, "year vs day in that year");
+        prop_assert_eq!(year.semantic_cmp(&month), None, "year vs month in that year");
+        prop_assert_eq!(month.semantic_cmp(&day), None, "month vs day in that month");
+        prop_assert_eq!(year.semantic_cmp(&day), None, "year vs day in that year");
         // …and in both directions, since incomparability is symmetric.
-        prop_assert_eq!(month.partial_cmp(&year), None);
-        prop_assert_eq!(day.partial_cmp(&month), None);
-        prop_assert_eq!(day.partial_cmp(&year), None);
+        prop_assert_eq!(month.semantic_cmp(&year), None);
+        prop_assert_eq!(day.semantic_cmp(&month), None);
+        prop_assert_eq!(day.semantic_cmp(&year), None);
     }
 
     /// A coarser value is still *decidably* ordered against a finer one that
@@ -329,8 +329,8 @@ proptest! {
     fn differing_known_components_are_still_decidable(y in 2020i32..=2023, m in 2u8..=12) {
         let year: Date = format!("{y:04}").parse().unwrap();
         let later: Date = format!("{:04}-{m:02}", y + 1).parse().unwrap();
-        prop_assert_eq!(year.partial_cmp(&later), Some(Ordering::Less));
-        prop_assert_eq!(later.partial_cmp(&year), Some(Ordering::Greater));
+        prop_assert_eq!(year.semantic_cmp(&later), Some(Ordering::Less));
+        prop_assert_eq!(later.semantic_cmp(&year), Some(Ordering::Greater));
     }
 
     /// Equal text implies equal ordering, and the converse where both are
@@ -340,6 +340,6 @@ proptest! {
     fn identical_text_compares_equal(s in narrow_datetime_text()) {
         let a = DateTime::from_str(&s).unwrap();
         let b = DateTime::from_str(&s).unwrap();
-        prop_assert_eq!(a.partial_cmp(&b), Some(Ordering::Equal));
+        prop_assert_eq!(a.semantic_cmp(&b), Some(Ordering::Equal));
     }
 }

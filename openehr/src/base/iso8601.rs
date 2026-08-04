@@ -17,15 +17,23 @@
 //! # Comparison is partial, on purpose
 //!
 //! ```
+//! use core::cmp::Ordering;
 //! use openehr::base::iso8601::Date;
 //!
 //! let may: Date = "2024-05".parse().unwrap();
 //! let june_first: Date = "2024-06-01".parse().unwrap();
 //! let may_17: Date = "2024-05-17".parse().unwrap();
 //!
-//! assert!(may < june_first);                     // decidable: different months
-//! assert_eq!(may.partial_cmp(&may_17), None);    // undecidable: May which day?
+//! // decidable: different months
+//! assert_eq!(may.semantic_cmp(&june_first), Some(Ordering::Less));
+//! // undecidable: May which day?
+//! assert_eq!(may.semantic_cmp(&may_17), None);
 //! ```
+//!
+//! `semantic_cmp` rather than [`PartialOrd`]: `Eq` on these types is lexical —
+//! the stored text is the record (`db:M3.28`) — and Rust requires a
+//! `PartialOrd` impl to agree with `Eq`. Chronological order and lexical
+//! equality are different questions here on purpose; see `lib:A-32`.
 //!
 //! Returning `Less` for the last comparison — the choice a "just complete it to
 //! the first of the month" implementation makes — would order a month-precision
@@ -151,14 +159,20 @@ impl Date {
     fn key(&self) -> (i32, u8, u8) {
         (self.year, self.month.unwrap_or(0), self.day.unwrap_or(0))
     }
-}
 
-impl PartialOrd for Date {
     /// Compares on the components both dates know.
     ///
     /// Returns `None` when the known components are equal but one date knows
     /// more than the other — see the module header for why that is not `Less`.
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    ///
+    /// Not [`PartialOrd`]: `Eq` here is lexical (`db:M3.28` — the text is the
+    /// stored value) and this comparison is semantic (chronological), and
+    /// Rust requires the two to agree wherever `PartialOrd` is implemented.
+    /// `Ord`/`PartialOrd` on a type whose `Eq` is lexical would be a silent
+    /// invitation to `sort().dedup()`, which uses `==` and would not remove a
+    /// duplicate instant written two different ways. See `lib:A-32`.
+    #[must_use]
+    pub fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
         let common = self.precision().min(other.precision());
         let (a, b) = (self.key(), other.key());
         let ord = match common {
@@ -356,14 +370,17 @@ impl Time {
     }
 }
 
-impl PartialOrd for Time {
+impl Time {
     /// Compares on the components both times know, after normalising to UTC.
     ///
     /// Returns `None` if exactly one side carries a UTC offset: a local time
     /// with no offset is unanchored, and could be up to 26 hours either side of
     /// the offset one. Also returns `None` when the known components agree but
     /// the precisions differ, for the reason given in the module header.
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    ///
+    /// Not [`PartialOrd`] — see [`Date::semantic_cmp`] (`lib:A-32`).
+    #[must_use]
+    pub fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self.offset, other.offset) {
             (Some(_), None) | (None, Some(_)) => return None,
             _ => {}
@@ -592,11 +609,14 @@ impl DateTime {
     }
 }
 
-impl PartialOrd for DateTime {
+impl DateTime {
     /// Compares the dates first; compares times only when the dates are equal
     /// to day precision. `None` propagates from either part.
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match self.date.partial_cmp(&other.date)? {
+    ///
+    /// Not [`PartialOrd`] — see [`Date::semantic_cmp`] (`lib:A-32`).
+    #[must_use]
+    pub fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
+        match self.date.semantic_cmp(&other.date)? {
             Ordering::Equal => {}
             ord => return Some(ord),
         }
@@ -605,7 +625,7 @@ impl PartialOrd for DateTime {
             // Same day, one with a time and one without: the timeless one could
             // be any instant that day.
             (None, Some(_)) | (Some(_), None) => None,
-            (Some(a), Some(b)) => a.partial_cmp(b),
+            (Some(a), Some(b)) => a.semantic_cmp(b),
         }
     }
 }
@@ -796,11 +816,17 @@ impl fmt::Display for Duration {
     }
 }
 
-impl PartialOrd for Duration {
+impl Duration {
     /// Orders by [`Duration::approx_seconds`], and refuses to order two
     /// durations whose approximations agree but whose component shapes differ —
     /// `P1M` and `P30D` are not comparable without a calendar anchor.
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    ///
+    /// Not [`PartialOrd`] — see [`Date::semantic_cmp`] (`lib:A-32`). Here the
+    /// "semantic" value being compared is length, not chronological position,
+    /// but the same lexical-`Eq`-versus-computed-order split applies: `.5`
+    /// and `.50` are different stored strings and the same length.
+    #[must_use]
+    pub fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
         let (a, b) = (self.approx_seconds(), other.approx_seconds());
         let calendarish = |d: &Self| d.years > 0 || d.months > 0;
         match a.partial_cmp(&b)? {
@@ -951,10 +977,10 @@ mod tests {
         let may_17: Date = "2024-05-17".parse().unwrap();
         // Mutation check for that behaviour: an implementation that completed
         // the missing day to 0 or 1 would answer Some(Less) here.
-        assert_eq!(may.partial_cmp(&may_17), None);
+        assert_eq!(may.semantic_cmp(&may_17), None);
         // And the coarser value is still ordered where the answer is decidable.
         let april: Date = "2024-04".parse().unwrap();
-        assert_eq!(april.partial_cmp(&may_17), Some(Ordering::Less));
+        assert_eq!(april.semantic_cmp(&may_17), Some(Ordering::Less));
     }
 
     #[test]
@@ -969,14 +995,14 @@ mod tests {
     fn offsets_normalise_before_comparison() {
         let london: Time = "12:00:00+01:00".parse().unwrap();
         let utc: Time = "11:00:00Z".parse().unwrap();
-        assert_eq!(london.partial_cmp(&utc), Some(Ordering::Equal));
+        assert_eq!(london.semantic_cmp(&utc), Some(Ordering::Equal));
     }
 
     #[test]
     fn a_local_time_is_not_comparable_with_an_anchored_one() {
         let local: Time = "11:00:00".parse().unwrap();
         let utc: Time = "11:00:00Z".parse().unwrap();
-        assert_eq!(local.partial_cmp(&utc), None);
+        assert_eq!(local.semantic_cmp(&utc), None);
     }
 
     #[test]
@@ -1045,13 +1071,13 @@ mod tests {
         // on the same day only by the accident of that anchor.
         let twelve_months: Duration = "P12M".parse().unwrap();
         let one_year: Duration = "P1Y".parse().unwrap();
-        assert_eq!(twelve_months.partial_cmp(&one_year), None);
+        assert_eq!(twelve_months.semantic_cmp(&one_year), None);
 
         // Where a calendar component is present but the approximations differ,
         // the answer is still decidable.
         let one_month: Duration = "P1M".parse().unwrap();
         let thirty_days: Duration = "P30D".parse().unwrap();
-        assert_eq!(one_month.partial_cmp(&thirty_days), Some(Ordering::Greater));
+        assert_eq!(one_month.semantic_cmp(&thirty_days), Some(Ordering::Greater));
     }
 
     /// A UTC offset renders with the sign it was parsed with.
@@ -1284,89 +1310,91 @@ mod tests {
         let t = |s: &str| s.parse::<Time>().unwrap();
 
         // Each component in isolation, so no other term can carry the result.
-        assert!(t("09:00:00") < t("10:00:00"));
-        assert!(t("09:00:00") < t("09:01:00"));
-        assert!(t("09:00:00") < t("09:00:01"));
-        assert!(t("09:00:00.100") < t("09:00:00.200"));
+        assert_eq!(t("09:00:00").semantic_cmp(&t("10:00:00")), Some(Ordering::Less));
+        assert_eq!(t("09:00:00").semantic_cmp(&t("09:01:00")), Some(Ordering::Less));
+        assert_eq!(t("09:00:00").semantic_cmp(&t("09:00:01")), Some(Ordering::Less));
+        assert_eq!(t("09:00:00.100").semantic_cmp(&t("09:00:00.200")), Some(Ordering::Less));
 
         // Across components, which is the only way the *scale* of each term is
         // tested. Comparing `09:00:00` with `09:01:00` cannot tell `m * 60_000`
         // from `m + 60_000` — addition is monotonic too, so the ordering comes
         // out the same. These pairs cross a boundary, so a term with the wrong
         // magnitude reverses them.
-        assert!(t("00:02:00") > t("00:00:59"), "a minute is not sixty seconds");
-        assert!(t("00:00:02") > t("00:00:00.500"), "a second is not 1000ms");
-        assert!(t("01:00:00") > t("00:59:59"), "an hour is not sixty minutes");
+        assert_eq!(t("00:02:00").semantic_cmp(&t("00:00:59")), Some(Ordering::Greater), "a minute is not sixty seconds");
+        assert_eq!(t("00:00:02").semantic_cmp(&t("00:00:00.500")), Some(Ordering::Greater), "a second is not 1000ms");
+        assert_eq!(t("01:00:00").semantic_cmp(&t("00:59:59")), Some(Ordering::Greater), "an hour is not sixty minutes");
         // The same for the fraction's padding: `.5` is 500ms, not 5000ms, so
         // it is *less* than a whole second. A pad loop that ran once too often
         // makes it greater.
-        assert!(t("09:00:00.5") < t("09:00:01"), "`.5` was read as five seconds");
+        assert_eq!(t("09:00:00.5").semantic_cmp(&t("09:00:01")), Some(Ordering::Less), "`.5` was read as five seconds");
 
         // A short fraction is padded to milliseconds, not treated as smaller.
         // Compared through `partial_cmp` rather than `==`: `Eq` here is
         // lexical identity, and the two are deliberately different values that
         // denote the same instant (`lib:A-32`).
-        assert!(t("09:00:00.5") > t("09:00:00.499"));
+        assert_eq!(t("09:00:00.5").semantic_cmp(&t("09:00:00.499")), Some(Ordering::Greater));
         let same = Some(Ordering::Equal);
-        assert_eq!(t("09:00:00.5").partial_cmp(&t("09:00:00.500")), same);
+        assert_eq!(t("09:00:00.5").semantic_cmp(&t("09:00:00.500")), same);
         // And a longer one is truncated at millisecond resolution rather than
         // overflowing into the seconds.
-        assert_eq!(t("09:00:00.5009").partial_cmp(&t("09:00:00.500")), same);
+        assert_eq!(t("09:00:00.5009").semantic_cmp(&t("09:00:00.500")), same);
 
         // Offsets are normalised before comparing (`D3.18`): the same instant
         // written two ways orders equal, and a later local time can be the
         // earlier instant.
-        assert_eq!(t("12:00:00+01:00").partial_cmp(&t("11:00:00Z")), same);
-        assert!(t("12:00:00+01:00") < t("12:00:00Z"));
+        assert_eq!(t("12:00:00+01:00").semantic_cmp(&t("11:00:00Z")), same);
+        assert_eq!(t("12:00:00+01:00").semantic_cmp(&t("12:00:00Z")), Some(Ordering::Less));
 
         // Equal on what both know, but different precision: unordered. A
         // 09:00 that might be 09:00:59 is not "the same as" 09:00:00.
-        assert_eq!(t("09:00").partial_cmp(&t("09:00:00")), None);
+        assert_eq!(t("09:00").semantic_cmp(&t("09:00:00")), None);
         // One anchored and one not: unordered, whatever the components say.
-        assert_eq!(t("12:00:00Z").partial_cmp(&t("12:00:00")), None);
+        assert_eq!(t("12:00:00Z").semantic_cmp(&t("12:00:00")), None);
     }
 
-    /// `Eq` and `PartialOrd` answer different questions, and disagree.
+    /// `Eq` and `semantic_cmp` answer different questions, and neither one is
+    /// a stdlib trait, so there is no contract for them to violate.
     ///
     /// `Eq` is derived and therefore **lexical**: two values are equal when
-    /// they were written the same way. `PartialOrd` normalises to UTC
+    /// they were written the same way. `semantic_cmp` normalises to UTC
     /// (`D3.18`) and compares instants. So `11:00:00Z` and `12:00:00+01:00`
-    /// order `Equal` while `==` says they differ.
+    /// order `Equal` under `semantic_cmp` while `==` says they differ — and
+    /// that is fine, because `PartialOrd` (whose contract requires the two to
+    /// agree) is not implemented for this type. `semantic_cmp` is a plain
+    /// method precisely so the disagreement cannot become the bug this type
+    /// used to have (`lib:A-32`, `D3.18a`): lexical equality is record
+    /// identity (`db:M3.28` — the text is the stored value, `.5` and `.50` are
+    /// different strings, and `Hash` must agree with `Eq`), while instant
+    /// ordering is what a query needs, and neither can move without losing
+    /// the other.
     ///
-    /// That contradicts the standard library's requirement that the two agree
-    /// — `a == b` if and only if `partial_cmp` is `Some(Equal)` — and it is
-    /// pinned here rather than fixed, because both halves are wanted and
-    /// neither can move without losing something. Lexical equality is record
-    /// identity: the text is the stored value (`db:M3.28`), `.5` and `.50` are
-    /// different strings, and `Hash` must agree with `Eq`. Instant ordering is
-    /// what a query needs. See `lib:A-32` and `D3.18a`.
-    ///
-    /// **What a caller must not do:** sort, `dedup`, or `binary_search` a
-    /// collection of these and expect the two notions to coincide. `dedup`
-    /// after `sort` keeps both spellings, because `dedup` uses `==`.
+    /// **What this buys a caller:** `<`, `sort()`, and `dedup()` do not exist
+    /// for this type at all, so there is no operator that silently means
+    /// "semantically" while looking like it means "lexically". Ordering by
+    /// instant is spelled `semantic_cmp` everywhere, on purpose.
     #[test]
-    fn lexical_equality_and_instant_ordering_are_different_questions() {
+    fn eq_is_lexical_and_semantic_cmp_is_not_the_same_question() {
         let t = |s: &str| s.parse::<Time>().unwrap();
         let (utc, plus_one) = (t("11:00:00Z"), t("12:00:00+01:00"));
 
-        assert_eq!(utc.partial_cmp(&plus_one), Some(Ordering::Equal));
+        assert_eq!(utc.semantic_cmp(&plus_one), Some(Ordering::Equal));
         assert_ne!(utc, plus_one, "`Eq` is lexical, and these differ");
         // The consequence, stated so it cannot surprise anyone twice: none of
         // the three comparison operators is true for a pair that `partial_cmp`
         // calls equal. Written with `matches!` because clippy rightly objects
         // to negating `<` on a partially ordered type — the objection is the
         // point, and the operators are exactly what a caller reaches for.
-        assert!(matches!(utc.partial_cmp(&plus_one), Some(Ordering::Equal)));
-        assert!(!matches!(utc.partial_cmp(&plus_one), Some(Ordering::Less)));
+        assert!(matches!(utc.semantic_cmp(&plus_one), Some(Ordering::Equal)));
+        assert!(!matches!(utc.semantic_cmp(&plus_one), Some(Ordering::Less)));
         assert!(!matches!(
-            utc.partial_cmp(&plus_one),
+            utc.semantic_cmp(&plus_one),
             Some(Ordering::Greater)
         ));
         assert_ne!(utc, plus_one);
 
         // The same for a fraction written two ways.
         assert_eq!(
-            t("09:00:00.5").partial_cmp(&t("09:00:00.50")),
+            t("09:00:00.5").semantic_cmp(&t("09:00:00.50")),
             Some(Ordering::Equal)
         );
         assert_ne!(t("09:00:00.5"), t("09:00:00.50"));
@@ -1374,7 +1402,7 @@ mod tests {
         // And identical text is equal by both notions, which is the case the
         // rest of the crate relies on.
         assert_eq!(utc, t("11:00:00Z"));
-        assert_eq!(utc.partial_cmp(&t("11:00:00Z")), Some(Ordering::Equal));
+        assert_eq!(utc.semantic_cmp(&t("11:00:00Z")), Some(Ordering::Equal));
     }
 
     /// Every component of a duration, and the approximate length it implies.
@@ -1473,12 +1501,12 @@ mod tests {
         let d = |s: &str| s.parse::<Duration>().unwrap_or_else(|e| panic!("{s}: {e}"));
 
         // Plainly ordered: no calendar component on either side.
-        assert!(d("PT1H") < d("PT2H"));
-        assert!(d("P1D") < d("P1W"));
-        assert!(d("PT59S") < d("PT1M"));
+        assert_eq!(d("PT1H").semantic_cmp(&d("PT2H")), Some(Ordering::Less));
+        assert_eq!(d("P1D").semantic_cmp(&d("P1W")), Some(Ordering::Less));
+        assert_eq!(d("PT59S").semantic_cmp(&d("PT1M")), Some(Ordering::Less));
         // Equal and identically written: ordered, not refused.
-        assert_eq!(d("P1D").partial_cmp(&d("P1D")), Some(Ordering::Equal));
-        assert_eq!(d("P1M").partial_cmp(&d("P1M")), Some(Ordering::Equal));
+        assert_eq!(d("P1D").semantic_cmp(&d("P1D")), Some(Ordering::Equal));
+        assert_eq!(d("P1M").semantic_cmp(&d("P1M")), Some(Ordering::Equal));
 
         // Calendar against non-calendar, approximations equal but shapes
         // different: no order. `P1M` is 30.436875 days by the constant, so
@@ -1490,8 +1518,8 @@ mod tests {
             same_days.approx_seconds(),
             "fixture no longer pins the guard"
         );
-        assert_eq!(month.partial_cmp(&same_days), None, "P1M vs an equal span");
-        assert_eq!(same_days.partial_cmp(&month), None, "and the other way");
+        assert_eq!(month.semantic_cmp(&same_days), None, "P1M vs an equal span");
+        assert_eq!(same_days.semantic_cmp(&month), None, "and the other way");
 
         // A calendar component on *either* side is enough — the `||`. And both
         // halves of `years > 0 || months > 0` matter, so a year-only duration
@@ -1499,20 +1527,20 @@ mod tests {
         let year = d("P1Y");
         let year_in_seconds = d("PT31556952S"); // 365.2425 days
         assert_eq!(year.approx_seconds(), year_in_seconds.approx_seconds());
-        assert_eq!(year.partial_cmp(&year_in_seconds), None);
+        assert_eq!(year.semantic_cmp(&year_in_seconds), None);
 
         // Neither side calendarish: equal approximations *are* an order, and
         // the `&&` is what keeps this from being refused too.
         assert_eq!(
-            d("P1W").partial_cmp(&d("P7D")),
+            d("P1W").semantic_cmp(&d("P7D")),
             Some(Ordering::Equal),
             "a week is exactly seven days, with no calendar involved"
         );
 
         // Ordered pairs stay ordered even with a calendar component: the guard
         // only fires on `Equal`.
-        assert!(d("P1M") < d("P2M"));
-        assert!(d("P1M") > d("P1D"));
+        assert_eq!(d("P1M").semantic_cmp(&d("P2M")), Some(Ordering::Less));
+        assert_eq!(d("P1M").semantic_cmp(&d("P1D")), Some(Ordering::Greater));
     }
 
     /// A negative duration is negative, and orders below every positive one.
@@ -1534,9 +1562,9 @@ mod tests {
         assert_eq!(minus_day.as_str(), "-P1D");
 
         assert!(!d("P1D").is_negative());
-        assert!(minus_day < d("PT0S"));
-        assert!(minus_day < d("P1D"));
-        assert!(d("-P2D") < d("-P1D"), "more negative is less");
+        assert_eq!(minus_day.semantic_cmp(&d("PT0S")), Some(Ordering::Less));
+        assert_eq!(minus_day.semantic_cmp(&d("P1D")), Some(Ordering::Less));
+        assert_eq!(d("-P2D").semantic_cmp(&d("-P1D")), Some(Ordering::Less), "more negative is less");
     }
 
     /// Seconds are added to an instant, not subtracted from it.

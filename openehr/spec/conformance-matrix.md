@@ -148,7 +148,7 @@ Process requirements; they govern this specification rather than the code.
 | D3.16 | • | `quantity::tests::ordinals_from_different_terminologies_do_not_compare` |
 | D3.17 | • | `invariants::proportions_of_different_kinds_do_not_compare` |
 | D3.18 | • | `iso8601::tests::offsets_normalise_before_comparison` |
-| D3.18a | • | declared inconsistency: `Eq` is lexical, `PartialOrd` compares instants — `iso8601::tests::lexical_equality_and_instant_ordering_are_different_questions` (`A-32`) |
+| D3.18a | • | resolved: `PartialOrd`/`Ord` removed from the base ISO 8601 types, semantic order is the plain method `semantic_cmp` — `iso8601::tests::eq_is_lexical_and_semantic_cmp_is_not_the_same_question` (`A-32`, fixed) |
 | D3.19 | • | `quantity::tests::non_finite_magnitudes_are_refused` |
 | D3.19a | doc | declared narrowing; recorded here and in §3 |
 | D3.20, D3.20a | • | `quantity::tests::precision_accepts_the_unlimited_sentinel`; `validation::tests::the_unlimited_precision_sentinel_validates` |

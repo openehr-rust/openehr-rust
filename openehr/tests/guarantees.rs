@@ -8,6 +8,7 @@
 //! Each test here has a stated failure mode. A test whose failure mode nobody
 //! wrote down is a test nobody will maintain.
 
+use core::cmp::Ordering;
 use openehr::aql::AqlQuery;
 use openehr::base::{Interval, iso8601};
 use openehr::path::Pathable;
@@ -200,15 +201,15 @@ fn redaction_masks_and_reports_a_count_not_a_category() {
 fn every_undecidable_comparison_answers_none() {
     let month: iso8601::Date = "2024-05".parse().unwrap();
     let day: iso8601::Date = "2024-05-17".parse().unwrap();
-    assert_eq!(month.partial_cmp(&day), None);
+    assert_eq!(month.semantic_cmp(&day), None);
 
     let local: iso8601::Time = "11:00:00".parse().unwrap();
     let utc: iso8601::Time = "11:00:00Z".parse().unwrap();
-    assert_eq!(local.partial_cmp(&utc), None);
+    assert_eq!(local.semantic_cmp(&utc), None);
 
     let twelve_months: iso8601::Duration = "P12M".parse().unwrap();
     let one_year: iso8601::Duration = "P1Y".parse().unwrap();
-    assert_eq!(twelve_months.partial_cmp(&one_year), None);
+    assert_eq!(twelve_months.semantic_cmp(&one_year), None);
 
     let mg = DataValue::Quantity(DvQuantity::new(5.0, "mg").unwrap());
     let ml = DataValue::Quantity(DvQuantity::new(5.0, "mL").unwrap());
@@ -221,7 +222,7 @@ fn every_undecidable_comparison_answers_none() {
     // And the decidable cases are still decided, so the refusals above are not
     // just "comparison is broken".
     let april: iso8601::Date = "2024-04".parse().unwrap();
-    assert!(april < day);
+    assert_eq!(april.semantic_cmp(&day), Some(Ordering::Less));
     let more = DataValue::Quantity(DvQuantity::new(6.0, "mg").unwrap());
     assert!(mg < more);
 }

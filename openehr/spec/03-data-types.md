@@ -103,22 +103,26 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
   match.
 - **D3.18** Times carrying UTC offsets MUST be normalised to UTC before
   comparison.
-- **D3.18a** *Declared inconsistency.* `Eq` on `Time`, `Date` and `DateTime` is
-  **lexical** — two values are equal when they were written the same way —
-  while `PartialOrd` compares instants under `D3.18`. So `11:00:00Z` and
-  `12:00:00+01:00` order `Equal` and are **not** `==`.
+- **D3.18a** *Resolved by design, not by compromise.* `Eq` on `Time`, `Date`,
+  `DateTime` and `Duration` is **lexical** — two values are equal when they
+  were written the same way — while chronological (or, for `Duration`, length)
+  order compares what the value denotes under `D3.18`. So `11:00:00Z` and
+  `12:00:00+01:00` order equal semantically and are **not** `==`.
 
-  This contradicts the standard library's requirement that the two agree, and it
-  is declared rather than resolved because both halves are load-bearing and
-  neither moves without loss. Lexical equality is record identity: the text is
-  the stored value (`db:M3.28`), `.5` and `.50` are different strings a record
-  must round-trip, and `Hash` must agree with `Eq`. Instant ordering is what a
-  query needs.
+  These types therefore do **not** implement `PartialOrd`/`Ord`. Rust requires
+  `a == b` wherever `partial_cmp` reports `Some(Equal)`, and no fixed
+  implementation of both traits together can satisfy that here — lexical
+  equality is record identity (`db:M3.28`: the text is the stored value, `.5`
+  and `.50` are different strings a record must round-trip, and `Hash` must
+  agree with `Eq`), while semantic ordering is what a query needs, and neither
+  moves without losing the other. Semantic comparison is instead a plain method,
+  `semantic_cmp(&self, other: &Self) -> Option<Ordering>`, so `<`, `sort()`,
+  and `dedup()` simply do not exist for these types — there is no operator
+  that could silently mean the wrong one.
 
-  **What a caller must not do:** treat the two as interchangeable. `dedup` after
-  `sort` keeps both spellings of one instant, because `dedup` uses `==`. Recorded
-  as `A-32` and pinned by
-  `iso8601::lexical_equality_and_instant_ordering_are_different_questions`.
+  Formerly recorded as the open finding `A-32`; closed once the trait impl
+  was removed rather than left to disagree with `Eq`. Pinned by
+  `iso8601::eq_is_lexical_and_semantic_cmp_is_not_the_same_question`.
 
 ## Quantities and proportions
 
