@@ -104,8 +104,10 @@ corpus.
 
 The real parsers. ISO 8601, `OBJECT_ID`, openEHR paths, AQL, and canonical-JSON
 deserialization all accept documents from outside the process, and all live in
-the [`openehr`](../openehr) crate, where **nothing is fuzzed yet**. That is the
-larger half of `T11.9` and is tracked as `lib:A-09`.
+the [`openehr`](../openehr) crate — covered separately, by
+[`openehr-fuzz`](../openehr-fuzz), not by these six. That was the larger half of
+`T11.9` and is tracked as `lib:A-09`; `openehr-fuzz`'s own README has its
+targets and results.
 
 A dialect owns four small functions, and only one of them takes untrusted input.
 These crates cover that one honestly; they do not make the crate safe against a
