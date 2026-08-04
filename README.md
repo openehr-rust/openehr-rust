@@ -239,7 +239,51 @@ that a SQL console can walk around is not one.
 
 Runnable: `cargo run --example 04_versioning_and_audit`
 
-## Tutorial 5 — generating DDL for your engine
+## Tutorial 5 — access decisions and redaction
+
+Two different questions, asked in sequence: *may this request see this
+record at all*, and then *which parts of what it may see should be withheld*.
+
+```rust
+use openehr::security::{AccessRequest, EhrAccess, GroupSettings, Operation};
+
+// Everything defaults to deny: no settings recorded is not "wide open".
+let bare = EhrAccess::new(attrs)?;
+let request = AccessRequest { operation: Operation::Read, groups: &["care-team".to_owned()], is_subject: false };
+assert!(!bare.decide(&request).is_permit());
+
+let configured = bare.with_settings(
+    GroupSettings::new().permit(Operation::Read, "care-team").into(),
+);
+assert!(configured.decide(&request).is_permit());
+```
+
+```rust
+use openehr::security::{RedactionRule, Redactor};
+
+// Redaction masks; it does not delete. A withheld element becomes
+// `272｜masked｜` — there is a value here and you are not being shown it.
+// Deleting it instead would turn "the patient withheld their HIV status"
+// into "the patient has no HIV status", a clinical statement nobody made.
+let (filtered, count) = Redactor::new()
+    .with_rule(RedactionRule::node_id("at0011"))
+    .with_reason("Withheld under the patient's recorded consent preferences")
+    .redact_counting(&composition)?;
+
+// The redacted document still validates: a filter that produces something
+// the receiving system rejects has achieved nothing.
+assert!(filtered.validate().is_empty());
+```
+
+A policy in a scheme this crate does not implement — an external opt-out
+register, say — is carried unchanged and denied, never evaluated as though it
+were the reference scheme. The access-log line records the **count** of
+withheld elements, never their names: an audit trail that records "HIV status
+withheld" has disclosed the category it was protecting.
+
+Runnable: `cargo run --example 05_access_and_redaction`
+
+## Generating DDL for your engine
 
 ```rust
 use openehr_postgresql::PostgresqlDialect;
