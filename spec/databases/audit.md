@@ -508,7 +508,9 @@ Stated so "not examined" and "examined and sound" stay distinguishable (`W0.3`):
   Both crates are at **Dialect**, which is the correct level for that, and the
   gap is in evidence rather than a judgement that the DDL is wrong.
 - **The `openehr` crate's Reference Model conformance** was not re-verified; it
-  has its own register with seventeen findings.
+  has its own register, tracked and counted separately (its own summary
+  paragraph is checked against its own table by CI) — see
+  [`openehr/spec/audit.md`](../../openehr/spec/audit.md).
 - **Performance.** No benchmark exists and none is claimed (`T11.5`, withdrawn).
 - **The rewritten requirements themselves** have not been reviewed by a second
   reader.
