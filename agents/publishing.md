@@ -26,17 +26,19 @@ below. The tree has moved past them: 0.4.0 is prepared and staged — manifests,
 `Cargo.lock`, and [`CHANGELOG.md`](../CHANGELOG.md) all say 0.4.0 — and is
 waiting on the gate below.
 
-> **Do not publish 0.4.0 until CI has run green on `decd78b` or later.**
+> **Gate satisfied 2026-08-21.** CI ran green on **`adcfaae`**: 28 jobs
+> succeeded and one — `mutants` — was skipped because it is pull-request only.
 >
-> That commit added an `msrv` job, a `bench` job, two fuzz matrix rows, a tenth
-> crate to the `test` matrix, and rewrote the `layering` and `claims` guards.
-> **None of it has ever executed.** `W0.11` is the rule that a committed
-> workflow is not a working one, and `W-02` is the finding for making exactly
-> this mistake — and a published version is immutable, so 0.4.0's documentation
-> would permanently describe checks whose first run had not happened.
+> The gate said: do not publish until the `msrv` job, the `bench` jobs, the two
+> new fuzz matrix rows, the tenth crate in the `test` matrix, and the rewritten
+> `layering` and `claims` guards had all actually run. They have now, all of
+> them, together. `W0.11` is the rule that a committed workflow is not a working
+> one, and a published version is immutable — 0.4.0's documentation describes
+> those checks, so their first green run had to precede it.
 >
-> Every one of those jobs was run locally, including against deliberately
-> broken inputs. That is evidence, and it is not the same evidence.
+> The run before it, `decd78b`, was **red**: `fuzz / openehr` had been failing
+> since 2026-08-04 (`lib:A-37`) and `test / openehr-loco` failed a lint that
+> only fires under `RUSTFLAGS="-D warnings"`. Both are fixed in `adcfaae`.
 
 | Crate | crates.io | Local |
 | --- | --- | --- |
