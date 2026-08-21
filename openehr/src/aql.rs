@@ -238,8 +238,15 @@ fn lex(input: &str) -> Result<Vec<Lexed>, AqlError> {
                 });
             }
             _ => {
-                const SYMBOLS: [&str; 14] = [
-                    ">=", "<=", "!=", "(", ")", "{", "}", ",", "=", ">", "<", "[", "]", "*",
+                // `-` is here and **not** in the number scanner, which is the
+                // whole of the `Q12.9b` decision. An archetype id such as
+                // `openEHR-EHR-COMPOSITION.encounter.v1` begins with a letter,
+                // so it is scanned as a *word* that absorbs its own hyphens and
+                // never reaches this branch. A `-` only ever arrives here when
+                // no word claimed it, and the parser decides at that point
+                // whether it is a sign (`Parser::operand`).
+                const SYMBOLS: [&str; 15] = [
+                    ">=", "<=", "!=", "(", ")", "{", "}", ",", "=", ">", "<", "[", "]", "*", "-",
                 ];
                 let Some(sym) = SYMBOLS.iter().find(|s| input[i..].starts_with(**s)) else {
                     return Err(AqlError::new(i, "unexpected character"));
@@ -294,7 +301,27 @@ impl fmt::Display for Literal {
                 f.write_str("'")
             }
             Self::Integer(v) => write!(f, "{v}"),
-            Self::Number(v) => write!(f, "{v}"),
+            // A `Number` must render so that it lexes back as a `Number`.
+            //
+            // `format!("{v}")` gives `0` for `0.0` and `-0` for `-0.0`, and the
+            // number scanner reads a run of digits with no `.` as an
+            // **integer** — so the literal changed type on a round trip, which
+            // `Q12.15` forbids. It went unseen until `Q12.9b` allowed a sign,
+            // because `-0.0` was the first case where the *text* also differed:
+            // `-0` reparsed as `Integer(0)` and rendered `0`.
+            //
+            // Display rather than `{v:?}`: Rust's `Debug` for `f64` may use
+            // exponent form for extreme values, and `e` is not in this lexer's
+            // number scanner, so `1e300` would lex as `1` followed by a word.
+            // Display never does that — it writes the full decimal expansion.
+            Self::Number(v) => {
+                let rendered = format!("{v}");
+                if rendered.contains('.') {
+                    f.write_str(&rendered)
+                } else {
+                    write!(f, "{rendered}.0")
+                }
+            }
             Self::Boolean(v) => write!(f, "{v}"),
         }
     }
@@ -1025,10 +1052,31 @@ impl Parser {
         })
     }
 
+    /// A count for `LIMIT` or `OFFSET`.
+    ///
+    /// The sign is refused **deliberately** (`Q12.9d`). Before `Q12.9b` gave
+    /// the lexer a `-` symbol, `LIMIT -5` failed as `unexpected character` —
+    /// the right answer for the wrong reason, and one that stopped being given
+    /// the moment a sign became lexically well formed. A `LIMIT` that clamped
+    /// `-5` to `0` would return an empty result set that looks like an answer
+    /// (`db:P6.15`).
+    ///
+    /// `Token::Integer` still never carries a sign — the scanner starts at a
+    /// digit — so there is no `v >= 0` guard here. There was one; mutation
+    /// testing could replace it with `true` unnoticed because nothing could
+    /// reach it (`A-27`). The check that matters is the one above it.
     fn integer(&mut self) -> Result<u64, AqlError> {
         let offset = self.offset();
+        if matches!(self.peek(), Some(Token::Symbol("-"))) {
+            return Err(AqlError::new(
+                offset,
+                "LIMIT and OFFSET are counts and must not be negative",
+            ));
+        }
         match self.next_token() {
-            Some(Token::Integer(v)) if v >= 0 => Ok(u64::try_from(v).unwrap_or(0)),
+            Some(Token::Integer(v)) => u64::try_from(v).map_err(|_| {
+                AqlError::new(offset, "LIMIT and OFFSET are counts and must not be negative")
+            }),
             _ => Err(AqlError::new(offset, "expected a non-negative integer")),
         }
     }
@@ -1049,6 +1097,19 @@ impl Parser {
 
     fn operand(&mut self) -> Result<Operand, AqlError> {
         let offset = self.offset();
+        // A leading `-` is a sign only here, where a value is expected, and
+        // only when a number follows (`Q12.9b`). `> -openEHR-EHR-…` is an
+        // error rather than anything clever: the sign is consumed, no number
+        // follows, and the arm below reports where.
+        if matches!(self.peek(), Some(Token::Symbol("-"))) {
+            self.next_token();
+            let offset = self.offset();
+            return match self.next_token() {
+                Some(Token::Integer(v)) => Ok(Operand::Literal(Literal::Integer(-v))),
+                Some(Token::Number(v)) => Ok(Operand::Literal(Literal::Number(-v))),
+                _ => Err(AqlError::new(offset, "expected a number after `-`")),
+            };
+        }
         match self.next_token() {
             Some(Token::String(v)) => Ok(Operand::Literal(Literal::String(v))),
             Some(Token::Integer(v)) => Ok(Operand::Literal(Literal::Integer(v))),
@@ -1547,27 +1608,52 @@ mod tests {
         assert_eq!((q.limit, q.offset), (Some(5), Some(10)));
     }
 
-    /// No numeric literal in a condition may be negative.
+    /// A numeric literal in a condition may be negative, and a sign is a sign
+    /// only where a value is expected.
     ///
-    /// A limitation, pinned so that it is a decision rather than a surprise
-    /// (`lib:A-27`). `WHERE o/value/magnitude > -2.5` is an ordinary clinical
-    /// condition — a base excess, a temperature difference, a scale scored
-    /// below zero — and this parser rejects it at the lexer.
+    /// This test used to assert the opposite: that `WHERE c/v > -1` was
+    /// **refused**, pinning `lib:A-27` so the limitation was a decision rather
+    /// than a surprise. `Q12.9b` lifted it on 2026-08-21, and the shape of the
+    /// test is the shape of the risk — a sign that the *lexer* understood
+    /// would have to decide what to do with the `-` in
+    /// `openEHR-EHR-COMPOSITION.encounter.v1`. The parser decides instead, at
+    /// operand position, so an archetype id is never even a candidate: it
+    /// begins with a letter and is scanned as a word that absorbs its own
+    /// hyphens.
     ///
-    /// `Q12.9a` says a construct the crate does not model must be refused with
-    /// an error rather than parsed and ignored. It is refused. The error names
-    /// the character rather than the requirement, which is the part `A-27`
-    /// records as unfinished.
+    /// Each case below is one way that could have gone wrong.
     #[test]
-    fn a_negative_numeric_literal_is_refused_rather_than_misread() {
+    fn a_sign_is_a_number_where_a_value_belongs_and_nowhere_else() {
+        // The condition `A-27` existed for.
+        let q: AqlQuery = "SELECT c/uid FROM COMPOSITION c WHERE c/v > -2.5"
+            .parse()
+            .expect("a negative literal is a value");
+        assert_eq!(q.to_string(), "SELECT c/uid FROM COMPOSITION c WHERE c/v > -2.5");
+
+        // Integers too, and inside a value set, which parses its members as
+        // operands like everything else.
+        let q: AqlQuery = "SELECT c/uid FROM COMPOSITION c WHERE c/v MATCHES {-1, 0, 1}"
+            .parse()
+            .expect("a value set may hold negative values");
+        assert_eq!(
+            q.to_string(),
+            "SELECT c/uid FROM COMPOSITION c WHERE c/v MATCHES {-1, 0, 1}"
+        );
+
+        // The hyphens that made this a decision rather than a patch. Both the
+        // bracketed predicate and the quoted string must be untouched.
         for text in [
-            "SELECT c/uid FROM COMPOSITION c WHERE c/v > -1",
-            "SELECT c/uid FROM COMPOSITION c WHERE c/v > -2.5",
+            "SELECT c/uid FROM COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]",
+            "SELECT c/uid FROM COMPOSITION c WHERE c/archetype_node_id = 'openEHR-EHR-COMPOSITION.encounter.v1'",
         ] {
-            let err = text.parse::<AqlQuery>().expect_err(text);
-            // Refused where the sign is, not silently read as a bare `1`.
-            assert_eq!(err.offset, text.find('-').unwrap(), "{}", err.reason);
+            let q: AqlQuery = text.parse().expect(text);
+            assert_eq!(q.to_string(), text, "an archetype id was re-lexed");
         }
+
+        // A sign with no number is an error, not a guess.
+        let text = "SELECT c/uid FROM COMPOSITION c WHERE c/v > -openEHR-EHR-COMPOSITION.encounter.v1";
+        let err = text.parse::<AqlQuery>().expect_err(text);
+        assert!(err.reason.contains("number"), "{}", err.reason);
     }
 
     /// An error reports where the query went wrong, not where it started.

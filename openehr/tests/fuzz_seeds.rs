@@ -118,6 +118,24 @@ fn the_canonical_json_seeds_span_instances_and_refusals() {
     );
 }
 
+/// Every committed `aql` seed is a query the parser accepts.
+///
+/// Unlike `canonical_json`, this corpus is entirely hand-authored: each seed is
+/// a *shape* mutation is slow to build — a containment tree, a value set, a
+/// signed literal beside an archetype id. A seed the parser rejects is
+/// therefore a typo, not a deliberate malformation, and it contributes nothing
+/// (`W0.30`).
+#[test]
+fn every_aql_seed_still_parses() {
+    let Some(_) = fuzz_crate() else { return };
+    for (name, bytes) in seeds("aql") {
+        let text = std::str::from_utf8(&bytes)
+            .unwrap_or_else(|e| panic!("corpus/aql/{name} is not UTF-8: {e}"));
+        text.parse::<openehr::aql::AqlQuery>()
+            .unwrap_or_else(|e| panic!("corpus/aql/{name} no longer parses: {e}\n  {text}"));
+    }
+}
+
 /// The `uri` seeds are text rather than JSON, so "parses" is not the property.
 ///
 /// What matters is that the corpus still spans **both** answers: a seed set in

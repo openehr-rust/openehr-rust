@@ -367,7 +367,9 @@ Process requirements; they govern this specification rather than the code.
 | Q12.8 | • | `path::tests::predicates_round_trip_through_display_in_long_form` |
 | Q12.9 | • | `aql::tests::the_canonical_blood_pressure_query_parses`, `…::aggregates_and_distinct_parse`, `…::not_contains_parses_and_keeps_its_negation`, `…::like_and_offset_parse` |
 | Q12.9a | • | `guarantees::aql_refuses_what_it_does_not_model_and_says_where_that_is_recorded` |
-| Q12.9b | • | declared limitation: no signed numeric literal — `aql::a_negative_numeric_literal_is_refused_rather_than_misread` (`A-27`) |
+| Q12.9b | • | signed numeric literals parse, resolved at operand position — `aql::a_sign_is_a_number_where_a_value_belongs_and_nowhere_else` (`A-27`, fixed) |
+| Q12.9d | • | `LIMIT -5` and `OFFSET -1` refused with a message naming the reason — `aql::a_negative_limit_or_offset_is_refused_rather_than_clamped` |
+| Q12.9e | • | a real renders with a decimal point so it lexes back a real — `guarantees::aql_rendering_round_trips_through_the_parser`, which compares trees |
 | Q12.9c | • | declared limitation: no node-id predicate shorthand — `aql::only_a_dashed_and_dotted_word_standing_alone_is_an_archetype_id` (`A-30`) |
 | Q12.10 | — | no execution API exists |
 | Q12.11 | • | `aql::tests::keywords_are_case_insensitive` |

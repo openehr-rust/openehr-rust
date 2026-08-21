@@ -15,17 +15,17 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**38 findings, 38 in the table below: 6 High, 23 Medium, 9 Low. 30 fixed or
-classified, 8 open.** These counts are checked against the table by CI
+**38 findings, 38 in the table below: 6 High, 23 Medium, 9 Low. 31 fixed or
+classified, 7 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
-verified), and the check should have failed. Every one of the 8 open findings
+verified), and the check should have failed. Every one of the 7 open findings
 is open by a stated reason rather than by omission: **A-02** and **A-08** are
 declared departures the crate does not intend to close; **A-05**, **A-10**,
 **A-30** and **A-38** are recorded limitations or residuals with the reasoning
 for leaving them written beside them — **A-38** is a defect in `serde_json`
-that this repository cannot repair, only contain and report; **A-19** and **A-27** are declared
-departures (`S1.18`, `Q12.9b`) whose *enforcement* remains open work. **A-09**
+that this repository cannot repair, only contain and report; **A-19** is a declared
+departure (`S1.18`) whose *enforcement* remains open work. **A-09**
 (no property-based testing) is closed: `tests/properties.rs` covers the laws, and
 `openehr-fuzz` now drives five targets over the parsers — ISO 8601, the
 identifier grammars, AQL, paths, and canonical-JSON deserialization — run in CI
@@ -103,7 +103,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-24 | Medium | The 75 unnamed RM invariants were undifferentiated, so a real gap was indistinguishable from a class deliberately not modelled | **classified** — 29 out of scope, 17 vacuous, 25 unenforced, 1 enforced-but-misnamed; the build now fails on an unclassified one. **Unenforced now 21**: the four `EHR` reference rules and the interval rename are fixed; two sub-findings open |
 | A-25 | High | The invariant-coverage count matched invariant **names** without their class, matched names in comments, and saw only two of the ways a rule is reported | **fixed** — matches the cited `(class, name)` pair through a real scanner; **83 named became 69**, and 24 invariants nobody had examined were revealed |
 | A-26 | Low | The conformance matrix boasted mechanical completeness — "291 ids, 291 covered, none missing" — and six requirements added afterwards had no row | **fixed** — 297 of 297, and CI re-derives the count on every push |
-| A-27 | Medium | AQL cannot express a **negative numeric literal** — `WHERE o/value/magnitude > -2.5` is refused at the lexer, and `Parser::integer`'s `v >= 0` guard is therefore unreachable | **declared** as `Q12.9b`; the parser gap is open |
+| A-27 | Medium | AQL could not express a **negative numeric literal** — `WHERE o/value/magnitude > -2.5` was refused at the lexer, and `Parser::integer`'s `v >= 0` guard was therefore unreachable | **fixed** — the sign is resolved by the parser at operand position, never by the number scanner, so an archetype id cannot be affected (`Q12.9b`, `Q12.9d`) |
 | A-28 | High | The query surface — `aql.rs` and `path.rs` — had **115 surviving mutants of 435**, the largest untested area in the crate; fifty of them were navigation-table arms whose loss turns a resolvable path into an empty result | **fixed** for the navigation table and the AQL parser; the count is in the `A-09` table |
 | A-29 | Medium | The four temporal data types carry `DV_ORDERED` attributes and implement `DvOrdered`, but `path.rs` reached them on five classes only — a normal range on a `DV_DATE` was unreachable by path, against `Q12.7a` | **fixed** — nine classes; found by a test written to kill a mutant |
 | A-30 | Low | AQL has no node-id predicate shorthand: `c[at0001]` is refused, not read as `archetype_node_id = 'at0001'` | open, pinned by a test |
@@ -1941,6 +1941,67 @@ the drift **stops** — an upstream fix or a move to `arbitrary_precision` — s
 whoever closes this finding is told what it was. That test also asserts the
 containment rather than restating it: a digest over the stored bytes is stable
 because it is taken over bytes.
+
+## A-27 — a sign the lexer could not have added
+
+**Closed 2026-08-21.** Opened as a limitation with the decision explicitly
+unmade: `WHERE o/value/magnitude > -2.5` is ordinary clinical AQL — a base
+excess, a temperature difference, a scale scored below zero — and this parser
+refused it outright.
+
+**Why it stayed open.** `-` is also the character that separates the parts of an
+archetype id. Adding a sign to the number scanner means deciding what
+`openEHR-EHR-COMPOSITION.encounter.v1` is when it follows an operator, and the
+finding said so rather than guessing. `CLAUDE.md` carried the warning in as many
+words: *do not "fix" it by adding a sign to the number scanner*.
+
+**The decision.** The sign is resolved by the **parser**, at a position where an
+operand is expected — never by the lexer's number scanner. The lexer gains `-`
+as an ordinary symbol and nothing else changes there.
+
+The ambiguity then cannot arise, and not by care: an archetype id begins with a
+**letter**, so it is scanned as a *word*, and the word scanner already absorbs
+its own hyphens. It never reaches the symbol branch. A `-` stands alone only
+where no word claimed it, and the parser looks at that position and asks a
+single question — is a number next?
+
+| Input | Result |
+| --- | --- |
+| `WHERE o/value/magnitude > -2.5` | a comparison against −2.5 |
+| `WHERE c/v MATCHES {-1, 0, 1}` | a three-element set; `MATCHES` parses operands like everything else |
+| `COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]` | unchanged, and asserted to be |
+| `WHERE c/v > -openEHR-EHR-…` | **error**: "expected a number after `-`" |
+
+**A dead guard, made honest.** `Parser::integer`'s `v >= 0` was unreachable —
+`Token::Integer` starts at a digit and never carries a sign — and mutation
+testing could have replaced it with `true` unnoticed. It is gone. In its place
+`LIMIT`/`OFFSET` refuse a sign **deliberately** (`Q12.9d`), because what used to
+be refused incidentally as `unexpected character` stopped being refused that way
+the moment a sign became lexically well formed. The message now names the
+reason: *LIMIT and OFFSET are counts and must not be negative*. A `LIMIT` that
+clamped `-5` to `0` would return an empty result set that looks like an answer
+(`db:P6.15`).
+
+**And it uncovered an older one.** The fuzz target, run against the widened
+grammar, found `SELECT -0.0` rendering as `-0` and reparsing as `Integer(0)`.
+The sign was not the defect: `format!("{v}")` writes `0` for `0.0`, and this
+lexer reads digits with no `.` as an **integer**, so `Number(0.0)` had always
+round-tripped to `Integer(0)` — a literal changing type, which `Q12.15`'s tree
+equality forbids. It was invisible because the *text* matched; `-0.0` is the
+first value where it does not. Fixed by `Q12.9e`: a real renders with a decimal
+point.
+
+Two defects, one of them years older than the other, and the second only
+reachable because the first was fixed. That is the ordinary shape of this work
+and is worth noting against the instinct to treat a new failure after a change
+as evidence the change was wrong.
+
+**Verified.** `aql::a_sign_is_a_number_where_a_value_belongs_and_nowhere_else`
+drives all four rows above; the `aql` fuzz target ran clean over the widened
+grammar. The test that pinned the limitation was **rewritten rather than
+deleted**, and its doc comment says what it used to assert — a pinned limitation
+and a pinned capability are the same test with the sign flipped, and the history
+is the part worth keeping.
 
 ## Closed findings
 

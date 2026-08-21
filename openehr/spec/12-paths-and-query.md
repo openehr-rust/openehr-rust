@@ -50,18 +50,56 @@ Requirement prefix: `Q12`.
   class extension, terminology-function subqueries — MUST be **refused with an
   error naming this requirement**, never parsed-and-ignored. A
   partially-understood query that looks fully understood is the failure mode.
-- **Q12.9b** *Limitation.* A numeric literal MUST NOT be required to carry a
-  sign, and the crate does not parse one: `-1` and `-2.5` are refused at the
-  lexer. This is a departure from `Q12.9`'s "comparison operators" in practice,
-  because a condition such as `WHERE o/value/magnitude > -2.5` is ordinary
-  clinical AQL — a base excess, a temperature difference, a scale scored below
-  zero — and cannot be written here at all.
+- **Q12.9b** *(amended 2026-08-21 — was a limitation, now a rule)* A numeric
+  literal MAY carry a leading `-`, and the crate MUST parse one. `-1` and `-2.5`
+  are values.
 
-  It is recorded rather than fixed because the fix has a decision in it: `-` is
-  also the character that separates the parts of an archetype id, so a sign
-  cannot simply be added to the number scanner without deciding what
-  `[openEHR-EHR-COMPOSITION.encounter.v1]` means when it follows an operator.
-  See `A-27`.
+  **This was a stated limitation until 2026-08-21**, and the reason it stayed
+  one is the reason the amendment is worth reading: `-` is also the character
+  that separates the parts of an archetype id, so a sign could not simply be
+  added to the number scanner. `A-27` recorded the decision as unmade.
+
+  The decision, now made: **the sign is resolved by the parser, at a position
+  where an operand is expected — never by the number scanner.** The lexer gains
+  `-` as an ordinary symbol and nothing else changes there. An archetype id
+  cannot be affected, because `openEHR-EHR-COMPOSITION.encounter.v1` begins with
+  a letter and is therefore scanned as a **word**, which absorbs its own
+  hyphens and never reaches the symbol branch. A `-` only ever stands alone
+  where a word did not claim it.
+
+  What follows from resolving it in the parser rather than the lexer:
+
+  - `WHERE o/value/magnitude > -2.5` is a comparison against minus two point
+    five — a base excess, a temperature difference, a scale scored below zero.
+  - `MATCHES {-1, 0, 1}` is a three-element set, because `MATCHES` parses its
+    values as operands like everything else.
+  - `> -openEHR-EHR-COMPOSITION.encounter.v1` is an **error**, because a sign
+    must be followed by a number. It is refused rather than read as anything.
+
+- **Q12.9e** *(added 2026-08-21)* A rendered numeric literal MUST lex back as
+  the **same kind** of literal. A real that renders without a decimal point is a
+  real that comes back an integer.
+
+  `format!("{v}")` writes `0` for `0.0` and `-0` for `-0.0`, and this lexer
+  reads a run of digits with no `.` as an integer — so `Number(0.0)` round
+  tripped to `Integer(0)`, a type change, which `Q12.15`'s tree equality
+  forbids. It had been true since the renderer was written and was invisible
+  until `Q12.9b` allowed a sign, because `-0.0` is the first value where the
+  *text* also differs: `-0` reparses as `Integer(0)` and renders `0`.
+
+  Display and not `Debug`: `Debug` for `f64` may use exponent form for extreme
+  values, and `e` is not in this number scanner, so `1e300` would lex as `1`
+  followed by a word. Display writes the full decimal expansion and never does
+  that.
+
+- **Q12.9d** *(added 2026-08-21)* `LIMIT` and `OFFSET` MUST refuse a signed
+  literal, and MUST say so.
+
+  They take a count, not a value, and `Q12.9b` makes `-5` lexically
+  well-formed where it previously was not — so what used to be refused
+  incidentally, as `unexpected character`, now has to be refused deliberately.
+  A `LIMIT` that clamped `-5` to `0` would return an empty result set that looks
+  like an answer (`db:P6.15`).
 
 - **Q12.9c** *Limitation.* A bracketed predicate MUST be either the archetype
   shorthand (`c[openEHR-EHR-COMPOSITION.encounter.v1]`) or a full condition.

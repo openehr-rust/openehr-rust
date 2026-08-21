@@ -5,6 +5,23 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
+## Unreleased
+
+- **AQL accepts negative numeric literals** (`lib:Q12.9b`, closing `lib:A-27`).
+  `WHERE o/value/magnitude > -2.5` — a base excess, a temperature difference, a
+  scale scored below zero — parses. So does `MATCHES {-1, 0, 1}`.
+
+  The sign is resolved by the parser at operand position, never by the number
+  scanner, so an archetype id is unaffected:
+  `openEHR-EHR-COMPOSITION.encounter.v1` begins with a letter and is scanned as
+  a word that absorbs its own hyphens. `> -openEHR-EHR-…` is an error, not a
+  guess. `LIMIT`/`OFFSET` refuse a sign deliberately and say why (`Q12.9d`).
+
+- **A real numeric literal renders with a decimal point** (`lib:Q12.9e`).
+  `Number(0.0)` rendered as `0` and reparsed as `Integer(0)` — a literal
+  changing type across a round trip. Pre-existing; found by fuzzing the widened
+  grammar above.
+
 ## 0.4.0 — 2026-08-21
 
 **Breaking.** Two of the three items below change an API; the third raises the
