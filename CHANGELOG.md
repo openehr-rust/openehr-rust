@@ -5,7 +5,13 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
-## Unreleased
+## 0.4.0
+
+**Breaking.** Two of the three items below change an API; the third raises the
+minimum toolchain. Every affected line in a dependent is a **compile error**,
+never a silent change in behaviour — which is the property that made the
+`PartialOrd` removal safe to do at all.
+
 
 - **MSRV raised from 1.90 to 1.95, and it is now a rule rather than a number:
   N−3, three Rust releases behind stable**
@@ -39,6 +45,34 @@ together.
   disagrees. Duplicated passages are bound to one owner with
   `<!-- shared: NAME (owner) -->` markers and compared byte for byte (`W0.38`).
   Three findings were drift of exactly this kind (**W-10**, **W-11**, **W-16**).
+
+- **AQL string literals are no longer corrupted, and rendering no longer changes
+  what a query asks** (`lib:A-37`, `lib:Q12.15`, `lib:Q12.15a`, `lib:Q12.15b`).
+
+  The lexer copied a string literal one UTF-8 **byte** at a time, so `'Müller'`
+  became `'MÃ¼ller'` and a `WHERE` against it matched nobody — the query parsed,
+  checked clean, and was about a different string. Separately, the `FROM`
+  renderer omitted parentheses its own grammar needs, so
+  `(EHR e CONTAINS COMPOSITION c) OR EHR x` rendered as text that re-parsed to
+  `EHR e CONTAINS (COMPOSITION c OR EHR x)` — a query over different records.
+  Rendering also now escapes `'` and `\` in string literals.
+
+  Not a breaking API change; a behaviour fix. Code that round-tripped a query
+  through `to_string()` was getting a different query back, and now is not.
+
+- **Known limitation, upstream: `serde_json` reads back a number it did not
+  write** (`lib:A-38`). Its float parser is one ULP below `core::str::parse`
+  for some inputs, so a magnitude **drifts** across repeated canonical-JSON
+  round trips — three applications before it settled in the observed case, with
+  no bound established. **Stored bytes, and the
+  content digest over them, are unaffected** — `db:M3.43` stores canonical JSON
+  byte-preserving and the integrity check hashes the stored bytes rather than
+  re-deriving them, so no false tamper alarm is reachable. Recorded rather than
+  worked around; the fix is upstream.
+
+- **The `agents/` directory is lowercase** (`AG1`, `spec/agents-directory-name-is-lowercase.md`).
+  `AGENTS/` became `agents/`; the file `AGENTS.md` keeps its name, which is a
+  cross-tool convention. Affects nobody depending on these crates.
 
 - **BREAKING: no `DV_ORDERED` implements `PartialOrd` any more, and neither
   does `DATA_VALUE`** (`lib:D3.18b`, closing `lib:A-35`). Comparison is
@@ -125,7 +159,7 @@ schema, and reloads.
 
 See [`spec/audit.md`](spec/audit.md) and [`openehr/spec/audit.md`](openehr/spec/audit.md)
 for the full findings this release closes, and
-[`AGENTS/publishing.md`](AGENTS/publishing.md) for the publishing process
+[`agents/publishing.md`](agents/publishing.md) for the publishing process
 itself.
 
 ## 0.2.0 and earlier

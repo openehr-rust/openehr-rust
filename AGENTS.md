@@ -11,7 +11,7 @@ specification governs and this file has a defect (`W0.2`). The specifications ar
 - [`spec/databases/`](spec/databases/index.md) — storing openEHR in SQL.
 - [`openehr/spec/`](openehr/spec/index.md) — the Reference Model library.
 
-Detailed topic guides live in [`AGENTS/`](AGENTS/index.md).
+Detailed topic guides live in [`agents/`](agents/index.md).
 
 ## What this repository is
 
@@ -65,7 +65,9 @@ These are the ones this repository has broken, not a generic list.
 ```sh
 # One crate
 cd openehr && cargo test
-cd openehr && cargo clippy --all-targets
+# `RUSTFLAGS="-D warnings"` is what CI sets, and the difference is not
+# theoretical: a lint that fires only under it passed locally and failed in CI.
+cd openehr && RUSTFLAGS="-D warnings" cargo clippy --all-targets
 
 # Every buildable crate. The list is ten, not eight: `openehr-loco` and
 # `openehr-assets` build and test like the rest, and `openehr-assets` spent its
@@ -74,7 +76,8 @@ cd openehr && cargo clippy --all-targets
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \
          openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
          openehr-loco openehr-assets; do
-  (cd "$d" && cargo test --quiet && cargo clippy --all-targets --quiet) || echo "FAIL $d"
+  (cd "$d" && cargo test --quiet \
+     && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) || echo "FAIL $d"
 done
 
 # The committed assets are what the code renders
@@ -135,7 +138,7 @@ arm64, and the Oracle images need registry authentication. Both crates stay at
 | `fuzz` | a short regression run of every fuzz target — a crash, panic, or abort fails the build; this is a gate, not a campaign |
 | `layering` | `openehr` and `openehr-store` depend inward only, including dev-dependencies. The crate list is **derived** from the tree, not written here: it used to name nine of seventeen and could not see a cycle through the eight it skipped (**W-13**) |
 | `claims` | that mssql and oracle still claim only Dialect, that the library matrix covers every requirement exactly once, that the conformance matrix does not contradict itself, that the audit summary counts itself correctly, and that **all eighteen** crates declare the same five licences (**W-14**) |
-| `mutants` | pull requests only: `cargo-mutants --in-diff` against the PR's changed lines, per crate touched — see [`AGENTS/auditing.md`](AGENTS/auditing.md) |
+| `mutants` | pull requests only: `cargo-mutants --in-diff` against the PR's changed lines, per crate touched — see [`agents/auditing.md`](agents/auditing.md) |
 
 Two rules it follows, both from the specification rather than habit: the schema
 jobs **fail rather than skip** without a container runtime (`C0.13`), and they
@@ -201,7 +204,7 @@ still compile and still run (`W0.36`), which is the part that rots.
 
 ## Adding an engine crate
 
-Read [`AGENTS/adding-an-engine.md`](AGENTS/adding-an-engine.md) first. The short
+Read [`agents/adding-an-engine.md`](agents/adding-an-engine.md) first. The short
 version:
 
 1. A dialect owns **four** things: type spellings, identifier quoting,
@@ -241,7 +244,7 @@ version:
 
 All eight publishable crates are live on crates.io at **0.3.0**, published
 2026-08-04, and **local matches published** — the per-crate table is in
-[`AGENTS/publishing.md`](AGENTS/publishing.md), which is the one file to trust
+[`agents/publishing.md`](agents/publishing.md), which is the one file to trust
 on this and the one to update first.
 
 0.3.0 was a breaking release, not 0.2.1: `SCHEMA_VERSION` now exists and is `4`,
@@ -253,7 +256,7 @@ compatible, so any of those shipped as a patch would have broken a dependent on
 There is no schema migration and there will not be one before 1.0
 (`db:O10.14`). A deployment on published 0.2.0 exports, recreates, and reloads
 to reach 0.3.0.
-Read [`AGENTS/publishing.md`](AGENTS/publishing.md) before publishing again.
+Read [`agents/publishing.md`](agents/publishing.md) before publishing again.
 
 A published version is **immutable**. `openehr` 0.1.0 is already live carrying a
 `repository` field pointing at an unrelated project; that cannot be fixed, only
@@ -269,7 +272,7 @@ spec/                     repository specification + audit register
   audit.md                repository-wide findings (W-xx)
   databases/              persistence specification (db:)
 AGENTS.md                 this file
-AGENTS/                   topic guides
+agents/                   topic guides
 scripts/check-docs.py     counts, versions, levels, shared blocks
 openehr/                  the Reference Model library
   spec/                   library specification (lib:) + audit + matrix

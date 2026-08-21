@@ -3,7 +3,7 @@
 Guidance for Claude Code working in this repository.
 
 Read [`AGENTS.md`](AGENTS.md) for the full operational guide and
-[`AGENTS/`](AGENTS/index.md) for topic guides. This file is the short version
+[`agents/`](agents/index.md) for topic guides. This file is the short version
 plus the things that specifically trip up automated work here.
 
 **Not normative.** The specifications decide what must be true (`W0.2`):
@@ -20,7 +20,7 @@ ten are `publish = false`.
 `SCHEMA_VERSION` now exists and is `4`, `ColTy::Json` changed type,
 `ColTy::Digest` was added, and `OriginalVersion::new` refuses input it used to
 accept — which is why it was not 0.2.1. Read
-[`AGENTS/publishing.md`](AGENTS/publishing.md) before touching a version
+[`agents/publishing.md`](agents/publishing.md) before touching a version
 number; it is the only file that tracks this, and four others state the version
 without tracking it (`spec/audit.md` **W-10**).
 
@@ -46,13 +46,18 @@ DDL, a `Store`, or a database server (`W0.32`). It states evidence instead.
 
 ```sh
 cd <crate> && cargo test
-cd <crate> && cargo clippy --all-targets
+# `RUSTFLAGS="-D warnings"` is what CI sets. Without it a lint that fires only
+# under `-D warnings` passes locally and fails in CI -- which is how
+# `openehr-loco` went red on `clippy::unused_async_trait_impl` after a local
+# run reported clean.
+cd <crate> && RUSTFLAGS="-D warnings" cargo clippy --all-targets
 
 # everything
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \
          openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
          openehr-loco openehr-assets; do
-  (cd "$d" && cargo test --quiet && cargo clippy --all-targets --quiet) \
+  (cd "$d" && cargo test --quiet \
+     && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) \
     || echo "FAIL $d"
 done
 
@@ -101,8 +106,13 @@ warnings — keep it there.**
 - **A published version is immutable, and one here is permanently wrong.**
   `openehr` 0.1.0 went out with a `repository` pointing at an unrelated project.
   0.1.1 and 0.2.0 fixed it; 0.1.0 still says it. Read
-  [`AGENTS/publishing.md`](AGENTS/publishing.md) before any publish.
-- **CI is green and `openehr-sqlite` is at Verified.** Every other crate is at
+  [`agents/publishing.md`](agents/publishing.md) before any publish.
+- **Read the last CI run before believing any claim about CI.** `gh run list`.
+  This file said "CI is green" while the `fuzz / openehr` job had been red on
+  `main` for seventeen days, and the bug it had found was a `WHERE` clause
+  silently matching nobody (`lib:A-37`). A red job on the default branch is as
+  visible as a signal gets, and it was still missed.
+- **`openehr-sqlite` is at Verified.** Every other crate is at
   Schema or Dialect and must not be promoted without evidence. Do not write text
   implying more continuity than a job actually provides; a specification here
   once claimed a workflow file that never existed.

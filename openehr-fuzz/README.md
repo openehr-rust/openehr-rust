@@ -118,10 +118,20 @@ output would say so.
 
 ## Results
 
-No crashes. All seven targets run in CI on every push.
+All seven targets run in CI on every push, and **two of them have found
+defects** — which is the outcome a fuzz target exists for, and is worth
+recording as prominently as a green run.
 
-`uri` is the exception worth recording: it **did** crash, against the code as it
-stood when the target was written, and the finding is `lib:A-36`.
+- `uri` crashed against the code as it stood when the target was written:
+  `lib:A-36`, a panic reachable from any JSON document.
+- `aql` crashed on 2026-08-04, **in CI, on `main`**, and the job stayed red for
+  seventeen days while this file said "no crashes". It had found two ways an AQL
+  query silently changes meaning — a lexer that mangled UTF-8 in string
+  literals, and a renderer that dropped the parentheses its own grammar needs.
+  `lib:A-37`.
+
+The second is the one to learn from. The target worked; the gap was between the
+job failing and anyone reading it.
 
 ## What this does not cover
 

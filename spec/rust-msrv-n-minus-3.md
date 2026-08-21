@@ -9,7 +9,7 @@ is the current stable release. N is **1.98**, so the MSRV is **1.95**.
 This is its own document rather than a section of [`index.md`](index.md) for the
 reason [`databases/search-adjuncts.md`](databases/search-adjuncts.md) is: it is
 one decision that several places depend on and no section owns — eighteen
-manifests, nine READMEs, one AGENTS guide, and a CI job. It is also the only
+manifests, nine READMEs, one `agents/` guide, and a CI job. It is also the only
 requirement in this tree whose **correct value changes on a schedule nobody
 here controls**, which is a property worth writing down next to the rule rather
 than discovering later.
@@ -71,7 +71,7 @@ either right or loudly wrong, and never quietly either.
   ```
 
   and the same job checks the manifests and the prose together. Nine READMEs and
-  [`AGENTS/adding-an-engine.md`](../AGENTS/adding-an-engine.md) carry it. A
+  [`agents/adding-an-engine.md`](../agents/adding-an-engine.md) carry it. A
   README that names a floor the manifest does not is the `W0.2` failure — a
   descriptive file disagreeing with the thing it describes — and here it is
   mechanically preventable, so it MUST be prevented mechanically.
@@ -97,7 +97,7 @@ either right or loudly wrong, and never quietly either.
   published as a patch bump. Cargo will refuse the build with a clear message
   rather than miscompile, so the damage is bounded — but "your dependency
   silently stopped supporting your toolchain" is still a thing a user is
-  entitled to read before it happens (`AGENTS/publishing.md`).
+  entitled to read before it happens (`agents/publishing.md`).
 
 - **RV7** A dependency MUST NOT be added whose own MSRV is newer than N−3.
   Its floor becomes this repository's floor regardless of what these manifests

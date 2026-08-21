@@ -138,31 +138,40 @@ def documents(include_historical: bool = False) -> list[tuple[str, str]]:
     return out
 
 
-def released_version() -> str:
-    """The version `AGENTS/publishing.md` says is live, which owns this fact.
+def versions() -> tuple[str, str]:
+    """`(live, local)` — what is on crates.io, and what the manifests say.
 
-    A published version is immutable and is not derivable from the tree —
-    `Cargo.toml` says what is *here*, not what is on crates.io, and the two are
-    allowed to differ between a version bump and a release. So one file owns it,
-    every other file restates it, and this reads it from the owner.
+    Both are owned by `agents/publishing.md`. A published version is immutable
+    and is **not** derivable from the tree: `Cargo.toml` says what is here, not
+    what is on crates.io.
+
+    The two are equal most of the time and deliberately differ between a version
+    bump and a release. This function reads both because the first draft of this
+    check assumed they were always equal, and reported eight errors the moment
+    0.4.0 was staged — a checker that cannot express "prepared but not yet
+    published" forces you to either lie in the manifests or switch it off, and
+    both are worse than the state it was complaining about.
     """
-    text = (ROOT / "AGENTS/publishing.md").read_text()
-    m = re.search(r"All eight publishable crates are live at \*\*([0-9.]+)\*\*", text)
+    text = (ROOT / "agents/publishing.md").read_text()
+    m = re.search(r"are live at \*\*([0-9.]+)\*\* on crates\.io", text)
     if not m:
         sys.exit(
-            "::error file=AGENTS/publishing.md::the fixed-form 'live at **X.Y.Z**' "
-            "sentence is gone; it is what every other document's version is checked "
-            "against. Restore it, or update this script and that sentence together."
+            "::error file=agents/publishing.md::the fixed-form 'are live at "
+            "**X.Y.Z** on crates.io' sentence is gone; it is what every other "
+            "document's version is checked against. Restore it, or update this "
+            "script and that sentence together."
         )
-    return m.group(1)
+    live = m.group(1)
+    staged = re.search(r"Local is ([0-9.]+) and NOT yet published", text)
+    return live, (staged.group(1) if staged else live)
 
 
 def check_versions() -> int:
     """Every restatement of the published version matches the one file that owns it."""
-    want = released_version()
+    want, local = versions()
     bad = 0
     for rel, text in documents():
-        if rel == "AGENTS/publishing.md":
+        if rel == "agents/publishing.md":
             continue
         for pattern in (
             r"live on crates\.io at \*\*([0-9.]+)\*\*",
@@ -175,24 +184,44 @@ def check_versions() -> int:
                     line = text[: m.start()].count("\n") + 1
                     print(
                         f"::error file={rel},line={line}::the published version is "
-                        f"{want} (AGENTS/publishing.md), this says {m.group(1)}"
+                        f"{want} (agents/publishing.md), this says {m.group(1)}"
                     )
                     bad = 1
-    # And the tree itself: a manifest disagreeing with the release table is the
-    # gap `W0.21` is about -- publishing from a tree whose version you did not
-    # check is how `openehr` 0.1.0 went out with the wrong `repository` field.
+    # And the tree itself: every publishable manifest carries the SAME version,
+    # and it is the one the release table calls local. A mismatch between two
+    # siblings is the one `agents/publishing.md` warns about -- a dependency
+    # pinned to a version that is not the one beside it resolves to a published
+    # crate rather than the local path, so the workspace silently tests
+    # something other than what it ships.
     for manifest in sorted(ROOT.glob("*/Cargo.toml")):
-        pkg = tomllib.loads(manifest.read_text()).get("package", {})
+        raw = tomllib.loads(manifest.read_text())
+        pkg = raw.get("package", {})
         if pkg.get("publish") is False:
             continue
-        if pkg.get("version") != want:
+        rel = manifest.relative_to(ROOT)
+        if pkg.get("version") != local:
             print(
-                f"::error file={manifest.relative_to(ROOT)}::version is "
-                f"{pkg.get('version')}, AGENTS/publishing.md says {want} is live"
+                f"::error file={rel}::version is {pkg.get('version')}, "
+                f"agents/publishing.md says local is {local}"
             )
             bad = 1
+        for section in ("dependencies", "dev-dependencies", "build-dependencies"):
+            for name, spec in (raw.get(section) or {}).items():
+                if not name.startswith("openehr") or not isinstance(spec, dict):
+                    continue
+                if "version" in spec and spec["version"] != local:
+                    print(
+                        f"::error file={rel}::depends on {name} "
+                        f"{spec['version']}, but local is {local}"
+                    )
+                    bad = 1
     if not bad:
-        print(f"the published version is {want} everywhere, manifests included")
+        state = (
+            f"live {want} everywhere"
+            if want == local
+            else f"live {want}, local {local} staged for release"
+        )
+        print(f"versions agree: {state}, manifests and inter-crate pins included")
     return bad
 
 
@@ -247,7 +276,7 @@ def check_ci_jobs() -> int:
 # divergence". The conformance ladder was stated in **four**: `C0.8`, which owns
 # it; `spec/index.md` `W0.8`, which says the ladder is defined in `C0.8` and
 # then reproduces it; `openehr-store/spec/conformance.md`; and
-# `AGENTS/conformance.md`.
+# `agents/conformance.md`.
 #
 # Deleting three copies would be the literal reading of `W0.1` and would make
 # every one of those documents worse -- a reader deciding whether a crate's
@@ -479,7 +508,7 @@ AGENT_FILE_LIMIT = 40 * 1024
 
 
 def check_agent_file_sizes() -> int:
-    """`CLAUDE.md`, `AGENTS.md`, and `AGENTS/*.md` stay under 40 kB each.
+    """`CLAUDE.md`, `AGENTS.md`, and `agents/*.md` stay under 40 kB each.
 
     These are the files an agent loads before it knows what the task is, so
     their cost is paid on every session whether or not they turn out to be
@@ -489,12 +518,27 @@ def check_agent_file_sizes() -> int:
     40 kB is roughly ten thousand tokens: large enough for a topic guide with
     its reasoning intact, small enough that four of them still leave room to
     work. When one approaches the limit, the answer is to move a topic into its
-    own guide under `AGENTS/`, not to delete the reasoning -- `W0.2` makes these
+    own guide under `agents/`, not to delete the reasoning -- `W0.2` makes these
     descriptive, and the description that survives trimming is usually the
     *what*, while the *why* is the half that was worth keeping.
     """
     bad = 0
-    files = [ROOT / "CLAUDE.md", ROOT / "AGENTS.md", *sorted((ROOT / "AGENTS").glob("*.md"))]
+    # `AGENTS.md` is a file and keeps its uppercase name; `agents/` is a
+    # directory and does not (`AG1`, `AG2`). The directory is asserted to exist
+    # rather than globbed hopefully: this line read `ROOT / "AGENTS"` after the
+    # rename, which still resolves on a case-insensitive filesystem and finds
+    # **nothing** on the Linux runner -- so the check would have quietly fallen
+    # to two files and reported success. `AG4`.
+    guides = ROOT / "agents"
+    if not guides.is_dir():
+        print(f"::error::{guides.relative_to(ROOT)}/ does not exist; this check "
+              f"would silently cover only the two root files")
+        return 1
+    files = [ROOT / "CLAUDE.md", ROOT / "AGENTS.md", *sorted(guides.glob("*.md"))]
+    if len(files) < 3:
+        print(f"::error::only {len(files)} agent-facing files found; expected the "
+              f"two root files plus the guides in {guides.relative_to(ROOT)}/")
+        return 1
     largest = 0
     for f in files:
         size = len(f.read_bytes())
@@ -503,7 +547,7 @@ def check_agent_file_sizes() -> int:
             print(
                 f"::error file={f.relative_to(ROOT)}::{size} bytes, over the "
                 f"{AGENT_FILE_LIMIT}-byte budget for agent-facing files; "
-                f"split a topic into its own AGENTS/ guide"
+                f"split a topic into its own agents/ guide"
             )
             bad = 1
     if not bad:

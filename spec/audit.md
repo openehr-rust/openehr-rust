@@ -386,7 +386,7 @@ stays open with its scope narrowed rather than closed.
 ## W-09 — The declared MSRV was checked by nothing, and was false — **Medium, fixed**
 
 **Claimed.** Seventeen manifests declared `rust-version = "1.90"`, and nine
-READMEs plus [`AGENTS/adding-an-engine.md`](../AGENTS/adding-an-engine.md) said
+READMEs plus [`agents/adding-an-engine.md`](../agents/adding-an-engine.md) said
 "Requires Rust 1.90+ (edition 2024)". A floor stated eleven times is a floor a
 reader is entitled to rely on.
 
@@ -453,7 +453,7 @@ crates.io at **0.2.0**, and **the tree has moved past them**"), `CLAUDE.md`, and
 a paragraph in each about what the next release would be.
 
 **Found.** 0.3.0 was published on **2026-08-04**, sixteen days before this
-finding. `AGENTS/publishing.md` — the file whose whole job is tracking releases —
+finding. `agents/publishing.md` — the file whose whole job is tracking releases —
 says so, correctly, with a per-crate table. The four other files that also state
 the version were not touched by the release commit, so a reader of the
 specification was told the tree was ahead of a release that had already gone
@@ -466,7 +466,7 @@ and a copy is a future divergence.* The version is not a normative statement, bu
 it behaves like one — five copies, one maintained.
 
 **Fixed** by making the other four defer rather than restate: each now names
-`AGENTS/publishing.md` as the file that tracks this. The version still appears in
+`agents/publishing.md` as the file that tracks this. The version still appears in
 them, because a reader needs the number in front of them; what changed is that
 they say where it comes from.
 
@@ -485,7 +485,7 @@ specification — read: "The repository holds **fourteen** crates: `openehr`,
 
 There are seventeen. `openehr-loco`, `openehr-assets`, and `openehr-fuzz` were
 added and the requirement was not amended, while `spec/index.md`, `README.md`,
-`AGENTS.md`, `CLAUDE.md`, and `AGENTS/index.md` all said seventeen.
+`AGENTS.md`, `CLAUDE.md`, and `agents/index.md` all said seventeen.
 
 **Why this is worse than a stale README.** `W0.2` settles a disagreement between
 a specification and a descriptive file: the specification governs. It has nothing
@@ -504,7 +504,7 @@ checkable and is not checked… the next count to go stale will go stale
 silently." [`scripts/check-docs.py`](../scripts/check-docs.py) now derives every
 countable claim from the tree and checks the documents against it, and the
 `claims` job runs it. It found two stale counts on its first run —
-`AGENTS/index.md` still said nine unpublished crates and still said the released
+`agents/index.md` still said nine unpublished crates and still said the released
 version was **0.2.0**, a sixth file with the defect **W-10** records in five.
 
 ---
@@ -638,11 +638,11 @@ stated in full in four documents:
 | `spec/databases/00-conformance.md` `C0.8` | the owner; `W0.8` says so |
 | [`index.md`](index.md) `W0.8` | says "This repository has **one** ladder, defined in `databases/00-conformance.md`", then reproduces it |
 | `openehr-store/spec/conformance.md` | a third copy |
-| [`../AGENTS/conformance.md`](../AGENTS/conformance.md) | a fourth |
+| [`../agents/conformance.md`](../agents/conformance.md) | a fourth |
 
 **Two of the four had already drifted.** `W0.8`'s copy read "A transcript
 against that engine's own server: applied cleanly…" where the owner reads "…the
-script applied cleanly…", and `AGENTS/conformance.md` had rewritten every cell
+script applied cleanly…", and `agents/conformance.md` had rewritten every cell
 shorter — "Golden tests + `conformance::check_dialect`", "Store, run in CI on
 every commit". None of the differences changed what a level means. That is the
 point: they were four texts drifting apart at the rate prose drifts, and the
@@ -650,7 +650,7 @@ next difference would not have announced itself as the interesting one.
 
 **Why the copies were not simply deleted.** `W0.1`'s literal remedy is one
 occurrence and three links. Applied here it would make all four documents worse:
-someone reading `AGENTS/conformance.md` to decide whether a crate's claim is
+someone reading `agents/conformance.md` to decide whether a crate's claim is
 honest should not have to open a second file to learn what the claim means, and
 `W0.8` reproducing the ladder is why the repository index is readable on its own.
 
@@ -667,7 +667,7 @@ changed* — not one place where it can be read.
 `scripts/check-docs.py` fails when a copy diverges from its owner and rewrites
 it with `--fix`. The three copies are now byte-identical to `C0.8`.
 
-**Shown to fail.** Shortening one cell in `AGENTS/conformance.md` produces
+**Shown to fail.** Shortening one cell in `agents/conformance.md` produces
 `block 'conformance-ladder' differs from its owner
 spec/databases/00-conformance.md`, and `--fix` restores it.
 

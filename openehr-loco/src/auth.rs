@@ -406,6 +406,20 @@ pub fn principal_from_headers(
 impl FromRequestParts<AppContext> for Principal {
     type Rejection = Denial;
 
+    // `async fn` with nothing to await, deliberately. Axum's trait declares
+    // this method `async`, and extracting a principal from headers is pure
+    // computation over data already in hand -- there is no I/O here and there
+    // must not be, because an extractor that talked to a database would put a
+    // round trip in front of every request including the ones it rejects.
+    //
+    // `clippy::unused_async_trait_impl` proposes returning `impl Future`
+    // instead. That is the same future, spelled in a way that stops matching
+    // the trait's own signature, and it buys nothing: `async fn` in a trait
+    // impl already compiles to a state machine that is immediately ready.
+    #[allow(
+        clippy::unused_async_trait_impl,
+        reason = "matches the trait's declared shape; there is nothing to await and must not be"
+    )]
     async fn from_request_parts(parts: &mut Parts, ctx: &AppContext) -> Result<Self, Denial> {
         let verifier = ctx
             .shared_store

@@ -145,7 +145,7 @@ The [conformance matrix](databases/conformance-matrix.md) is the detailed
 version of that last column and is the one to trust.
 
 All eight are on crates.io at **0.3.0**, published 2026-08-04, and local matches
-published. [`AGENTS/publishing.md`](../AGENTS/publishing.md) holds the
+published. [`agents/publishing.md`](../agents/publishing.md) holds the
 per-crate table and is the file to read before the next release.
 
 This sentence said **0.2.0** for sixteen days after 0.3.0 went out, because the
@@ -336,7 +336,7 @@ is genuinely worse. The rules below keep the copies and make them mechanical.
   The conformance ladder is the first block bound this way. It was written out
   four times — `db:C0.8`, which owns it; `W0.8` below, which says the ladder is
   *defined* in `db:C0.8` and then reproduces it; `openehr-store/spec/conformance.md`;
-  and `AGENTS/conformance.md` — and two of the four had already drifted. See
+  and `agents/conformance.md` — and two of the four had already drifted. See
   [`audit.md`](audit.md) **W-16**.
 
 - **W0.39** *(added 2026-08-20)* A **countable** claim about this repository —

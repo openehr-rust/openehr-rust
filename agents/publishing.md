@@ -19,19 +19,35 @@ publish a crate with an open finding against its claims (`W0.21`).
 
 ## State today
 
-**Published 2026-08-04.** All eight publishable crates are live at **0.3.0**
-on crates.io, in the order below, and local matches published.
+**Published 2026-08-04 at 0.3.0. Local is 0.4.0 and NOT yet published.**
+
+All eight publishable crates are live at **0.3.0** on crates.io, in the order
+below. The tree has moved past them: 0.4.0 is prepared and staged — manifests,
+`Cargo.lock`, and [`CHANGELOG.md`](../CHANGELOG.md) all say 0.4.0 — and is
+waiting on the gate below.
+
+> **Do not publish 0.4.0 until CI has run green on `decd78b` or later.**
+>
+> That commit added an `msrv` job, a `bench` job, two fuzz matrix rows, a tenth
+> crate to the `test` matrix, and rewrote the `layering` and `claims` guards.
+> **None of it has ever executed.** `W0.11` is the rule that a committed
+> workflow is not a working one, and `W-02` is the finding for making exactly
+> this mistake — and a published version is immutable, so 0.4.0's documentation
+> would permanently describe checks whose first run had not happened.
+>
+> Every one of those jobs was run locally, including against deliberately
+> broken inputs. That is evidence, and it is not the same evidence.
 
 | Crate | crates.io | Local |
 | --- | --- | --- |
-| `openehr` | 0.1.0, 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
-| `openehr-store` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
-| `openehr-sqlite` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
-| `openehr-postgresql` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
-| `openehr-mysql` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
-| `openehr-mariadb` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
-| `openehr-mssql` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
-| `openehr-oracle` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
+| `openehr` | 0.1.0, 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
+| `openehr-store` | 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
+| `openehr-sqlite` | 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
+| `openehr-postgresql` | 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
+| `openehr-mysql` | 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
+| `openehr-mariadb` | 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
+| `openehr-mssql` | 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
+| `openehr-oracle` | 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
 
 `openehr-loco`, `openehr-assets`, and the eight fuzz crates are `publish = false`
 and are not on crates.io. `openehr-loco`'s own version moves in lockstep with

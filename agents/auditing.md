@@ -33,7 +33,8 @@ A worked pass, in the order that has actually found things here:
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \
          openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
          openehr-loco openehr-assets; do
-  (cd "$d" && cargo test --quiet && cargo clippy --all-targets --quiet) \
+  (cd "$d" && cargo test --quiet \
+     && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) \
     || echo "FAIL $d"
 done
 
@@ -57,6 +58,10 @@ grep -n 'for d in\|for other in\|for f in' .github/workflows/ci.yml  # hand-writ
 # 6. Do the documents' counts, versions, and levels match the tree?
 python3 scripts/check-docs.py
 
+# 6b. What did the last CI run actually say? Not what a document says it said.
+gh run list --limit 3
+gh run view --log-failed $(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
+
 # 7. Is the published metadata what the repository says?
 curl -s https://crates.io/api/v1/crates/openehr \
   -H 'User-Agent: your-name (your@email)' | python3 -m json.tool | head -20
@@ -67,6 +72,16 @@ Step 5 is why it had survived — the guard listed five of six dialects, and lat
 found **W-13** and **W-14** the same way, where two more guards listed nine
 crates of seventeen. **Any list of names inside a guard is a finding waiting to
 happen**; the fix is always to derive the list from the tree and assert its size.
+
+**Step 6b is the one this repository learned last and hardest.** `A-37` was a
+red `fuzz / openehr` job on `main`, seventeen days old, while `CLAUDE.md` said
+"CI is green" and `openehr-fuzz/README.md` said "no crashes". The target had
+done its job on the day it was written. Nobody read the result. The bug it was
+holding was an AQL `WHERE` clause that silently matched nobody.
+
+Note the `RUSTFLAGS="-D warnings"` in step 1. Without it, a lint that fires only
+under `-D warnings` — which CI sets — passes locally and fails there, and you
+will read your own green run as evidence.
 
 Step 6 is step 5 turned on the documentation. It exists because **W-10** and
 **W-11** were nothing but stale counts — the published version stated in five

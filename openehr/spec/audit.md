@@ -15,15 +15,16 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**36 findings, 36 in the table below: 5 High, 22 Medium, 9 Low. 29 fixed or
-classified, 7 open.** These counts are checked against the table by CI
+**38 findings, 38 in the table below: 6 High, 23 Medium, 9 Low. 30 fixed or
+classified, 8 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
-verified), and the check should have failed. Every one of the 7 open findings
+verified), and the check should have failed. Every one of the 8 open findings
 is open by a stated reason rather than by omission: **A-02** and **A-08** are
-declared departures the crate does not intend to close; **A-05**, **A-10** and
-**A-30** are recorded limitations or residuals with the reasoning for leaving
-them written beside them; **A-19** and **A-27** are declared
+declared departures the crate does not intend to close; **A-05**, **A-10**,
+**A-30** and **A-38** are recorded limitations or residuals with the reasoning
+for leaving them written beside them — **A-38** is a defect in `serde_json`
+that this repository cannot repair, only contain and report; **A-19** and **A-27** are declared
 departures (`S1.18`, `Q12.9b`) whose *enforcement* remains open work. **A-09**
 (no property-based testing) is closed: `tests/properties.rs` covers the laws, and
 `openehr-fuzz` now drives five targets over the parsers — ISO 8601, the
@@ -111,6 +112,8 @@ in the documentation, which is the class this register most exists to catch.
 | A-33 | Medium | The Gregorian leap rule was implemented **twice** — `base::iso8601` and `rm::data_structures` — byte-identical but for the fallback arm, and the second copy had never been run by any test | **fixed** — one implementation, `pub(crate)`; the interval-event arithmetic that used it is now tested against hand-computed dates |
 | A-34 | Medium | `DV_ENCAPSULATED`'s `charset` and `language` were preserved across a round trip and **unreadable** — `EncapsulatedAttrs` is exported but no type returned one, so a caller holding a `DV_MULTIMEDIA` or `DV_PARSABLE` could not ask what it declared | **fixed** — an `encapsulated()` accessor on both; found because the two accessors had no reachable caller to test |
 | A-36 | Medium | `DV_URI` and `DV_EHR_URI` enforced their invariants in the constructor only. A `DV_URI` deserialized from `{"value":"nocolon"}` **panicked** in `scheme()`, whose rustdoc said "# Panics — Never"; a `DV_EHR_URI` deserialized from `{"value":"https://example.org/x"}` reported scheme `https`, which is what the type exists to make impossible. `Validate for DataValue` reached both through a `_ => {}` arm, and `LINK.target` was validated nowhere | **fixed** — `scheme()`/`rest()` are total (`D3.30a`), validation checks both types and every `LOCATABLE`'s links, and `openehr-fuzz` has a `uri` target that reproduces the panic in seconds |
+| A-37 | High | The `aql` fuzz target had been **failing in CI since 2026-08-04** and nobody had triaged it. Two defects: the lexer copied a string literal one UTF-8 **byte** at a time, so `'Müller'` lexed to `'MÃ¼ller'` and a `WHERE` against it matched nobody; and the `FROM` renderer omitted the parentheses its own grammar needs, so `Or(Contains(a,b), c)` rendered as text that re-parsed to `Contains(a, Or(b,c))` — a query over different records | **fixed** — slices not bytes, escaped rendering, precedence-correct parentheses (`Q12.15`, `Q12.15a`, `Q12.15b`) |
+| A-38 | Medium | `serde_json` 1.0.151's float parser is **not the inverse of its own serializer**: it reads `1.5777777777770001` one ULP below `core::str::parse`. A magnitude therefore **drifts** across repeated canonical round trips — three applications before it settled in the observed case, with no bound established — and a composition read out of a store is not bit-identical to the one written | open, **upstream** — contained by `db:M3.43`, which stores canonical JSON byte-preserving and digests the stored bytes rather than re-canonicalising, so no false tamper alarm is reachable |
 | A-35 | Medium | Ten types — every `DV_ORDERED` descendant and `DataValue` — implemented `PartialOrd` while deriving `PartialEq` over all their fields, so `a != b` while `a <= b` and `a >= b` were both true. Recorded as the lexical-vs-semantic shape of `A-32` and scoped to five types; the mechanism is `OrderedAttrs`, which every `DV_ORDERED` carries, and it reached five more | **fixed** — no `DV_ORDERED` implements `PartialOrd`; comparison is `DvOrdered::semantic_cmp`, and `INTERVAL<T>` is bounded on a new `SemanticOrd` (`D3.18b`, `D3.18c`) |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
@@ -1747,6 +1750,183 @@ they order `Equal` — so restoring `PartialOrd` fails the suite rather than
 quietly reintroducing the contradiction. And by
 `guarantees::a_reference_range_is_unmoved_by_how_an_instant_is_spelled`, because
 the rewrite of `contains` is the part that could have changed an answer.
+
+## A-37 — a red fuzz job nobody read, and two ways an AQL query changed meaning
+
+**Found 2026-08-21**, not by fuzzing but by *looking at the last CI run on
+`main`*. It was a failure, from 2026-08-04, seventeen days old:
+
+```
+thread '<unnamed>' panicked at fuzz_targets/aql.rs:33:9:
+assertion `left == right` failed: AQL normalisation is not idempotent
+```
+
+**The finding before the findings.** `CLAUDE.md` said "CI is green".
+`openehr-fuzz/README.md` said "No crashes. All seven targets run in CI on every
+push." Both were written when they were true and neither was re-checked, and a
+red job on the default branch is about as visible as a signal gets. `W0.3` is
+usually about a claim nobody could check; this one anybody could, in one
+command, and for seventeen days nobody did.
+
+Two independent defects were behind it.
+
+### The lexer widened UTF-8 bytes into characters
+
+```rust
+value.push(bytes[i] as char);   // one byte -> one char
+```
+
+Scanning the input as bytes is correct — the only bytes the lexer examines are
+ASCII delimiters, and an ASCII byte never occurs inside a multi-byte UTF-8
+sequence. **Copying** by byte is not. Every non-ASCII character in a string
+literal came out as Latin-1 mojibake:
+
+| Written | Lexed as |
+| --- | --- |
+| `'Müller'` | `'MÃ¼ller'` |
+| `'日本語'` | `'æ—¥æœ¬èªž'` |
+
+`WHERE c/name/value = 'Müller'` therefore parsed, checked clean, and asked
+about a string nobody is named. There was no error to see: the query was valid,
+it was simply about something else. This is the same shape as `db:D-08`, where
+MySQL rewrote a magnitude of `1.10` as `1.1` — a silent transformation of
+clinical data by a layer that was only supposed to carry it.
+
+Fixed by appending **slices** of the input, tracking the start of each run
+between escapes.
+
+### The renderer omitted the parentheses its own grammar needs
+
+`FROM` puts `CONTAINS`, `AND` and `OR` at one precedence level, and `CONTAINS`
+takes the whole remainder as its right operand — `containment` calls itself
+there. The renderer wrote `{left} CONTAINS {right}` with no parentheses:
+
+| Tree | Rendered | Re-parsed as |
+| --- | --- | --- |
+| `Or(Contains(a, b), c)` | `(a CONTAINS b OR c)` | `Contains(a, Or(b, c))` |
+
+The caller asked for *either (a containing b) or c*. What came back was *a
+containing either b or c*. Both are valid AQL, both select records, and they
+select **different** records.
+
+`Q12.15` said a rendered query must re-parse to an "equivalent" query, and by
+that word the renderer passed: the output parses. The word was doing no work.
+It now says **equal** — the same tree — and the test compares trees rather than
+strings.
+
+Fixed by parenthesising any operand that is not a bare class, which leaves the
+ordinary `EHR e CONTAINS COMPOSITION c` unchanged.
+
+### A third, found while fixing the second
+
+`Literal::Display` wrote `'{v}'` with no escaping, so a string containing a
+quote rendered as `'it's'`. Rendering now escapes `'` and `\` — and only
+those, because the lexer's rule is "a backslash introduces the next character
+literally" and not a C-style table, so a rendered `\n` would mean the letter
+`n`.
+
+**Verified.** The `aql` target, which reproduced all of this from an empty
+corpus in under two minutes, now runs seven minutes clean. Pinned by
+`guarantees::an_aql_string_literal_is_not_mangled_by_the_lexer` and
+`guarantees::aql_rendering_round_trips_through_the_parser`, the second of which
+asserts tree equality and not only text equality — the assertion `Q12.15`'s
+original wording could not make.
+
+**What this says about the process.** Every finding in this register was found
+by running something. This one was found by *reading the result of something
+that had already run* — which had been sitting in the open, red, on the default
+branch. The fuzz target did its job on 2026-08-04. The gap was between the job
+failing and anyone looking, and no amount of additional checking closes that
+one.
+
+## A-38 — `serde_json` reads back a number it did not write
+
+**Found 2026-08-21** by the `data_value` fuzz target, on its **first CI run**,
+which is the outcome that justifies writing a fuzz target at all.
+
+```
+assertion `left == right` failed: canonical JSON is not a fixed point
+  left:  …,"value":1.5777777777770001}
+ right:  …,"value":1.577777777777}
+```
+
+**It is not this crate's arithmetic.** Reduced:
+
+| Operation | Result |
+| --- | --- |
+| `core::str::parse::<f64>("1.5777777777770001")` | `0x3ff9_3e93_e93e_863b` |
+| `serde_json::from_str::<f64>("1.5777777777770001")` | `0x3ff9_3e93_e93e_863a` |
+
+One ULP apart. `serde_json` 1.0.151 serialises `…863b` as
+`1.5777777777770001` — correctly, since `core` reads that string back as
+`…863b` — and then its own parser reads it as `…863a`. **The serializer and the
+parser disagree.**
+
+**The consequence is drift, not a single lost bit.** The first version of this
+finding said the value "converges on the second application and stays there".
+That was written from one example and was wrong; the fuzz target disproved it
+within two minutes of the claim being made. Iterating on a `DV_QUANTITY`
+magnitude:
+
+```text
+4.4444444444444444e-7  →  4.4444444444444454e-7  →  4.444444444444446e-7  →  stable
+```
+
+Three applications there. **No bound is established** — it settles in the cases
+observed, and nothing here proves it must. Each serialise-and-reparse cycle can
+move a magnitude, and a record that is read, amended in one field, and
+re-committed passes every *other* field through such a cycle.
+
+**What this costs, exactly.** Measured rather than reasoned about:
+
+| Question | Answer |
+| --- | --- |
+| Are the stored bytes stable? | **Yes.** `1.5777777777770001`, written once. |
+| Is the digest over them stable? | **Yes.** |
+| Can `verify_versions` raise a false tamper alarm? | **No.** |
+| Is the value read back equal to the value written? | **No.** One ULP low. |
+| Do re-canonicalised bytes match the stored bytes? | **No.** |
+
+The first three are "no" **because of a decision already made**.
+`db:M3.43` requires canonical JSON to be stored in a byte-preserving type, and
+`openehr_store::integrity::hashed_bytes` hashes `row.data_json` **as bytes**
+rather than re-deriving them from the parsed value. Had the integrity check
+re-canonicalised — the obvious implementation — a clinical record carrying a
+high-precision number would report `ContentAltered` with nobody having altered
+it.
+
+That requirement was written for `db:D-08`, where MySQL rewrote a magnitude of
+`1.10` as `1.1`. It turns out to defend against the JSON library too. A rule
+that pays twice for reasons its author did not know about is the argument for
+writing rules about *properties* rather than about the specific thing that went
+wrong.
+
+**Open, and upstream.** Nothing in this repository can make `serde_json`'s
+parser agree with its serializer. Three responses exist and none is free:
+
+1. **Leave it**, with the containment above and this finding. The residual is
+   that a caller who reads a value back and compares it to what they wrote
+   finds them unequal in the last bit.
+2. **`serde_json`'s `arbitrary_precision`**, which keeps a number as its
+   original text and would preserve the input digits exactly. It changes the
+   type of every numeric Reference-Model field from `f64` to something
+   text-backed — a large API change with its own arithmetic questions.
+3. **Report it upstream**, which is worth doing regardless of 1 or 2.
+
+Choosing between them is a design decision, not a repair, so it is written down
+rather than made silently (`W0.19`).
+
+**The fuzz targets assert only that canonical form re-parses** (`W0.31`: a
+target must not report a documented limitation as a finding). Convergence was
+tried first and is not assertable — see above; the attempt is why the drift is
+described accurately here instead of by extrapolation from one example.
+
+The behaviour is pinned instead by
+`guarantees::canonical_json_drifts_on_a_high_precision_float`, which fails when
+the drift **stops** — an upstream fix or a move to `arbitrary_precision` — so
+whoever closes this finding is told what it was. That test also asserts the
+containment rather than restating it: a digest over the stored bytes is stable
+because it is taken over bytes.
 
 ## Closed findings
 

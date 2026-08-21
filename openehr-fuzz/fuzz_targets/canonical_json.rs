@@ -46,5 +46,22 @@ fuzz_target!(|data: &[u8]| {
     };
     let again: Composition =
         serde_json::from_str(&canonical).expect("canonical form must re-parse");
-    assert_eq!(value, again, "canonical JSON did not round-trip");
+    // Canonical form must **re-parse**. It is deliberately not asserted to be a
+    // fixed point, and not asserted to converge either: `A-38` records that
+    // `serde_json` 1.0.151's float parser is not the inverse of its own
+    // serializer, so a magnitude *drifts* across repeated round trips —
+    // `4.4444444444444444e-7`, `4.4444444444444454e-7`, `4.444444444444446e-7`,
+    // then stable. Three applications in that case, and no bound is
+    // established.
+    //
+    // `W0.31`: a target must not report a documented limitation as a finding.
+    // The property a store actually needs is unaffected and is not this one —
+    // `db:M3.43` stores canonical JSON byte-preserving and
+    // `openehr_store::integrity` digests the stored bytes rather than
+    // re-deriving them, so the digest never sees a second application. The
+    // drift itself is pinned by
+    // `guarantees::canonical_json_drifts_on_a_high_precision_float`.
+    let twice =
+        openehr::security::to_canonical_string(&again).expect("and re-canonicalise");
+    let _: Composition = serde_json::from_str(&twice).expect("and that must re-parse too");
 });

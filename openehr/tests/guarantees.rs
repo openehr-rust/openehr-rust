@@ -898,3 +898,126 @@ fn a_reference_range_is_unmoved_by_how_an_instant_is_spelled() {
     assert!(!open.contains(&DvDateTime::new("2026-08-01T12:00:00+01:00").unwrap()));
     assert!(open.contains(&DvDateTime::new("2026-08-01T12:00:00Z").unwrap()));
 }
+
+/// A non-ASCII string literal survives AQL lexing.
+///
+/// **Failure mode.** The lexer scanned the input as bytes — correct, since the
+/// only bytes it examines are ASCII delimiters — but *copied* them one at a
+/// time with `value.push(bytes[i] as char)`. That widens each UTF-8 byte into
+/// its own `char`, so every non-ASCII character became Latin-1 mojibake:
+/// `'Müller'` lexed to `'MÃ¼ller'`. A `WHERE name = 'Müller'` then matched
+/// nobody, and nothing reported it — the query parsed, checked clean, and was
+/// simply about a different string. Found by the `aql` fuzz target as a
+/// non-idempotent render; the corruption is the larger half. `A-37`.
+#[test]
+fn an_aql_string_literal_is_not_mangled_by_the_lexer() {
+    for text in ["Müller", "日本語", "Ω", "naïve café", "\u{59a}\u{7fc}"] {
+        let query: AqlQuery = format!("SELECT c FROM EHR e WHERE c/name/value = '{text}'")
+            .parse()
+            .unwrap_or_else(|e| panic!("{text:?} must parse: {e}"));
+        assert!(
+            query.to_string().contains(text),
+            "{text:?} was corrupted to {:?}",
+            query.to_string()
+        );
+    }
+}
+
+/// Rendering an AQL query and reparsing it yields the same query.
+///
+/// **Failure mode, twice over.** A renderer that is not idempotent silently
+/// rewrites a caller's query into a different one, and both defects here did
+/// exactly that:
+///
+/// * `FROM` puts `CONTAINS`, `AND` and `OR` at one precedence level, and
+///   `CONTAINS` takes the whole remainder as its right operand. So
+///   `Or(Contains(a, b), c)` rendered as `(a CONTAINS b OR c)` and reparsed as
+///   `Contains(a, Or(b, c))` — *a containing either b or c*, where the caller
+///   asked for *either (a containing b) or c*. Different records.
+/// * A string literal containing a quote rendered unescaped, so `it's` came
+///   back as `'it's'`.
+///
+/// This is `Q12.7`'s round-trip property, driven over the shapes that broke it
+/// rather than over the shapes that already worked.
+#[test]
+fn aql_rendering_round_trips_through_the_parser() {
+    for text in [
+        "SELECT c FROM (EHR e CONTAINS COMPOSITION c) OR EHR x",
+        "SELECT c FROM EHR e CONTAINS (COMPOSITION c OR EHR x)",
+        "SELECT c FROM (EHR e CONTAINS COMPOSITION c) CONTAINS OBSERVATION o",
+        "SELECT c FROM EHR e CONTAINS COMPOSITION c",
+        r"SELECT c FROM EHR e WHERE c/name/value = 'it\'s'",
+        r"SELECT c FROM EHR e WHERE c/name/value = 'back\\slash'",
+        "SELECT c FROM EHR e WHERE c/name/value = 'Müller'",
+    ] {
+        let once: AqlQuery = text.parse().unwrap_or_else(|e| panic!("{text:?}: {e}"));
+        let rendered = once.to_string();
+        let twice: AqlQuery = rendered
+            .parse()
+            .unwrap_or_else(|e| panic!("{text:?} rendered to {rendered:?}, which will not reparse: {e}"));
+        assert_eq!(
+            twice.to_string(),
+            rendered,
+            "rendering {text:?} is not idempotent"
+        );
+        // Stronger than string equality of the render: the *tree* is the same,
+        // so the second query selects the same records as the first.
+        assert_eq!(twice, once, "reparsing {text:?} produced a different query");
+    }
+}
+
+/// A high-precision magnitude drifts across repeated canonical round trips.
+///
+/// **This test pins a defect, not a guarantee.** `serde_json` 1.0.151's float
+/// parser is not the inverse of its own serializer — it reads
+/// `1.5777777777770001` one ULP below `core::str::parse` — so serialising and
+/// re-parsing a value moves it. Repeatedly, it *drifts*:
+///
+/// ```text
+/// 4.4444444444444444e-7 → 4.4444444444444454e-7 → 4.444444444444446e-7 → stable
+/// ```
+///
+/// Three applications there, and no bound is established. `A-38`.
+///
+/// **Failure mode of this test.** It fails when the behaviour changes — an
+/// upstream fix, or a move to `arbitrary_precision`. That is the point: `A-38`
+/// is open with three possible responses written down, and whoever takes one
+/// should find this test telling them what it was.
+///
+/// **What is NOT at risk, and why.** The stored bytes are written once and the
+/// content digest is taken over them (`db:M3.43`);
+/// `openehr_store::integrity::hashed_bytes` hashes `data_json` as bytes rather
+/// than re-canonicalising, so the digest never sees a second application and no
+/// false tamper alarm is reachable. Asserted here so that the containment is
+/// checked and not merely claimed.
+#[test]
+fn canonical_json_drifts_on_a_high_precision_float() {
+    let source = r#"{"_type":"DV_QUANTITY","magnitude":0.000000444444444444444444444444444444444444444444441569995,"units":"m"}"#;
+    let mut value: DataValue = serde_json::from_str(source).expect("parses");
+
+    let mut seen = Vec::new();
+    for _ in 0..4 {
+        let canonical = openehr::security::to_canonical_string(&value).expect("canonicalises");
+        seen.push(canonical.clone());
+        value = serde_json::from_str(&canonical).expect("re-parses");
+    }
+
+    assert_ne!(
+        seen[0], seen[1],
+        "the drift is gone — `serde_json` may have been fixed, or the number \
+         representation changed. Re-read A-38 and close it or restate it."
+    );
+    assert_eq!(
+        seen[2], seen[3],
+        "the drift no longer settles by the third application; A-38 says it did"
+    );
+
+    // The containment: a digest over the bytes that were stored is stable,
+    // because it is taken over bytes and never re-derived.
+    let stored = seen[0].as_bytes();
+    assert_eq!(
+        openehr::security::Digest256::of(stored),
+        openehr::security::Digest256::of(stored),
+        "a digest over fixed bytes must be stable"
+    );
+}

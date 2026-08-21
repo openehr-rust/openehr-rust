@@ -501,7 +501,7 @@ prose disagrees:
 | --- | --- |
 | how many crates, how many published, how many fuzz targets, how many tutorials | the tree itself |
 | which CI jobs exist | `.github/workflows/ci.yml` |
-| which version is live on crates.io | [`AGENTS/publishing.md`](AGENTS/publishing.md) |
+| which version is live on crates.io | [`agents/publishing.md`](agents/publishing.md) |
 | each crate's conformance level | [`spec/databases/conformance-matrix.md`](spec/databases/conformance-matrix.md) |
 | a passage that genuinely belongs in several documents | whichever copy is marked `(owner)` |
 
@@ -543,7 +543,7 @@ Recorded rather than implied — see [`spec/audit.md`](spec/audit.md):
 ```
 spec/                      repository specification + audit register
   databases/               persistence specification (db:)
-AGENTS.md, AGENTS/         contributor and agent guides
+AGENTS.md, agents/         contributor and agent guides
 CLAUDE.md                  guidance for Claude Code
 openehr/                   the Reference Model library
   spec/                    library specification, audit, conformance matrix
@@ -568,17 +568,18 @@ eight fuzz harnesses — are not.
 
 ## Contributing
 
-Read [`AGENTS.md`](AGENTS.md), and [`AGENTS/`](AGENTS/index.md) for topic guides:
-[adding an engine](AGENTS/adding-an-engine.md),
-[conformance](AGENTS/conformance.md), [publishing](AGENTS/publishing.md),
-[openEHR concepts](AGENTS/openehr-concepts.md), and
-[auditing](AGENTS/auditing.md).
+Read [`AGENTS.md`](AGENTS.md), and [`agents/`](agents/index.md) for topic guides:
+[adding an engine](agents/adding-an-engine.md),
+[conformance](agents/conformance.md), [publishing](agents/publishing.md),
+[openEHR concepts](agents/openehr-concepts.md), and
+[auditing](agents/auditing.md).
 
 ```sh
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \
          openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
          openehr-loco openehr-assets; do
-  (cd "$d" && cargo test --quiet && cargo clippy --all-targets --quiet) \
+  (cd "$d" && cargo test --quiet \
+     && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) \
     || echo "FAIL $d"
 done
 ```

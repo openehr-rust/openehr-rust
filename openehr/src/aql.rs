@@ -50,6 +50,7 @@
 //! records the list.
 
 use core::fmt;
+use core::fmt::Write as _;
 
 // ---------------------------------------------------------------------------
 // Lexer
@@ -109,20 +110,43 @@ fn lex(input: &str) -> Result<Vec<Lexed>, AqlError> {
                 let quote = c;
                 i += 1;
                 let mut value = String::new();
+                // Copied as **slices of the input**, not byte by byte.
+                //
+                // This read `value.push(bytes[i] as char)`, which takes one
+                // UTF-8 byte and widens it to a `char` — so every non-ASCII
+                // character in a string literal came out as Latin-1 mojibake.
+                // `'Müller'` lexed to `'MÃ¼ller'`, and a `WHERE name = …`
+                // against it matched nobody. See `A-37`.
+                //
+                // Scanning by byte is still correct: the only bytes examined
+                // are `\\` and the quote, both ASCII, and an ASCII byte never
+                // occurs inside a multi-byte UTF-8 sequence. What was wrong was
+                // *copying* by byte. `segment` tracks the start of the current
+                // run so each run is appended whole.
+                let mut segment = i;
                 loop {
                     if i >= bytes.len() {
                         return Err(AqlError::new(start, "unterminated string literal"));
                     }
                     if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                        value.push(bytes[i + 1] as char);
-                        i += 2;
+                        value.push_str(&input[segment..i]);
+                        // The escaped character may itself be multi-byte, so
+                        // step over all of it. `i + 1` is a character boundary
+                        // because a backslash is one byte.
+                        let escaped = input[i + 1..]
+                            .chars()
+                            .next()
+                            .expect("a character starts here: i + 1 < bytes.len()");
+                        value.push(escaped);
+                        i += 1 + escaped.len_utf8();
+                        segment = i;
                         continue;
                     }
                     if bytes[i] == quote {
+                        value.push_str(&input[segment..i]);
                         i += 1;
                         break;
                     }
-                    value.push(bytes[i] as char);
                     i += 1;
                 }
                 out.push(Lexed {
@@ -251,7 +275,24 @@ pub enum Literal {
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::String(v) => write!(f, "'{v}'"),
+            // Escaped, so that a value containing a quote or a backslash
+            // renders as something the lexer reads back unchanged. Without
+            // this, `it's` rendered as `'it's'` — which reparses as the string
+            // `it` followed by garbage, or fails outright (`A-37`).
+            //
+            // Only these two characters: the lexer's escape rule is "a
+            // backslash introduces the next character literally", not a C-style
+            // table, so `\n` in a rendered query would mean the letter `n`.
+            Self::String(v) => {
+                f.write_str("'")?;
+                for ch in v.chars() {
+                    if ch == '\'' || ch == '\\' {
+                        f.write_char('\\')?;
+                    }
+                    f.write_char(ch)?;
+                }
+                f.write_str("'")
+            }
             Self::Integer(v) => write!(f, "{v}"),
             Self::Number(v) => write!(f, "{v}"),
             Self::Boolean(v) => write!(f, "{v}"),
@@ -485,6 +526,29 @@ impl From {
     }
 }
 
+impl From {
+    /// Renders an operand, parenthesised unless it is a bare class.
+    ///
+    /// Every operator in a `FROM` clause sits at **one** precedence level, and
+    /// `CONTAINS` takes the whole remainder as its right operand
+    /// (`containment` calls itself there). So the parenthesis is not
+    /// decoration: without it, rendering re-associates the tree.
+    ///
+    /// `Or(Contains(a, b), c)` used to render `(a CONTAINS b OR c)`, and
+    /// reparsing that produced `Contains(a, Or(b, c))` — *a containing either b
+    /// or c*, where the caller wrote *either (a containing b) or c*. Those
+    /// select different records. `A-37`.
+    ///
+    /// A bare class is left unwrapped so the common query renders unchanged:
+    /// `EHR e CONTAINS COMPOSITION c`, not `(EHR e) CONTAINS (COMPOSITION c)`.
+    fn operand(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Class(c) => write!(f, "{c}"),
+            other => write!(f, "({other})"),
+        }
+    }
+}
+
 impl fmt::Display for From {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -494,11 +558,20 @@ impl fmt::Display for From {
                 negated,
                 right,
             } => {
-                let not = if *negated { "NOT " } else { "" };
-                write!(f, "{left} {not}CONTAINS {right}")
+                left.operand(f)?;
+                write!(f, " {}CONTAINS ", if *negated { "NOT " } else { "" })?;
+                right.operand(f)
             }
-            Self::And(a, b) => write!(f, "({a} AND {b})"),
-            Self::Or(a, b) => write!(f, "({a} OR {b})"),
+            Self::And(a, b) => {
+                a.operand(f)?;
+                write!(f, " AND ")?;
+                b.operand(f)
+            }
+            Self::Or(a, b) => {
+                a.operand(f)?;
+                write!(f, " OR ")?;
+                b.operand(f)
+            }
         }
     }
 }

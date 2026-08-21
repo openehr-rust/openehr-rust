@@ -2,7 +2,7 @@
 
 [package]
 name = "openehr-sqlite"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
@@ -13,8 +13,8 @@ repository = "https://github.com/openehr-rust/openehr-rust"
 readme = "README.md"
 
 [dependencies]
-openehr = { path = "../openehr", version = "0.3.0" }
-openehr-store = { path = "../openehr-store", version = "0.3.0" }
+openehr = { path = "../openehr", version = "0.4.0" }
+openehr-store = { path = "../openehr-store", version = "0.4.0" }
 serde_json = { version = "1", features = ["preserve_order"] }
 # `bundled` compiles a known SQLite rather than linking whatever the host
 # ships. The generated DDL and the JSON1 functions the store uses are
@@ -32,11 +32,11 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # distinctness check covered five of six dialects and the one it omitted was a
 # byte-identical copy of `openehr-mysql`. An incomplete guard reports the same
 # green as a complete one.
-openehr-postgresql = { path = "../openehr-postgresql", version = "0.3.0" }
-openehr-mysql = { path = "../openehr-mysql", version = "0.3.0" }
-openehr-mariadb = { path = "../openehr-mariadb", version = "0.3.0" }
-openehr-mssql = { path = "../openehr-mssql", version = "0.3.0" }
-openehr-oracle = { path = "../openehr-oracle", version = "0.3.0" }
+openehr-postgresql = { path = "../openehr-postgresql", version = "0.4.0" }
+openehr-mysql = { path = "../openehr-mysql", version = "0.4.0" }
+openehr-mariadb = { path = "../openehr-mariadb", version = "0.4.0" }
+openehr-mssql = { path = "../openehr-mssql", version = "0.4.0" }
+openehr-oracle = { path = "../openehr-oracle", version = "0.4.0" }
 
 [lints.rust]
 missing_docs = "deny"

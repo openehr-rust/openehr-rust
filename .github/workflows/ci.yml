@@ -189,7 +189,7 @@ jobs:
             esac
           done < /tmp/rv-prose
 
-          # `AGENTS/adding-an-engine.md` pastes a manifest skeleton, and a
+          # `agents/adding-an-engine.md` pastes a manifest skeleton, and a
           # skeleton naming a floor nobody uses is how the next engine crate
           # acquires the wrong one.
           grep -rn --include='*.md' --exclude-dir=target \

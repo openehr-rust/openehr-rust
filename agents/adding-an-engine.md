@@ -42,7 +42,7 @@ Its own workspace, matching the others:
 Match the *current* version the rest of the workspace is on — read it from a
 sibling dialect crate's `Cargo.toml` rather than copying the numbers below,
 which will drift. As of this writing that is `0.3.0`, published 2026-08-04
-(`AGENTS/publishing.md`); a new crate's own version starts wherever the others
+(`agents/publishing.md`); a new crate's own version starts wherever the others
 are, not at `0.1.x`.
 
 The same applies to `rust-version`, which is **N−3** and changes on Rust's

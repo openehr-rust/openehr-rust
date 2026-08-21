@@ -80,5 +80,37 @@ Requirement prefix: `Q12`.
   does not bind. This is the error AQL's syntax makes easiest to write — rename
   a class alias and miss one `SELECT` column — and hardest to see, because such
   a query is syntactically perfect and returns nothing.
-- **Q12.15** A parsed query MUST render to text that re-parses to an equivalent
-  query.
+- **Q12.15** *(amended 2026-08-21)* A parsed query MUST render to text that
+  re-parses to an **equal** query — the same tree, not merely one that parses.
+
+  "Equivalent" was the original word and it was too weak to be checkable. The
+  `FROM` renderer emitted `(a CONTAINS b OR c)` for `Or(Contains(a, b), c)`, and
+  that text re-parses cleanly into `Contains(a, Or(b, c))` — *a containing
+  either b or c*, where the caller wrote *either (a containing b) or c*. Both
+  are valid queries over different records, so "it re-parses" was satisfied and
+  the caller's query had still been rewritten. See [`audit.md`](audit.md)
+  **A-37**.
+
+- **Q12.15a** *(added 2026-08-21)* The renderer MUST emit whatever parentheses
+  the grammar needs to reproduce the tree it was given.
+
+  `FROM` puts `CONTAINS`, `AND` and `OR` at one precedence level and lets
+  `CONTAINS` take the whole remainder as its right operand, so an operand that
+  is not a bare class is parenthesised. A bare class is not, so the ordinary
+  query still renders as `EHR e CONTAINS COMPOSITION c` rather than
+  `(EHR e) CONTAINS (COMPOSITION c)`.
+
+- **Q12.15b** *(added 2026-08-21)* Lexing a string literal MUST preserve it
+  exactly, and rendering one MUST escape whatever the lexer treats as special.
+
+  The lexer copied the literal one **byte** at a time into a `String`, widening
+  each UTF-8 byte to its own `char`: `'Müller'` lexed to `'MÃ¼ller'`, and a
+  `WHERE` against it matched nobody. The query parsed, checked clean, and was
+  about a different string — there was nothing for a caller to notice. Scanning
+  by byte is still correct, because the only bytes the lexer examines are ASCII
+  delimiters and an ASCII byte never occurs inside a multi-byte sequence; what
+  was wrong was copying by byte.
+
+  Rendering escapes `'` and `\` and nothing else, because the lexer's rule is
+  "a backslash introduces the next character literally" rather than a C-style
+  table — so a rendered `\n` would mean the letter `n`.

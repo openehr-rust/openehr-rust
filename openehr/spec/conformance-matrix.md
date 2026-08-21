@@ -374,7 +374,9 @@ Process requirements; they govern this specification rather than the code.
 | Q12.12 | • | `aql::tests::malformed_queries_report_an_offset` |
 | Q12.13 | • | `aql::tests::parameters_are_collected_from_every_clause_and_deduplicated` |
 | Q12.14 | • | `guarantees::aql_catches_a_path_rooted_at_an_unbound_alias` |
-| Q12.15 | • | `aql::tests::a_parsed_query_reparses_from_its_own_rendering`; cosmetic spacing difference noted in **A-05** |
+| Q12.15 | • | `aql::tests::a_parsed_query_reparses_from_its_own_rendering`; `guarantees::aql_rendering_round_trips_through_the_parser`, which compares the **tree** and not only the text; cosmetic spacing difference noted in **A-05** |
+| Q12.15a | • | `guarantees::aql_rendering_round_trips_through_the_parser` over the `CONTAINS`/`OR` shapes that broke it (**A-37**) |
+| Q12.15b | • | `guarantees::an_aql_string_literal_is_not_mangled_by_the_lexer` (**A-37**) |
 
 ## §13 Conformance testing — `T13`
 

@@ -1,4 +1,4 @@
-# AGENTS
+# agents
 
 Topic guides for working in this repository. Start with
 [`../AGENTS.md`](../AGENTS.md), which covers the layout, the build commands, and
