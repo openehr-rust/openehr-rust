@@ -16,13 +16,13 @@ generated DDL of all six dialects compared byte for byte; the three engines that
 can be provisioned locally actually provisioned and the DDL run against them;
 crates.io queried for what is already published.
 
-Sixteen findings: three High (**W-01**, **W-02**, **W-04**), nine Medium
+Seventeen findings: three High (**W-01**, **W-02**, **W-04**), nine Medium
 (**W-03**, **W-05**, **W-06**, **W-09**, **W-11**, **W-12**, **W-13**,
-**W-14**, **W-16**), four Low (**W-07**, **W-08**, **W-10**, **W-15**).
-**Fifteen are fixed**; **W-03** is fixed going forward only, because the
+**W-14**, **W-16**), five Low (**W-07**, **W-08**, **W-10**, **W-15**,
+**W-17**). **Sixteen are fixed**; **W-03** is fixed going forward only, because the
 published `openehr` 0.1.0 is immutable and keeps its wrong `repository` field.
 
-**W-09 through W-16 were added on 2026-08-20**, outside the original audit date
+**W-09 through W-17 were added on 2026-08-20 and -21**, outside the original audit date
 below, and are marked as such. They were found the same way as the rest — by
 running something — and three of them are the same defect in three places: a
 **guard whose input list was written by hand**. The MSRV was declared in
@@ -150,7 +150,7 @@ exists. It runs, on every push and pull request:
 | `assets` | that the committed `assets/` files are what the code renders — a stale generated artifact is a lie that reviews are read against |
 | `fuzz` | a bounded run of every fuzz target (`W0.27`); a crash, panic, or abort fails the build |
 | `layering` | that `openehr` and `openehr-store` depend inward only, dev-dependencies included, against a crate list **derived** from the tree (**W-13**) |
-| `claims` | that `openehr-mssql` and `openehr-oracle` still claim only **Dialect**; that both conformance matrices cover every requirement exactly once and do not contradict themselves; that this file's summary paragraph counts itself correctly; that the licence expression is harmonized across every crate (`W0.22`); and that the documentation's countable claims match the tree (`scripts/check-docs.py`) |
+| `claims` | that `openehr-mssql` and `openehr-oracle` still claim only **Dialect**; that both conformance matrices cover every requirement exactly once and do not contradict themselves; that this file's summary paragraph counts itself correctly; that the licence expression is harmonized across every crate (`W0.22`); that no requirement marked satisfied calls itself unverified (**W-17**); and that the documentation's countable claims match the tree (`scripts/check-docs.py`) |
 | `mutants` | pull requests only: `cargo-mutants --in-diff` over the changed lines, scoped to the diff because a full run is hours per crate |
 
 The `schema` jobs **fail rather than skip** when no container runtime is present
@@ -680,6 +680,60 @@ checked. Whether they should be is an open question, not a settled exemption.
 
 ---
 
+## W-17 — a gap that was closed, and four documents that went on describing it — **Low, fixed**
+
+**Found 2026-08-21** by cross-checking the register against the tree while
+looking for something else: `README.md` listed "No concurrency testing of the
+SQLite store" as a known gap and cited **`db:D-02`** for it. `db:D-02` is
+**fixed**, and it is not about that — it is about two store requirements being
+unverifiable as written. The citation was wrong and the gap was not a gap.
+
+`openehr-sqlite/tests/concurrency.rs` has driven both races since 2026-08-01. It
+passes. It found `db:D-06` when it was written.
+
+**Four documents said otherwise**, and two of them are normative:
+
+| Where | Said |
+| --- | --- |
+| `spec/databases/04-shredding-and-reconstruction.md` `R4.5` | "**Not verified.** … nothing in this repository exercises concurrent readers against writers" |
+| `spec/databases/05-versioning-and-history.md` `H5.4` | "**Not verified.** Nothing in this repository exercises concurrent writers" |
+| `openehr-store/spec/conformance.md` | "Nothing exercises concurrent writers." |
+| [`index.md`](index.md) → this file's *What this audit did not cover* | "nothing exercises concurrent writers" |
+
+Meanwhile [`databases/conformance-matrix.md`](databases/conformance-matrix.md)
+marked both `•` with the evidence named. So the matrix and the requirements it
+indexes disagreed, in one directory, for twenty days.
+
+**This is `W0.3` pointed the other way.** Overclaiming is the dangerous
+direction and is what most of this register is about. Underclaiming is the quiet
+one and costs the same way twice: a reader redoes work that already exists, and
+a reader distrusts a guarantee that actually holds. Neither is visible to
+anybody who does not go and check.
+
+**Why it survived.** A requirement that says "not verified" is *correct when
+written* and becomes wrong by someone else's success. Nothing was watching that
+direction — every check in this repository looks for a claim exceeding its
+evidence, and none looked for evidence exceeding its claim. The "what this audit
+did not cover" section has the same property: it is a list of things that are
+true until they are fixed, and closing one does not touch it.
+
+**Fixed**, and mechanically:
+
+- All four now state what verifies each requirement, with the test's name and
+  what it found. `H5.4` records that the test **failed first** — the guarantee
+  held, the reporting did not, which is `db:D-06` and is the argument for
+  writing the test rather than reasoning from the unique index.
+- `scripts/check-docs.py` gained a check: **a requirement marked `•` in a
+  conformance matrix must not describe itself as unverified.** It found exactly
+  these two and nothing else, across 65 satisfied requirements in both matrices.
+
+**Residual, stated because closing a gap is how this one started.** Concurrency
+is exercised for **SQLite only**, and only for the two races `db:R4.5` and
+`db:H5.4` name. No other engine has a `Store`, so there is nothing else to race;
+that changes the moment one does.
+
+---
+
 ## What this audit did not cover
 
 Stated so that "not examined" and "examined and sound" stay distinguishable
@@ -694,7 +748,13 @@ Stated so that "not examined" and "examined and sound" stay distinguishable
   registry authentication. Both remain at **Dialect**, which is the correct level
   for "no server has seen it", and that is a gap in evidence rather than a
   judgement that the DDL is wrong.
-- **The SQLite store under concurrency.** `conformance::run` passes against a real
-  in-process database, but nothing exercises concurrent writers.
+- **The SQLite store under concurrency — no longer true, kept as a correction.**
+  This said "nothing exercises concurrent writers". It was closed on 2026-08-01
+  by `openehr-sqlite/tests/concurrency.rs` (`db:D-02`, and `db:D-06` which that
+  test found), and four documents including two **normative requirements** went
+  on saying otherwise until 2026-08-21. See **W-17**.
+
+  What is still uncovered: concurrency on any engine other than SQLite, and any
+  race other than the two that `db:R4.5` and `db:H5.4` name.
 - **Fuzzing.** No parser in either crate is fuzzed; `openehr`'s own register
   carries this as **A-09**.

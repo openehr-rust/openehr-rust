@@ -77,9 +77,18 @@ Requirement prefix: `R4`.
   snapshot. A reader looping against a writer MUST NOT observe a version row
   without its index row, or a container without its head version.
 
-  **Not verified.** `openehr-sqlite` reads inside a transaction, but nothing in
-  this repository exercises concurrent readers against writers. Recorded here as
-  required and unverified rather than assumed (`C0.20`).
+  **Verified 2026-08-01** by
+  `openehr-sqlite/tests/concurrency.rs::a_reader_never_observes_a_torn_commit`:
+  a reader loops against a writer committing 24 versions and asserts every
+  version it can see has its index row visible too. It passed first time — the
+  commit transaction of `R4.4` was already doing its job — which is a result and
+  not a formality, because until it ran, "reads inside a transaction" was an
+  argument rather than an observation.
+
+  The test uses a **file** database with a connection per thread. An in-memory
+  SQLite database is private to its connection, so the same test against
+  `in_memory()` would run N independent databases and pass without testing
+  anything (`D-02`).
 
 ## Withdrawn
 

@@ -63,7 +63,7 @@ reports the silence as success.
 
 | Crate | Level | What is verified | What is not |
 | --- | --- | --- | --- |
-| `openehr-sqlite` | **Verified** | The full suite against a real in-process database, run in CI on every push: every commit rule, every read, the archetype index, the append-only triggers, DDL idempotence. | Nothing exercises concurrent writers. |
+| `openehr-sqlite` | **Verified** | The full suite against a real in-process database, run in CI on every push: every commit rule, every read, the archetype index, the append-only triggers, DDL idempotence. | Concurrency **is** exercised, by `openehr-sqlite/tests/concurrency.rs` (`D-02`, `D-06`) — but only for SQLite, and only for the two races `R4.5` and `H5.4` name. |
 | `openehr-postgresql` | **Schema** | DDL executed against **PostgreSQL 18**: 5 tables, 7 indexes, idempotent across repeated runs, foreign keys enforced, and both append-only tables refused `UPDATE` and `DELETE` with the row surviving unmodified. | No driver and no `Store`. |
 | `openehr-mysql` | **Schema** | The same, against **MySQL 8.4**. | as above |
 | `openehr-mariadb` | **Schema** | The same, against **MariaDB 11.4**. | as above. This crate was a name-substituted copy of `openehr-mysql` until 2026-08-01, claiming Schema against a "MariaDB 8.4" that does not exist; see [`spec/audit.md`](../../spec/audit.md) **W-01**. The current claim was earned by an actual run. |

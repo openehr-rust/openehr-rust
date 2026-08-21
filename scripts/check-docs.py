@@ -565,6 +565,80 @@ def check_agent_file_sizes() -> int:
     return bad
 
 
+# --------------------------------------------------------------------------
+# A requirement cannot be both satisfied and described as unverified
+# --------------------------------------------------------------------------
+
+# Phrases that assert, in a requirement's own definition, that nothing checks
+# it. Deliberately short and literal: this reports a contradiction between two
+# files, so a loose match would be noise rather than a finding.
+UNVERIFIED = (
+    "**not verified.**",
+    "nothing in this repository exercises",
+    "nothing exercises",
+    "has not been demonstrated",
+    "no test in this repository",
+)
+
+
+def check_unverified_claims() -> int:
+    """A requirement marked satisfied in a matrix must not call itself unverified.
+
+    `db:H5.4` said "**Not verified.** Nothing in this repository exercises
+    concurrent writers" while `databases/conformance-matrix.md` marked it `•`
+    and `openehr-sqlite/tests/concurrency.rs` had been driving it since
+    2026-08-01. The gap was closed and four documents went on describing it as
+    open — one of them a normative requirement.
+
+    That is `W0.3` pointed the other way. Overclaiming is the dangerous
+    direction and the one the register is mostly about; underclaiming is the
+    quiet one, and it costs the same way — a reader redoes work that exists, or
+    distrusts a guarantee that holds. `spec/audit.md` **W-17**.
+    """
+    bad = 0
+    checked = 0
+    for matrix, spec_dir in (
+        ("spec/databases/conformance-matrix.md", "spec/databases"),
+        ("openehr/spec/conformance-matrix.md", "openehr/spec"),
+    ):
+        satisfied = set()
+        for line in (ROOT / matrix).read_text().splitlines():
+            if not line.startswith("|"):
+                continue
+            cells = [c.strip() for c in line.split("|")]
+            if len(cells) > 2 and any(c == "\u2022" for c in cells[2:-1]):
+                satisfied |= set(re.findall(r"`([A-Z]+[0-9]*\.[0-9]+[a-z]?)`", cells[1]))
+
+        for path in sorted((ROOT / spec_dir).glob("*.md")):
+            if path.name in ("conformance-matrix.md", "audit.md", "index.md"):
+                continue
+            text = path.read_text()
+            # Each requirement runs from its own bullet to the next one.
+            starts = [
+                (m.group(1), m.start())
+                for m in re.finditer(r"^- \*\*([A-Z]+[0-9]*\.[0-9]+[a-z]?)\*\*", text, re.M)
+            ]
+            for i, (ident, start) in enumerate(starts):
+                if ident not in satisfied:
+                    continue
+                checked += 1
+                end = starts[i + 1][1] if i + 1 < len(starts) else len(text)
+                body = text[start:end].lower()
+                for phrase in UNVERIFIED:
+                    if phrase in body:
+                        line_no = text[:start].count("\n") + 1
+                        print(
+                            f"::error file={path.relative_to(ROOT)},line={line_no}::"
+                            f"{ident} is marked satisfied in {matrix} and its own "
+                            f"definition says {phrase!r}"
+                        )
+                        bad = 1
+                        break
+    if not bad:
+        print(f"{checked} satisfied requirements, none of which calls itself unverified")
+    return bad
+
+
 def main() -> int:
     fix = "--fix" in sys.argv
     f = facts()
@@ -575,6 +649,7 @@ def main() -> int:
         | check_ci_jobs()
         | check_audit_summary()
         | check_agent_file_sizes()
+        | check_unverified_claims()
     )
     checked = 0
     seen: dict[str, int] = {pattern: 0 for _, pattern, _ in PATTERNS}

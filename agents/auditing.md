@@ -7,6 +7,14 @@ Not normative. `W0.3`–`W0.4` in [`spec/index.md`](../spec/index.md) are.
 1. **Documentation must not claim more than is verified** (`W0.3`).
 2. **A gap that is not written down reads as a pass** (`W0.4`).
 
+There is a third, which this repository learned late: **a gap that was closed and
+not written down reads as still open** (**W-17**). Every check here looks for a
+claim exceeding its evidence; none looked for evidence exceeding its claim, and
+two normative requirements described a guarantee as unverified for twenty days
+after the test that verified it was passing in CI. Underclaiming is quieter than
+overclaiming and costs the same way — somebody redoes the work, or distrusts the
+guarantee.
+
 Every finding in [`spec/audit.md`](../spec/audit.md) is a violation of the first,
 surviving because of the second.
 
@@ -101,6 +109,7 @@ findings, and re-deriving one by hand is how you get a second answer.
 | no requirement is both satisfied and absent | `claims` job |
 | documented counts, versions, CI jobs, conformance levels | `scripts/check-docs.py` |
 | duplicated passages match their owner | `scripts/check-docs.py` (`W0.38`) |
+| a satisfied requirement does not call itself unverified | `scripts/check-docs.py` (**W-17**) |
 | every crate declares the same licence and MSRV | `claims`, `msrv` jobs |
 | `openehr`/`openehr-store` depend inward only | `layering` job |
 | committed assets match what the code renders | `assets` job |

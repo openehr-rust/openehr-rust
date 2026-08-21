@@ -104,10 +104,16 @@ Requirement prefix: `H5`.
   is sufficient for this and is the preferred mechanism, because it holds
   regardless of how many processes are writing.
 
-  **Not verified.** Nothing in this repository exercises concurrent writers. The
-  index exists and the constraint is declared; that a race actually loses in the
-  database has not been demonstrated, and is recorded as unverified rather than
-  assumed (`C0.20`, `T11`).
+  **Verified 2026-08-01** by
+  `openehr-sqlite/tests/concurrency.rs::racing_commits_to_one_position_produce_one_winner`:
+  eight writers race for one position in a version tree and exactly one wins.
+
+  It **failed** the first time it ran, and that failure is `D-06` — the seven
+  losers were refused, correctly, but the refusal surfaced as an engine error
+  rather than as a commit-rule refusal, so a caller could not tell "you lost a
+  race, retry" from "the database is broken". The guarantee this requirement
+  states held; the way it was reported did not. That is the argument for writing
+  the test rather than reasoning from the unique index.
 
 ## Preconditions on a write
 

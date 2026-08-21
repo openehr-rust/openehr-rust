@@ -530,8 +530,10 @@ Recorded rather than implied — see [`spec/audit.md`](spec/audit.md):
   2026-08-01. It now describes this system, but the requirements were derived by
   reading the code rather than the openEHR sources, so some are descriptions
   rather than considered generalizations (`db:D-05`).
-- **No concurrency testing of the SQLite store** (`db:D-02`). `conformance::run`
-  passes against a real database; nothing exercises concurrent writers.
+- **AQL cannot express a negative numeric literal** (`lib:A-27`).
+  `WHERE o/value/magnitude > -2.5` is refused at the lexer, because `-` also
+  separates the parts of an archetype id. Declared as `lib:Q12.9b` and open —
+  refused rather than misread, which is the safe direction.
 - **AQL cannot parse a negative number** (`lib:A-27`). `WHERE … > -2.5` is
   refused at the lexer, because `-` also separates the parts of an archetype id.
   Declared as `lib:Q12.9b` and open.
