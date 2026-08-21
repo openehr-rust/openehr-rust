@@ -81,6 +81,12 @@ found **W-13** and **W-14** the same way, where two more guards listed nine
 crates of seventeen. **Any list of names inside a guard is a finding waiting to
 happen**; the fix is always to derive the list from the tree and assert its size.
 
+**A skipped job is not a passed job.** `C0.13` says a skip is
+indistinguishable from a pass, and this repository wrote that rule for database
+jobs and then let a `mutants` job report `skipped` on nine consecutive commits
+to `main` — every one of them changing code the job exists to check (**W-18**).
+When reading a green run, look at what did **not** run.
+
 **Step 6b is the one this repository learned last and hardest.** `A-37` was a
 red `fuzz / openehr` job on `main`, seventeen days old, while `CLAUDE.md` said
 "CI is green" and `openehr-fuzz/README.md` said "no crashes". The target had
@@ -116,6 +122,7 @@ findings, and re-deriving one by hand is how you get a second answer.
 | every RM invariant is cited or dispositioned | `openehr-assets` |
 | fuzz seed corpora still parse | `openehr/tests/fuzz_seeds.rs` |
 | the six dialects emit different DDL | `openehr-sqlite/tests/dialects.rs` |
+| changed lines are mutation-tested | `mutants` job, on push **and** pull request (**W-18**) |
 
 ## What "verified" means
 

@@ -791,11 +791,21 @@ jobs:
   mutants:
     name: changed lines are mutation-tested
     runs-on: ubuntu-latest
-    # Needs a base to diff against. On a push to main there is no pull request
-    # and no meaningful diff scope, so the job does not run rather than running
-    # over nothing and reporting success (`C0.13`: a vacuous pass is worse than
-    # an absent one).
-    if: github.event_name == 'pull_request'
+    # Needs a base to diff against, and **both** event kinds have one.
+    #
+    # This was `if: github.event_name == 'pull_request'`, reasoning that a push
+    # to main has "no meaningful diff scope". A push has `github.event.before`,
+    # which is exactly the diff scope, and the consequence of not using it was
+    # that **every commit made directly to `main` bypassed this gate entirely**
+    # — nine of them in a row on 2026-08-20/21, including a rewrite of
+    # `Interval::contains`, the `DV_URI` validation path, and the AQL lexer.
+    # The one check that exists to catch untested changed lines ran on none of
+    # them, and reported `skipped`, which reads as "nothing to do".
+    #
+    # The only case with genuinely no base is the first push of a new branch,
+    # where `event.before` is all zeros. That is skipped **loudly**, in the step
+    # itself, rather than by an `if` that cannot say why (`C0.13`).
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -827,10 +837,25 @@ jobs:
       # this one checks that they resolve rather than trusting that they did.
       - name: Diff against the base
         working-directory: ${{ matrix.crate }}
+        env:
+          # A pull request diffs against its target branch; a push diffs against
+          # what was there before it. Three dots for the PR (merge base) and two
+          # for the push (the actual range pushed) -- a push is not a merge and
+          # has no base to find.
+          BASE: ${{ github.event_name == 'pull_request'
+                    && format('origin/{0}...HEAD', github.base_ref)
+                    || format('{0}..HEAD', github.event.before) }}
         run: |
           set -eu
-          git diff --relative "origin/${{ github.base_ref }}"...HEAD -- '*.rs' \
-            > /tmp/pr.diff
+          case "$BASE" in
+            0000000000000000000000000000000000000000..*)
+              echo "::notice::first push of this ref — no previous commit to"
+              echo "::notice::diff against, so there are no changed lines to"
+              echo "::notice::mutate. Not a pass: there was nothing to check."
+              : > /tmp/pr.diff ;;
+            *)
+              git diff --relative "$BASE" -- '*.rs' > /tmp/pr.diff ;;
+          esac
           wc -l < /tmp/pr.diff | xargs echo "diff lines:"
 
       # `--in-diff` mutates only lines the diff touched. `--test-workspace` is

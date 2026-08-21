@@ -207,4 +207,48 @@ mod tests {
         assert!(DvEhrUri::new("ehr://1/2").is_ok());
         assert!(DvEhrUri::new("http://example.org").is_err());
     }
+
+    /// `rest` returns what follows the colon, and it is not always empty.
+    ///
+    /// Mutation testing replaced this whole function with `""` and **nothing
+    /// failed** (`W-18`). The only assertion about `rest` was in
+    /// `guarantees::a_uri_that_never_saw_a_constructor_is_reported_rather_than_panicking`,
+    /// which checks the colon-less case — where the right answer *is* `""`. A
+    /// test that agrees with the bug is not a test, and the way to notice is to
+    /// mutate the function rather than to read the test.
+    #[test]
+    fn rest_is_everything_after_the_scheme_and_the_scheme_is_everything_before() {
+        let uri = DvUri::new("ehr://87284370/content[0]/data").expect("literal");
+        assert_eq!(uri.scheme(), "ehr");
+        assert_eq!(uri.rest(), "//87284370/content[0]/data");
+        // The two halves reassemble the whole, which is the property that makes
+        // either of them meaningful.
+        assert_eq!(format!("{}:{}", uri.scheme(), uri.rest()), uri.value());
+
+        // A second colon belongs to `rest`: only the first one separates.
+        let with_port = DvUri::new("https://example.org:8443/x").expect("literal");
+        assert_eq!(with_port.scheme(), "https");
+        assert_eq!(with_port.rest(), "//example.org:8443/x");
+    }
+
+    /// Both URI types display as the URI, not as nothing.
+    ///
+    /// Mutation testing replaced each `Display::fmt` with `Ok(())` — writing an
+    /// empty string — and the whole suite passed (`W-18`). `Display` is not
+    /// decoration here: it is what a `ParseError` embeds, what a violation's
+    /// path is built beside, and what a caller shows whoever wrote the
+    /// document. A `DV_EHR_URI` that rendered as nothing would make a link
+    /// error unreadable at exactly the moment somebody needed to read it.
+    #[test]
+    fn a_uri_displays_as_itself() {
+        let uri = DvUri::new("https://example.org/guidelines/htn").expect("literal");
+        assert_eq!(uri.to_string(), "https://example.org/guidelines/htn");
+
+        let ehr = DvEhrUri::new("ehr://87284370/content[0]/data").expect("literal");
+        assert_eq!(ehr.to_string(), "ehr://87284370/content[0]/data");
+
+        // And `DvEhrUri` displays its whole self rather than delegating to a
+        // field and losing the scheme.
+        assert!(ehr.to_string().starts_with("ehr:"), "the scheme was dropped");
+    }
 }

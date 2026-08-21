@@ -16,13 +16,13 @@ generated DDL of all six dialects compared byte for byte; the three engines that
 can be provisioned locally actually provisioned and the DDL run against them;
 crates.io queried for what is already published.
 
-Seventeen findings: three High (**W-01**, **W-02**, **W-04**), nine Medium
+Eighteen findings: three High (**W-01**, **W-02**, **W-04**), ten Medium
 (**W-03**, **W-05**, **W-06**, **W-09**, **W-11**, **W-12**, **W-13**,
-**W-14**, **W-16**), five Low (**W-07**, **W-08**, **W-10**, **W-15**,
-**W-17**). **Sixteen are fixed**; **W-03** is fixed going forward only, because the
+**W-14**, **W-16**, **W-18**), five Low (**W-07**, **W-08**, **W-10**,
+**W-15**, **W-17**). **Seventeen are fixed**; **W-03** is fixed going forward only, because the
 published `openehr` 0.1.0 is immutable and keeps its wrong `repository` field.
 
-**W-09 through W-17 were added on 2026-08-20 and -21**, outside the original audit date
+**W-09 through W-18 were added on 2026-08-20 and -21**, outside the original audit date
 below, and are marked as such. They were found the same way as the rest — by
 running something — and three of them are the same defect in three places: a
 **guard whose input list was written by hand**. The MSRV was declared in
@@ -151,7 +151,7 @@ exists. It runs, on every push and pull request:
 | `fuzz` | a bounded run of every fuzz target (`W0.27`); a crash, panic, or abort fails the build |
 | `layering` | that `openehr` and `openehr-store` depend inward only, dev-dependencies included, against a crate list **derived** from the tree (**W-13**) |
 | `claims` | that `openehr-mssql` and `openehr-oracle` still claim only **Dialect**; that both conformance matrices cover every requirement exactly once and do not contradict themselves; that this file's summary paragraph counts itself correctly; that the licence expression is harmonized across every crate (`W0.22`); that no requirement marked satisfied calls itself unverified (**W-17**); and that the documentation's countable claims match the tree (`scripts/check-docs.py`) |
-| `mutants` | pull requests only: `cargo-mutants --in-diff` over the changed lines, scoped to the diff because a full run is hours per crate |
+| `mutants` | `cargo-mutants --in-diff` over the lines a push or a pull request changed, scoped to the diff because a full run is hours per crate. Pull-request-only until **W-18** |
 
 The `schema` jobs **fail rather than skip** when no container runtime is present
 (`C0.13`), and invoke the same script a contributor runs locally rather than a
@@ -731,6 +731,77 @@ true until they are fixed, and closing one does not touch it.
 is exercised for **SQLite only**, and only for the two races `db:R4.5` and
 `db:H5.4` name. No other engine has a `Store`, so there is nothing else to race;
 that changes the moment one does.
+
+---
+
+## W-18 — the mutation gate never ran on a commit made to `main` — **Medium, fixed**
+
+**Found 2026-08-21** by asking what had checked the previous three days' work,
+rather than by anything failing.
+
+The `mutants` job carried `if: github.event_name == 'pull_request'`, with the
+reason written beside it: *"On a push to main there is no pull request and no
+meaningful diff scope, so the job does not run rather than running over nothing
+and reporting success."*
+
+The premise is false. A push carries `github.event.before`, which is exactly the
+diff scope, and the consequence was that **every commit made directly to `main`
+bypassed the gate**. Nine in a row, on 2026-08-20 and -21, including:
+
+- `Interval::contains` rewritten against `semantic_cmp` — the function that
+  decides whether a clinical value falls inside a reference range;
+- the whole `DV_URI`/`DV_EHR_URI` validation path (`lib:A-36`);
+- the AQL lexer's string handling and the `FROM` renderer (`lib:A-37`);
+- signed numeric literals and `Literal::Number` rendering (`lib:A-27`);
+- three new properties in `openehr_store::conformance`.
+
+Every one of those is exactly what `T13.2` exists for: changed lines that no
+test notices when their meaning changes.
+
+**What made it invisible.** The job reported **`skipped`**, and a skipped job in
+a green summary reads as "nothing to do here". That is `C0.13` — *a skip is
+indistinguishable from a pass* — the rule this repository wrote for database
+jobs, working exactly as predicted against a job nobody had thought to apply it
+to.
+
+**Fixed.** The job runs on `push` as well, diffing `github.event.before..HEAD`
+— two dots, because a push is not a merge and has no base to find, where a pull
+request wants three. The one genuinely baseless case, the first push of a new
+branch where `event.before` is forty zeros, is skipped **loudly in the step**
+with a note saying there was nothing to check, rather than by an `if` that
+cannot say why.
+
+**Run by hand over the two files where a silent wrong answer would matter
+most**, and it found three survivors — all of them in `A-36`'s own changes:
+
+| Mutant | Meaning |
+| --- | --- |
+| `DvUri::rest -> ""` | nothing tested `rest` with a non-empty answer |
+| `Display for DvUri -> Ok(())` | nothing asserted what a URI displays as |
+| `Display for DvEhrUri -> Ok(())` | nor an EHR URI |
+
+`Interval::contains` and the `SemanticOrd` machinery — the rewrite most likely
+to change a clinical answer — had **none**: 24 caught, 0 missed.
+
+**`rest` is the instructive one.** It *was* asserted, in
+`guarantees::a_uri_that_never_saw_a_constructor_is_reported_rather_than_panicking`,
+which checks the colon-less case — where the correct answer is `""`, the exact
+value the mutant substitutes. A test that agrees with the bug is not a test, and
+no amount of reading it would say so; mutating the function is what says so.
+
+`Display` matters for a reason worth writing down: it is what a `ParseError`
+embeds and what a caller shows whoever wrote the document. A `DV_EHR_URI` that
+rendered as nothing would make a link error unreadable at exactly the moment
+somebody needed to read it.
+
+**Fixed** by two tests in `uri.rs`, and re-mutated to confirm all three are now
+caught rather than assumed to be.
+
+**Residual.** The retrospective gap is not closed. Only `interval.rs` and
+`uri.rs` were mutated by hand; the AQL lexer and renderer, the validation walk,
+and the three new `conformance` properties were not. They are covered by the
+job from the next push onward, which is forward protection and not a check of
+what is already on `main`.
 
 ---
 
