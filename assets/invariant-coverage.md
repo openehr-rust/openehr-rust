@@ -25,14 +25,14 @@ merely names — see `rm-1.1.0-invariants.json`.
 | | Count |
 | --- | --- |
 | Invariants in RM 1.1.0 | 155 |
-| Named in the crate's source | 74 |
-| Not named | 81 |
+| Named in the crate's source | 75 |
+| Not named | 80 |
 
 Every not-named invariant is accounted for below, and the build fails if one is not (`W0.4`). This file used to say that telling them apart "needs a human" — which was true only for as long as nobody did it, and while it stood a genuine gap was indistinguishable from a class this crate deliberately does not model.
 
 - **Not enforced**: **10**
 - Cannot fail in Rust: **32**
-- Enforced under another name (`lib:L10.4`): **6**
+- Enforced under another name (`lib:L10.4`): **5**
 - Out of scope: **33**
 
 ## Invariant names that diverge from openEHR (`lib:L10.4`)
@@ -54,6 +54,7 @@ Only classes openEHR gives invariants to are listed; where openEHR states none, 
 | `DV_PARSABLE` | `Value_valid` | yes | `Formalism_valid`, `Size_valid` |
 | `DV_PROPORTION` | `Parts_finite` | yes | `Fraction_validity`, `Is_integral_validity`, `Percent_validity`, `Precision_validity`, `Type_validity`, `Unitary_validity`, `Valid_denominator` |
 | `DV_TEXT` | `value` | **NO** | `Encoding_valid`, `Formatting_valid`, `Language_valid`, `Mappings_valid`, `Valid_value` |
+| `DV_URI` | `Uri_well_formed` | yes | `Value_valid` |
 | `ENTRY` | `Provider_valid` | **NO** | `Encoding_valid`, `Is_archetype_root`, `Language_valid`, `Other_participations_valid`, `Subject_validity` |
 | `ENTRY` | `Subject_valid` | **NO** | `Encoding_valid`, `Is_archetype_root`, `Language_valid`, `Other_participations_valid`, `Subject_validity` |
 | `EVENT` | `Time_after_origin` | yes | `Offset_validity1` |
@@ -84,7 +85,7 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `ENTRY` | `Encoding_valid` | IANA character sets are not carried |
 | `ENTRY` | `Language_valid` | ISO 639 is not carried |
 
-### Enforced under another name (`lib:L10.4`) — 6
+### Enforced under another name (`lib:L10.4`) — 5
 
 | Class | Invariant | Why |
 | --- | --- | --- |
@@ -92,7 +93,6 @@ Grouped by why. **Not enforced** is the only group that is a gap; the others are
 | `DV_DATE_TIME` | `Value_valid` | as DV_DATE |
 | `DV_DURATION` | `Value_valid` | as DV_DATE |
 | `DV_TIME` | `Value_valid` | as DV_DATE |
-| `DV_URI` | `Value_valid` | the URI parser refuses invalid text and reports itself |
 | `VERSION` | `Lifecycle_state_ valid` | checked and cited as ORIGINAL_VERSION; openEHR declares it on VERSION |
 
 ### Cannot fail in Rust — 32

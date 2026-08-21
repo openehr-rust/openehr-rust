@@ -19,7 +19,7 @@
 use openehr::base::iso8601::Date;
 use openehr::path::Pathable;
 use openehr::rm::data_structures::Element;
-use openehr::rm::data_types::DvQuantity;
+use openehr::rm::data_types::{DvOrdered as _, DvQuantity};
 use openehr::rm::ehr::Composition;
 use openehr::validation::Validate;
 
@@ -113,7 +113,7 @@ fn refuse_rather_than_guess() -> Result<(), Box<dyn std::error::Error>> {
 
     let mg = DvQuantity::new(5.0, "mg")?;
     let ml = DvQuantity::new(5.0, "mL")?;
-    assert_eq!(mg.partial_cmp(&ml), None); // not the same dose of anything
+    assert_eq!(mg.semantic_cmp(&ml), None); // not the same dose of anything
     Ok(())
 }
 

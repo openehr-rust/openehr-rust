@@ -16,11 +16,24 @@ generated DDL of all six dialects compared byte for byte; the three engines that
 can be provisioned locally actually provisioned and the DDL run against them;
 crates.io queried for what is already published.
 
-Eight findings: three High (**W-01**, **W-02**, **W-04**), three Medium
-(**W-03**, **W-05**, **W-06**), two Low (**W-07**, **W-08**). **Seven are
-fixed** — W-01, W-02, W-04, W-05, W-06, W-07, and W-08. **W-03** is fixed going
-forward only: the published `openehr` 0.1.0 is immutable and keeps its wrong
-`repository` field.
+Sixteen findings: three High (**W-01**, **W-02**, **W-04**), nine Medium
+(**W-03**, **W-05**, **W-06**, **W-09**, **W-11**, **W-12**, **W-13**,
+**W-14**, **W-16**), four Low (**W-07**, **W-08**, **W-10**, **W-15**).
+**Fifteen are fixed**; **W-03** is fixed going forward only, because the
+published `openehr` 0.1.0 is immutable and keeps its wrong `repository` field.
+
+**W-09 through W-16 were added on 2026-08-20**, outside the original audit date
+below, and are marked as such. They were found the same way as the rest — by
+running something — and three of them are the same defect in three places: a
+**guard whose input list was written by hand**. The MSRV was declared in
+seventeen manifests and compiled in none (**W-09**); the layering check compared
+nine crates of seventeen (**W-13**); the licence check compared the same nine,
+and the eight it skipped were the eight with no licence (**W-14**).
+
+That is `W-01` recurring — *a guard is only as wide as its input list* — and the
+fix is the same in all three: derive the list from the tree, and assert the
+derived count, so that a crate the guard cannot see fails the job instead of
+being silently exempt.
 
 **W-08** was found by reviewing a requirement against the openEHR terminology
 rather than against the code that inspired it, and is the smallest finding here
@@ -129,10 +142,16 @@ exists. It runs, on every push and pull request:
 
 | Job | Covers |
 | --- | --- |
-| `test` | `clippy --all-targets`, `test`, and `doc` for each of the eight crates separately, because each is its own workspace and a single `--workspace` invocation would silently cover one of them |
-| `examples` | the five runnable tutorials the README points at |
+| `test` | `clippy --all-targets`, `test`, and `doc` for each of the ten buildable crates separately, because each is its own workspace and a single `--workspace` invocation would silently cover one of them |
+| `msrv` | that the MSRV is N−3, declared identically everywhere, and **builds** — see [`rust-msrv-n-minus-3.md`](rust-msrv-n-minus-3.md) and **W-09** |
+| `examples` | the five runnable tutorials the README points at, plus `openehr-sqlite`'s persistence tutorial |
+| `bench` | every criterion benchmark runs once (`--test`); nothing is gated on wall-clock (`W0.35`, `W0.36`) |
 | `schema` | `verify-schema.sh` against real PostgreSQL 18, MySQL 8.4, and MariaDB 11.4 containers |
-| `claims` | that `openehr-mssql` and `openehr-oracle` still claim only **Dialect**, and that the licence expression is harmonized across all eight crates (`W0.22`) |
+| `assets` | that the committed `assets/` files are what the code renders — a stale generated artifact is a lie that reviews are read against |
+| `fuzz` | a bounded run of every fuzz target (`W0.27`); a crash, panic, or abort fails the build |
+| `layering` | that `openehr` and `openehr-store` depend inward only, dev-dependencies included, against a crate list **derived** from the tree (**W-13**) |
+| `claims` | that `openehr-mssql` and `openehr-oracle` still claim only **Dialect**; that both conformance matrices cover every requirement exactly once and do not contradict themselves; that this file's summary paragraph counts itself correctly; that the licence expression is harmonized across every crate (`W0.22`); and that the documentation's countable claims match the tree (`scripts/check-docs.py`) |
+| `mutants` | pull requests only: `cargo-mutants --in-diff` over the changed lines, scoped to the diff because a full run is hours per crate |
 
 The `schema` jobs **fail rather than skip** when no container runtime is present
 (`C0.13`), and invoke the same script a contributor runs locally rather than a
@@ -361,6 +380,303 @@ Four of four, now five of five.
 **Residual.** One requirement was checked this way. The rest of
 `spec/databases/` has still not been re-derived from openEHR, so `db:D-05`
 stays open with its scope narrowed rather than closed.
+
+---
+
+## W-09 — The declared MSRV was checked by nothing, and was false — **Medium, fixed**
+
+**Claimed.** Seventeen manifests declared `rust-version = "1.90"`, and nine
+READMEs plus [`AGENTS/adding-an-engine.md`](../AGENTS/adding-an-engine.md) said
+"Requires Rust 1.90+ (edition 2024)". A floor stated eleven times is a floor a
+reader is entitled to rely on.
+
+**Found.** Nothing had ever compiled this repository with a 1.90 toolchain. The
+`test` job installs `stable` and nothing else; there was no MSRV job. Running it
+by hand — `cargo +1.90 check --all-targets --all-features`, per crate, which is
+the whole method — six crates passed and **`openehr-loco` failed**:
+
+```
+error: rustc 1.90.0 is not supported by the following packages:
+  loco-gen@1.0.0 requires rustc 1.94
+  loco-rs@1.0.1 requires rustc 1.94
+```
+
+The crate's own floor was 1.90; its framework's was 1.94. Cargo refuses rather
+than miscompiles, so the consequence was bounded — but the statement "Requires
+Rust 1.90+" was false for that crate from the day it was written, and the
+repository could not tell.
+
+**When it was written matters.** `rust-version = "1.90"` arrived in `9a7ecf6`,
+2026-08-01, when stable was 1.97. The number was seven releases old on the day it
+was committed. It was not a floor that drifted; it was one nobody had picked.
+
+**This is `W0.3` in its purest form.** Not a claim that became false — a claim
+that was never in contact with anything that could make it true or false. It sat
+next to `W-02` ("the repository claims CI it does not have") and `W-01` ("the
+guard existed and did not cover the sixth dialect") and is the same defect: an
+assertion with no check behind it, reporting the same green as a verified one.
+
+**Fixed**, in three parts, because fixing only the number would have left the
+next one just as unchecked:
+
+1. **A rule instead of a number.**
+   [`rust-msrv-n-minus-3.md`](rust-msrv-n-minus-3.md) sets the MSRV at **N−3** —
+   three Rust releases behind stable, an eighteen-week window. A number is
+   consistent with itself no matter what it says; a formula is re-derived from
+   the outside world and is either right or loudly wrong.
+2. **The floor is compiled.** The `msrv` job in
+   [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) derives N from the
+   stable toolchain it installs, installs N−3, and runs `cargo test` for all ten
+   buildable crates under it (`RV3`). All eighteen manifests, the ten prose
+   statements, and the specification's own headline sentence are checked against
+   the same derived value (`RV2`, `RV4`).
+3. **The number moved to 1.95** and `openehr-loco` builds on it, which was
+   confirmed by running `cargo +1.95 test` rather than by observing that 1.95 is
+   above 1.94.
+
+**The check was shown to fail.** Deleting `rust-version` from one manifest, and
+re-running with a fabricated stable version, both produce a red job naming the
+files — the standard `W0.28` asks of a fuzz property, applied to a CI check.
+
+**Residual.** Two, both stated in the specification rather than left implicit:
+the eight fuzz crates are not built by the job, because `cargo fuzz` needs
+nightly; and only N−3 and stable are built, so a break appearing only on an
+intermediate release reaches a user before it reaches CI.
+
+---
+
+## W-10 — the published version was stated in five places and updated in one — **Low, fixed**
+
+**Claimed.** [`index.md`](index.md), the file that says what this repository
+*is*: "All eight are on crates.io at **0.2.0**." Likewise `AGENTS.md` ("live on
+crates.io at **0.2.0**, and **the tree has moved past them**"), `CLAUDE.md`, and
+a paragraph in each about what the next release would be.
+
+**Found.** 0.3.0 was published on **2026-08-04**, sixteen days before this
+finding. `AGENTS/publishing.md` — the file whose whole job is tracking releases —
+says so, correctly, with a per-crate table. The four other files that also state
+the version were not touched by the release commit, so a reader of the
+specification was told the tree was ahead of a release that had already gone
+out, and told to plan a release that had already happened.
+
+**Consequence.** Small and entirely of the "which file do I trust" kind, which
+is the kind `W0.1` exists to prevent: *a normative statement MUST exist in
+exactly one place, because where two files state one rule, one of them is a copy
+and a copy is a future divergence.* The version is not a normative statement, but
+it behaves like one — five copies, one maintained.
+
+**Fixed** by making the other four defer rather than restate: each now names
+`AGENTS/publishing.md` as the file that tracks this. The version still appears in
+them, because a reader needs the number in front of them; what changed is that
+they say where it comes from.
+
+**Why it is not Medium.** Nothing was published on the strength of it and no
+behaviour depended on it. It is here because the *shape* is `W-02`'s and
+`W-05`'s, and this repository's register is mostly a record of that shape
+recurring in cheaper and cheaper forms.
+
+---
+
+## W-11 — one specification said fourteen crates, another said seventeen — **Medium, fixed**
+
+**Found.** `db:W16.1` — a **normative** requirement, in the persistence
+specification — read: "The repository holds **fourteen** crates: `openehr`,
+`openehr-store`, six dialect crates, and six `openehr-<engine>-fuzz` harnesses."
+
+There are seventeen. `openehr-loco`, `openehr-assets`, and `openehr-fuzz` were
+added and the requirement was not amended, while `spec/index.md`, `README.md`,
+`AGENTS.md`, `CLAUDE.md`, and `AGENTS/index.md` all said seventeen.
+
+**Why this is worse than a stale README.** `W0.2` settles a disagreement between
+a specification and a descriptive file: the specification governs. It has nothing
+to say when a specification disagrees with a *specification*, and a reader
+following the rule as written would have concluded that three crates in the tree
+should not exist. The requirement had already been amended once, when the layout
+changed, and the amendment did not survive the next three additions.
+
+**Fixed.** `W16.1` now says eighteen — seventeen plus `openehr-store-fuzz`, added
+by the same change — and enumerates them, and states the eight that are
+published rather than deriving the count. The note recording what it used to say
+stays with it (`W0.16`).
+
+**Residual — closed 2026-08-20 by `W0.39`.** This said: "a count in prose is
+checkable and is not checked… the next count to go stale will go stale
+silently." [`scripts/check-docs.py`](../scripts/check-docs.py) now derives every
+countable claim from the tree and checks the documents against it, and the
+`claims` job runs it. It found two stale counts on its first run —
+`AGENTS/index.md` still said nine unpublished crates and still said the released
+version was **0.2.0**, a sixth file with the defect **W-10** records in five.
+
+---
+
+## W-12 — nine tests in `openehr-assets` that CI never ran — **Medium, fixed**
+
+**Found.** The `test` matrix listed nine crates. `openehr-assets` was not one of
+them, and the `assets` job runs `cargo run -- check` and nothing else. The crate
+has nine `#[test]`s in `src/main.rs`, and none had ever been executed by CI.
+
+Nor had clippy or `cargo doc`, on the crate whose job is to fail the build when a
+generated artifact is stale — so the checker was the one component nothing
+checked.
+
+**Consequence.** Latent rather than realised: run by hand, all nine pass, clippy
+is clean, and the docs build. What was wrong is that nobody could have known
+that, and "nine tests" and "nine tests, three of which stopped compiling" report
+the same green when neither is run. That is `W-02` at one remove — the workflow
+existed, and covered nine crates of ten.
+
+**Fixed.** `openehr-assets` is in the `test` matrix. Verified by running the same
+three commands the job runs.
+
+---
+
+## W-13 — the layering guard's list omitted eight of seventeen crates — **Medium, fixed**
+
+**Claimed.** [`index.md`](index.md) `W0.15`: "The guard against `W0.14` MUST
+cover **every** engine crate, and the coverage MUST itself be checked. A
+comparison that omits a dialect cannot find that dialect identical to another,
+and reports the same green as a complete one."
+
+**Found.** The `layering` job — which enforces that `openehr` and
+`openehr-store` depend inward only, and which exists because a probe once added
+`openehr-store` as a dev-dependency of `openehr` and nothing objected — checked
+against a list of nine crate names written into the YAML. `openehr-assets` and
+all seven fuzz crates were absent.
+
+A dev-dependency from `openehr` onto `openehr-sqlite-fuzz` is a cycle:
+`openehr-sqlite-fuzz` → `openehr-sqlite` → `openehr-store` → `openehr`. The guard
+could not see it. Neither could it see one onto `openehr-assets`, which depends
+on every dialect crate in the tree.
+
+**This is `W-01` exactly**, and `W-01`'s own lesson stated as a rule in
+`CLAUDE.md`: *a guard is only as wide as its input list.* The cross-dialect check
+compared five dialects and the sixth was a copy of another. Here the guard
+compared nine crates of seventeen, and the ones it skipped were the ones with the
+most edges.
+
+**Fixed.** The list is **derived** — `ls -d */Cargo.toml` — and the job asserts
+the derived count is eighteen, so a crate the guard cannot see fails the job
+rather than being silently exempt. The check also now recognises
+`[dev-dependencies.x]` table syntax, which the inline-only `^x *=` pattern would
+have missed.
+
+**Shown to fail.** A `[dev-dependencies.openehr-sqlite-fuzz]` block added to
+`openehr/Cargo.toml` produces `openehr/Cargo.toml depends on
+openehr-sqlite-fuzz; dependencies run inward only`. Against the old list, it
+produced nothing.
+
+---
+
+## W-14 — eight crates carried no licence at all — **Medium, fixed**
+
+**Claimed.** [`index.md`](index.md) `W0.22`: "**Every** crate MUST carry the same
+licence expression." `W0.23`: "**Every** crate MUST ship a `LICENSE.md` naming
+all five."
+
+**Found.** Nine did. The other eight — `openehr-assets` and the seven fuzz
+harnesses — had **no `license` field in `Cargo.toml`**, and seven of the eight
+had no `LICENSE.md` either. The `claims` job's licence check iterated a
+hand-written list of the same nine.
+
+The guard and the gap were the same list, which is why neither found the other.
+
+**Consequence.** Real, if small. These crates are not published, but they are
+distributed as source in this repository, and a file with no licence in a
+licensed tree is precisely the ambiguity a five-way grant exists to remove.
+`W0.23`'s own reasoning applies: shipping the licence for some files and not
+others understates the grant, "which is the same defect class as claiming more
+than is verified, pointed the other way".
+
+**Fixed.** All eighteen crates declare the expression and ship `LICENSE.md`, and
+the check derives its list from the tree and asserts the count — the same fix as
+`W-13`, for the same reason.
+
+**Shown to fail.** Deleting the `license` line from `openehr-mssql-fuzz`
+produces a red job naming the file.
+
+---
+
+## W-15 — a fuzz seed corpus that nothing checked — **Low, fixed**
+
+**Found** while writing the check, not by suspecting the corpus.
+`corpus/canonical_json/` holds seven committed seeds; two are real compositions
+and five are deliberate malformations. That mix is correct and useful. What was
+missing was any way to tell it from the mix that is *not* correct — a seed that
+used to be a real composition and quietly stopped parsing after a field became
+required.
+
+A fuzz run's output cannot distinguish them. libFuzzer reports how many files it
+read, not how many got past `serde_json`, so seven seeds and seven files the
+deserializer rejects produce the same line. `W0.30` requires the corpus and said
+nothing about checking it, on the reasoning that a committed file does not
+change — which is true of the file and not of the type it is a seed *for*.
+
+**Fixed.** `openehr/tests/fuzz_seeds.rs` asserts that each structured target's
+corpus still spans both answers: at least one instance the deserializer accepts,
+so the target reaches past the lexer, and at least one it refuses, so the error
+paths are driven by something other than mutation. `W0.30` is amended to require
+it.
+
+**The first version of the check was wrong**, and the way it was wrong is the
+finding's other half. It required *every* seed to parse, which failed
+immediately on `seed-307cfdd3` — `{"_type":"COMPOSITION","name":{}}`, a
+deliberate malformation doing exactly its job. A check that would have deleted
+half the corpus is not a stricter check; it is a different and worse one, and it
+looked like a finding for about a minute.
+
+---
+
+## W-16 — the conformance ladder was written out four times, and two had drifted — **Medium, fixed**
+
+**Found** by grepping for the table rather than by suspecting it. The four-level
+ladder — the definition of what `Dialect`, `Schema`, `Store`, and `Verified`
+mean, which every conformance claim in this repository is denominated in — was
+stated in full in four documents:
+
+| Where | Status |
+| --- | --- |
+| `spec/databases/00-conformance.md` `C0.8` | the owner; `W0.8` says so |
+| [`index.md`](index.md) `W0.8` | says "This repository has **one** ladder, defined in `databases/00-conformance.md`", then reproduces it |
+| `openehr-store/spec/conformance.md` | a third copy |
+| [`../AGENTS/conformance.md`](../AGENTS/conformance.md) | a fourth |
+
+**Two of the four had already drifted.** `W0.8`'s copy read "A transcript
+against that engine's own server: applied cleanly…" where the owner reads "…the
+script applied cleanly…", and `AGENTS/conformance.md` had rewritten every cell
+shorter — "Golden tests + `conformance::check_dialect`", "Store, run in CI on
+every commit". None of the differences changed what a level means. That is the
+point: they were four texts drifting apart at the rate prose drifts, and the
+next difference would not have announced itself as the interesting one.
+
+**Why the copies were not simply deleted.** `W0.1`'s literal remedy is one
+occurrence and three links. Applied here it would make all four documents worse:
+someone reading `AGENTS/conformance.md` to decide whether a crate's claim is
+honest should not have to open a second file to learn what the claim means, and
+`W0.8` reproducing the ladder is why the repository index is readable on its own.
+
+The rule `W0.1` is really enforcing is *one place where the statement can be
+changed* — not one place where it can be read.
+
+**Fixed** by marking the copies rather than removing them (`W0.38`):
+
+```
+<!-- shared: conformance-ladder (owner) -->  …  <!-- /shared: conformance-ladder -->
+<!-- shared: conformance-ladder (copy)  -->  …  <!-- /shared: conformance-ladder -->
+```
+
+`scripts/check-docs.py` fails when a copy diverges from its owner and rewrites
+it with `--fix`. The three copies are now byte-identical to `C0.8`.
+
+**Shown to fail.** Shortening one cell in `AGENTS/conformance.md` produces
+`block 'conformance-ladder' differs from its owner
+spec/databases/00-conformance.md`, and `--fix` restores it.
+
+**Residual.** One block is bound this way. The ladder was the worst case and is
+not the only duplicated passage — the "two gates, not one" argument, the
+`W-01`/`F-08` story, and the "with a row present" explanation each appear in
+three or four documents in their own words. Those are **rationale** rather than
+normative statements (`db:C0.2`), so they are not covered by `W0.38` and are not
+checked. Whether they should be is an open question, not a settled exemption.
 
 ---
 

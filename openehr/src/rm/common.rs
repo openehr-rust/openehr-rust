@@ -30,6 +30,7 @@ use crate::base::{
 };
 use crate::error::ParseError;
 use crate::rm::data_types::{
+    DvOrdered as _,
     DataValue, DvCodedText, DvDate, DvDateTime, DvEhrUri, DvIdentifier, DvMultimedia, Text,
 };
 use crate::terminology;
@@ -1764,7 +1765,7 @@ impl<T> VersionedObject<T> {
     pub fn version_at_time(&self, time: &DvDateTime) -> Option<&Version<T>> {
         self.versions.iter().rfind(|v| {
             matches!(
-                v.commit_audit().time_committed().partial_cmp(time),
+                v.commit_audit().time_committed().semantic_cmp(time),
                 Some(core::cmp::Ordering::Less | core::cmp::Ordering::Equal)
             )
         })

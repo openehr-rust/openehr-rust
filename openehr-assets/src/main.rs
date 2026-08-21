@@ -798,12 +798,6 @@ const DISPOSITIONS: &[(&str, &str, Disposition, &str)] = &[
         "as DV_DATE",
     ),
     (
-        "DV_URI",
-        "Value_valid",
-        Disposition::Renamed,
-        "the URI parser refuses invalid text and reports itself",
-    ),
-    (
         "VERSION",
         "Lifecycle_state_ valid",
         Disposition::Renamed,

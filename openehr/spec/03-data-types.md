@@ -124,6 +124,53 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
   was removed rather than left to disagree with `Eq`. Pinned by
   `iso8601::eq_is_lexical_and_semantic_cmp_is_not_the_same_question`.
 
+- **D3.18b** *(added 2026-08-21)* `D3.18a` binds **every `DV_ORDERED`
+  descendant and `DATA_VALUE`**, not only the base ISO 8601 types. None of them
+  implements `PartialOrd`; semantic comparison is the named method
+  `DvOrdered::semantic_cmp`, and `DataValue::semantic_cmp` for the enum.
+
+  `D3.18a` was written about lexical form, because that is where the
+  disagreement was first seen. **That is not the mechanism, only one instance of
+  it.** Every `DV_ORDERED` carries `OrderedAttrs` — normal range, normal status,
+  other reference ranges — and every one of them derives `PartialEq` over all
+  its fields while comparing only its magnitude. So:
+
+  | These two values | `==` | `partial_cmp` |
+  | --- | --- | --- |
+  | `DV_DATE_TIME` `11:00:00Z` and `12:00:00+01:00` | false | `Some(Equal)` |
+  | `DV_QUANTITY` `5 mg` with `precision` 1 and with 2 | false | `Some(Equal)` |
+  | `DV_QUANTITY` `5 mg` with and without `units_display_name` | false | `Some(Equal)` |
+  | `DV_COUNT` `5` with and without a normal range | false | `Some(Equal)` |
+  | `DV_PROPORTION` `1/4` with `precision` 1 and with 2 | false | `Some(Equal)` |
+
+  Rust requires `a == b` if and only if `partial_cmp` reports `Some(Equal)`, so
+  each row is a broken trait contract: `a != b` while `a <= b` and `a >= b` are
+  both true. Nothing inside this crate depended on it — every comparison here
+  goes through the ordering consistently — which is exactly why it survived. A
+  caller's `binary_search`, `dedup_by`, `max_by`, or `sort_by` is where it
+  surfaces, in someone else's code.
+
+  Neither trait can move. Field equality is **record identity**: a
+  `DV_QUANTITY` that records its precision is not the same stored value as one
+  that does not, `db:M3.28` requires the text a record round-trips to be exactly
+  what arrived, and a content digest is taken over those bytes (`db:M3.43`).
+  Magnitude ordering is what a query and a reference range need. Making `==`
+  semantic would make a canonicaliser that rewrote `1.10` as `1.1` pass its own
+  round-trip test, which is `db:D-08` reintroduced.
+
+  Formerly the open finding `A-35`, which named five types; the survey that
+  closed it found **ten**.
+
+- **D3.18c** *(added 2026-08-21)* `INTERVAL<T>` MUST NOT be bounded on
+  `PartialOrd`. It is bounded on `SemanticOrd` — a trait this crate defines,
+  whose single method is the same partial comparison — and implemented for the
+  primitives an interval is used over and for every type in `D3.18b`.
+
+  A blanket `impl<T: PartialOrd> SemanticOrd for T` is deliberately **not**
+  written: it would collide with the explicit impls under Rust's coherence
+  rules, and more to the point it would let a type that has the `D3.18b` defect
+  reach `INTERVAL<T>` again without anyone deciding that it should.
+
 ## Quantities and proportions
 
 - **D3.19** `DV_QUANTITY` MUST require a finite magnitude and a non-empty
@@ -195,11 +242,29 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
 
 ## URIs
 
-- **D3.30** `DV_URI` MUST require a well-formed scheme and MUST refuse spaces
-  and control characters.
-- **D3.31** `DV_EHR_URI` MUST require the scheme `ehr`. `LINK.target` is typed
-  `DV_EHR_URI` precisely so that a link cannot point out of the record without
-  saying so.
+- **D3.30** *(amended 2026-08-20)* `DV_URI` MUST require a well-formed scheme
+  and MUST refuse spaces and control characters, **at both gates** (`L10.1`,
+  `L10.1a`) — in the constructor, and in validation.
+- **D3.31** *(amended 2026-08-20)* `DV_EHR_URI` MUST require the scheme `ehr`,
+  **at both gates**. `LINK.target` is typed `DV_EHR_URI` precisely so that a
+  link cannot point out of the record without saying so.
+
+  Both requirements said only "MUST require", and the crate satisfied that
+  reading in the constructor alone. `DV_EHR_URI` is `#[serde(transparent)]` over
+  `DV_URI`, whose `Deserialize` is derived, so a link target arriving as JSON
+  reached neither check: `{"value":"https://example.org/x"}` deserialized into a
+  `DV_EHR_URI` whose scheme was `https`, and `{"value":"nocolon"}` deserialized
+  into a `DV_URI` that **panicked** when its scheme was read. See
+  [`audit.md`](audit.md) **A-36**. "At both gates" is now written into the
+  requirement, because "MUST require" was read as "the constructor requires"
+  once and would be again.
+
+- **D3.30a** *(added 2026-08-20)* Reading any part of a `DV_URI` — its scheme,
+  or the remainder — MUST be **total**. A value that never passed a constructor
+  is a value this crate is obliged to be able to look at, and the accessor's
+  answer for one with no scheme is the empty string, which compares unequal to
+  every real scheme and so fails closed. An accessor that panics converts a
+  malformed document into a denial of service against the process reading it.
 - **D3.32** Validity of a `DV_EHR_URI` is **structural only**. The crate cannot
   resolve it, and documentation MUST NOT let "valid" be read as "resolvable".
 

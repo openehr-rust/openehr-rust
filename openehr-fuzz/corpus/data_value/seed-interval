@@ -1,0 +1,1 @@
+{"_type":"DV_INTERVAL","lower":{"_type":"DV_COUNT","magnitude":1},"upper":{"_type":"DV_COUNT","magnitude":9},"lower_unbounded":false,"upper_unbounded":false,"lower_included":true,"upper_included":true}

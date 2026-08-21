@@ -4,7 +4,7 @@
 name = "openehr-sqlite"
 version = "0.3.0"
 edition = "2024"
-rust-version = "1.90"
+rust-version = "1.95"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
 description = "openEHR persistence for SQLite: schema dialect and a complete embedded store"
 keywords = ["openehr", "ehr", "sqlite", "healthcare", "sql"]

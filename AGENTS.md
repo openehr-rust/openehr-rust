@@ -15,10 +15,10 @@ Detailed topic guides live in [`AGENTS/`](AGENTS/index.md).
 
 ## What this repository is
 
-Seventeen crates implementing openEHR in Rust: one Reference Model library, one
+Eighteen crates implementing openEHR in Rust: one Reference Model library, one
 engine-agnostic persistence library, six SQL engine crates, an HTTP service, an
-asset generator, and seven fuzz harnesses. The first eight are published to
-crates.io at 0.2.0; the other nine are `publish = false`.
+asset generator, and eight fuzz harnesses. The first eight are published to
+crates.io at 0.3.0; the other ten are `publish = false`.
 
 | Crate | Role | Level |
 | --- | --- | --- |
@@ -67,12 +67,32 @@ These are the ones this repository has broken, not a generic list.
 cd openehr && cargo test
 cd openehr && cargo clippy --all-targets
 
-# Every crate
+# Every buildable crate. The list is ten, not eight: `openehr-loco` and
+# `openehr-assets` build and test like the rest, and `openehr-assets` spent its
+# whole life outside every matrix with nine tests nobody ran (`spec/audit.md`
+# W-12).
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \
-         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle; do
+         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
+         openehr-loco openehr-assets; do
   (cd "$d" && cargo test --quiet && cargo clippy --all-targets --quiet) || echo "FAIL $d"
 done
+
+# The committed assets are what the code renders
+(cd openehr-assets && cargo run -- check)
+
+# The documentation's counts, versions, conformance levels, and shared blocks
+python3 scripts/check-docs.py          # --fix rewrites copies from their owner
+
+# Benchmarks. `--test` is the one-iteration form CI runs; bare `cargo bench`
+# takes measurements and asserts nothing (`W0.34`, `W0.35`).
+(cd openehr && cargo bench -- --test)
+(cd openehr-store && cargo bench -- --test)
 ```
+
+The MSRV is **N−3** — three Rust releases behind stable, currently 1.95 — and
+the `msrv` job re-derives that number rather than trusting a constant, so it
+goes red within six weeks of every Rust release. Fix the number; do not pin the
+toolchain. See [`spec/rust-msrv-n-minus-3.md`](spec/rust-msrv-n-minus-3.md).
 
 Lints are `deny`, not `warn`: `missing_docs`, `missing_errors_doc`,
 `missing_panics_doc`; `unsafe_code` is `forbid`. Clippy runs at `pedantic`. The
@@ -106,13 +126,15 @@ arm64, and the Oracle images need registry authentication. Both crates stay at
 
 | Job | Covers |
 | --- | --- |
-| `test` | clippy, tests, and docs for each of the nine crates separately (the eight published crates plus `openehr-loco`) — one `--workspace` invocation would silently miss one, since each crate is its own workspace |
-| `examples` | the five runnable tutorials |
+| `test` | clippy, tests, and docs for each of the ten buildable crates separately — one `--workspace` invocation would silently miss one, since each crate is its own workspace. `openehr-assets` was absent from this list and its nine tests had never run (`spec/audit.md` **W-12**) |
+| `msrv` | derives N−3 from the stable toolchain it just installed, checks every manifest and document declares exactly that, then **builds and tests on it**. See [`spec/rust-msrv-n-minus-3.md`](spec/rust-msrv-n-minus-3.md); this job is expected to go red within six weeks of every Rust release, and that is the point |
+| `examples` | the five runnable tutorials in `openehr`, plus the persistence tutorial in `openehr-sqlite` |
+| `bench` | `cargo bench -- --test`: every criterion benchmark runs once. Nothing is gated on wall-clock (`W0.35`) — a threshold on a shared runner fails for unrelated reasons and gets silenced |
 | `schema` | `verify-schema.sh` against real PostgreSQL, MySQL, and MariaDB containers |
 | `assets` | `openehr-assets` regenerates the committed DDL/schema files and fails the build if a committed one is stale |
 | `fuzz` | a short regression run of every fuzz target — a crash, panic, or abort fails the build; this is a gate, not a campaign |
-| `layering` | `openehr` and `openehr-store` depend inward only, including dev-dependencies |
-| `claims` | that mssql and oracle still claim only Dialect, that the library matrix covers every requirement exactly once, that the conformance matrix does not contradict itself, that the audit summary counts itself correctly, and that the eight published crates plus `openehr-loco` declare the same five licences |
+| `layering` | `openehr` and `openehr-store` depend inward only, including dev-dependencies. The crate list is **derived** from the tree, not written here: it used to name nine of seventeen and could not see a cycle through the eight it skipped (**W-13**) |
+| `claims` | that mssql and oracle still claim only Dialect, that the library matrix covers every requirement exactly once, that the conformance matrix does not contradict itself, that the audit summary counts itself correctly, and that **all eighteen** crates declare the same five licences (**W-14**) |
 | `mutants` | pull requests only: `cargo-mutants --in-diff` against the PR's changed lines, per crate touched — see [`AGENTS/auditing.md`](AGENTS/auditing.md) |
 
 Two rules it follows, both from the specification rather than habit: the schema
@@ -122,14 +144,18 @@ YAML — two ways of doing one check drift, and the one that drifts is always th
 one nobody runs.
 
 It first ran green on 2026-08-01, [run 30713623082](https://github.com/openehr-rust/openehr-rust/actions/runs/30713623082), across all nineteen jobs — which
-is what closed **W-02**, rather than the commit that added the file.
+is what closed **W-02**, rather than the commit that added the file. The `msrv`
+and `bench` jobs and two more fuzz targets were added on 2026-08-20 and have
+**not** yet run on `main`; every step of the `msrv` job was run locally,
+including against deliberately broken inputs, which is evidence and is not the
+same evidence (`W0.11`).
 `openehr-sqlite` is now at **Verified**; no other crate is eligible, having no
 `Store` ([`spec/audit.md`](spec/audit.md) **W-02**).
 
 ### Fuzzing
 
-Six `openehr-<engine>-fuzz` crates, one per dialect. They need nightly and
-`cargo-fuzz`, and run from the engine crate with `--fuzz-dir`:
+Eight fuzz crates, 21 targets. They need nightly and `cargo-fuzz`, and run from
+the crate they fuzz, with `--fuzz-dir`:
 
 ```sh
 cargo install cargo-fuzz
@@ -137,18 +163,41 @@ cd openehr-postgresql
 cargo +nightly fuzz run --fuzz-dir ../openehr-postgresql-fuzz quote -- -max_total_time=60
 ```
 
-Targets: `quote` (an identifier must not be able to escape its own quoting --
-the property with a security consequence) and `col_sql` (every logical type maps
-to something usable).
+| Crate | Targets | What is untrusted about the input |
+| --- | --- | --- |
+| `openehr-<engine>-fuzz` × 6 | `quote`, `col_sql` | An archetype id reaches a `WHERE` clause from caller input, so an identifier escaping its own quoting is SQL injection (`P6.12`). |
+| `openehr-fuzz` | `iso8601`, `object_id`, `aql`, `path`, `canonical_json`, `uri`, `data_value` | These are the parsers that read documents from outside the process. |
+| `openehr-store-fuzz` | `project`, `integrity` | Not parsers: a composition that passed no constructor becoming rows, and rows read back out of a database somebody may have edited. |
 
-The **properties live in `openehr_store::conformance`**, shared by all six; a
-fuzz target is a thin call. Six copies of one assertion is the arrangement that
-produced W-01. Seed corpora are committed; inputs the fuzzer discovers are not.
+The **properties live in `openehr_store::conformance`** wherever more than one
+crate drives them (`W0.38`, `W0.26`); a dialect fuzz target is a thin call. Six
+copies of one assertion is the arrangement that produced W-01.
+
+Seed corpora are committed and inputs the fuzzer discovers are not — and the
+**corpora themselves are checked**, by `openehr/tests/fuzz_seeds.rs`, because a
+seed that quietly stopped deserializing is an unseeded target wearing a corpus
+and no fuzz run's output would say so (**W-15**).
 
 CI runs every target on every push, because a committed fuzz target nobody
-executes is a claim rather than a check (`T11.9`).
+executes is a claim rather than a check (`T11.9`). One of them has a result:
+`uri` was written against the code as it stood and found `lib:A-36` — a panic
+reachable from any JSON document — from an empty corpus.
 
 None of these crates is published (`publish = false`).
+
+### Benchmarks
+
+`openehr/benches/rm.rs` and `openehr-store/benches/store.rs`, on criterion.
+
+```sh
+cd openehr && cargo bench              # measure
+cd openehr && cargo bench -- --test    # one iteration each; what CI runs
+```
+
+**A number from these is not a conformance claim** (`W0.34`) and **nothing is
+gated on wall-clock** (`W0.35`). No requirement in this repository is stated in
+seconds. What CI asserts is the only thing it honestly can — that the benchmarks
+still compile and still run (`W0.36`), which is the part that rots.
 
 ## Adding an engine crate
 
@@ -169,26 +218,41 @@ version:
 ## Documentation rules
 
 - State the crate's conformance level in the **first screenful** of its README
-  and its crate docs (`C0.9`).
+  and its crate docs (`C0.9`). The level has **one owner**,
+  [`spec/databases/conformance-matrix.md`](spec/databases/conformance-matrix.md)
+  (`W0.40`); change it there first, and `scripts/check-docs.py` will name every
+  restatement that has not caught up.
 - Never describe a capability at a level above the crate's (`C0.11`).
 - When you fix something that was wrong in public, say what was wrong. The
   `openehr-mariadb` README documents its own history because a corrected claim is
   only meaningful against the claim it corrects.
 - Rustdoc examples are compiled and run. A `no_run` or `ignore` example is a
   claim nothing checks.
+- **A count is a claim** (`W0.39`). How many crates, how many are published, how
+  many fuzz targets, which version is live, which CI jobs exist — all of it is
+  derived from the tree by `scripts/check-docs.py` and checked against the prose.
+  Two findings here were nothing but stale counts (**W-10**, **W-11**).
+- **Do not paste a passage into a second document unmarked** (`W0.38`). If it
+  genuinely belongs in both, mark one `<!-- shared: NAME (owner) -->` and the
+  rest `(copy)`, and they are compared byte for byte. The conformance ladder was
+  copied four times unmarked, and two of the four had drifted (**W-16**).
 
 ## Publishing
 
-All eight publishable crates are live on crates.io at **0.2.0**, and **the tree
-has moved past them**. Twenty-five commits separate local 0.2.0 from published
-0.2.0, several of them breaking: `SCHEMA_VERSION` now exists and is `4`,
+All eight publishable crates are live on crates.io at **0.3.0**, published
+2026-08-04, and **local matches published** — the per-crate table is in
+[`AGENTS/publishing.md`](AGENTS/publishing.md), which is the one file to trust
+on this and the one to update first.
+
+0.3.0 was a breaking release, not 0.2.1: `SCHEMA_VERSION` now exists and is `4`,
 `ColTy::Json` changed type, `ColTy::Digest` was added, and
-`OriginalVersion::new` refuses input it used to accept. The next release is
-**0.3.0**, not 0.2.1 — cargo treats `0.2.x` as compatible, so any of those as a
-patch would break a dependent on `cargo update`.
+`OriginalVersion::new` refuses input it used to accept. Cargo treats `0.2.x` as
+compatible, so any of those shipped as a patch would have broken a dependent on
+`cargo update`.
 
 There is no schema migration and there will not be one before 1.0
-(`db:O10.14`). A deployment on published 0.2.0 exports, recreates, and reloads.
+(`db:O10.14`). A deployment on published 0.2.0 exports, recreates, and reloads
+to reach 0.3.0.
 Read [`AGENTS/publishing.md`](AGENTS/publishing.md) before publishing again.
 
 A published version is **immutable**. `openehr` 0.1.0 is already live carrying a
@@ -206,16 +270,24 @@ spec/                     repository specification + audit register
   databases/              persistence specification (db:)
 AGENTS.md                 this file
 AGENTS/                   topic guides
+scripts/check-docs.py     counts, versions, levels, shared blocks
 openehr/                  the Reference Model library
   spec/                   library specification (lib:) + audit + matrix
   src/{rm,base,security}/ the model, identifiers, change-control security
-  examples/               five runnable tutorials
+  examples/               five runnable tutorials (the Reference Model)
+  benches/rm.rs           criterion; not a conformance claim (W0.34)
+  tests/fuzz_seeds.rs     the committed seed corpora still parse (W0.30)
 openehr-store/            engine-agnostic persistence
   src/{schema,dialect,record,store,conformance}.rs
+  benches/store.rs        projection and chain verification
+  spec/conformance.md     marked copy of the ladder; C0.8 owns it
   scripts/verify-schema.sh
 openehr-<engine>/         one Dialect each; sqlite also has a Store
   spec/14-<engine>-dialect.md  that dialect's annex and its M14.x departures
+openehr-sqlite/examples/01_store_a_record.rs
+                          the persistence tutorial; the only crate with a Store
 openehr-fuzz/             fuzz harness for the RM parsers; publish = false
+openehr-store-fuzz/       projection and integrity; publish = false
 openehr-<engine>-fuzz/    fuzz harness per dialect; publish = false
 .github/workflows/ci.yml  test, examples, schema, fuzz, claims
 ```

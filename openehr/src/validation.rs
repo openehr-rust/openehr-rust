@@ -52,7 +52,9 @@
 use crate::error::{ValidationReport, Violation};
 use crate::rm::common::{Attestation, Locatable as _, Participation, PartyProxy};
 use crate::rm::data_structures::{Cluster, Element, Event, History, Item, ItemStructure};
-use crate::rm::data_types::{DataValue, DvCodedText, DvOrdered, DvQuantity, OrderedAttrs, Text};
+use crate::rm::data_types::{
+    DataValue, DvCodedText, DvEhrUri, DvOrdered, DvQuantity, DvUri, OrderedAttrs, Text,
+};
 use crate::rm::ehr::{Composition, ContentItem, EhrStatus, Entry, EventContext, Section};
 use crate::terminology;
 
@@ -139,6 +141,16 @@ fn check_locatable<L: crate::rm::common::Locatable>(node: &L, ctx: &mut Context)
             c.violation("DV_TEXT", "Valid_value", "value is empty");
         });
     }
+    // Links are checked here, on the `LOCATABLE` that carries them, so that
+    // every node in every structure is covered by one call rather than by a
+    // rule repeated per class. `LINK.target` is where a `DV_EHR_URI` actually
+    // reaches this crate from outside (`M5.9`), and nothing validated it until
+    // `A-36`.
+    for (i, link) in node.links().iter().enumerate() {
+        ctx.nested(format!("/links[{i}]"), |c| {
+            c.nested("/target".to_owned(), |c| check_ehr_uri(link.target(), c));
+        });
+    }
     // An archetype root whose archetype id constrains a different RM class is
     // the single most common structural error in hand-built or
     // transform-produced instances: an OBSERVATION archetype id on an
@@ -172,6 +184,56 @@ fn check_locatable<L: crate::rm::common::Locatable>(node: &L, ctx: &mut Context)
 /// `DV_TEXT`, so one helper covers both. A `DV_TEXT` inside a data value the
 /// walk does not descend into is not reached, which is a property of the walk
 /// rather than of this rule.
+/// `DV_URI`, on data that arrived rather than data the program built.
+///
+/// The constructor is the only definition of "well formed" — this re-runs it
+/// rather than restating its rules, so the two gates cannot drift into
+/// disagreeing about one URI (`W0.1`). What it adds is the *reporting*: a
+/// constructor returns one `ParseError` and stops, and validation has to name
+/// the class, the invariant, and the path (`L10.4`), and collect rather than
+/// abort (`L10.3`).
+///
+/// Two invariants, deliberately distinct:
+///
+/// * `Value_valid` is openEHR's own, and is only `not value.is_empty`.
+/// * `Uri_well_formed` is a **crate-added** check (`L10.9`, `D3.30`): a scheme
+///   matching RFC 3986, and no spaces or control characters. openEHR does not
+///   require it, this crate's constructor always has, and until `A-36` nothing
+///   required it of a document read from a wire.
+fn check_uri(uri: &DvUri, ctx: &mut Context) {
+    if uri.value().is_empty() {
+        ctx.violation("DV_URI", "Value_valid", "value is empty");
+        // Nothing further is meaningful, and `new` would report the same thing
+        // under the added name as well.
+        return;
+    }
+    if DvUri::new(uri.value()).is_err() {
+        ctx.violation(
+            "DV_URI",
+            "Uri_well_formed",
+            "no RFC 3986 scheme, or a space or control character in the value",
+        );
+    }
+}
+
+/// `DV_EHR_URI`, on data that arrived.
+///
+/// `LINK.target` is typed `DV_EHR_URI` precisely so that a link cannot point
+/// out of the record without saying so (`D3.31`, `M5.9`) — and the type's own
+/// doctest asserts that `"https://example.org/x"` fails to *parse*. It
+/// deserialized without complaint, which made the guarantee true of links this
+/// program builds and false of links it is sent. That is the whole of `A-36`.
+fn check_ehr_uri(uri: &DvEhrUri, ctx: &mut Context) {
+    check_uri(uri.as_uri(), ctx);
+    if uri.scheme() != DvEhrUri::SCHEME {
+        ctx.violation(
+            "DV_EHR_URI",
+            "Scheme_valid",
+            "the scheme is not `ehr`, so the target is outside the record",
+        );
+    }
+}
+
 fn check_text(text: &crate::rm::data_types::DvText, ctx: &mut Context) {
     for mapping in text.mappings() {
         if let Some(purpose) = mapping.purpose()
@@ -413,6 +475,8 @@ impl Validate for DataValue {
             Self::Text(t) if t.value().is_empty() => {
                 ctx.violation("DV_TEXT", "Valid_value", "value is empty");
             }
+            Self::Uri(u) => check_uri(u, ctx),
+            Self::EhrUri(u) => check_ehr_uri(u, ctx),
             _ => {}
         }
     }
@@ -601,7 +665,7 @@ impl Validate for History {
             // before the zero point has a negative offset, and `EVENT.offset`
             // is defined as `time - origin` with no provision for one.
             if matches!(
-                event.time().partial_cmp(self.origin()),
+                event.time().semantic_cmp(self.origin()),
                 Some(core::cmp::Ordering::Less)
             ) {
                 ctx.nested(format!("/events[{i}]"), |c| {
@@ -635,7 +699,7 @@ impl Validate for EventContext {
         }
         if let Some(end) = self.end_time()
             && matches!(
-                end.partial_cmp(self.start_time()),
+                end.semantic_cmp(self.start_time()),
                 Some(core::cmp::Ordering::Less)
             )
         {

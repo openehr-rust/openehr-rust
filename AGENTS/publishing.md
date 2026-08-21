@@ -33,7 +33,7 @@ on crates.io, in the order below, and local matches published.
 | `openehr-mssql` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
 | `openehr-oracle` | 0.1.1, 0.2.0, **0.3.0** | 0.3.0 |
 
-`openehr-loco`, `openehr-assets`, and the seven fuzz crates are `publish = false`
+`openehr-loco`, `openehr-assets`, and the eight fuzz crates are `publish = false`
 and are not on crates.io. `openehr-loco`'s own version moves in lockstep with
 the published crates for consistency (0.3.0 locally) even though it is never
 itself published.
@@ -58,7 +58,7 @@ upgrading from a published 0.2.0 — catalogued in full in
 | Nine chain columns on `openehr_version` | `db:D-07`. Absent at 0.2.0. |
 | `ColTy::Digest` added | `ColTy` is deliberately not `#[non_exhaustive]`, so this breaks any external `Dialect` implementation at compile time — by design. |
 | `OriginalVersion::new` refuses what it accepted | `lib:A-23`. A first version naming a predecessor, or a successor naming none, now fails to construct. |
-| `Date`/`Time`/`DateTime`/`Duration` lost `PartialOrd`/`Ord` | `lib:A-32`. `Eq` on these was lexical while `PartialOrd` was semantic, contradicting the standard library's requirement that the two agree. `<`, `.partial_cmp()`, `.min()`/`.max()`, `sort()` on these four types no longer compile; call the new `.semantic_cmp()` instead. Does not touch `DvDate`/`DvTime`/`DvDateTime`/`DvDuration`, whose own `PartialOrd` is unchanged. |
+| `Date`/`Time`/`DateTime`/`Duration` lost `PartialOrd`/`Ord` | `lib:A-32`. `Eq` on these was lexical while `PartialOrd` was semantic, contradicting the standard library's requirement that the two agree. `<`, `.partial_cmp()`, `.min()`/`.max()`, `sort()` on these four types no longer compile; call the new `.semantic_cmp()` instead. Did not touch `DvDate`/`DvTime`/`DvDateTime`/`DvDuration` at 0.3.0, whose own `PartialOrd` was unchanged **then**. That is history: `lib:A-35` removed `PartialOrd` from those four and from every other `DV_ORDERED` after 0.3.0 — see `CHANGELOG.md` under *Unreleased*. |
 
 That is why the release was **0.3.0**, not 0.2.1: cargo treats `0.2.x` as
 compatible with `0.2.0`, and shipping any of the above as a patch would have

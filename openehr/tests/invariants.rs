@@ -30,6 +30,7 @@ use openehr::rm::data_structures::{
 };
 use openehr::rm::data_types::DvDate;
 use openehr::rm::data_types::{
+    DvOrdered as _,
     CodePhrase, DataValue, DvCount, DvDateTime, DvDuration, DvParagraph, DvParsable, DvProportion,
     DvText, MappingMatch, ProportionKind, Text,
 };
@@ -221,13 +222,13 @@ fn a_leap_second_is_accepted_and_a_sixty_first_is_not() {
 fn proportions_of_different_kinds_do_not_compare() {
     let ratio = DvProportion::new(1.0, 128.0, ProportionKind::Ratio).unwrap();
     let percent = DvProportion::new(0.78, 100.0, ProportionKind::Percent).unwrap();
-    assert_eq!(ratio.partial_cmp(&percent), None);
-    assert_eq!(percent.partial_cmp(&ratio), None);
+    assert_eq!(ratio.semantic_cmp(&percent), None);
+    assert_eq!(percent.semantic_cmp(&ratio), None);
     assert!(!ratio.is_strictly_comparable_to(&percent));
 
     // Same kind still compares.
     let bigger = DvProportion::new(1.0, 64.0, ProportionKind::Ratio).unwrap();
-    assert!(ratio < bigger);
+    assert_eq!(ratio.semantic_cmp(&bigger), Some(core::cmp::Ordering::Less));
 }
 
 /// `D3.28` — fails if `DV_PARSABLE` starts accepting content with no formalism,

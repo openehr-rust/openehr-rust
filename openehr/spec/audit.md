@@ -15,15 +15,15 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**35 findings, 35 in the table below: 5 High, 21 Medium, 9 Low. 27 fixed or
-classified, 8 open.** These counts are checked against the table by CI
+**36 findings, 36 in the table below: 5 High, 22 Medium, 9 Low. 29 fixed or
+classified, 7 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
-verified), and the check should have failed. Every one of the 8 open findings
+verified), and the check should have failed. Every one of the 7 open findings
 is open by a stated reason rather than by omission: **A-02** and **A-08** are
-declared departures the crate does not intend to close; **A-05**, **A-10**,
-**A-30** and **A-35** are recorded limitations or residuals with the reasoning
-for leaving them written beside them; **A-19** and **A-27** are declared
+declared departures the crate does not intend to close; **A-05**, **A-10** and
+**A-30** are recorded limitations or residuals with the reasoning for leaving
+them written beside them; **A-19** and **A-27** are declared
 departures (`S1.18`, `Q12.9b`) whose *enforcement* remains open work. **A-09**
 (no property-based testing) is closed: `tests/properties.rs` covers the laws, and
 `openehr-fuzz` now drives five targets over the parsers — ISO 8601, the
@@ -110,7 +110,8 @@ in the documentation, which is the class this register most exists to catch.
 | A-32 | Medium | `Eq` on the ISO 8601 types was lexical while `PartialOrd` compared instants, so `11:00:00Z` and `12:00:00+01:00` ordered `Equal` and were not `==` — contrary to the standard library's requirement that the two agree | **fixed** — `PartialOrd`/`Ord` removed from `Date`, `Time`, `DateTime`, `Duration`; semantic ordering is now the plain method `semantic_cmp`, so no trait contract applies |
 | A-33 | Medium | The Gregorian leap rule was implemented **twice** — `base::iso8601` and `rm::data_structures` — byte-identical but for the fallback arm, and the second copy had never been run by any test | **fixed** — one implementation, `pub(crate)`; the interval-event arithmetic that used it is now tested against hand-computed dates |
 | A-34 | Medium | `DV_ENCAPSULATED`'s `charset` and `language` were preserved across a round trip and **unreadable** — `EncapsulatedAttrs` is exported but no type returned one, so a caller holding a `DV_MULTIMEDIA` or `DV_PARSABLE` could not ask what it declared | **fixed** — an `encapsulated()` accessor on both; found because the two accessors had no reachable caller to test |
-| A-35 | Medium | `DvDate`, `DvTime`, `DvDateTime`, `DvDuration` and `DataValue` have the same lexical-`Eq`-versus-semantic-`PartialOrd` shape `A-32` fixed at the base `iso8601` layer — found while fixing `A-32` and left alone because closing it would mean either the same trait-removal treatment rippling through `Interval<T>`'s `T: PartialOrd` bound everywhere it is instantiated (`Interval<DvDate>`, `Interval<DataValue>`, `Interval<i32>`, …), or a narrower fix scoped to just these types | open |
+| A-36 | Medium | `DV_URI` and `DV_EHR_URI` enforced their invariants in the constructor only. A `DV_URI` deserialized from `{"value":"nocolon"}` **panicked** in `scheme()`, whose rustdoc said "# Panics — Never"; a `DV_EHR_URI` deserialized from `{"value":"https://example.org/x"}` reported scheme `https`, which is what the type exists to make impossible. `Validate for DataValue` reached both through a `_ => {}` arm, and `LINK.target` was validated nowhere | **fixed** — `scheme()`/`rest()` are total (`D3.30a`), validation checks both types and every `LOCATABLE`'s links, and `openehr-fuzz` has a `uri` target that reproduces the panic in seconds |
+| A-35 | Medium | Ten types — every `DV_ORDERED` descendant and `DataValue` — implemented `PartialOrd` while deriving `PartialEq` over all their fields, so `a != b` while `a <= b` and `a >= b` were both true. Recorded as the lexical-vs-semantic shape of `A-32` and scoped to five types; the mechanism is `OrderedAttrs`, which every `DV_ORDERED` carries, and it reached five more | **fixed** — no `DV_ORDERED` implements `PartialOrd`; comparison is `DvOrdered::semantic_cmp`, and `INTERVAL<T>` is bounded on a new `SemanticOrd` (`D3.18b`, `D3.18c`) |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
 | A-13 | Medium | One `IF NOT EXISTS` flag covered two statements MySQL treats differently | **fixed**, verified on MySQL 8.4 |
@@ -1578,6 +1579,174 @@ including `R4.12a`–`R4.12c`. Those are covered, by a row reading
 `R4.12`. Three of nine reported gaps were defects in the instrument, which is
 `A-25` in miniature and the second time in two days that a measurement of this
 specification has been wrong before the specification was.
+
+## A-36 — a URI checked at one gate, and a panic behind the other
+
+**Found 2026-08-20**, by writing a fuzz target for a type that had none and
+running it. Two defects, one cause.
+
+**The panic.** `DvUri::scheme()` read:
+
+```rust
+self.value.split_once(':').map(|(s, _)| s).expect("constructor guarantees a scheme")
+```
+
+with rustdoc saying `# Panics — Never: the constructor guarantees a colon is
+present`. The constructor does. `Deserialize` is derived, writes `value`
+straight in, and calls no constructor — which is `L10.1a`, stated in this
+crate's own specification and in `CLAUDE.md`, and the sentence in the rustdoc
+was written as though only one construction path existed.
+
+```rust
+let u: DvUri = serde_json::from_str(r#"{"value":"nocolon"}"#).unwrap();  // Ok
+u.scheme();  // panicked at src/rm/data_types/uri.rs:86
+```
+
+`rest()` was the same function with the other half of the tuple.
+
+**The silent half, which is worse.** `DvEhrUri` is `#[serde(transparent)]` over
+`DvUri`. Its whole reason for existing is that `LINK.target` is typed
+`DV_EHR_URI` so that *a link cannot point out of the record without saying so*
+(`D3.31`, `M5.9`) — and the type's own doctest asserts that
+`"https://example.org/x".parse::<DvEhrUri>()` is an error. It is. The JSON path
+is not:
+
+```rust
+let u: DvEhrUri = serde_json::from_str(r#"{"value":"https://example.org/x"}"#).unwrap();
+assert_eq!(u.scheme(), "https");   // passed
+```
+
+No panic, no error, no violation — a link out of the record, in a record, with
+the type system satisfied.
+
+**Why nothing reported it.** `impl Validate for DataValue` ends in `_ => {}`.
+`Uri` and `EhrUri` fell into it. This is the hazard `CLAUDE.md` records about
+`Node::children` — *a path that resolves to nothing is not an error* — appearing
+in the validation table instead of the navigation one: an absent arm is
+indistinguishable from a value with nothing to check. And `LINK.target` was
+reached by no validation at all, on any class.
+
+The invariant scanner did not catch it either, and could not have: it asks
+whether an invariant is **named** somewhere in the crate.
+`DV_URI.Value_valid` was named — as a *disposition*, `Renamed`, reading "the
+URI parser refuses invalid text and reports itself". True of the parser. The
+disposition described gate one and was read as covering both.
+
+**Consequence.** `openehr-loco` deserializes documents from HTTP. A composition
+carrying one malformed link target was a panic in a request handler, and one
+carrying a well-formed `https://` target was accepted and stored. Neither
+required anything unusual — a hand-written JSON document reaches both.
+
+**Fixed**, in four parts:
+
+1. `scheme()` and `rest()` are **total**: no colon means an empty scheme, which
+   compares unequal to `ehr` and to every other real scheme, so a caller that
+   dispatches on it fails closed. `D3.30a` now requires this of any accessor on
+   a type whose `Deserialize` is derived.
+2. `check_uri` and `check_ehr_uri` in `validation.rs`, reached from the
+   `DataValue` arms that used to fall through. `check_uri` re-runs `DvUri::new`
+   rather than restating its rules, so the two gates cannot drift (`W0.1`).
+   Emptiness reports openEHR's own `DV_URI.Value_valid`; the scheme and
+   character rules report `Uri_well_formed`, registered as a crate addition
+   under `L10.9` because openEHR's `Value_valid` is only `not value.is_empty`.
+3. Links are validated on `LOCATABLE`, so every node of every structure is
+   covered by one call, at path `/links[N]/target`.
+4. The `DV_URI.Value_valid` disposition is removed. `openehr-assets` **refused
+   the build** until it was — "dispositions for invariants the crate now names"
+   — which is `A-24` working as designed.
+
+**Reproduced before and after.** Four tests in `tests/guarantees.rs`, each
+naming its failure mode, plus the `uri` fuzz target, which finds the panic from
+an empty corpus.
+
+**What this says about the class.** Every finding here is some version of "a
+claim was written once and never re-checked". This one is narrower and worth
+naming separately: **a mitigation was recorded against the gate it worked at,
+and read as covering the gate it did not.** The disposition was not wrong. It
+was scoped, and nothing carried the scope.
+
+## A-35 — ten types whose equality and order contradicted each other
+
+**Opened** while fixing `A-32`, as a note that the base-layer defect had the
+same shape one level up, in `DvDate`, `DvTime`, `DvDateTime`, `DvDuration`, and
+`DataValue`. Left open because closing it looked like it meant rippling a trait
+removal through `Interval<T>`'s bound.
+
+**Closed 2026-08-21**, and the survey that closed it found the record was wrong
+about both the scale and the cause.
+
+**The cause is not lexical form.** That is where it was first seen. Every
+`DV_ORDERED` descendant carries `OrderedAttrs` — normal range, normal status,
+other reference ranges — and every one derives `PartialEq` over all its fields
+while comparing only its magnitude. Run against each type in turn:
+
+| These two values | `==` | `partial_cmp` |
+| --- | --- | --- |
+| `DV_DATE_TIME` `11:00:00Z` and `12:00:00+01:00` | false | `Some(Equal)` |
+| `DV_TIME` `11:00:00Z` and `12:00:00+01:00` | false | `Some(Equal)` |
+| `DV_DURATION` `PT60M` and `PT1H` | false | `Some(Equal)` |
+| `DV_QUANTITY` `5 mg` with `precision` 1 and with 2 | false | `Some(Equal)` |
+| `DV_QUANTITY` `5 mg` with and without `units_display_name` | false | `Some(Equal)` |
+| `DV_COUNT` `5` with and without a normal range | false | `Some(Equal)` |
+| `DV_PROPORTION` `1/4` with `precision` 1 and with 2 | false | `Some(Equal)` |
+| `DATA_VALUE` wrapping any of the above | false | `Some(Equal)` |
+
+Five types were named in the finding. Ten had it — the four temporal wrappers,
+`DV_QUANTITY`, `DV_COUNT`, `DV_ORDINAL`, `DV_SCALE`, `DV_PROPORTION`, and
+`DATA_VALUE` — and the three that the original note did not reach have nothing
+to do with ISO 8601.
+
+**What was actually wrong.** Rust requires `a == b` if and only if
+`partial_cmp(a, b)` is `Some(Equal)`. Every row above ships `a != b` together
+with `a <= b` and `a >= b`. Inside this crate that is invisible, because every
+comparison here goes through the ordering consistently — which is exactly why it
+survived two audits. It surfaces in a caller: `binary_search` can return a hit
+that is not `==` to the needle, `dedup_by` leaves adjacent "equal" elements,
+`sort_by` and `max_by` are underdetermined.
+
+**Neither trait could move**, which is why the fix is to drop one:
+
+- Making `==` semantic would make `DvCount::new(5).with_normal_range(r)` equal
+  to `DvCount::new(5)`, and would let a canonicaliser that rewrote `1.10` as
+  `1.1` pass its own round-trip test. That is `db:D-08` reintroduced, in the
+  crate rather than in a database.
+- Making `partial_cmp` return `None` where the values are ordered-equal but not
+  `==` would satisfy the contract and break reference ranges: an interval of
+  `[11:00Z, 13:00Z]` would stop containing `12:00+01:00`. A wrong clinical
+  answer in exchange for a satisfied trait.
+
+**Fixed** as `D3.18a` was, one level up:
+
+1. No `DV_ORDERED` implements `PartialOrd`, and neither does `DataValue`.
+   Comparison is `DvOrdered::semantic_cmp`, a required method so a new
+   `DV_ORDERED` cannot forget it, and `DataValue::semantic_cmp` for the enum.
+2. `INTERVAL<T>` is bounded on `SemanticOrd` rather than `PartialOrd`
+   (`D3.18c`), with explicit impls and deliberately no blanket one — a blanket
+   `impl<T: PartialOrd> SemanticOrd for T` collides under coherence, and the
+   explicit list is what stops a type with this defect reaching `INTERVAL<T>`
+   again without anyone deciding it should.
+3. `Interval::contains` is rewritten against `semantic_cmp`. The operators it
+   used read "not comparable" as "not greater, therefore below", which is a
+   wrong answer rather than a missing one.
+
+**No behaviour changed.** The comparison logic is the same logic; what changed
+is which trait it is reachable through. Verified by the suite, by the doctests,
+and by the four downstream crates, which needed **no edits at all** — the whole
+blast radius was inside `openehr`, and every affected call site was a compile
+error rather than a silent change. That is the argument for the trait removal
+over the alternatives: the compiler enumerated the work.
+
+**Breaking for callers**, and cheaply: `a < b` becomes
+`a.semantic_cmp(&b) == Some(Ordering::Less)`, `a.partial_cmp(&b)` becomes
+`a.semantic_cmp(&b)`, and `DvOrdered` has to be in scope. Recorded in
+`CHANGELOG.md`; the next release is not a patch.
+
+**Pinned** by `guarantees::equality_and_order_disagree_by_design_and_neither_is_partial_ord`,
+which asserts both halves for each shape — that the values are `!=`, and that
+they order `Equal` — so restoring `PartialOrd` fails the suite rather than
+quietly reintroducing the contradiction. And by
+`guarantees::a_reference_range_is_unmoved_by_how_an_instant_is_spelled`, because
+the rewrite of `contains` is the part that could have changed an answer.
 
 ## Closed findings
 

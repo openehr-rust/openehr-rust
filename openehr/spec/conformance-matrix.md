@@ -4,7 +4,11 @@
 the file to distrust last: if it disagrees with the code, the code wins and this
 file has a defect.
 
-**Assessed:** 2026-08-02, against `rustc 1.97.1`, `openehr` 0.2.0.
+**Assessed:** 2026-08-02, against `rustc 1.97.1`, `openehr` 0.2.0. Rows touched
+by **A-36** were re-derived 2026-08-20 against `openehr` 0.3.0 and `rustc 1.98.0`;
+the rest carry the earlier date and have not been re-checked since, which is
+stated rather than papered over (`W0.10`). The `D3.18b`/`D3.18c` rows were
+derived 2026-08-21 with **A-35**.
 **Method:** each requirement read against the code that implements it and the
 test that exercises it; test names below are real and runnable with
 `cargo test <name>`.
@@ -149,6 +153,8 @@ Process requirements; they govern this specification rather than the code.
 | D3.17 | • | `invariants::proportions_of_different_kinds_do_not_compare` |
 | D3.18 | • | `iso8601::tests::offsets_normalise_before_comparison` |
 | D3.18a | • | resolved: `PartialOrd`/`Ord` removed from the base ISO 8601 types, semantic order is the plain method `semantic_cmp` — `iso8601::tests::eq_is_lexical_and_semantic_cmp_is_not_the_same_question` (`A-32`, fixed) |
+| D3.18b | • | the same resolution over all ten `DV_ORDERED` types and `DATA_VALUE` — `guarantees::equality_and_order_disagree_by_design_and_neither_is_partial_ord` (`A-35`, fixed) |
+| D3.18c | • | `INTERVAL<T>` is bounded on `SemanticOrd`; `guarantees::a_reference_range_is_unmoved_by_how_an_instant_is_spelled` covers the `contains` rewrite |
 | D3.19 | • | `quantity::tests::non_finite_magnitudes_are_refused` |
 | D3.19a | doc | declared narrowing; recorded here and in §3 |
 | D3.20, D3.20a | • | `quantity::tests::precision_accepts_the_unlimited_sentinel`; `validation::tests::the_unlimited_precision_sentinel_validates` |
@@ -165,8 +171,9 @@ Process requirements; they govern this specification rather than the code.
 | D3.27 | • | `encapsulated::tests::sha1_is_readable_but_not_writable` |
 | D3.28 | • | `invariants::parsable_content_needs_a_formalism` |
 | D3.29 | • | `encapsulated::tests::base64_round_trips_including_padding_lengths` |
-| D3.30 | • | `uri::tests::schemes_are_checked_not_assumed` |
-| D3.31 | • | `uri::tests::ehr_uri_refuses_an_external_target` |
+| D3.30 | • | `uri::tests::schemes_are_checked_not_assumed`; `guarantees::a_uri_that_never_saw_a_constructor_is_reported_rather_than_panicking`; `guarantees::an_empty_uri_is_reported_under_openehrs_own_invariant_name` |
+| D3.30a | • | `guarantees::a_uri_that_never_saw_a_constructor_is_reported_rather_than_panicking` |
+| D3.31 | • | `uri::tests::ehr_uri_refuses_an_external_target`; `guarantees::an_ehr_uri_deserialized_with_a_foreign_scheme_is_reported`; `guarantees::a_link_target_is_validated_on_every_locatable_that_carries_it` |
 | D3.32 | doc | `uri` module header |
 | D3.33 | • | `basic::tests::an_empty_identifier_is_refused` |
 | D3.34 | • | `basic::tests::display_never_reveals_the_identifier` |

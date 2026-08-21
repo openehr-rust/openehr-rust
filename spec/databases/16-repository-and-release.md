@@ -13,14 +13,26 @@ Requirement prefix: `W16`.
 
 ## Layout
 
-- **W16.1** *(amended)* The repository holds **fourteen** crates: `openehr` (the
-  Reference Model), `openehr-store` (engine-agnostic persistence), six
-  `openehr-<engine>` dialect crates, and six `openehr-<engine>-fuzz` harnesses.
-  Shared normative text lives at the root, in `spec/`; each engine crate carries
-  only its own dialect annex (`X15.6`).
+- **W16.1** *(amended 2026-08-20)* The repository holds **eighteen** crates:
+  `openehr` (the Reference Model), `openehr-store` (engine-agnostic
+  persistence), six `openehr-<engine>` dialect crates, `openehr-loco` (the HTTP
+  service), `openehr-assets` (the generator for the committed assets), and
+  **eight** fuzz harnesses — one per dialect, plus `openehr-fuzz` over the
+  Reference Model parsers and `openehr-store-fuzz` over projection and the
+  integrity check. Shared normative text lives at the root, in `spec/`; each
+  engine crate carries only its own dialect annex (`X15.6`).
 
-  The eight non-fuzz crates are published; the six fuzz crates MUST NOT be
-  (`W0.25`).
+  The **eight** published crates are `openehr`, `openehr-store`, and the six
+  dialects. The other ten MUST declare `publish = false` (`W0.25`).
+
+  This requirement said **fourteen** until 2026-08-20, having been amended once
+  already when the layout changed and then not again when `openehr-loco`,
+  `openehr-assets`, and `openehr-fuzz` were added. A count is the cheapest
+  possible claim to check and the easiest to leave behind; `spec/index.md`,
+  `README.md`, and `AGENTS.md` all said seventeen while this said fourteen, and
+  a specification disagreeing with a specification is worse than either
+  disagreeing with a README (`W0.1`). See [`../audit.md`](../audit.md)
+  **W-11**.
 - **W16.2** *(amended)* An engine crate MUST be named `openehr-<engine>`, and the
   `<engine>` component MUST name the engine it actually targets. There are no
   `-map`, `-gen`, or per-engine `-store` crates.

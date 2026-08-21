@@ -22,7 +22,7 @@ openehr = "0.2"
 openehr = "0.2"
 ```
 
-Requires Rust 1.90+ (edition 2024).
+Requires Rust 1.95+ (edition 2024).
 
 ## What it does
 
@@ -91,12 +91,27 @@ could detect.
 ```rust
 let may: Date = "2024-05".parse()?;
 let may_17: Date = "2024-05-17".parse()?;
-assert_eq!(may.partial_cmp(&may_17), None);   // May which day?
+assert_eq!(may.semantic_cmp(&may_17), None);  // May which day?
 
 let mg = DvQuantity::new(5.0, "mg")?;
 let ml = DvQuantity::new(5.0, "mL")?;
-assert_eq!(mg.partial_cmp(&ml), None);        // not the same dose of anything
+assert_eq!(mg.semantic_cmp(&ml), None);       // not the same dose of anything
 ```
+
+It is `semantic_cmp` and not `partial_cmp` on purpose, and the reason is worth
+one paragraph because it will otherwise look like an oversight.
+
+Equality here is **record identity**: a `DV_QUANTITY` that records
+`precision: 1` is a different stored value from one that records `2`, and
+`2026-08-01T12:00:00+01:00` is a different stored value from `…T11:00:00Z` —
+the text is what round-trips and what a content digest is taken over. Ordering
+compares only the magnitude, so those pairs order **equal** while comparing
+**unequal**. Rust's `PartialOrd` requires `a == b` exactly when `partial_cmp`
+reports `Equal`, so implementing it would mean shipping `a != b` alongside
+`a <= b && a >= b` — invisible inside this crate, and a wrong answer inside a
+caller's `binary_search` or `dedup_by`. So no `DV_ORDERED` implements
+`PartialOrd`; comparison is a named method (`D3.18b`, formerly the finding
+`A-35`).
 
 **Absence is structured.** openEHR's four null flavours are four different
 clinical facts, and this crate will not let them collapse:
@@ -204,7 +219,30 @@ cargo clippy --all-targets      # pedantic, with missing_docs/errors/panics deni
 cargo fmt --all -- --check
 ```
 
-MSRV is `rust-version` in `Cargo.toml` (currently 1.90), Rust edition 2024.
+MSRV is **N−3** — three Rust releases behind stable, currently **1.95** — and is
+`rust-version` in every `Cargo.toml`. Rust edition 2024. The policy, and the CI
+job that re-derives the number rather than trusting it, are in
+[`spec/rust-msrv-n-minus-3.md`](../spec/rust-msrv-n-minus-3.md).
+
+## Benchmarks
+
+```sh
+cargo bench                     # criterion; results in target/criterion/
+cargo bench -- --test           # one iteration each, which is what CI runs
+```
+
+`benches/rm.rs` measures the paths a whole document travels — deserialization
+(the widest untrusted surface), validation (gate two, one full traversal),
+canonical JSON (taken over by a content digest, so it runs twice per round
+trip), path resolution, AQL parsing, and ISO 8601 parsing, which is the hottest
+because openEHR times are preserved lexically and every instant in a document is
+parsed as text.
+
+**A number here is not a conformance claim** (`W0.3`, `W0.34`). No requirement in
+this repository is stated in seconds and no crate's conformance level depends on
+a timing. CI runs the benchmarks with `--test` and gates on nothing: wall-clock
+on a shared runner varies by more than most real regressions, and a threshold
+that fails for unrelated reasons is one somebody silences.
 
 ## Licence
 

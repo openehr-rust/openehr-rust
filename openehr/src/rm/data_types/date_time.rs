@@ -90,25 +90,23 @@ macro_rules! temporal {
             }
         }
 
-        impl PartialOrd for $ty {
+        impl DvOrdered for $ty {
+            fn ordered_attrs(&self) -> &OrderedAttrs {
+                &self.ordered
+            }
+
             /// Inherits the partial order of the underlying ISO 8601 type: two
             /// values of different precision whose known components agree are
             /// **not** ordered.
             ///
-            /// This wrapper's own `Eq` (derived) is still lexical while this
-            /// is semantic, which is the same `lib:A-32` divergence the inner
-            /// type declares — kept exactly as it already behaved. Only the
-            /// inner type's comparison stopped being a `PartialOrd` impl
-            /// (`Date::semantic_cmp` and siblings), so it is called by name
-            /// here rather than through the trait.
-            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            /// This is a named method and not `PartialOrd`, for the reason
+            /// `D3.18a` gives about the inner type and `D3.18b` extends to
+            /// this one: the derived `PartialEq` is lexical *and* covers the
+            /// `OrderedAttrs`, while this compares only the instant. The two
+            /// disagree by design, and Rust's `PartialOrd` contract does not
+            /// permit that.
+            fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
                 self.value.semantic_cmp(&other.value)
-            }
-        }
-
-        impl DvOrdered for $ty {
-            fn ordered_attrs(&self) -> &OrderedAttrs {
-                &self.ordered
             }
 
             fn is_abnormal(&self) -> Option<bool> {
@@ -123,7 +121,7 @@ temporal! {
     /// A date, to year, month, or day precision.
     ///
     /// ```
-    /// use openehr::rm::data_types::DvDate;
+    /// use openehr::rm::data_types::{DvDate, DvOrdered as _};
     ///
     /// let dob = DvDate::new("1953-11-02").unwrap();
     /// assert_eq!(dob.as_str(), "1953-11-02");
@@ -131,7 +129,7 @@ temporal! {
     /// // A date known only to the month stays that way.
     /// let partial = DvDate::new("1953-11").unwrap();
     /// assert_eq!(partial.as_str(), "1953-11");
-    /// assert_eq!(partial.partial_cmp(&dob), None);
+    /// assert_eq!(partial.semantic_cmp(&dob), None);
     /// ```
     DvDate, iso8601::Date, "DV_DATE", Date
 }

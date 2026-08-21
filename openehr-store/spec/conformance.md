@@ -11,12 +11,14 @@ none had ever had a CLI (**F-01**).
 
 ## The levels
 
+<!-- shared: conformance-ladder (copy) -->
 | Level | Means | Evidence required |
 | --- | --- | --- |
-| **Dialect** | Emits DDL for the shared schema. | The golden DDL tests, and [`conformance::check_dialect`]. |
+| **Dialect** | Emits DDL for the shared schema. | The golden DDL tests, and `conformance::check_dialect`. |
 | **Schema** | The engine itself has executed that DDL. | A transcript against that engine's own server: the script applied cleanly, applied *again* cleanly, and the append-only tables were observed refusing `UPDATE` and `DELETE` **with a row present**. |
-| **Store** | Implements `Store` against a real database. | [`conformance::run`] passing against that engine. |
+| **Store** | Implements `Store` against a real database. | `conformance::run` passing against that engine. |
 | **Verified** | Store level, run in CI against the engine's own server on every commit. | A CI job that provisions the engine and fails — not skips — without it. |
+<!-- /shared: conformance-ladder -->
 
 Schema is a level because the step from Dialect to Schema found three defects
 that no golden test could have found; see `A-13`, `A-14`, and `A-15` in the

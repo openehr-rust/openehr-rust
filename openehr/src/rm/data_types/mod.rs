@@ -87,7 +87,7 @@ pub type DvInterval = Interval<DataValue>;
 ///
 /// let q = DataValue::Quantity(DvQuantity::new(5.0, "mg").unwrap());
 /// let c = DataValue::Count(DvCount::new(5));
-/// assert_eq!(q.partial_cmp(&c), None); // 5 mg is not 5 of anything
+/// assert_eq!(q.semantic_cmp(&c), None); // 5 mg is not 5 of anything
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "_type")]
@@ -268,18 +268,60 @@ fn trim_float(v: f64) -> String {
     }
 }
 
-impl PartialOrd for DataValue {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+/// `SemanticOrd` for every type an `INTERVAL<T>` is used over here (`D3.18c`).
+///
+/// Written out rather than blanket-implemented: a blanket
+/// `impl<T: PartialOrd> SemanticOrd for T` collides with these under coherence,
+/// and the explicit list is what stops a type with the `D3.18b` defect from
+/// reaching `INTERVAL<T>` again without anyone deciding that it should.
+macro_rules! semantic_ord_via_dv_ordered {
+    ($($ty:ty),+ $(,)?) => {$(
+        impl crate::base::SemanticOrd for $ty {
+            fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
+                <$ty as DvOrdered>::semantic_cmp(self, other)
+            }
+        }
+    )+};
+}
+
+semantic_ord_via_dv_ordered!(
+    DvDate,
+    DvTime,
+    DvDateTime,
+    DvDuration,
+    DvOrdinal,
+    DvScale,
+    DvQuantity,
+    DvCount,
+    DvProportion,
+);
+
+impl crate::base::SemanticOrd for DataValue {
+    fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
+        Self::semantic_cmp(self, other)
+    }
+}
+
+impl DataValue {
+    /// Compares two data values, or reports them incomparable.
+    ///
+    /// Not `PartialOrd::partial_cmp`, and deliberately (`D3.18b`): the derived
+    /// `PartialEq` compares every field of the wrapped value, and this compares
+    /// only what is ordered, so the two disagree on values that denote the same
+    /// point. Values of **different** classes are never comparable (`D3.14`) —
+    /// `5 mg` and `5` are not the same kind of thing, and neither is greater.
+    #[must_use]
+    pub fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
-            (Self::Ordinal(a), Self::Ordinal(b)) => a.partial_cmp(b),
-            (Self::Scale(a), Self::Scale(b)) => a.partial_cmp(b),
-            (Self::Quantity(a), Self::Quantity(b)) => a.partial_cmp(b),
-            (Self::Count(a), Self::Count(b)) => a.partial_cmp(b),
-            (Self::Proportion(a), Self::Proportion(b)) => a.partial_cmp(b),
-            (Self::Date(a), Self::Date(b)) => a.partial_cmp(b),
-            (Self::Time(a), Self::Time(b)) => a.partial_cmp(b),
-            (Self::DateTime(a), Self::DateTime(b)) => a.partial_cmp(b),
-            (Self::Duration(a), Self::Duration(b)) => a.partial_cmp(b),
+            (Self::Ordinal(a), Self::Ordinal(b)) => a.semantic_cmp(b),
+            (Self::Scale(a), Self::Scale(b)) => a.semantic_cmp(b),
+            (Self::Quantity(a), Self::Quantity(b)) => a.semantic_cmp(b),
+            (Self::Count(a), Self::Count(b)) => a.semantic_cmp(b),
+            (Self::Proportion(a), Self::Proportion(b)) => a.semantic_cmp(b),
+            (Self::Date(a), Self::Date(b)) => a.semantic_cmp(b),
+            (Self::Time(a), Self::Time(b)) => a.semantic_cmp(b),
+            (Self::DateTime(a), Self::DateTime(b)) => a.semantic_cmp(b),
+            (Self::Duration(a), Self::Duration(b)) => a.semantic_cmp(b),
             _ => None,
         }
     }

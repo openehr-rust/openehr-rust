@@ -5,6 +5,74 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
+## Unreleased
+
+- **MSRV raised from 1.90 to 1.95, and it is now a rule rather than a number:
+  N−3, three Rust releases behind stable**
+  ([`spec/rust-msrv-n-minus-3.md`](spec/rust-msrv-n-minus-3.md)).
+
+  Raising a floor is breaking for a user below it (`RV6`), so it is recorded
+  here rather than left to be discovered by a build error. Cargo refuses with a
+  clear message rather than miscompiling, so the damage is bounded.
+
+  1.90 was never verified: no job had ever compiled this repository with a 1.90
+  toolchain, and the claim was **false** for `openehr-loco`, whose framework
+  requires 1.94. CI now derives N−3 from the stable toolchain it installs and
+  builds and tests every crate on it (`spec/audit.md` **W-09**).
+
+- **A runnable tutorial for the persistence layer**:
+  `openehr-sqlite/examples/01_store_a_record.rs`, run by CI on every push. The
+  five existing tutorials build and check documents in memory; this is the other
+  half — install, commit, amend, read the history, resolve a point-in-time read,
+  query the archetype index, watch a stale predecessor be refused, print a
+  tamper-evidence checkpoint, and watch the database's own trigger refuse a raw
+  `UPDATE` that went around the `Store`.
+
+- **Criterion benchmarks** in `openehr` and `openehr-store`. A number from them
+  is not a conformance claim and nothing is gated on wall-clock (`W0.34`,
+  `W0.35`); CI runs them with `--test`, one iteration, so they cannot rot
+  (`W0.36`).
+
+- **`scripts/check-docs.py`**, run by the `claims` job: derives the crate count,
+  the published version, the fuzz-target and tutorial counts, the CI job list,
+  and every crate's conformance level from the tree, and fails when a document
+  disagrees. Duplicated passages are bound to one owner with
+  `<!-- shared: NAME (owner) -->` markers and compared byte for byte (`W0.38`).
+  Three findings were drift of exactly this kind (**W-10**, **W-11**, **W-16**).
+
+- **BREAKING: no `DV_ORDERED` implements `PartialOrd` any more, and neither
+  does `DATA_VALUE`** (`lib:D3.18b`, closing `lib:A-35`). Comparison is
+  `DvOrdered::semantic_cmp`; `INTERVAL<T>` is bounded on the new
+  `openehr::base::SemanticOrd` rather than on `PartialOrd` (`lib:D3.18c`).
+
+  All ten types derived `PartialEq` over every field — including the
+  `OrderedAttrs` each carries, and `DV_QUANTITY`'s `precision` and
+  `units_display_name` — while comparing only the magnitude. So
+  `5 mg precision 1` was `!=` to `5 mg precision 2` while `<=` and `>=` were
+  both true of it, which is exactly what Rust's `PartialOrd` contract forbids.
+  Invisible inside this crate; a wrong answer inside a caller's `binary_search`
+  or `dedup_by`.
+
+  **Migrating**: `a < b` becomes `a.semantic_cmp(&b) == Some(Ordering::Less)`,
+  `a.partial_cmp(&b)` becomes `a.semantic_cmp(&b)`, and `DvOrdered` must be in
+  scope. Every affected line is a compile error, never a silent change — the
+  four crates in this repository that depend on `openehr` needed no edits at
+  all. **No behaviour changed**: the comparison logic is the same logic, reached
+  through a different name.
+
+- **`DV_URI` and `DV_EHR_URI` are validated, and reading one no longer panics**
+  (`lib:A-36`). A `DV_URI` deserialized from `{"value":"nocolon"}` panicked in
+  `scheme()`; a `DV_EHR_URI` deserialized from `{"value":"https://…"}` reported
+  scheme `https`, which is what that type exists to make impossible.
+
+  `DvUri::scheme()` and `rest()` now return `""` where there is no scheme, and
+  `validate()` reports `DV_URI.Value_valid`, `DV_URI.Uri_well_formed`, and
+  `DV_EHR_URI.Scheme_valid` — including on `LINK.target`, on every `LOCATABLE`,
+  which was validated nowhere. **Behaviour change for callers:** a document that
+  previously validated clean and carried a malformed or foreign-scheme URI now
+  reports violations, and code matching on `scheme()` for a value built by
+  `Deserialize` gets `""` instead of a panic.
+
 ## 0.3.0
 
 **Breaking.** No migration path exists or is planned before 1.0

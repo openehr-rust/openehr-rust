@@ -8,7 +8,7 @@
 name = "openehr"
 version = "0.3.0"
 edition = "2024"
-rust-version = "1.90"
+rust-version = "1.95"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
 description = "openEHR Reference Model types, validation, paths, AQL parsing, and change-control security primitives"
 keywords = ["openehr", "ehr", "healthcare", "archetype", "aql"]
@@ -49,6 +49,11 @@ serde_json = { version = "1", features = ["preserve_order"] }
 # parser totality, `D3.10` lexical fidelity, and the partial-order axioms,
 # which is where a hand-written `partial_cmp` goes wrong.
 proptest = "1"
+# Benchmarks (`benches/rm.rs`). `default-features = false` drops the HTML
+# report and its plotting stack: this crate's numbers are read from a terminal
+# by one person comparing two commits, and gnuplot/plotters would add a dozen
+# dependencies to a `cargo test` that never renders a chart.
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 
 [lints.rust]
 missing_docs = "deny"
@@ -61,3 +66,9 @@ pedantic = { level = "warn", priority = -1 }
 # function can panic will not guard it.
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
+
+# Criterion drives its own harness; libtest's would swallow the arguments it
+# needs. `harness = false` is required, not stylistic.
+[[bench]]
+name = "rm"
+harness = false

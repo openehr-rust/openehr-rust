@@ -59,8 +59,19 @@ right to; the mistake was assuming one flat namespace.
   which directory an id came from. Unqualified citations already written into the
   code stay valid where the surrounding crate makes the domain unambiguous, and
   MUST NOT be mass-rewritten: a citation's whole value is that it does not change.
-- **W0.7** Neither domain may allocate identifiers in the other's sections.
-  `W0.x` is reserved for this file and MUST NOT be defined by either domain.
+- **W0.7** *(amended 2026-08-20)* Neither domain may allocate identifiers in the
+  other's sections. `W0.x` is reserved for this file and MUST NOT be defined by
+  either domain.
+
+  A repository-level document other than this one takes its **own** prefix,
+  registered here, rather than extending `W0`: `W0.1` puts each normative
+  statement in exactly one place, and a prefix shared across files is the
+  arrangement in which two files can both look like its home. The register:
+
+  | Prefix | Document |
+  | --- | --- |
+  | `W0` | this file |
+  | `RV` | [`rust-msrv-n-minus-3.md`](rust-msrv-n-minus-3.md) — the Rust MSRV |
 
 ## Conformance levels
 
@@ -72,12 +83,14 @@ than either alone.
 - **W0.8** This repository has **one** ladder, defined in
   [`databases/00-conformance.md`](databases/00-conformance.md):
 
+  <!-- shared: conformance-ladder (copy) -->
   | Level | Means | Evidence required |
   | --- | --- | --- |
   | **Dialect** | Emits DDL for the shared schema. | The golden DDL tests, and `conformance::check_dialect`. |
-  | **Schema** | The engine itself has executed that DDL. | A transcript against that engine's own server: applied cleanly, applied *again* cleanly, and the append-only tables observed refusing `UPDATE` and `DELETE` **with a row present**. |
+  | **Schema** | The engine itself has executed that DDL. | A transcript against that engine's own server: the script applied cleanly, applied *again* cleanly, and the append-only tables were observed refusing `UPDATE` and `DELETE` **with a row present**. |
   | **Store** | Implements `Store` against a real database. | `conformance::run` passing against that engine. |
   | **Verified** | Store level, run in CI against the engine's own server on every commit. | A CI job that provisions the engine and fails — not skips — without it. |
+  <!-- /shared: conformance-ladder -->
 
 - **W0.32** *(added 2026-08-02)* The ladder above describes **engine** crates.
   Every rung is defined by DDL, by a `Store` implementation, or by a database
@@ -111,8 +124,8 @@ than either alone.
 
 ## What is in this repository
 
-**Seventeen crates**, each its own Cargo workspace: eight that are published,
-and nine that are not — `openehr-loco`, `openehr-assets`, and seven fuzz
+**Eighteen crates**, each its own Cargo workspace: eight that are published,
+and ten that are not — `openehr-loco`, `openehr-assets`, and eight fuzz
 harnesses.
 
 ### The published crates
@@ -131,7 +144,13 @@ harnesses.
 The [conformance matrix](databases/conformance-matrix.md) is the detailed
 version of that last column and is the one to trust.
 
-All eight are on crates.io at **0.2.0**.
+All eight are on crates.io at **0.3.0**, published 2026-08-04, and local matches
+published. [`AGENTS/publishing.md`](../AGENTS/publishing.md) holds the
+per-crate table and is the file to read before the next release.
+
+This sentence said **0.2.0** for sixteen days after 0.3.0 went out, because the
+release commit updated the file that exists to track releases and not the four
+others that also state the version. See [`audit.md`](audit.md) **W-10**.
 
 ### The service and tooling crates
 
@@ -146,29 +165,62 @@ Not published, and not on the conformance ladder — see `W0.32` above.
 
 One per dialect — `openehr-<engine>-fuzz` — driving two properties each: that an
 identifier cannot escape its own quoting, and that every logical column type maps
-to something usable. Plus `openehr-fuzz`, driving five targets over the Reference
-Model parsers, which is where the untrusted surface actually is: ISO 8601, the
-identifier grammars, AQL, openEHR paths, and canonical-JSON deserialization.
+to something usable.
 
-Seventeen targets in total.
+Plus two crates over the layers a dialect does not reach:
+
+- `openehr-fuzz`, seven targets over the Reference Model parsers, which is where
+  the untrusted surface actually is: ISO 8601, the identifier grammars, AQL,
+  openEHR paths, canonical-JSON deserialization, `DV_URI`/`DV_EHR_URI` through
+  **both** gates (`lib:A-36`), and every `DATA_VALUE` variant.
+- `openehr-store-fuzz`, two targets over the layer that is not a parser at all:
+  the projection from a composition onto rows, and `verify_versions` — the check
+  that answers *has this record been tampered with*, whose input is by
+  definition a row somebody may have edited.
+
+Twenty-one targets in total.
 
 - **W0.25** A fuzz crate MUST declare `publish = false`. It is a test harness; a
   registry release would claim it as part of the library's surface.
-- **W0.26** The properties a fuzz target drives MUST live in `openehr-store`,
-  shared by every fuzz crate. Six copies of one assertion is the arrangement that
-  produced **W-01**, and a fuzz harness repeating the mistake it exists to catch
-  would be worse than none.
+- **W0.26** *(amended 2026-08-20)* A property driven by **more than one** fuzz
+  crate MUST live in `openehr-store`, shared rather than copied. Six copies of
+  one assertion is the arrangement that produced **W-01**, and a fuzz harness
+  repeating the mistake it exists to catch would be worse than none.
+
+  A property driven by exactly one crate MAY live in the crate it is a property
+  *of* — which for `openehr-store-fuzz` is `openehr-store` again, and for
+  `openehr-fuzz` is the target file. The rule was written absolutely, and read
+  literally it required a property about ISO 8601 lexical fidelity to live in
+  the persistence crate, which knows nothing about ISO 8601 and would have had
+  to be told. That is `W0.14`'s layering inverted to satisfy a rule aimed at
+  duplication, and no duplication was involved.
+
+  The test is not *where* but *how many*: one copy, in the crate that owns the
+  thing being asserted about.
 - **W0.27** A fuzz target MUST be **run**, not merely committed, with a committed
   seed corpus and a bounded budget in CI. A committed target nobody executes is a
   claim rather than a check (`db:T11.9`).
 - **W0.28** A fuzz property MUST be shown to **fail** against a deliberately
   broken implementation. A check that cannot fail is indistinguishable from a
   control that works (`db:T11.10`).
-- **W0.30** A fuzz target over a **structured** input MUST carry a seed corpus of
-  real instances. Random bytes are never a valid `COMPOSITION`, so an unseeded
-  target exercises the lexer and stops — and reports the same green as one that
-  works. Coverage is the evidence: seeded, `canonical_json` reaches roughly 4,800
-  edges against 650 for `iso8601`.
+- **W0.30** *(amended 2026-08-20)* A fuzz target over a **structured** input
+  MUST carry a seed corpus of real instances. Random bytes are never a valid
+  `COMPOSITION`, so an unseeded target exercises the lexer and stops — and
+  reports the same green as one that works. Coverage is the evidence: seeded,
+  `canonical_json` reaches roughly 4,800 edges against 650 for `iso8601`.
+
+  The corpus MUST itself be checked, and by something that runs. A committed
+  seed that stopped deserializing is an unseeded target wearing a corpus: the
+  target still runs, the directory is still there, the file contributes nothing,
+  and a fuzz run's output cannot tell twenty-two seeds from twenty-two files the
+  deserializer rejects. `openehr/tests/fuzz_seeds.rs` asserts that each
+  structured target's corpus still spans **both** answers — at least one real
+  instance, so the target gets past the lexer, and at least one refusal for the
+  parser's error paths.
+
+  Requiring *every* seed to parse would be wrong and was tried: five of
+  `canonical_json`'s seven seeds are `null`, `{}`, `[]` and other deliberate
+  malformations, and they are half of what the corpus is for.
 - **W0.31** A fuzz target MUST NOT report a **documented limitation** as a
   finding. `lib:S1.15` states that recursion depth on deserialization is
   deliberately unbounded and that a caller must bound it; a fuzzer pointed at
@@ -261,6 +313,110 @@ Seventeen targets in total.
 - **W0.24** A crate's README MUST state the licence in the same terms as
   `LICENSE.md`, and MUST NOT name a subset.
 
+## One fact, one owner, checked
+
+`W0.1` says a normative statement exists in exactly one place. It is the oldest
+rule here and the one this repository breaks by accident most often, because the
+alternative — a reader who must open a second file to learn what a level means —
+is genuinely worse. The rules below keep the copies and make them mechanical.
+
+- **W0.38** *(added 2026-08-20)* Where the same statement genuinely must appear
+  in more than one document, exactly **one** occurrence is the **owner** and the
+  rest are marked copies:
+
+  ```
+  <!-- shared: NAME (owner) -->   …   <!-- /shared: NAME -->
+  <!-- shared: NAME (copy)  -->   …   <!-- /shared: NAME -->
+  ```
+
+  [`scripts/check-docs.py`](../scripts/check-docs.py) fails when a copy diverges
+  and rewrites it from the owner with `--fix`. A copy that is not marked is a
+  copy nothing compares, which is the arrangement `W0.1` forbids.
+
+  The conformance ladder is the first block bound this way. It was written out
+  four times — `db:C0.8`, which owns it; `W0.8` below, which says the ladder is
+  *defined* in `db:C0.8` and then reproduces it; `openehr-store/spec/conformance.md`;
+  and `AGENTS/conformance.md` — and two of the four had already drifted. See
+  [`audit.md`](audit.md) **W-16**.
+
+- **W0.39** *(added 2026-08-20)* A **countable** claim about this repository —
+  how many crates, how many are published, how many fuzz targets, how many
+  tutorials, which version is live, which CI jobs exist — MUST be checked against
+  the tree by [`scripts/check-docs.py`](../scripts/check-docs.py), which the
+  `claims` job runs.
+
+  A count is the cheapest possible claim to check and the easiest to leave
+  behind: **W-10** (the published version stated in five files, updated in one)
+  and **W-11** (`db:W16.1` saying fourteen crates while five documents said
+  seventeen) were both counts, and both survived review. The residual recorded
+  against **W-11** was this script's absence.
+
+- **W0.40** *(added 2026-08-20)* A crate's **conformance level** has one owner:
+  the table in [`databases/conformance-matrix.md`](databases/conformance-matrix.md).
+  Every other statement of a level — this file, `README.md`, `CLAUDE.md`,
+  `AGENTS.md`, each crate's README and rustdoc first screenful (`W0.9`,
+  `db:C0.9`) — is checked against it.
+
+  These are not marked copies, because they are legitimately different shapes: a
+  crate's README says `## Conformance level: Verified` and this file's table
+  carries a Role column. What is checked is the **level**, wherever it is
+  asserted, which is the part `W0.9` is about.
+
+## Benchmarks
+
+`openehr` and `openehr-store` carry criterion benchmarks —
+[`openehr/benches/rm.rs`](../openehr/benches/rm.rs) and
+[`openehr-store/benches/store.rs`](../openehr-store/benches/store.rs).
+
+- **W0.34** *(added 2026-08-20)* A benchmark result is **not** a conformance
+  claim and MUST NOT be cited as one. No requirement in this repository is
+  stated in seconds, no crate's level depends on a timing, and the conformance
+  ladder's rungs are defined by DDL, a `Store`, and a database server (`W0.32`)
+  — none of which a stopwatch can establish.
+
+  This is `W0.3` pointed at the most persuasive kind of number there is. A
+  benchmark is evidence about one machine on one afternoon; a level is a claim
+  about the present (`W0.10`).
+
+- **W0.35** *(added 2026-08-20)* A benchmark MUST NOT gate CI on wall-clock.
+  A shared runner varies by more than most real regressions, so a threshold
+  fails for reasons unrelated to the change, and a check that fails for
+  unrelated reasons is a check that gets silenced. A silenced check reports the
+  same green as a passing one, which is the defect class in
+  [`audit.md`](audit.md).
+
+- **W0.36** *(added 2026-08-20)* A benchmark MUST be **run** in CI, with
+  `--test`: one iteration per benchmark, asserting nothing about the time. This
+  is `W0.27` for benchmarks — a committed benchmark nobody executes stops
+  compiling within a few refactors, and the first person to need it finds a
+  build error instead of a baseline. Running it proves the only property CI can
+  honestly check, which is that it still works.
+
+- **W0.37** *(added 2026-08-20)* A benchmark SHOULD measure a path a whole
+  document travels, rather than a function chosen for being easy to measure.
+  The ones here are deserialization, validation, canonical JSON, path
+  resolution, AQL parsing, ISO 8601 parsing, projection, and chain
+  verification — each of which runs once per request or once per row.
+
+  `verify_versions` is measured at 1, 10, and 100 versions for a reason worth
+  stating: the question is not how fast one row is but whether the walk is
+  **linear**. A check that quietly became quadratic would pass every test in the
+  suite and would first be noticed by whoever verified a record with ten years
+  of history in it.
+
+## Toolchain
+
+- **W0.33** *(added 2026-08-20)* The minimum supported Rust version is a
+  repository-wide requirement, not a per-crate one, and is specified in
+  [`rust-msrv-n-minus-3.md`](rust-msrv-n-minus-3.md): **N−3**, three stable
+  releases behind current, declared identically by all eighteen crates and
+  **compiled** by CI rather than asserted (`RV1`–`RV3`).
+
+  It is a separate document because it is the one requirement here whose correct
+  value changes on a schedule nobody in this repository controls. See
+  [`audit.md`](audit.md) **W-09** for what the number was before it had a rule
+  behind it.
+
 ## Status, not requirements
 
 - [`audit.md`](audit.md) — the repository-level findings register: divergences
@@ -278,6 +434,10 @@ Someone new to the repository should read, in order:
 3. [`openehr/spec/index.md`](../openehr/spec/index.md) — the library, for work on
    the Reference Model rather than on storage.
 4. [`audit.md`](audit.md) — what is known to be wrong today.
+
+Anyone about to build the tree should also read
+[`rust-msrv-n-minus-3.md`](rust-msrv-n-minus-3.md), which is one page and
+explains why CI will one day fail on their unrelated pull request.
 
 Contributors should also read [`AGENTS.md`](../AGENTS.md), which is operational
 guidance and not normative (`W0.2`).

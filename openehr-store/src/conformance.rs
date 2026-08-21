@@ -737,6 +737,111 @@ pub fn check_col_sql<D: Dialect + ?Sized>(dialect: &D, ty: crate::ColTy) {
     }
 }
 
+/// Drives the projection with a composition that passed no constructor.
+///
+/// This is the fuzz property for `openehr-store`, and it lives here rather
+/// than in `openehr-store-fuzz` for the reason `W0.26` gives: a property in a
+/// harness is a property one harness has.
+///
+/// The projection is where a `COMPOSITION` becomes rows, and a composition
+/// read from JSON reached it having been checked by nothing (`V9.8`). Three
+/// properties, and the third is the one with teeth:
+///
+/// 1. **Total.** `Ok` or `Err`, never a panic. `Err` is the correct answer for
+///    a composition with no `archetype_details` — there is nothing to put in
+///    `archetype_id`, and an invented one would not be a fact.
+/// 2. **Deterministic.** Projected twice, the rows are equal. The row is what
+///    a content digest is taken over downstream, so a projection that varied —
+///    with map iteration order, say — would produce a record that failed its
+///    own integrity check on the next read.
+/// 3. **The derived instant column is a function of the authoritative one**
+///    (`M3.31`). `…_text` is exact and authoritative; `…_utc` is derived and
+///    nullable. Re-deriving the second from the first must give the same
+///    answer, or SQL and Rust disagree about one record — and `2024-05` is a
+///    date known to the month, not `2024-05-01`, so the derived half is `None`
+///    and must stay `None`.
+///
+/// # Panics
+///
+/// Panics naming the property when one fails.
+pub fn check_projection(version_uid: &str, ehr_id: &str, composition: &Composition) {
+    let first = crate::record::CompositionIndexRow::project(version_uid, ehr_id, composition);
+    let second = crate::record::CompositionIndexRow::project(version_uid, ehr_id, composition);
+
+    match (first, second) {
+        (Ok(a), Ok(b)) => {
+            assert_eq!(a, b, "projection is not deterministic");
+            for (which, instant) in [("context_start", &a.context_start), ("context_end", &a.context_end)] {
+                let Some(stored) = instant else { continue };
+                check_stored_instant(which, stored);
+            }
+        }
+        (Err(_), Err(_)) => {}
+        (a, b) => panic!(
+            "projection is not deterministic: one call {} and the other {}",
+            if a.is_ok() { "succeeded" } else { "failed" },
+            if b.is_ok() { "succeeded" } else { "failed" },
+        ),
+    }
+}
+
+/// The two halves of a stored instant agree, and the derived half is derived.
+///
+/// # Panics
+///
+/// Panics naming the column when they do not.
+pub fn check_stored_instant(column: &str, stored: &crate::record::StoredInstant) {
+    let parsed: openehr::base::iso8601::DateTime = stored
+        .text
+        .parse()
+        .unwrap_or_else(|e| panic!("{column}: the authoritative text does not re-parse: {e}"));
+    assert_eq!(
+        parsed.as_str(),
+        stored.text,
+        "{column}: the authoritative text is not lexically preserved (`D3.10`)"
+    );
+    let rederived = crate::record::StoredInstant::from_date_time(&parsed);
+    assert_eq!(
+        rederived.utc_seconds, stored.utc_seconds,
+        "{column}: the derived UTC column is not a function of the authoritative text — \
+         SQL and Rust would disagree about one record"
+    );
+}
+
+/// Drives `verify_versions` with rows that passed no constructor.
+///
+/// `verify_versions` answers "has this record been tampered with", over rows
+/// that came out of a database and may have been edited there — which is the
+/// whole reason the function exists. Its input is therefore untrusted by
+/// construction, and a panic in it is a denial of service against the integrity
+/// check itself: the answer a reader needs most is exactly the one they stop
+/// being able to get.
+///
+/// The property is totality, plus the one structural claim the function makes
+/// unconditionally: an empty container is `Empty` and never `Verified`, because
+/// nothing was checked. `C0.13` is that rule in general form.
+///
+/// # Panics
+///
+/// Panics when the property fails.
+pub fn check_verify_versions(rows: &[crate::record::VersionRow]) {
+    let verdict = crate::integrity::verify_versions(rows, &[]);
+    if rows.is_empty() {
+        assert_eq!(
+            verdict,
+            crate::integrity::Integrity::Empty,
+            "an empty container must report Empty, never a verdict about nothing"
+        );
+    }
+    // Running it twice is not redundant: it is the check that the verdict does
+    // not depend on anything outside the rows.
+    assert_eq!(
+        verdict,
+        crate::integrity::verify_versions(rows, &[]),
+        "verify_versions is not a function of its input"
+    );
+}
+
 #[cfg(test)]
 mod property_tests {
     //! Proof that the fuzz properties are not vacuous.

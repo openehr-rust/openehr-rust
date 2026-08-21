@@ -52,14 +52,46 @@ done                            # two matching hashes is a copied dialect
 
 # 5. Do the guards cover everything they claim to?
 grep -A12 'fn all()' openehr-sqlite/tests/dialects.rs   # count the dialects
+grep -n 'for d in\|for other in\|for f in' .github/workflows/ci.yml  # hand-written lists
 
-# 6. Is the published metadata what the repository says?
+# 6. Do the documents' counts, versions, and levels match the tree?
+python3 scripts/check-docs.py
+
+# 7. Is the published metadata what the repository says?
 curl -s https://crates.io/api/v1/crates/openehr \
   -H 'User-Agent: your-name (your@email)' | python3 -m json.tool | head -20
 ```
 
 Step 4 is the one that found **W-01**: two engine crates hashing identically.
-Step 5 is why it had survived — the guard listed five of six dialects.
+Step 5 is why it had survived — the guard listed five of six dialects, and later
+found **W-13** and **W-14** the same way, where two more guards listed nine
+crates of seventeen. **Any list of names inside a guard is a finding waiting to
+happen**; the fix is always to derive the list from the tree and assert its size.
+
+Step 6 is step 5 turned on the documentation. It exists because **W-10** and
+**W-11** were nothing but stale counts — the published version stated in five
+files and updated in one, and a normative requirement saying fourteen crates
+while five documents said seventeen. It found two more the first time it ran.
+
+## Checks this repository already runs, so you do not repeat them
+
+Before writing a new check, look for it here; several of these were themselves
+findings, and re-deriving one by hand is how you get a second answer.
+
+| Check | Where |
+| --- | --- |
+| every requirement has exactly one matrix row | `claims` job |
+| the library audit summary counts itself | `claims` job |
+| the repository audit summary counts itself | `scripts/check-docs.py` |
+| no requirement is both satisfied and absent | `claims` job |
+| documented counts, versions, CI jobs, conformance levels | `scripts/check-docs.py` |
+| duplicated passages match their owner | `scripts/check-docs.py` (`W0.38`) |
+| every crate declares the same licence and MSRV | `claims`, `msrv` jobs |
+| `openehr`/`openehr-store` depend inward only | `layering` job |
+| committed assets match what the code renders | `assets` job |
+| every RM invariant is cited or dispositioned | `openehr-assets` |
+| fuzz seed corpora still parse | `openehr/tests/fuzz_seeds.rs` |
+| the six dialects emit different DDL | `openehr-sqlite/tests/dialects.rs` |
 
 ## What "verified" means
 

@@ -109,6 +109,7 @@ which this crate enforces anyway.
 | `DV_MULTIMEDIA` | `Integrity_check_matches` | the recorded digest matches the inline data | openEHR requires a check to name its algorithm (`Integrity_check_validity`) but never says the digest must be *right*. Reported under openEHR's name until `A-22`, which sent a reader to an invariant about something else |
 | `DV_PARSABLE` | `Value_valid` | the value is non-empty | openEHR constrains `formalism` and `size` but not the value |
 | `DV_PROPORTION` | `Parts_finite` | numerator and denominator are finite | as `DV_AMOUNT.Accuracy_finite` |
+| `DV_URI` | `Uri_well_formed` | an RFC 3986 scheme, and no space or control character | openEHR's `DV_URI.Value_valid` is only `not value.is_empty`. This crate's constructor has always required more (`D3.30`), and until `A-36` nothing required it of a URI that arrived as JSON |
 | `EVENT` | `Time_after_origin` | an event's time is at or after its history's origin | openEHR states the offset relation but not the ordering |
 | `EVENT_CONTEXT` | `End_time_valid` | end time is at or after start time | a consultation that ended before it began |
 | `INSTRUCTION` | `Narrative_valid` | the narrative is non-empty | the narrative is what a human reads when the structured form is not understood |
@@ -136,7 +137,10 @@ clinical comparison is false against every bound including itself.
   integrity (`D3.26`); `PARTY_IDENTIFIED` basic validity (`M5.14`);
   `COMPOSITION.category` group membership (`E6.6`); `EVENT_CONTEXT.setting`
   group membership (`E6.11`); `ISM_TRANSITION.current_state` group membership
-  (`E6.21`).
+  (`E6.21`); and `DV_URI` well-formedness with `DV_EHR_URI` scheme (`D3.30`,
+  `D3.31`), wherever a URI appears — as a `DATA_VALUE` **and** as a
+  `LINK.target` on any `LOCATABLE` (`M5.9`), which is where one actually
+  arrives from outside the process.
 - **L10.7** Violation order MUST be stable across runs — depth-first, document
   order — so that a report diffed between two runs shows real change.
 - **L10.8** Where a check cannot be performed, the result MUST be reported as

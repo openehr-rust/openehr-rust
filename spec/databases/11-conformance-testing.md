@@ -86,17 +86,35 @@ Listed as requirements rather than omitted, so the gap is visible (`C0.20`).
   one assertion is the arrangement that produced **W-01**.
 
   **Implemented for the parsers**, which is where the untrusted surface actually
-  is. `openehr-fuzz` drives five targets — ISO 8601, the identifier grammars,
-  AQL, openEHR paths, and canonical-JSON deserialization — each asserting a
-  property beyond "did not panic": lexical fidelity, `Display` round-trip,
-  idempotent AQL normalisation, and canonical round-trip through `validate()`.
-  That closes `lib:A-09`.
+  is. `openehr-fuzz` drives seven targets — ISO 8601, the identifier grammars,
+  AQL, openEHR paths, canonical-JSON deserialization, `DV_URI`/`DV_EHR_URI`, and
+  every `DATA_VALUE` variant — each asserting a property beyond "did not panic":
+  lexical fidelity, `Display` round-trip, idempotent AQL normalisation, canonical
+  round-trip through `validate()`, and that the constructor and validation
+  **agree** about a value. That closes `lib:A-09`.
+
+  The `uri` target is the one with a result. It was written against the code as
+  it stood, and found `lib:A-36` from an empty corpus: `DvUri::scheme()`
+  `expect`ed a colon "the constructor guarantees", and a `DV_URI` read from JSON
+  passes no constructor.
+
+  **Implemented for the store**, added 2026-08-20. `openehr-store-fuzz` drives
+  two targets over the layer that is not a parser: the projection from a
+  composition onto rows, asserting determinism and that the derived UTC column is
+  re-derivable from the authoritative text (`M3.31`); and `verify_versions`,
+  whose input is by definition a row somebody may have edited in the database,
+  and where a panic loses the answer a reader needs most.
 
   A seed corpus is not optional for a structured target. `canonical_json` seeded
   with a real composition reaches roughly 4,800 covered edges; unseeded it would
   exercise the JSON lexer and stop, because random bytes are never a valid
   `COMPOSITION`. A target that runs millions of iterations against nothing
   reports the same green as one that works.
+
+  **And the corpus is checked** (`W0.30`, `spec/audit.md` **W-15**). A committed
+  seed that stopped deserializing is an unseeded target wearing a corpus, and no
+  fuzz run's output distinguishes the two — libFuzzer reports how many files it
+  read, not how many got past the deserializer.
 
   Deep nesting is **not** treated as a finding: `lib:S1.15` states unbounded
   recursion as a documented limitation a caller must bound, and a fuzzer pointed

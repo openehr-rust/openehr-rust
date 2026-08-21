@@ -40,19 +40,24 @@ emit another engine's schema, because it does not own the schema.
 Its own workspace, matching the others:
 
 Match the *current* version the rest of the workspace is on — read it from a
-sibling dialect crate's `Cargo.toml` rather than copying the number below,
-which will drift. As of this writing that is `0.2.0` locally, with `0.3.0` the
-next release (`AGENTS/publishing.md`); a new crate's own version starts wherever
-the others are, not at `0.1.x`.
+sibling dialect crate's `Cargo.toml` rather than copying the numbers below,
+which will drift. As of this writing that is `0.3.0`, published 2026-08-04
+(`AGENTS/publishing.md`); a new crate's own version starts wherever the others
+are, not at `0.1.x`.
+
+The same applies to `rust-version`, which is **N−3** and changes on Rust's
+release schedule rather than on anything that happens here
+([`spec/rust-msrv-n-minus-3.md`](../spec/rust-msrv-n-minus-3.md)). Read it from
+a sibling too; the `msrv` job checks that every manifest agrees.
 
 ```toml
 [workspace]
 
 [package]
 name = "openehr-<engine>"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
-rust-version = "1.90"
+rust-version = "1.95"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
 description = "openEHR persistence for <Engine>: schema dialect and DDL"
 keywords = ["openehr", "ehr", "<engine>", "healthcare", "sql"]
@@ -61,8 +66,8 @@ repository = "https://github.com/openehr-rust/openehr-rust"
 readme = "README.md"
 
 [dependencies]
-openehr = { path = "../openehr", version = "0.2.0" }
-openehr-store = { path = "../openehr-store", version = "0.2.0" }
+openehr = { path = "../openehr", version = "0.3.0" }
+openehr-store = { path = "../openehr-store", version = "0.3.0" }
 serde_json = { version = "1", features = ["preserve_order"] }
 
 [lints.rust]
@@ -74,6 +79,17 @@ pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
 ```
+
+**Three CI jobs assert the crate count.** `msrv`, `layering`, and `claims` each
+derive the list of crates from `*/Cargo.toml` and check it is eighteen — so a
+new crate fails all three until the number is raised. That is deliberate
+(`spec/audit.md` **W-13**): the alternative is a guard whose list is written by
+hand, which is how the layering check came to cover nine crates of seventeen and
+miss every cycle through the eight it skipped.
+
+Raise the count in `.github/workflows/ci.yml` (three places), and add a fuzz
+crate for the new dialect — `db:T11.9` requires one, and a dialect with no fuzz
+target is a dialect whose identifier quoting nobody drove.
 
 ### 2. Implement `Dialect`
 

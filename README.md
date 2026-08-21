@@ -74,7 +74,7 @@ openehr-store = "0.2"
 openehr-sqlite = "0.2"
 ```
 
-Requires Rust 1.90+ (edition 2024).
+Requires Rust 1.95+ (edition 2024).
 
 ## Tutorial 1 — build a composition
 
@@ -283,6 +283,53 @@ withheld" has disclosed the category it was protecting.
 
 Runnable: `cargo run --example 05_access_and_redaction`
 
+## Tutorial 6 — store a record, and watch the guarantees hold
+
+The five tutorials above build and check documents in memory. This one is the
+other half — what happens when a document reaches a database — and it runs
+against a real SQLite database in process, with nothing to install:
+
+```sh
+cd openehr-sqlite && cargo run --example 01_store_a_record
+```
+
+```
+installed on SQLite
+committed  87284370-…::ehr1.example.org::1
+amended    version 2
+latest     87284370-…::ehr1.example.org::2 (250), committed 2026-08-01T09:05:00Z
+           text "2026-08-01T09:05:00Z", derived utc Some(1785575100)
+history    2 versions, oldest first
+at 09:02   87284370-…::ehr1.example.org::1
+indexed    2 composition(s) of that archetype
+refused    stale predecessor: preceding version is not the current latest
+checkpoint entries=2 head=2a13e345… last_version=87284370-…::2
+refused    direct UPDATE: openehr_version is append-only (openEHR V8.10)
+intact     version 1 unchanged after the refused UPDATE
+```
+
+Eight steps, and the last four are the ones worth reading the source for:
+
+- **A stale predecessor is refused.** Two clinicians amending one composition
+  from the same starting point is a lost update in any store that does not
+  check, and this one returns `StoreError::Commit`.
+- **The checkpoint carries no clinical content** — a count, a head digest, and
+  an identifier — so it can be published to a witness the database
+  administrator does not control. That is the only thing that detects
+  **truncation**: delete the newest version and the shorter chain still
+  verifies perfectly (`db:M3.16c`).
+- **Append-only is enforced by the database, not by this crate.** The tutorial
+  goes around the `Store` with a raw `UPDATE` on the connection and the trigger
+  refuses it. A rule enforced only in Rust is a rule an administrator with a
+  SQL prompt does not have.
+- **The row is checked afterwards.** A refusal alone proves nothing if nothing
+  looks at the row: a `FOR EACH ROW` trigger on zero rows never fires
+  (`db:C0.12`).
+
+It lives in `openehr-sqlite` because that is the only crate with a `Store`. The
+other five engine crates supply a `Dialect` and no more, so the same tutorial
+there would be demonstrating code that does not exist (`db:C0.11`).
+
 ## Generating DDL for your engine
 
 ```rust
@@ -427,26 +474,69 @@ checkable years later by someone who was not here.
 | [`spec/databases/`](spec/databases/index.md) | storing openEHR in SQL | `db:` — `M3.x`, `T11.x`, … |
 | [`openehr/spec/`](openehr/spec/index.md) | the Reference Model library | `lib:` — `D3.x`, `V8.x`, … |
 
-Three rules carry most of the weight:
+Four rules carry most of the weight:
 
-1. **Documentation must not claim more than is verified.** "The same code path
-   works elsewhere" is not evidence.
-2. **A gap that is not written down reads as a pass.** Known divergences go in an
-   audit register with checkable evidence.
-3. **Requirement identifiers are permanent.** Never renumbered, never reused.
+1. **Documentation must not claim more than is verified** (`W0.3`). "The same
+   code path works elsewhere" is not evidence.
+2. **A gap that is not written down reads as a pass** (`W0.4`). Known
+   divergences go in an audit register with checkable evidence.
+3. **Requirement identifiers are permanent** (`db:C0.5`). Never renumbered,
+   never reused — a citation in a test name or a commit message is written once
+   and read years later.
+4. **One fact, one owner** (`W0.1`). Where two files state one rule, one is a
+   copy, and a copy is a future divergence.
+
+### One owner, and a script that enforces it
+
+The fourth rule is the one that is easy to agree with and hard to keep, because
+the literal remedy — one occurrence and three links — makes documents worse. A
+reader deciding whether a crate's conformance claim is honest should not have to
+open a second file to learn what the claim means.
+
+So the copies stay and are made mechanical. `python3 scripts/check-docs.py`,
+which the `claims` job runs, derives the facts from the tree and fails when the
+prose disagrees:
+
+| Fact | Owner |
+| --- | --- |
+| how many crates, how many published, how many fuzz targets, how many tutorials | the tree itself |
+| which CI jobs exist | `.github/workflows/ci.yml` |
+| which version is live on crates.io | [`AGENTS/publishing.md`](AGENTS/publishing.md) |
+| each crate's conformance level | [`spec/databases/conformance-matrix.md`](spec/databases/conformance-matrix.md) |
+| a passage that genuinely belongs in several documents | whichever copy is marked `(owner)` |
+
+The last row is a marked block:
+
+```html
+<!-- shared: conformance-ladder (owner) -->  …  <!-- /shared: conformance-ladder -->
+<!-- shared: conformance-ladder (copy)  -->  …  <!-- /shared: conformance-ladder -->
+```
+
+`--fix` rewrites every copy from its owner. This exists because three findings
+here were nothing but drift of this kind: a version stated in five files and
+updated in one (**W-10**), a requirement saying fourteen crates while five
+documents said seventeen (**W-11**), and the conformance ladder written out four
+times with two already diverged (**W-16**).
 
 ### Known gaps
 
 Recorded rather than implied — see [`spec/audit.md`](spec/audit.md):
 
-- **SQL Server and Oracle DDL is unparsed.** See below; both stay at **Dialect**.
+- **SQL Server and Oracle DDL has never been parsed by the engine it names.**
+  SQL Server 2022 segfaults under qemu on arm64 and the Oracle images need
+  registry authentication, so both crates stay at **Dialect**. That is a gap in
+  evidence, not a judgement that the DDL is wrong.
 - **`spec/databases/` was rewritten from an imported FHIR specification** on
   2026-08-01. It now describes this system, but the requirements were derived by
   reading the code rather than the openEHR sources, so some are descriptions
   rather than considered generalizations (`db:D-05`).
-- **SQL Server and Oracle DDL has never been parsed by the engine it names.**
-  Both stay at **Dialect** — a gap in evidence, not a judgement that it is wrong.
-- **No concurrency testing of the SQLite store** (`db:D-02`).
+- **No concurrency testing of the SQLite store** (`db:D-02`). `conformance::run`
+  passes against a real database; nothing exercises concurrent writers.
+- **AQL cannot parse a negative number** (`lib:A-27`). `WHERE … > -2.5` is
+  refused at the lexer, because `-` also separates the parts of an archetype id.
+  Declared as `lib:Q12.9b` and open.
+- **Only N−3 and current stable are compiled** (`RV3`). A break appearing only
+  on an intermediate Rust release reaches a user before it reaches CI.
 
 ## Repository layout
 
@@ -457,7 +547,7 @@ AGENTS.md, AGENTS/         contributor and agent guides
 CLAUDE.md                  guidance for Claude Code
 openehr/                   the Reference Model library
   spec/                    library specification, audit, conformance matrix
-  examples/                five runnable tutorials
+  examples/                five runnable tutorials (the RM)
 openehr-store/             engine-agnostic persistence
   scripts/verify-schema.sh Dialect -> Schema verification
 openehr-<engine>/          one Dialect each; sqlite also has a Store
@@ -465,15 +555,16 @@ openehr-<engine>/          one Dialect each; sqlite also has a Store
 openehr-loco/              HTTP API server, outside the conformance ladder; not published
 openehr-assets/            regenerates committed DDL/schema files; not published
 openehr-fuzz/              fuzz harness for the RM parsers; not published
+openehr-store-fuzz/        fuzz harness for projection and integrity; not published
 openehr-<engine>-fuzz/     fuzz harness per dialect; not published
-  fuzz_targets/, corpus/   17 targets in all, committed seed corpora
-.github/workflows/ci.yml   test, examples, schema, fuzz, claims
+  fuzz_targets/, corpus/   21 targets in all, committed seed corpora
+.github/workflows/ci.yml   test, msrv, examples, bench, schema, fuzz, claims
 ```
 
-Seventeen crates, **each its own Cargo workspace** — run cargo from inside a
+Eighteen crates, **each its own Cargo workspace** — run cargo from inside a
 crate directory. Eight are published (`openehr`, `openehr-store`, and the six
-dialect crates); the other nine — `openehr-loco`, `openehr-assets`, and the
-seven fuzz harnesses — are not.
+dialect crates); the other ten — `openehr-loco`, `openehr-assets`, and the
+eight fuzz harnesses — are not.
 
 ## Contributing
 
@@ -495,6 +586,11 @@ done
 The tree is at zero clippy warnings under `pedantic`, with `missing_docs`,
 `missing_errors_doc`, and `missing_panics_doc` at `deny` and `unsafe_code` at
 `forbid`. Please keep it there.
+
+The MSRV is **N−3** — three Rust releases behind stable, currently 1.95 — and CI
+re-derives that number from the toolchain rather than trusting a constant, so it
+will fail on a stale one within six weeks of every Rust release. That is
+deliberate; see [`spec/rust-msrv-n-minus-3.md`](spec/rust-msrv-n-minus-3.md).
 
 ## Licence
 

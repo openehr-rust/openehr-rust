@@ -23,7 +23,7 @@ pub mod object_ref;
 pub mod serde_support;
 pub mod uid;
 
-pub use interval::Interval;
+pub use interval::{Interval, SemanticOrd};
 pub use iso8601::{Date, DatePrecision, DateTime, Duration, Offset, Time, TimePrecision};
 pub use object_id::{
     ArchetypeId, GenericId, HierObjectId, ObjectId, ObjectVersionId, TemplateId, TerminologyId,

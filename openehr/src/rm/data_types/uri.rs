@@ -73,30 +73,29 @@ impl DvUri {
         &self.value
     }
 
-    /// The scheme, without the colon.
+    /// The scheme, without the colon. Empty when there is none.
     ///
-    /// # Panics
+    /// This said "# Panics — Never: the constructor guarantees a colon is
+    /// present", and it was wrong. `Deserialize` is derived and writes `value`
+    /// straight in, so a `DV_URI` read from JSON has passed no constructor
+    /// (`L10.1a`); `{"value":"nocolon"}` deserialized cleanly and panicked
+    /// here. See [`crate::validation`] and `lib:A-36`.
     ///
-    /// Never: the constructor guarantees a colon is present.
+    /// Empty is the right answer rather than a fallback: a value with no colon
+    /// has no scheme, and `""` compares unequal to every real one — including
+    /// `ehr` — so a caller that dispatches on the scheme fails closed.
+    /// `validate()` is what *reports* it.
     #[must_use]
     pub fn scheme(&self) -> &str {
-        self.value
-            .split_once(':')
-            .map(|(s, _)| s)
-            .expect("constructor guarantees a scheme")
+        self.value.split_once(':').map_or("", |(s, _)| s)
     }
 
-    /// Everything after the scheme's colon.
+    /// Everything after the scheme's colon. Empty when there is no colon.
     ///
-    /// # Panics
-    ///
-    /// Never: the constructor guarantees a colon is present.
+    /// Total, for the reason [`Self::scheme`] gives.
     #[must_use]
     pub fn rest(&self) -> &str {
-        self.value
-            .split_once(':')
-            .map(|(_, r)| r)
-            .expect("constructor guarantees a scheme")
+        self.value.split_once(':').map_or("", |(_, r)| r)
     }
 }
 

@@ -53,6 +53,11 @@ jobs:
           - openehr-mssql
           - openehr-oracle
           - openehr-loco
+          # `openehr-assets` carries nine unit tests and was in no matrix: the
+          # `assets` job runs `cargo run -- check` and nothing ran `cargo test`
+          # or clippy on it. Nine tests that never execute report the same green
+          # as nine that pass (`spec/audit.md` W-12).
+          - openehr-assets
     steps:
       - uses: actions/checkout@v4
 
@@ -84,8 +89,176 @@ jobs:
         working-directory: ${{ matrix.crate }}
         run: cargo doc --no-deps --all-features
 
-  # The five runnable tutorials the README points at. A tutorial nobody runs is
-  # a tutorial that rots.
+  # `spec/rust-msrv-n-minus-3.md`: the MSRV is N-3, a formula rather than a
+  # number, and this job is the reason the formula is worth more than a number.
+  #
+  # It derives N from the stable toolchain it just installed, so the expected
+  # value comes from the outside world on every run rather than from a constant
+  # somebody has to remember to change. Two things follow:
+  #
+  #   * A stale number fails here within six weeks of every Rust release, on a
+  #     commit that touched nothing to do with Rust versions. That is deliberate
+  #     (`RV5`). The alternative is what this repository had: `rust-version =
+  #     "1.90"` committed on 2026-08-01, when stable was 1.97, checked by
+  #     nothing and wrong for `openehr-loco` from the day it was written
+  #     (`spec/audit.md` W-09).
+  #
+  #   * The declared floor is COMPILED, not merely declared (`RV3`). An MSRV no
+  #     toolchain has agreed to is a claim, and `W0.3` is about claims.
+  #
+  # Do not make this job `continue-on-error`, and do not relax the equality to a
+  # lower bound. Either turns a check into a decoration, which is the defect
+  # class the whole audit register is about.
+  msrv:
+    name: MSRV is N-3, declared everywhere, and builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive N-3 from the current stable release
+        id: msrv
+        run: |
+          set -eu
+          rustup toolchain install stable --profile minimal
+          n=$(rustup run stable rustc --version \
+                | sed -nE 's/^rustc 1\.([0-9]+)\..*/\1/p')
+          case "$n" in
+            ''|*[!0-9]*)
+              echo "::error::could not parse a minor version from rustc --version"
+              exit 1 ;;
+          esac
+          [ "$n" -gt 3 ] || { echo "::error::stable minor $n makes N-3 nonsense"; exit 1; }
+          echo "stable=1.$n"   >> "$GITHUB_OUTPUT"
+          echo "msrv=1.$((n - 3))" >> "$GITHUB_OUTPUT"
+          echo "stable is 1.$n, so N-3 is 1.$((n - 3))"
+
+      # Checked separately from the build, and before it, so that "the number
+      # went stale" and "the code stopped compiling on the floor" stay
+      # distinguishable. They are different failures with different fixes, and
+      # the first is a one-line sed.
+      - name: Every manifest and every document declares exactly that version
+        env:
+          WANT: ${{ steps.msrv.outputs.msrv }}
+          STABLE: ${{ steps.msrv.outputs.stable }}
+        run: |
+          set -eu
+          bad=0
+
+          # RV2: every crate, one number. A per-crate MSRV would mean the
+          # repository has no MSRV -- a user of openehr-sqlite gets openehr and
+          # openehr-store too, so the effective floor is the highest of them.
+          n=0
+          for f in */Cargo.toml; do
+            n=$((n + 1))
+            grep -qxF "rust-version = \"$WANT\"" "$f" \
+              || { echo "::error file=$f::does not declare rust-version = \"$WANT\""; bad=1; }
+          done
+          [ "$n" -eq 18 ] || {
+            echo "::error::found $n crate manifests, expected 18;"
+            echo "::error::a crate this loop cannot see is a crate with no MSRV (W0.15)"
+            bad=1
+          }
+
+          # RV4: prose names the same number. Via files rather than a heredoc:
+          # an unquoted heredoc terminator must sit at column zero, which it
+          # cannot inside a YAML block scalar, and the resulting script parses
+          # as an unterminated string.
+          grep -rn --include='*.md' --exclude-dir=target \
+            -E 'Requires Rust [0-9]+\.[0-9]+\+ \(edition 2024\)' . > /tmp/rv-prose \
+            || : # no hits is itself suspicious, but `RV4` binds the hits there are
+
+          # Two documents are registers of what this number USED to be:
+          # `spec/audit.md` W-09, and the specification's own "why a formula"
+          # passage. A citation's whole value is that it does not change
+          # (`W0.6`), so quoting the old floor there is correct and rewriting it
+          # would destroy the finding. Everything else must match.
+          historical() {
+            case "$1" in
+              *spec/audit.md:*|*spec/rust-msrv-n-minus-3.md:*|*CHANGELOG.md:*) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+          while IFS= read -r hit; do
+            [ -n "$hit" ] || continue
+            historical "$hit" && continue
+            case "$hit" in
+              *"Requires Rust $WANT+ (edition 2024)"*) ;;
+              *) echo "::error::$hit"
+                 echo "::error::should read: Requires Rust $WANT+ (edition 2024)"
+                 bad=1 ;;
+            esac
+          done < /tmp/rv-prose
+
+          # `AGENTS/adding-an-engine.md` pastes a manifest skeleton, and a
+          # skeleton naming a floor nobody uses is how the next engine crate
+          # acquires the wrong one.
+          grep -rn --include='*.md' --exclude-dir=target \
+            'rust-version = "' . > /tmp/rv-manifest-prose || :
+          while IFS= read -r hit; do
+            [ -n "$hit" ] || continue
+            historical "$hit" && continue
+            case "$hit" in
+              *"rust-version = \"$WANT\""*) ;;
+              *) echo "::error::$hit"
+                 echo "::error::should read: rust-version = \"$WANT\""
+                 bad=1 ;;
+            esac
+          done < /tmp/rv-manifest-prose
+
+          # The specification states today's two numbers in one fixed-form
+          # sentence, so that the document defining the formula is itself
+          # subject to it.
+          want_line="is the current stable release. N is **$STABLE**, so the MSRV is **$WANT**."
+          grep -qF "$want_line" spec/rust-msrv-n-minus-3.md || {
+            echo "::error file=spec/rust-msrv-n-minus-3.md::should contain: $want_line"
+            bad=1
+          }
+
+          [ "$bad" -eq 0 ] || {
+            echo "::error::to fix, from the repository root:"
+            echo "::error::  grep -rl 'rust-version = ' --include=Cargo.toml . | xargs sed -i 's/rust-version = \".*\"/rust-version = \"$WANT\"/'"
+            echo "::error::then update the READMEs and spec/rust-msrv-n-minus-3.md to match"
+            exit 1
+          }
+          echo "18 manifests and every document declare $WANT"
+
+      - name: Install the floor
+        run: |
+          rustup toolchain install ${{ steps.msrv.outputs.msrv }} --profile minimal
+          rustup run ${{ steps.msrv.outputs.msrv }} rustc --version
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: msrv-${{ steps.msrv.outputs.msrv }}
+
+      # The global `-D warnings` is dropped, for the same reason the mutants job
+      # drops it: an older compiler emits a different set of lints, and a lint
+      # that only exists on one of the two toolchains would fail this job for a
+      # reason that has nothing to do with the MSRV. The `[lints]` tables in the
+      # manifests still apply -- `missing_docs` is still deny, `unsafe_code` is
+      # still forbid -- because those are per-package and not RUSTFLAGS.
+      #
+      # `cargo test`, not `cargo check`: an MSRV that compiles the library and
+      # not its test suite is an MSRV under which nobody can develop.
+      - name: Build and test every crate on the floor
+        env:
+          RUSTFLAGS: ""
+        run: |
+          set -eu
+          bad=0
+          for d in openehr openehr-store openehr-sqlite openehr-postgresql \
+                   openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
+                   openehr-loco openehr-assets; do
+            echo "::group::$d on ${{ steps.msrv.outputs.msrv }}"
+            ( cd "$d" && cargo +${{ steps.msrv.outputs.msrv }} test --all-features ) \
+              || { echo "::error::$d does not build or test on ${{ steps.msrv.outputs.msrv }}"; bad=1; }
+            echo "::endgroup::"
+          done
+          [ "$bad" -eq 0 ] || exit 1
+
+  # The runnable tutorials the READMEs point at. A tutorial nobody runs is a
+  # tutorial that rots -- and one in a README is read as a demonstration that
+  # the thing works, which is a claim (`W0.3`).
   examples:
     name: examples
     runs-on: ubuntu-latest
@@ -96,7 +269,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: openehr
-      - name: Run tutorials
+      - name: Run the Reference Model tutorials
         working-directory: openehr
         run: |
           set -eu
@@ -106,6 +279,50 @@ jobs:
             cargo run -q --example "$e" >/dev/null
             echo ok
           done
+
+      # The persistence tutorial. It lives in `openehr-sqlite` because that is
+      # the only crate with a `Store` -- the other five supply a `Dialect` and
+      # nothing else, so a tutorial there would demonstrate code that does not
+      # exist (`C0.11`). It runs against a real in-process database and asserts
+      # its own claims, including that a refused `UPDATE` left the row intact.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: openehr-sqlite
+      - name: Run the persistence tutorial
+        working-directory: openehr-sqlite
+        run: |
+          set -eu
+          printf '01_store_a_record: '
+          cargo run -q --example 01_store_a_record >/dev/null
+          echo ok
+
+  # `W0.36`: benchmarks are RUN, never gated on. `--test` executes each one
+  # once and asserts nothing about the time.
+  #
+  # There is no threshold here and there must not be one (`W0.35`). Wall-clock
+  # on a shared runner varies by more than most real regressions, so a
+  # threshold would fail for reasons unrelated to the change -- and a check that
+  # fails for unrelated reasons is a check somebody silences. What this job
+  # asserts is the only thing it honestly can: the benchmarks still compile and
+  # still run. A committed benchmark nobody executes stops building within a few
+  # refactors, and the first person to need a baseline finds a compile error.
+  bench:
+    name: benchmarks still run / ${{ matrix.crate }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [openehr, openehr-store]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ matrix.crate }}
+      - name: Run every benchmark once
+        working-directory: ${{ matrix.crate }}
+        run: cargo bench --benches -- --test
 
   # Conformance level Dialect -> Schema. This is the job that turns "somebody
   # ran it once" into a standing claim.
@@ -173,8 +390,12 @@ jobs:
           - { engine: mssql,      crate: openehr-mssql,      targets: "quote col_sql" }
           - { engine: oracle,     crate: openehr-oracle,     targets: "quote col_sql" }
           # The Reference Model parsers -- the untrusted surface the dialect
-          # targets do not reach (`lib:A-09`).
-          - { engine: openehr,    crate: openehr,            targets: "iso8601 object_id aql path canonical_json" }
+          # targets do not reach (`lib:A-09`). `uri` was written against
+          # `lib:A-36` and finds that panic from an empty corpus.
+          - { engine: openehr,    crate: openehr,            targets: "iso8601 object_id aql path canonical_json uri data_value" }
+          # Projection and the integrity check: neither is a parser, and both
+          # take input from outside the process (`W0.26`).
+          - { engine: store,      crate: openehr-store,      targets: "project integrity" }
     steps:
       - uses: actions/checkout@v4
 
@@ -258,25 +479,42 @@ jobs:
       # Dev-dependencies count. A test that reaches downward can only be
       # written because the layering allows it, and the next one will not be a
       # throwaway.
+      # The list of crates to check against is DERIVED, not written down. It
+      # used to be nine names in this file, which omitted `openehr-assets` and
+      # all seven fuzz crates -- so a dev-dependency from `openehr` onto, say,
+      # `openehr-sqlite-fuzz` (which depends on `openehr-sqlite`, which depends
+      # on `openehr-store`, which depends on `openehr`) was a cycle this guard
+      # could not see. That is `W-01` exactly: a guard is only as wide as its
+      # input list, and the dialect it omitted was the one that was wrong.
+      # `spec/audit.md` W-13.
       - name: openehr depends on nothing in this repository
         run: |
           set -eu
           bad=0
+          crates=$(ls -d */Cargo.toml | sed 's|/Cargo.toml$||')
+          n=$(echo "$crates" | wc -l | tr -d ' ')
+          [ "$n" -eq 18 ] || {
+            echo "::error::derived $n crates, expected 18 — the guard is looking at the wrong tree"
+            exit 1
+          }
           for crate in openehr openehr-store; do
-            for other in openehr openehr-store openehr-sqlite openehr-postgresql \
-                         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
-                         openehr-loco; do
+            for other in $crates; do
               [ "$crate" = "$other" ] && continue
               # openehr-store may depend on openehr; nothing else is allowed.
               [ "$crate" = "openehr-store" ] && [ "$other" = "openehr" ] && continue
-              if grep -qE "^$other[[:space:]]*=" "$crate/Cargo.toml"; then
+              # Both spellings cargo accepts. The inline form is what this
+              # repository writes; the table form is what somebody adding a
+              # `features` list writes, and it would have slipped past the
+              # inline-only check.
+              if grep -qE "^$other[[:space:]]*=" "$crate/Cargo.toml" \
+                 || grep -qE "^\[(dev-|build-)?dependencies\.$other\]" "$crate/Cargo.toml"; then
                 echo "::error::$crate/Cargo.toml depends on $other; dependencies run inward only"
                 bad=1
               fi
             done
           done
           [ "$bad" -eq 0 ] || exit 1
-          echo "openehr and openehr-store depend only inward"
+          echo "openehr and openehr-store depend only inward, checked against all $n crates"
 
   claims:
     name: conformance claims match evidence
@@ -433,6 +671,20 @@ jobs:
           sys.exit(bad)
           PY
 
+      # `W-10` and `W-11`: the published version was stated in five files and
+      # updated in one, and `db:W16.1` said the repository held fourteen crates
+      # while five other documents said seventeen. Both were counts — the
+      # cheapest possible claim to check, and the easiest to leave behind.
+      #
+      # The residual recorded against **W-11** was this script's absence: the
+      # jobs above derive the crate *list* from the tree, so a crate cannot hide
+      # from a guard, but the *documents* were still hand-counted.
+      #
+      # A script, not a heredoc, so a contributor runs the same check CI runs —
+      # the principle this file already applies to `verify-schema.sh`.
+      - name: The documentation's counts and versions match the tree
+        run: python3 scripts/check-docs.py
+
       # `db:D-09`: the matrix marked two requirements satisfied and listed the
       # same two as absent, in one file, for a day. The file that says "where
       # this disagrees with a crate's documentation, trust this" was disagreeing
@@ -486,16 +738,26 @@ jobs:
       # the same clarity), and LICENSE.md as the only licence file. Shipping
       # the full text of some licences and not others privileges those and
       # understates the grant.
+      # `W0.22` says EVERY crate, and this loop checked nine of seventeen. The
+      # eight it skipped -- `openehr-assets` and the seven fuzz harnesses -- had
+      # no `license` field at all, and seven of the eight no `LICENSE.md`, for
+      # as long as the list was written by hand. Derived from the tree now, for
+      # the same reason as the layering job above (`spec/audit.md` W-14).
+      #
+      # `publish = false` is not a reason to skip one: these are distributed as
+      # source in this repository whether or not they reach a registry, and an
+      # unlicensed file in a licensed tree is the ambiguity the grant exists to
+      # remove.
       - name: Licence expression is harmonized
         run: |
           set -eu
           want='license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"'
           bad=0
-          for d in openehr openehr-store openehr-sqlite openehr-postgresql \
-                   openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
-                   openehr-loco; do
+          n=0
+          for d in $(ls -d */Cargo.toml | sed 's|/Cargo.toml$||'); do
+            n=$((n + 1))
             grep -qxF "$want" "$d/Cargo.toml" \
-              || { echo "::error::$d/Cargo.toml licence is not the harmonized five"; bad=1; }
+              || { echo "::error file=$d/Cargo.toml::licence is not the harmonized five"; bad=1; }
             [ -f "$d/LICENSE.md" ] \
               || { echo "::error::$d has no LICENSE.md"; bad=1; }
             for stray in LICENSE-MIT LICENSE-APACHE LICENSE LICENSE.txt; do
@@ -503,8 +765,12 @@ jobs:
                 && { echo "::error::$d/$stray shadows LICENSE.md (W0.23)"; bad=1; }
             done
           done
+          [ "$n" -eq 18 ] || {
+            echo "::error::derived $n crates, expected 18"
+            bad=1
+          }
           [ "$bad" -eq 0 ] || exit 1
-          echo "all nine checked crates declare the same five licences"
+          echo "all $n crates declare the same five licences and ship LICENSE.md"
 
   # `T13.2`: a test that cannot fail is not a test, and this repository has
   # shipped several — the first property tests passed vacuously (`lib:A-17`),

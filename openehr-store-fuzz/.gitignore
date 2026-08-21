@@ -1,0 +1,10 @@
+target/
+artifacts/
+coverage/
+
+# The fuzzer writes every interesting input it discovers into corpus/. Only the
+# deliberate `seed-*` files are committed (`T11.9` wants a seed corpus, not a
+# transcript): discovered inputs are machine-specific, grow without bound, and a
+# corpus nobody curated is noise in every future diff.
+corpus/*/*
+!corpus/*/seed-*

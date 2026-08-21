@@ -42,7 +42,7 @@ openehr-mysql = "0.2"
 openehr-store = "0.2"
 ```
 
-Requires Rust 1.90+ (edition 2024).
+Requires Rust 1.95+ (edition 2024).
 
 ## What this crate owns
 

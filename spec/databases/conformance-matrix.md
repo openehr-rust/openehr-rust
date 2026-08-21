@@ -134,7 +134,7 @@ states evidence and takes no level. Nothing here is published.
 | `X15.15` no two dialects emit the same DDL | • | all six compared |
 | `X15.16` the comparison's coverage is asserted | • | `ENGINE_CRATES` count; added after **W-01** |
 | `X15.19` types that differ in reality differ in code | • | booleans ≥ 4 spellings, JSON ≥ 3 |
-| `T11.9` fuzzing, run not merely committed | • | 17 targets across 7 fuzz crates, seeded, in CI on every push |
+| `T11.9` fuzzing, run not merely committed | • | 21 targets across 8 fuzz crates, seeded, in CI on every push; the seed corpora are themselves checked (`W0.30`, **W-15**) |
 | `M3.22` schema declared once | • | |
 | `M3.23` foreign keys point backwards only | • | |
 | `M3.27` every `_text` has a nullable `_utc` partner | • | asserted over the whole schema |

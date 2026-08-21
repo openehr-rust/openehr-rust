@@ -18,7 +18,61 @@
 //! `Option`, because openEHR says inclusion is undefined for an unbounded end.
 
 use crate::error::ParseError;
+use core::cmp::Ordering;
 use serde::{Deserialize, Serialize};
+
+/// A partial order that is **not** required to agree with `PartialEq`.
+///
+/// `INTERVAL<T>` is bounded on this rather than on `PartialOrd` (`D3.18c`),
+/// and the reason is `D3.18a`/`D3.18b`: for an openEHR value, equality and
+/// order answer different questions and cannot both be trait impls.
+///
+/// Equality is **record identity**. A `DV_QUANTITY` that records
+/// `precision: 1` is not the same stored value as one that records `2`, a
+/// `DV_DATE_TIME` written `12:00:00+01:00` is not the one written `11:00:00Z`
+/// (`D3.10`), and a content digest is taken over exactly those bytes
+/// (`db:M3.43`). Order is what a reference range and a query need, and it
+/// compares only the magnitude — so the two disagree, by design, on values
+/// that denote the same point.
+///
+/// Rust requires `a == b` if and only if `partial_cmp` reports `Some(Equal)`.
+/// Implementing both would break that contract in every one of those cases:
+/// `a != b` while `a <= b` and `a >= b` are both true, which is invisible here
+/// — every comparison in this crate goes through the ordering consistently —
+/// and surfaces in a caller's `binary_search`, `dedup_by`, or `sort_by`. That
+/// was the finding `A-35`.
+///
+/// # Why there is no blanket impl
+///
+/// `impl<T: PartialOrd> SemanticOrd for T` would collide with the explicit
+/// impls under Rust's coherence rules. It is also the wrong thing to want: the
+/// explicit list is what stops a type with the `D3.18b` defect from reaching
+/// `INTERVAL<T>` again without anyone deciding that it should.
+pub trait SemanticOrd {
+    /// Compares two values, or reports that they are not comparable.
+    ///
+    /// `None` is a real answer and never a default: a `DV_QUANTITY` in `mg`
+    /// and one in `ml` are not "not less than" each other (`D3.14`).
+    fn semantic_cmp(&self, other: &Self) -> Option<Ordering>;
+}
+
+/// The primitives an interval is used over here, plus the ones a caller
+/// reasonably would. For these, equality and order already agree, so
+/// delegating to `PartialOrd` is exactly right.
+macro_rules! semantic_ord_via_partial_ord {
+    ($($ty:ty),+ $(,)?) => {$(
+        impl SemanticOrd for $ty {
+            fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
+                self.partial_cmp(other)
+            }
+        }
+    )+};
+}
+
+semantic_ord_via_partial_ord!(i8, i16, i32, i64, i128, isize);
+semantic_ord_via_partial_ord!(u8, u16, u32, u64, u128, usize);
+semantic_ord_via_partial_ord!(f32, f64);
+semantic_ord_via_partial_ord!(char, &str, String);
 
 /// A range over any ordered type.
 ///
@@ -39,7 +93,7 @@ use serde::{Deserialize, Serialize};
 #[serde(
     from = "IntervalWire<T>",
     into = "IntervalWire<T>",
-    bound = "T: Clone + PartialOrd + Serialize + serde::de::DeserializeOwned"
+    bound = "T: Clone + SemanticOrd + Serialize + serde::de::DeserializeOwned"
 )]
 pub struct Interval<T> {
     lower: Option<T>,
@@ -48,7 +102,7 @@ pub struct Interval<T> {
     upper_included: Option<bool>,
 }
 
-impl<T: PartialOrd> Interval<T> {
+impl<T: SemanticOrd> Interval<T> {
     /// Builds an interval from its parts.
     ///
     /// # Errors
@@ -88,8 +142,8 @@ impl<T: PartialOrd> Interval<T> {
             // fine" and builds an interval whose ends have no established
             // order.
             if !matches!(
-                lo.partial_cmp(hi),
-                Some(core::cmp::Ordering::Less | core::cmp::Ordering::Equal)
+                lo.semantic_cmp(hi),
+                Some(Ordering::Less | Ordering::Equal)
             ) {
                 // `DV_INTERVAL.Limits_consistent`, reported by openEHR's own
                 // name. It said `INTERVAL` with prose until `lib:A-24`, which
@@ -183,15 +237,25 @@ impl<T: PartialOrd> Interval<T> {
     /// normal range is 60 to 100".
     #[must_use]
     pub fn contains(&self, value: &T) -> bool {
+        // Written against `semantic_cmp` rather than `>=`/`<=` because `T` is
+        // not `PartialOrd` (`D3.18c`) — and because the operators quietly read
+        // "not comparable" as "not greater, therefore below", which for an
+        // openEHR value is a wrong answer rather than a missing one.
         let above_lower = match &self.lower {
             None => true,
-            Some(lo) if self.lower_included.unwrap_or(true) => value >= lo,
-            Some(lo) => value > lo,
+            Some(lo) => match value.semantic_cmp(lo) {
+                Some(Ordering::Greater) => true,
+                Some(Ordering::Equal) => self.lower_included.unwrap_or(true),
+                Some(Ordering::Less) | None => false,
+            },
         };
         let below_upper = match &self.upper {
             None => true,
-            Some(hi) if self.upper_included.unwrap_or(true) => value <= hi,
-            Some(hi) => value < hi,
+            Some(hi) => match value.semantic_cmp(hi) {
+                Some(Ordering::Less) => true,
+                Some(Ordering::Equal) => self.upper_included.unwrap_or(true),
+                Some(Ordering::Greater) | None => false,
+            },
         };
         above_lower && below_upper
     }

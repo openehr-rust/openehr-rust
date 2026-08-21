@@ -33,7 +33,7 @@ openehr-store = "0.2"
 openehr = "0.2"
 ```
 
-Requires Rust 1.90+ (edition 2024). This crate emits DDL and defines the traits;
+Requires Rust 1.95+ (edition 2024). This crate emits DDL and defines the traits;
 it opens no connections and depends on no driver.
 
 ## The storage model
@@ -75,6 +75,16 @@ time with no offset, a date with no time — because that is the same answer the
 library gives. A column that guessed would make SQL disagree with Rust about the
 same record.
 
+## Seeing it work
+
+This crate has no `Store` of its own — it defines the trait, the schema, the
+projection, and the commit rules, and an engine crate implements against them.
+The runnable demonstration therefore lives one crate over:
+
+```sh
+cd ../openehr-sqlite && cargo run --example 01_store_a_record
+```
+
 ## The conformance suite
 
 Written once, here, and called by each engine's own tests against a real
@@ -115,6 +125,29 @@ rather than attested once. See [`spec/audit.md`](../spec/audit.md) **W-02**.
 - [`spec/databases/conformance-matrix.md`](../spec/databases/conformance-matrix.md)
   — per-engine status
 - [`spec/audit.md`](../spec/audit.md) — known gaps
+
+## Benchmarks
+
+```sh
+cargo bench                     # criterion; results in target/criterion/
+cargo bench -- --test           # one iteration each, which is what CI runs
+```
+
+`benches/store.rs` measures the two hot pure functions: the projection from a
+composition onto rows, and `verify_versions`. Everything else in a commit is a
+round trip to a database server, which no benchmark in this process can measure
+honestly.
+
+`verify_versions` is measured at 1, 10, and 100 versions, because the question
+is not how fast one row is but whether the walk is **linear**. A check that
+quietly became quadratic would pass every test in the suite and be noticed first
+by whoever verified a record with ten years of history in it.
+
+**A number here is not a conformance claim** (`W0.3`, `W0.34`). No requirement in
+this repository is stated in seconds and no crate's conformance level depends on
+a timing. CI runs the benchmarks with `--test` and gates on nothing: wall-clock
+on a shared runner varies by more than most real regressions, and a threshold
+that fails for unrelated reasons is one somebody silences.
 
 ## Licence
 

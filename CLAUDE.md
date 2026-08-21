@@ -12,16 +12,17 @@ plus the things that specifically trip up automated work here.
 
 ## Layout
 
-Seventeen crates, **each its own Cargo workspace**. There is no root workspace —
-run cargo from inside a crate directory. Eight are published at 0.2.0; the other
-nine are `publish = false`.
+Eighteen crates, **each its own Cargo workspace**. There is no root workspace —
+run cargo from inside a crate directory. Eight are published at 0.3.0; the other
+ten are `publish = false`.
 
-**The tree has moved past what is published.** Twenty-five commits and several
-breaking changes separate local 0.2.0 from published 0.2.0 — `SCHEMA_VERSION`
-now exists and is `4`, `ColTy::Json` changed type, `ColTy::Digest` was added,
-and `OriginalVersion::new` refuses input it used to accept. The next release is
-**0.3.0**. Read [`AGENTS/publishing.md`](AGENTS/publishing.md) before touching
-a version number.
+**Local matches published: 0.3.0, out 2026-08-04.** That release was breaking —
+`SCHEMA_VERSION` now exists and is `4`, `ColTy::Json` changed type,
+`ColTy::Digest` was added, and `OriginalVersion::new` refuses input it used to
+accept — which is why it was not 0.2.1. Read
+[`AGENTS/publishing.md`](AGENTS/publishing.md) before touching a version
+number; it is the only file that tracks this, and four others state the version
+without tracking it (`spec/audit.md` **W-10**).
 
 | Crate | Role | Level |
 | --- | --- | --- |
@@ -57,6 +58,13 @@ done
 
 # regenerate the committed assets, or fail if what is committed is stale
 (cd openehr-assets && cargo run -- write)   # or: -- check
+
+# the documentation's counts, versions, levels, and shared blocks
+python3 scripts/check-docs.py               # or: --fix
+
+# benchmarks (criterion). `--test` is the one-iteration form CI runs.
+(cd openehr && cargo bench)
+(cd openehr-store && cargo bench -- --test)
 
 # verify a dialect against a real engine (needs podman or docker)
 sh openehr-store/scripts/verify-schema.sh postgresql|mysql|mariadb
@@ -122,6 +130,14 @@ warnings — keep it there.**
   straight in. Anything arriving as JSON must be run through `validate()`, and
   the store does (`lib:A-23`). Adding a rule to a constructor alone leaves the
   path an HTTP service takes unchecked.
+
+  **So no accessor may rely on a constructor's guarantee.** `DvUri::scheme()`
+  read `.expect("constructor guarantees a scheme")`, with rustdoc saying
+  "# Panics — Never". `{"value":"nocolon"}` deserialized cleanly and panicked
+  (`lib:A-36`, `lib:D3.30a`). If a type derives `Deserialize`, every method on it
+  must be total for *any* field values, and `validate()` is what reports the bad
+  ones. Check the `_ => {}` arm in `Validate for DataValue` when you add a
+  variant: that arm is how a whole class of values reached no check at all.
 - **Nothing may index a column an engine cannot search.** A schema test refuses
   an index over `LongText` or `Json`; searching one needs the adjuncts of
   [`spec/databases/search-adjuncts.md`](spec/databases/search-adjuncts.md), and
@@ -146,6 +162,42 @@ warnings — keep it there.**
   id. Declared as `Q12.9b`, open as `lib:A-27`. Do not "fix" it by adding a sign
   to the number scanner without deciding what `[openEHR-EHR-…]` means after an
   operator.
+- **The documentation's counts and versions are checked** (`W0.39`).
+  `python3 scripts/check-docs.py` derives the crate count, the published
+  version, the fuzz-target count, the tutorial count, the CI job list, and every
+  crate's conformance level from the tree, and fails when a document disagrees.
+  Run it after anything that changes those. `--fix` rewrites the marked shared
+  blocks from their owner.
+- **A duplicated passage is either marked or forbidden** (`W0.38`). The
+  conformance ladder appears in four documents; one is the owner and three carry
+  `<!-- shared: conformance-ladder (copy) -->`, checked byte for byte. Do not
+  add a fifth unmarked copy — two of the original four had already drifted
+  (`W-16`).
+- **A conformance level has one owner:**
+  [`spec/databases/conformance-matrix.md`](spec/databases/conformance-matrix.md)
+  (`W0.40`). Promote a crate there first; every README, rustdoc header, and
+  index table is checked against it.
+- **Benchmarks are run, never gated on** (`W0.35`, `W0.36`). `cargo bench` in
+  `openehr` and `openehr-store`; CI runs them with `--test`, one iteration, and
+  asserts nothing about wall-clock. Do not add a timing threshold — on a shared
+  runner it fails for unrelated reasons and gets silenced.
+- **The MSRV is a formula, not a number** (`RV1`): N−3, currently 1.95. The
+  `msrv` job re-derives it from the stable toolchain, so it goes red within six
+  weeks of every Rust release. That is deliberate; fix the number, do not pin
+  the toolchain ([`spec/rust-msrv-n-minus-3.md`](spec/rust-msrv-n-minus-3.md)).
+- **No `DV_ORDERED` implements `PartialOrd`, and neither does `DataValue`**
+  (`lib:D3.18b`). `a < b` and `a.partial_cmp(&b)` do not compile on `DvQuantity`,
+  `DvDateTime`, `DvCount`, … — call `DvOrdered::semantic_cmp`, which needs the
+  trait in scope. `INTERVAL<T>` is bounded on `openehr::base::SemanticOrd`
+  (`lib:D3.18c`), which has **no blanket impl**: a new type reaching
+  `Interval<T>` needs an explicit one, deliberately.
+
+  The reason is that these types derive `PartialEq` over every field — including
+  the `OrderedAttrs` all of them carry — while comparing only the magnitude, so
+  `5 mg precision 1` is `!=` to `5 mg precision 2` and orders `Equal`. Do not
+  "fix" that by making `==` semantic: a canonicaliser that rewrote `1.10` as
+  `1.1` would then pass its own round-trip test, which is `db:D-08` again
+  (`lib:A-35`).
 - **Every RM invariant is accounted for.** `openehr-assets` fails the build if
   one is neither cited by the crate nor dispositioned with a reason, and also if
   a disposition outlives the rule it explains (`lib:A-24`). Cite an invariant as

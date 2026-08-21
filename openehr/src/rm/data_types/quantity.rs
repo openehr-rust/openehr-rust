@@ -202,6 +202,23 @@ pub trait DvOrdered {
     /// The `DV_ORDERED` attributes.
     fn ordered_attrs(&self) -> &OrderedAttrs;
 
+    /// Compares two values of the same class, or reports them incomparable.
+    ///
+    /// This is **not** `PartialOrd::partial_cmp`, and deliberately (`D3.18b`).
+    /// Every `DV_ORDERED` derives `PartialEq` over all its fields — including
+    /// the `OrderedAttrs` below, and `DV_QUANTITY`'s `precision` and
+    /// `units_display_name` — while ordering compares only the magnitude. So
+    /// `DvCount::new(5).with_normal_range(r)` and `DvCount::new(5)` are not
+    /// equal and order `Equal`, which is precisely what Rust's `PartialOrd`
+    /// contract forbids. Rather than break the contract, the crate does not
+    /// implement the trait, and comparison is this method.
+    ///
+    /// `None` is an answer, never a default (`D3.14`): a quantity in `mg` and
+    /// one in `ml` are not comparable in either direction.
+    fn semantic_cmp(&self, other: &Self) -> Option<Ordering>
+    where
+        Self: Sized;
+
     /// The normal range, if recorded.
     fn normal_range(&self) -> Option<&Interval<DataValue>> {
         self.ordered_attrs().normal_range()
@@ -263,10 +280,15 @@ macro_rules! ordered_builders {
 }
 
 macro_rules! ordered {
-    ($ty:ty, $as_value:expr) => {
+    ($ty:ty, $as_value:expr, $cmp:expr) => {
         impl DvOrdered for $ty {
             fn ordered_attrs(&self) -> &OrderedAttrs {
                 &self.ordered
+            }
+
+            fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
+                #[allow(clippy::redundant_closure_call)]
+                ($cmp)(self, other)
             }
 
             fn is_abnormal(&self) -> Option<bool> {
@@ -282,11 +304,11 @@ macro_rules! ordered {
 /// A value on a scale of ordered symbols: `+`, `++`, `+++`.
 ///
 /// ```
-/// use openehr::rm::data_types::{CodePhrase, DvCodedText, DvOrdinal};
+/// use openehr::rm::data_types::{CodePhrase, DvCodedText, DvOrdered as _, DvOrdinal};
 ///
 /// let mild = DvOrdinal::new(1, DvCodedText::new("mild", CodePhrase::new("local", "at0002").unwrap()).unwrap());
 /// let severe = DvOrdinal::new(3, DvCodedText::new("severe", CodePhrase::new("local", "at0004").unwrap()).unwrap());
-/// assert!(mild < severe);
+/// assert_eq!(mild.semantic_cmp(&severe), Some(core::cmp::Ordering::Less));
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DvOrdinal {
@@ -331,14 +353,13 @@ impl DvOrdinal {
     }
 }
 
-impl PartialOrd for DvOrdinal {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.is_strictly_comparable_to(other)
-            .then(|| self.value.cmp(&other.value))
-    }
-}
-
-ordered!(DvOrdinal, |s: &DvOrdinal| DataValue::Ordinal(s.clone()));
+ordered!(
+    DvOrdinal,
+    |s: &DvOrdinal| DataValue::Ordinal(s.clone()),
+    |a: &DvOrdinal, b: &DvOrdinal| a
+        .is_strictly_comparable_to(b)
+        .then(|| a.value.cmp(&b.value))
+);
 ordered_builders!(DvOrdinal, "DvOrdinal");
 
 /// A value on a numeric scale, where the steps may be fractional.
@@ -393,22 +414,22 @@ impl DvScale {
     }
 }
 
-impl PartialOrd for DvScale {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if !self.is_strictly_comparable_to(other) {
+ordered!(
+    DvScale,
+    |s: &DvScale| DataValue::Scale(s.clone()),
+    |a: &DvScale, b: &DvScale| {
+        if !a.is_strictly_comparable_to(b) {
             return None;
         }
-        self.value.partial_cmp(&other.value)
+        a.value.partial_cmp(&b.value)
     }
-}
-
-ordered!(DvScale, |s: &DvScale| DataValue::Scale(s.clone()));
+);
 ordered_builders!(DvScale, "DvScale");
 
 /// A dimensioned measured quantity: `110 mm[Hg]`, `3.5 mmol/l`.
 ///
 /// ```
-/// use openehr::rm::data_types::{DvQuantity, MagnitudeStatus};
+/// use openehr::rm::data_types::{DvOrdered as _, DvQuantity, MagnitudeStatus};
 ///
 /// let systolic = DvQuantity::new(184.0, "mm[Hg]").unwrap().with_precision(0).unwrap();
 /// assert_eq!(systolic.units(), "mm[Hg]");
@@ -421,7 +442,7 @@ ordered_builders!(DvScale, "DvScale");
 /// // Different units are not comparable, in either direction.
 /// let mg = DvQuantity::new(5.0, "mg").unwrap();
 /// let ml = DvQuantity::new(5.0, "mL").unwrap();
-/// assert_eq!(mg.partial_cmp(&ml), None);
+/// assert_eq!(mg.semantic_cmp(&ml), None);
 /// assert!(!(mg == ml));
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -650,16 +671,16 @@ impl DvQuantity {
     }
 }
 
-impl PartialOrd for DvQuantity {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if !self.is_strictly_comparable_to(other) {
+ordered!(
+    DvQuantity,
+    |s: &DvQuantity| DataValue::Quantity(s.clone()),
+    |a: &DvQuantity, b: &DvQuantity| {
+        if !a.is_strictly_comparable_to(b) {
             return None;
         }
-        self.magnitude.partial_cmp(&other.magnitude)
+        a.magnitude.partial_cmp(&b.magnitude)
     }
-}
-
-ordered!(DvQuantity, |s: &DvQuantity| DataValue::Quantity(s.clone()));
+);
 ordered_builders!(DvQuantity, "DvQuantity");
 
 /// A dimensionless count: three tablets, two episodes.
@@ -716,13 +737,11 @@ impl DvCount {
     }
 }
 
-impl PartialOrd for DvCount {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.magnitude.cmp(&other.magnitude))
-    }
-}
-
-ordered!(DvCount, |s: &DvCount| DataValue::Count(s.clone()));
+ordered!(
+    DvCount,
+    |s: &DvCount| DataValue::Count(s.clone()),
+    |a: &DvCount, b: &DvCount| Some(a.magnitude.cmp(&b.magnitude))
+);
 ordered_builders!(DvCount, "DvCount");
 
 /// What kind of proportion a `DV_PROPORTION` expresses.
@@ -941,18 +960,16 @@ impl DvProportion {
     }
 }
 
-impl PartialOrd for DvProportion {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if !self.is_strictly_comparable_to(other) {
+ordered!(
+    DvProportion,
+    |s: &DvProportion| DataValue::Proportion(s.clone()),
+    |a: &DvProportion, b: &DvProportion| {
+        if !a.is_strictly_comparable_to(b) {
             return None;
         }
-        self.as_ratio().partial_cmp(&other.as_ratio())
+        a.as_ratio().partial_cmp(&b.as_ratio())
     }
-}
-
-ordered!(DvProportion, |s: &DvProportion| DataValue::Proportion(
-    s.clone()
-));
+);
 ordered_builders!(DvProportion, "DvProportion");
 
 #[cfg(test)]
@@ -969,14 +986,17 @@ mod tests {
         let mg = quantity(5.0, "mg");
         let ml = quantity(5.0, "mL");
         // None, not Some(Equal): the magnitudes agree and the values do not.
-        assert_eq!(mg.partial_cmp(&ml), None);
-        assert_eq!(ml.partial_cmp(&mg), None);
+        assert_eq!(mg.semantic_cmp(&ml), None);
+        assert_eq!(ml.semantic_cmp(&mg), None);
         assert_ne!(mg, ml);
     }
 
     #[test]
     fn same_units_compare_normally() {
-        assert!(quantity(90.0, "mm[Hg]") < quantity(140.0, "mm[Hg]"));
+        assert_eq!(
+            quantity(90.0, "mm[Hg]").semantic_cmp(&quantity(140.0, "mm[Hg]")),
+            Some(Ordering::Less)
+        );
     }
 
     #[test]
@@ -989,7 +1009,7 @@ mod tests {
             2,
             DvCodedText::new("moderate", CodePhrase::new("SNOMED-CT", "6736007").unwrap()).unwrap(),
         );
-        assert_eq!(pain.partial_cmp(&sedation), None);
+        assert_eq!(pain.semantic_cmp(&sedation), None);
     }
 
     #[test]
@@ -1275,8 +1295,8 @@ mod tests {
 
         // Same terminology: comparable, and ordered by value.
         assert!(pain_2.is_strictly_comparable_to(&pain_3));
-        assert!(pain_2 < pain_3);
-        assert_eq!(pain_2.partial_cmp(&pain_2), Some(Ordering::Equal));
+        assert_eq!(pain_2.semantic_cmp(&pain_3), Some(Ordering::Less));
+        assert_eq!(pain_2.semantic_cmp(&pain_2), Some(Ordering::Equal));
 
         // Different terminologies: not comparable, whatever the numbers say.
         assert!(
@@ -1284,13 +1304,13 @@ mod tests {
             "two unrelated scales were called comparable"
         );
         assert_eq!(
-            pain_2.partial_cmp(&sedation_2),
+            pain_2.semantic_cmp(&sedation_2),
             None,
             "a pain score was ordered against a sedation score"
         );
-        assert_eq!(pain_3.partial_cmp(&sedation_2), None);
+        assert_eq!(pain_3.semantic_cmp(&sedation_2), None);
         // And symmetrically.
-        assert_eq!(sedation_2.partial_cmp(&pain_2), None);
+        assert_eq!(sedation_2.semantic_cmp(&pain_2), None);
     }
 
     /// A quantity reports the units annotations it was given.
@@ -1378,10 +1398,10 @@ mod tests {
     /// such a search compares).
     #[test]
     fn counts_order_by_magnitude_and_keep_their_status_marker() {
-        assert!(DvCount::new(1) < DvCount::new(2));
-        assert!(DvCount::new(-1) < DvCount::new(0));
+        assert_eq!(DvCount::new(1).semantic_cmp(&DvCount::new(2)), Some(Ordering::Less));
+        assert_eq!(DvCount::new(-1).semantic_cmp(&DvCount::new(0)), Some(Ordering::Less));
         assert_eq!(
-            DvCount::new(5).partial_cmp(&DvCount::new(5)),
+            DvCount::new(5).semantic_cmp(&DvCount::new(5)),
             Some(Ordering::Equal)
         );
 

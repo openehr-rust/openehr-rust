@@ -5,12 +5,17 @@ Not normative. `C0.8`–`C0.13` in
 
 ## The ladder
 
-| Level | Means | Evidence |
+The table below is a **marked copy**: `db:C0.8` owns it, and
+`scripts/check-docs.py` fails if this drifts from it (`W0.38`). Edit it there.
+
+<!-- shared: conformance-ladder (copy) -->
+| Level | Means | Evidence required |
 | --- | --- | --- |
-| **Dialect** | Emits DDL for the shared schema. | Golden tests + `conformance::check_dialect`. |
-| **Schema** | The engine has executed that DDL. | A transcript: applied cleanly, applied *again* cleanly, append-only tables refused `UPDATE` and `DELETE` **with a row present**. |
+| **Dialect** | Emits DDL for the shared schema. | The golden DDL tests, and `conformance::check_dialect`. |
+| **Schema** | The engine itself has executed that DDL. | A transcript against that engine's own server: the script applied cleanly, applied *again* cleanly, and the append-only tables were observed refusing `UPDATE` and `DELETE` **with a row present**. |
 | **Store** | Implements `Store` against a real database. | `conformance::run` passing against that engine. |
-| **Verified** | Store, run in CI on every commit. | A CI job that provisions the engine and **fails, not skips**, without it. |
+| **Verified** | Store level, run in CI against the engine's own server on every commit. | A CI job that provisions the engine and fails — not skips — without it. |
+<!-- /shared: conformance-ladder -->
 
 ## Where each crate stands
 
@@ -38,9 +43,17 @@ exactly such a claim, naming a workflow file that never existed
 sh openehr-store/scripts/verify-schema.sh <engine>
 ```
 
-Add a branch if your engine has none. Then update, in the same commit: the
-crate's README, its crate-level rustdoc, the table in
-`openehr-store/spec/conformance.md`, and `spec/index.md`.
+Add a branch if your engine has none. Then, **in the same commit**, change the
+level in its one owner —
+[`spec/databases/conformance-matrix.md`](../spec/databases/conformance-matrix.md)
+(`W0.40`) — and in every document that restates it: the crate's README, its
+crate-level rustdoc, `openehr-store/spec/conformance.md`, `spec/index.md`,
+`README.md`, `CLAUDE.md`, and `AGENTS.md`.
+
+You do not have to find them all by hand. `python3 scripts/check-docs.py` names
+every restatement that disagrees with the owner, and the `claims` job runs it, so
+a half-finished promotion fails CI rather than shipping as a crate that claims
+two different levels in two places.
 
 **Expect to fail the first time.** Three of three crates that have made this
 step were wrong at Dialect level and passed every golden test while being wrong:

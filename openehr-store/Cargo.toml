@@ -12,7 +12,7 @@
 name = "openehr-store"
 version = "0.3.0"
 edition = "2024"
-rust-version = "1.90"
+rust-version = "1.95"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
 description = "Engine-agnostic openEHR persistence: storage model, SQL dialect trait, commit semantics, and a conformance suite"
 keywords = ["openehr", "ehr", "database", "sql", "healthcare"]
@@ -34,3 +34,14 @@ unsafe_code = "forbid"
 pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
+
+[dev-dependencies]
+# Benchmarks (`benches/store.rs`). `default-features = false` drops the HTML
+# report and its plotting stack; see `openehr/Cargo.toml` for why.
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
+
+# Criterion drives its own harness; libtest's would swallow the arguments it
+# needs. `harness = false` is required, not stylistic.
+[[bench]]
+name = "store"
+harness = false

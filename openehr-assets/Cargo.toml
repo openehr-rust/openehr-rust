@@ -11,8 +11,9 @@
 name = "openehr-assets"
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.90"
+rust-version = "1.95"
 publish = false
+license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
 
 [dependencies]
 openehr-store = { path = "../openehr-store" }

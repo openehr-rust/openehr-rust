@@ -15,7 +15,8 @@ use openehr::path::Pathable;
 use openehr::rm::common::{LocatableAttrs, PartyIdentified};
 use openehr::rm::data_structures::{Element, ItemTree};
 use openehr::rm::data_types::{
-    CodePhrase, DataValue, DvDate, DvDateTime, DvIdentifier, DvMultimedia, DvQuantity, DvText,
+    CodePhrase, DataValue, DvCount, DvDate, DvDateTime, DvIdentifier, DvMultimedia, DvOrdered,
+    DvQuantity, DvText,
 };
 use openehr::rm::ehr::{Composition, EntryAttrs, Evaluation};
 use openehr::security::{ChainKey, RedactionRule, Redactor, Sensitive};
@@ -213,18 +214,18 @@ fn every_undecidable_comparison_answers_none() {
 
     let mg = DataValue::Quantity(DvQuantity::new(5.0, "mg").unwrap());
     let ml = DataValue::Quantity(DvQuantity::new(5.0, "mL").unwrap());
-    assert_eq!(mg.partial_cmp(&ml), None);
+    assert_eq!(mg.semantic_cmp(&ml), None);
     assert!(!mg.is_strictly_comparable_to(&ml));
 
     let count = DataValue::Count(openehr::rm::data_types::DvCount::new(5));
-    assert_eq!(mg.partial_cmp(&count), None);
+    assert_eq!(mg.semantic_cmp(&count), None);
 
     // And the decidable cases are still decided, so the refusals above are not
     // just "comparison is broken".
     let april: iso8601::Date = "2024-04".parse().unwrap();
     assert_eq!(april.semantic_cmp(&day), Some(Ordering::Less));
     let more = DataValue::Quantity(DvQuantity::new(6.0, "mg").unwrap());
-    assert!(mg < more);
+    assert_eq!(mg.semantic_cmp(&more), Some(Ordering::Less));
 }
 
 /// Fails if an ambiguous path starts resolving to its first match.
@@ -690,3 +691,210 @@ fn an_untagged_element_is_still_recognised_and_withheld() {
     assert!(!serde_json::to_string(&redacted).unwrap().contains(MARKER));
 }
 
+
+/// A `DV_URI` that arrived as JSON is checked, and reading it does not panic.
+///
+/// **Failure mode.** `Deserialize` is derived on `DvUri` and writes `value`
+/// straight in, so a URI read from a wire passes no constructor (`L10.1a`).
+/// `scheme()` then split on `':'` and `expect`ed a colon its rustdoc claimed
+/// the constructor guaranteed — true of a URI this program builds, false of one
+/// it is sent. `{"value":"nocolon"}` deserialized cleanly and panicked on the
+/// next line. `DataValue`'s validation match had a `_ => {}` arm, so nothing
+/// reported it either. See `A-36`.
+#[test]
+fn a_uri_that_never_saw_a_constructor_is_reported_rather_than_panicking() {
+    let uri: openehr::rm::data_types::DvUri =
+        serde_json::from_str(r#"{"value":"nocolon"}"#).expect("serde writes the field in");
+
+    // Total, and fails closed: no colon means no scheme, and "" matches none.
+    assert_eq!(uri.scheme(), "");
+    assert_eq!(uri.rest(), "");
+
+    let report = DataValue::Uri(uri).validate();
+    let named: Vec<_> = report
+        .violations()
+        .iter()
+        .map(|v| (v.class, v.invariant))
+        .collect();
+    assert!(
+        named.contains(&("DV_URI", "Uri_well_formed")),
+        "a malformed URI must be reported, got {named:?}"
+    );
+}
+
+/// An empty `DV_URI` is openEHR's own `Value_valid`, not the crate's addition.
+///
+/// **Failure mode.** `L10.4` requires openEHR's own invariant name wherever
+/// openEHR states the rule. openEHR's `DV_URI.Value_valid` is exactly
+/// `not value.is_empty` and nothing more; reporting emptiness under the added
+/// name `Uri_well_formed` would send a reader looking for a rule openEHR does
+/// not have.
+#[test]
+fn an_empty_uri_is_reported_under_openehrs_own_invariant_name() {
+    let uri: openehr::rm::data_types::DvUri =
+        serde_json::from_str(r#"{"value":""}"#).expect("serde writes the field in");
+    let report = DataValue::Uri(uri).validate();
+    let named: Vec<_> = report
+        .violations()
+        .iter()
+        .map(|v| (v.class, v.invariant))
+        .collect();
+    assert_eq!(named, vec![("DV_URI", "Value_valid")], "got {named:?}");
+}
+
+/// A `DV_EHR_URI` deserialized with a foreign scheme is reported.
+///
+/// **Failure mode.** The type exists so that `LINK.target` cannot point out of
+/// the record without saying so (`D3.31`, `M5.9`), and its own doctest asserts
+/// that `"https://example.org/x"` fails to **parse**. The JSON path accepted
+/// it: `DvEhrUri` is `#[serde(transparent)]` over `DvUri`, whose derived
+/// `Deserialize` runs no scheme check. The guarantee held for links this
+/// program builds and not for links it is sent, which is the half that matters.
+#[test]
+fn an_ehr_uri_deserialized_with_a_foreign_scheme_is_reported() {
+    let uri: openehr::rm::data_types::DvEhrUri =
+        serde_json::from_str(r#"{"value":"https://example.org/x"}"#)
+            .expect("serde writes the field in");
+    assert_eq!(uri.scheme(), "https", "the parse gate is the one it skipped");
+
+    let report = DataValue::EhrUri(uri).validate();
+    let named: Vec<_> = report
+        .violations()
+        .iter()
+        .map(|v| (v.class, v.invariant))
+        .collect();
+    assert_eq!(named, vec![("DV_EHR_URI", "Scheme_valid")], "got {named:?}");
+}
+
+/// Every `LOCATABLE`'s links are validated, at a path that names the link.
+///
+/// **Failure mode.** Checking a `DV_EHR_URI` only where it appears as a
+/// `DataValue` would miss the place it actually arrives: `LINK.target`, on any
+/// node in any structure. `LOCATABLE` is the one place that covers all of them
+/// — a per-class rule would be fourteen copies, and the fourteenth would be
+/// forgotten (`W0.1`).
+#[test]
+fn a_link_target_is_validated_on_every_locatable_that_carries_it() {
+    let element: Element = serde_json::from_str(
+        r#"{
+            "name": {"value": "Problem"},
+            "archetype_node_id": "at0002",
+            "links": [{
+                "meaning": {"value": "because of"},
+                "type": {"value": "issue"},
+                "target": {"value": "https://example.org/elsewhere"}
+            }],
+            "value": {"_type": "DV_TEXT", "value": "hypertension"}
+        }"#,
+    )
+    .expect("serde writes the fields in");
+
+    let report = element.validate();
+    let found = report
+        .violations()
+        .iter()
+        .find(|v| v.class == "DV_EHR_URI")
+        .expect("the link target must be reported");
+    assert_eq!(found.invariant, "Scheme_valid");
+    assert_eq!(
+        found.path, "/links[0]/target",
+        "a violation must name the path to the offending node (`L10.4`)"
+    );
+}
+
+/// No `DV_ORDERED` implements `PartialOrd`, and none may start.
+///
+/// **Failure mode.** Every `DV_ORDERED` derives `PartialEq` over all its
+/// fields — including the `OrderedAttrs` all of them carry, and
+/// `DV_QUANTITY`'s `precision` and `units_display_name` — while comparison
+/// looks only at the magnitude. Implementing both traits therefore breaks
+/// Rust's contract that `a == b` if and only if `partial_cmp` reports
+/// `Some(Equal)`: each pair below was `!=` while `a <= b` and `a >= b` were
+/// both true. Nothing in this crate depended on it, which is why it survived
+/// as `A-35`; a caller's `binary_search` or `dedup_by` is where it surfaces.
+///
+/// This test is the guard against the fix being undone. `semantic_cmp` says
+/// `Equal` for every pair, and `==` says false — which is correct, and is
+/// exactly why neither may be a `PartialOrd` impl (`D3.18b`).
+#[test]
+fn equality_and_order_disagree_by_design_and_neither_is_partial_ord() {
+    fn distinct_but_ordered_equal<T>(what: &str, a: &T, b: &T)
+    where
+        T: PartialEq + core::fmt::Debug + DvOrdered,
+    {
+        assert_ne!(a, b, "{what}: these are different stored values");
+        assert_eq!(
+            a.semantic_cmp(b),
+            Some(Ordering::Equal),
+            "{what}: they denote the same point and must order equal"
+        );
+    }
+
+    let range = openehr::base::Interval::closed(
+        DataValue::Count(DvCount::new(0)),
+        DataValue::Count(DvCount::new(10)),
+    )
+    .unwrap();
+
+    distinct_but_ordered_equal(
+        "DV_DATE_TIME written two ways",
+        &DvDateTime::new("2026-08-01T11:00:00Z").unwrap(),
+        &DvDateTime::new("2026-08-01T12:00:00+01:00").unwrap(),
+    );
+    distinct_but_ordered_equal(
+        "DV_QUANTITY differing only in precision",
+        &DvQuantity::new(5.0, "mg").unwrap().with_precision(1).unwrap(),
+        &DvQuantity::new(5.0, "mg").unwrap().with_precision(2).unwrap(),
+    );
+    distinct_but_ordered_equal(
+        "DV_QUANTITY differing only in units_display_name",
+        &DvQuantity::new(5.0, "mg").unwrap().with_units_display_name("mg"),
+        &DvQuantity::new(5.0, "mg").unwrap(),
+    );
+    distinct_but_ordered_equal(
+        "DV_COUNT differing only in its normal range",
+        &DvCount::new(5).with_normal_range(range),
+        &DvCount::new(5),
+    );
+
+    // The enum has the same shape and the same answer.
+    let utc = DataValue::DateTime(DvDateTime::new("2026-08-01T11:00:00Z").unwrap());
+    let offset = DataValue::DateTime(DvDateTime::new("2026-08-01T12:00:00+01:00").unwrap());
+    assert_ne!(utc, offset);
+    assert_eq!(utc.semantic_cmp(&offset), Some(Ordering::Equal));
+}
+
+/// A reference range still answers correctly for the same point spelled two ways.
+///
+/// **Failure mode.** `Interval::contains` was written with `>=` and `<=`, which
+/// need `PartialOrd`. Rewriting it against `semantic_cmp` (`D3.18c`) could
+/// silently change what an interval contains — and an interval here is a
+/// clinical reference range, so "is this result normal?" is the question that
+/// would change its answer. The operators also read "not comparable" as "not
+/// greater, therefore below", which is a wrong answer rather than a missing one.
+#[test]
+fn a_reference_range_is_unmoved_by_how_an_instant_is_spelled() {
+    let range = openehr::base::Interval::closed(
+        DvDateTime::new("2026-08-01T11:00:00Z").unwrap(),
+        DvDateTime::new("2026-08-01T13:00:00Z").unwrap(),
+    )
+    .unwrap();
+    assert!(range.contains(&DvDateTime::new("2026-08-01T11:00:00Z").unwrap()));
+    assert!(range.contains(&DvDateTime::new("2026-08-01T12:00:00+01:00").unwrap()));
+    assert!(!range.contains(&DvDateTime::new("2026-08-01T14:00:00Z").unwrap()));
+
+    // A bound that is not comparable is excluded, not silently admitted.
+    let month = DvDateTime::new("2026-08").unwrap();
+    assert_eq!(month.semantic_cmp(&DvDateTime::new("2026-08-01T11:00:00Z").unwrap()), None);
+    assert!(!range.contains(&month), "an incomparable value was admitted");
+
+    // An excluded bound is still excluded.
+    let open = openehr::base::Interval::open(
+        DvDateTime::new("2026-08-01T11:00:00Z").unwrap(),
+        DvDateTime::new("2026-08-01T13:00:00Z").unwrap(),
+    )
+    .unwrap();
+    assert!(!open.contains(&DvDateTime::new("2026-08-01T11:00:00Z").unwrap()));
+    assert!(!open.contains(&DvDateTime::new("2026-08-01T12:00:00+01:00").unwrap()));
+    assert!(open.contains(&DvDateTime::new("2026-08-01T12:00:00Z").unwrap()));
+}

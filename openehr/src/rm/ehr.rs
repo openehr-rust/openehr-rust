@@ -33,7 +33,9 @@ use crate::rm::common::{
     Locatable, LocatableAttrs, Participation, PartyProxy, PartySelf, impl_locatable,
 };
 use crate::rm::data_structures::{History, ItemStructure};
-use crate::rm::data_types::{CodePhrase, DvCodedText, DvDateTime, DvParsable, DvText, Text};
+use crate::rm::data_types::{
+    CodePhrase, DvCodedText, DvDateTime, DvOrdered as _, DvParsable, DvText, Text,
+};
 use crate::rm::rm_type_tag;
 use crate::terminology;
 use serde::{Deserialize, Serialize};
@@ -437,7 +439,7 @@ impl EventContext {
     /// [`crate::validation`] instead.
     pub fn with_end_time(mut self, end_time: DvDateTime) -> Result<Self, ParseError> {
         if matches!(
-            end_time.partial_cmp(&self.start_time),
+            end_time.semantic_cmp(&self.start_time),
             Some(core::cmp::Ordering::Less)
         ) {
             return Err(ParseError::invariant("EVENT_CONTEXT", "End_time_valid"));

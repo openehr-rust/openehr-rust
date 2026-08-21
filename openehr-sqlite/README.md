@@ -11,7 +11,7 @@ openehr-store = "0.2"
 openehr = "0.2"
 ```
 
-Requires Rust 1.90+ (edition 2024). SQLite itself is compiled in — no system
+Requires Rust 1.95+ (edition 2024). SQLite itself is compiled in — no system
 library is needed, and none is used.
 
 ## Conformance level: Verified
@@ -45,6 +45,24 @@ let then = store.version_at_time(&container, &at)?;
 **Verified** rather than Store because the suite runs in CI on every push
 against a bundled engine that cannot be absent, so the job cannot silently skip.
 It is the only crate at this level, being the only one with a `Store`.
+
+## Tutorial
+
+```sh
+cargo run --example 01_store_a_record
+```
+
+The whole loop, against a real in-process database: install the schema, commit a
+composition, amend it, read the history oldest-first, resolve a point-in-time
+read, query the archetype index, watch a stale predecessor be refused, print a
+tamper-evidence checkpoint, and then go **around** this crate with a raw
+`UPDATE` on the connection and watch the database's own trigger refuse it — and
+check the row is intact afterwards, because a `FOR EACH ROW` trigger on zero
+rows never fires (`C0.12`).
+
+It is the only runnable tutorial for the persistence layer, and CI runs it on
+every push. A tutorial in a README is read as a demonstration that the thing
+works, which makes it a claim (`W0.3`).
 
 ## The API
 
