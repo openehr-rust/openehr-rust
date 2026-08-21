@@ -19,15 +19,13 @@ publish a crate with an open finding against its claims (`W0.21`).
 
 ## State today
 
-**Published 2026-08-04 at 0.3.0. Local is 0.4.0 and NOT yet published.**
+**Published 2026-08-21.** All eight publishable crates are live at **0.4.0**
+on crates.io, in the order below, and local matches published. Verified against
+the registry API rather than read off `cargo publish`'s output.
 
-All eight publishable crates are live at **0.3.0** on crates.io, in the order
-below. The tree has moved past them: 0.4.0 is prepared and staged — manifests,
-`Cargo.lock`, and [`CHANGELOG.md`](../CHANGELOG.md) all say 0.4.0 — and is
-waiting on the gate below.
-
-> **Gate satisfied 2026-08-21.** CI ran green on **`adcfaae`**: 28 jobs
-> succeeded and one — `mutants` — was skipped because it is pull-request only.
+> **The gate that held 0.4.0, kept as the record of why.** CI ran green on
+> **`adcfaae`**: 28 jobs succeeded and one — `mutants` — was skipped because it
+> is pull-request only. 0.4.0 went out after that run and not before.
 >
 > The gate said: do not publish until the `msrv` job, the `bench` jobs, the two
 > new fuzz matrix rows, the tenth crate in the `test` matrix, and the rewritten
@@ -42,14 +40,14 @@ waiting on the gate below.
 
 | Crate | crates.io | Local |
 | --- | --- | --- |
-| `openehr` | 0.1.0, 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
-| `openehr-store` | 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
-| `openehr-sqlite` | 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
-| `openehr-postgresql` | 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
-| `openehr-mysql` | 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
-| `openehr-mariadb` | 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
-| `openehr-mssql` | 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
-| `openehr-oracle` | 0.1.1, 0.2.0, **0.3.0** | **0.4.0** (unpublished) |
+| `openehr` | 0.1.0, 0.1.1, 0.2.0, 0.3.0, **0.4.0** | 0.4.0 |
+| `openehr-store` | 0.1.1, 0.2.0, 0.3.0, **0.4.0** | 0.4.0 |
+| `openehr-sqlite` | 0.1.1, 0.2.0, 0.3.0, **0.4.0** | 0.4.0 |
+| `openehr-postgresql` | 0.1.1, 0.2.0, 0.3.0, **0.4.0** | 0.4.0 |
+| `openehr-mysql` | 0.1.1, 0.2.0, 0.3.0, **0.4.0** | 0.4.0 |
+| `openehr-mariadb` | 0.1.1, 0.2.0, 0.3.0, **0.4.0** | 0.4.0 |
+| `openehr-mssql` | 0.1.1, 0.2.0, 0.3.0, **0.4.0** | 0.4.0 |
+| `openehr-oracle` | 0.1.1, 0.2.0, 0.3.0, **0.4.0** | 0.4.0 |
 
 `openehr-loco`, `openehr-assets`, and the eight fuzz crates are `publish = false`
 and are not on crates.io. `openehr-loco`'s own version moves in lockstep with

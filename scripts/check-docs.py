@@ -152,8 +152,12 @@ def versions() -> tuple[str, str]:
     published" forces you to either lie in the manifests or switch it off, and
     both are worse than the state it was complaining about.
     """
+    # Whitespace-normalised before matching: the fixed-form sentence is a claim,
+    # and a line wrap is not a different claim. The first version of this regex
+    # matched a literal space and broke the moment the sentence was rewrapped.
     text = (ROOT / "agents/publishing.md").read_text()
-    m = re.search(r"are live at \*\*([0-9.]+)\*\* on crates\.io", text)
+    flat = re.sub(r"\s+", " ", text)
+    m = re.search(r"are live at \*\*([0-9.]+)\*\* on crates\.io", flat)
     if not m:
         sys.exit(
             "::error file=agents/publishing.md::the fixed-form 'are live at "
@@ -162,7 +166,7 @@ def versions() -> tuple[str, str]:
             "script and that sentence together."
         )
     live = m.group(1)
-    staged = re.search(r"Local is ([0-9.]+) and NOT yet published", text)
+    staged = re.search(r"Local is ([0-9.]+) and NOT yet published", flat)
     return live, (staged.group(1) if staged else live)
 
 
@@ -175,7 +179,10 @@ def check_versions() -> int:
             continue
         for pattern in (
             r"live on crates\.io at \*\*([0-9.]+)\*\*",
-            r"on crates\.io at ([0-9.]+)",
+            # Broad enough to catch "published to\ncrates.io at 0.3.0", which
+            # the narrower "on crates.io at" missed because the line wrapped
+            # between "to" and "crates.io".
+            r"crates\.io at \*{0,2}([0-9.]+)",
             r"[Aa]ll eight are on crates\.io at \*\*([0-9.]+)\*\*",
             r"[Ee]ight are published at ([0-9.]+)",
         ):

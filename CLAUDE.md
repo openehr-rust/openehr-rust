@@ -13,13 +13,13 @@ plus the things that specifically trip up automated work here.
 ## Layout
 
 Eighteen crates, **each its own Cargo workspace**. There is no root workspace —
-run cargo from inside a crate directory. Eight are published at 0.3.0; the other
+run cargo from inside a crate directory. Eight are published at 0.4.0; the other
 ten are `publish = false`.
 
-**Local matches published: 0.3.0, out 2026-08-04.** That release was breaking —
-`SCHEMA_VERSION` now exists and is `4`, `ColTy::Json` changed type,
-`ColTy::Digest` was added, and `OriginalVersion::new` refuses input it used to
-accept — which is why it was not 0.2.1. Read
+**Local matches published: 0.4.0, out 2026-08-21.** That release was breaking —
+`PartialOrd` was removed from every `DV_ORDERED` and from `DataValue`
+(`lib:A-35`), the MSRV moved to N−3, and AQL string literals stopped being
+mangled (`lib:A-37`) — which is why it was not 0.3.1. Read
 [`agents/publishing.md`](agents/publishing.md) before touching a version
 number; it is the only file that tracks this, and four others state the version
 without tracking it (`spec/audit.md` **W-10**).

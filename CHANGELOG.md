@@ -5,7 +5,7 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
-## 0.4.0
+## 0.4.0 — 2026-08-21
 
 **Breaking.** Two of the three items below change an API; the third raises the
 minimum toolchain. Every affected line in a dependent is a **compile error**,
