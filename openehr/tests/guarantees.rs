@@ -977,7 +977,8 @@ fn aql_rendering_round_trips_through_the_parser() {
 /// 4.4444444444444444e-7 → 4.4444444444444454e-7 → 4.444444444444446e-7 → stable
 /// ```
 ///
-/// Three applications there, and no bound is established. `A-38`.
+/// Three applications there, and no bound is established. `A-38`, reported
+/// upstream as <https://github.com/serde-rs/json/issues/1336>.
 ///
 /// **Failure mode of this test.** It fails when the behaviour changes — an
 /// upstream fix, or a move to `arbitrary_precision`. That is the point: `A-38`
@@ -1004,8 +1005,9 @@ fn canonical_json_drifts_on_a_high_precision_float() {
 
     assert_ne!(
         seen[0], seen[1],
-        "the drift is gone — `serde_json` may have been fixed, or the number \
-         representation changed. Re-read A-38 and close it or restate it."
+        "the drift is gone. If serde-rs/json#1336 was fixed, that is the good \
+         outcome: bump `serde_json`, delete this test, and close A-38. Do not \
+         relax the assertion."
     );
     assert_eq!(
         seen[2], seen[3],

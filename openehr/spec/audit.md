@@ -113,7 +113,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-34 | Medium | `DV_ENCAPSULATED`'s `charset` and `language` were preserved across a round trip and **unreadable** — `EncapsulatedAttrs` is exported but no type returned one, so a caller holding a `DV_MULTIMEDIA` or `DV_PARSABLE` could not ask what it declared | **fixed** — an `encapsulated()` accessor on both; found because the two accessors had no reachable caller to test |
 | A-36 | Medium | `DV_URI` and `DV_EHR_URI` enforced their invariants in the constructor only. A `DV_URI` deserialized from `{"value":"nocolon"}` **panicked** in `scheme()`, whose rustdoc said "# Panics — Never"; a `DV_EHR_URI` deserialized from `{"value":"https://example.org/x"}` reported scheme `https`, which is what the type exists to make impossible. `Validate for DataValue` reached both through a `_ => {}` arm, and `LINK.target` was validated nowhere | **fixed** — `scheme()`/`rest()` are total (`D3.30a`), validation checks both types and every `LOCATABLE`'s links, and `openehr-fuzz` has a `uri` target that reproduces the panic in seconds |
 | A-37 | High | The `aql` fuzz target had been **failing in CI since 2026-08-04** and nobody had triaged it. Two defects: the lexer copied a string literal one UTF-8 **byte** at a time, so `'Müller'` lexed to `'MÃ¼ller'` and a `WHERE` against it matched nobody; and the `FROM` renderer omitted the parentheses its own grammar needs, so `Or(Contains(a,b), c)` rendered as text that re-parsed to `Contains(a, Or(b,c))` — a query over different records | **fixed** — slices not bytes, escaped rendering, precedence-correct parentheses (`Q12.15`, `Q12.15a`, `Q12.15b`) |
-| A-38 | Medium | `serde_json` 1.0.151's float parser is **not the inverse of its own serializer**: it reads `1.5777777777770001` one ULP below `core::str::parse`. A magnitude therefore **drifts** across repeated canonical round trips — three applications before it settled in the observed case, with no bound established — and a composition read out of a store is not bit-identical to the one written | open, **upstream** — contained by `db:M3.43`, which stores canonical JSON byte-preserving and digests the stored bytes rather than re-canonicalising, so no false tamper alarm is reachable |
+| A-38 | Medium | `serde_json` 1.0.151's float parser is **not the inverse of its own serializer** ([serde-rs/json#1336](https://github.com/serde-rs/json/issues/1336)): it reads `1.5777777777770001` one ULP below `core::str::parse`. A magnitude therefore **drifts** across repeated canonical round trips — three applications before it settled in the observed case, with no bound established — and a composition read out of a store is not bit-identical to the one written | open, **upstream** — contained by `db:M3.43`, which stores canonical JSON byte-preserving and digests the stored bytes rather than re-canonicalising, so no false tamper alarm is reachable |
 | A-35 | Medium | Ten types — every `DV_ORDERED` descendant and `DataValue` — implemented `PartialOrd` while deriving `PartialEq` over all their fields, so `a != b` while `a <= b` and `a >= b` were both true. Recorded as the lexical-vs-semantic shape of `A-32` and scoped to five types; the mechanism is `OrderedAttrs`, which every `DV_ORDERED` carries, and it reached five more | **fixed** — no `DV_ORDERED` implements `PartialOrd`; comparison is `DvOrdered::semantic_cmp`, and `INTERVAL<T>` is bounded on a new `SemanticOrd` (`D3.18b`, `D3.18c`) |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
@@ -1901,17 +1901,31 @@ that pays twice for reasons its author did not know about is the argument for
 writing rules about *properties* rather than about the specific thing that went
 wrong.
 
-**Open, and upstream.** Nothing in this repository can make `serde_json`'s
-parser agree with its serializer. Three responses exist and none is free:
+**Reported upstream 2026-08-21** as
+[serde-rs/json#1336](https://github.com/serde-rs/json/issues/1336), *"Bug? float
+parser is not the inverse of its own serializer."* Open, unlabelled, no
+maintainer response yet.
+
+**Still open here, because a report is not a fix.** Nothing in this repository
+can make `serde_json`'s parser agree with its serializer, and this finding stays
+open until either the upstream issue is resolved and the dependency moves, or
+this repository takes option 2 below. Three responses exist and none is free:
 
 1. **Leave it**, with the containment above and this finding. The residual is
    that a caller who reads a value back and compares it to what they wrote
-   finds them unequal in the last bit.
+   finds them unequal in the last bit. **This is the current position.**
 2. **`serde_json`'s `arbitrary_precision`**, which keeps a number as its
    original text and would preserve the input digits exactly. It changes the
    type of every numeric Reference-Model field from `f64` to something
    text-backed — a large API change with its own arithmetic questions.
-3. **Report it upstream**, which is worth doing regardless of 1 or 2.
+3. ~~**Report it upstream**~~ — **done**, see above. Worth doing regardless of
+   1 or 2, and it is the only one of the three that helps anybody outside this
+   repository.
+
+**What to watch for.** If #1336 is fixed, the pinning test below starts failing
+— by design, because it asserts the drift is *present*. That failure is the
+signal to bump `serde_json`, delete the test, and close this finding. Do not
+"fix" the test by relaxing it.
 
 Choosing between them is a design decision, not a repair, so it is written down
 rather than made silently (`W0.19`).

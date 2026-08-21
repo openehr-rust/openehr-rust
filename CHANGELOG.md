@@ -64,7 +64,8 @@ never a silent change in behaviour — which is the property that made the
   write** (`lib:A-38`). Its float parser is one ULP below `core::str::parse`
   for some inputs, so a magnitude **drifts** across repeated canonical-JSON
   round trips — three applications before it settled in the observed case, with
-  no bound established. **Stored bytes, and the
+  no bound established. Reported upstream as
+  [serde-rs/json#1336](https://github.com/serde-rs/json/issues/1336). **Stored bytes, and the
   content digest over them, are unaffected** — `db:M3.43` stores canonical JSON
   byte-preserving and the integrity check hashes the stored bytes rather than
   re-deriving them, so no false tamper alarm is reachable. Recorded rather than
