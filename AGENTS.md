@@ -18,7 +18,7 @@ Detailed topic guides live in [`agents/`](agents/index.md).
 Eighteen crates implementing openEHR in Rust: one Reference Model library, one
 engine-agnostic persistence library, six SQL engine crates, an HTTP service, an
 asset generator, and eight fuzz harnesses. The first eight are published to
-crates.io at 0.4.0; the other ten are `publish = false`.
+crates.io at 0.5.0; the other ten are `publish = false`.
 
 | Crate | Role | Level |
 | --- | --- | --- |
@@ -242,15 +242,17 @@ version:
 
 ## Publishing
 
-All eight publishable crates are live on crates.io at **0.4.0**, published
+All eight publishable crates are live on crates.io at **0.5.0**, published
 2026-08-21, and **local matches published** — the per-crate table is in
 [`agents/publishing.md`](agents/publishing.md), which is the one file to trust
 on this and the one to update first.
 
 0.4.0 was a breaking release, not 0.3.1: `PartialOrd` is gone from every
 `DV_ORDERED` and from `DataValue` (`lib:A-35`), the MSRV moved to N−3, and AQL
-rendering changed (`lib:A-37`). Cargo treats `0.3.x` as compatible, so any of
-those shipped as a patch would have broken a dependent on `cargo update`.
+string literals stopped being mangled (`lib:A-37`). 0.5.0 followed the same day,
+and is 0.5.0 rather than 0.4.1 because `lib:Q12.9e` changes what a rendered
+query looks like. Cargo treats `0.4.x` as compatible, so either shipped as a
+patch would have reached a dependent on `cargo update` unasked.
 
 There is no schema migration and there will not be one before 1.0
 (`db:O10.14`). A deployment on a published 0.2.0 schema exports, recreates, and

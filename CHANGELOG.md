@@ -5,7 +5,7 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
-## 0.5.0
+## 0.5.0 — 2026-08-21
 
 **A feature and a behaviour change, neither an API break.** 0.5.0 rather than
 0.4.1 because cargo treats `0.4.x` as compatible: a dependent on `openehr =
