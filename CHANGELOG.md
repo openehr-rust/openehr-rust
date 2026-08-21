@@ -5,7 +5,13 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
-## Unreleased
+## 0.5.0
+
+**A feature and a behaviour change, neither an API break.** 0.5.0 rather than
+0.4.1 because cargo treats `0.4.x` as compatible: a dependent on `openehr =
+"0.4"` picks up a patch on `cargo update`, and the rendering change below is
+visible to anyone asserting on the text of a rendered query.
+
 
 - **AQL accepts negative numeric literals** (`lib:Q12.9b`, closing `lib:A-27`).
   `WHERE o/value/magnitude > -2.5` — a base excess, a temperature difference, a
