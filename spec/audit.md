@@ -797,11 +797,25 @@ somebody needed to read it.
 **Fixed** by two tests in `uri.rs`, and re-mutated to confirm all three are now
 caught rather than assumed to be.
 
+**Confirmed in CI, and the confirmation is weaker than it looks.** On
+`7d91a9d` the job ran on a push for the first time — four crates, all green.
+It tested **zero mutants**, correctly: the only changed lines were inside
+`#[cfg(test)]`, which cargo-mutants does not mutate. A green run over nothing
+is not evidence, and in a summary it looks identical to a green run over two
+hundred mutants.
+
+That is the same shape as the `skipped` job this finding is about, one level
+down, so the job now says which zero it was: a `::notice::` when the diff
+changed no mutable code, and a count when it did. The count excludes the
+unmutated baseline from `outcomes.json` — including it reports 16 where
+cargo-mutants says 15, and a count that is off by one is a count nobody trusts
+twice.
+
 **Residual.** The retrospective gap is not closed. Only `interval.rs` and
 `uri.rs` were mutated by hand; the AQL lexer and renderer, the validation walk,
 and the three new `conformance` properties were not. They are covered by the
-job from the next push onward, which is forward protection and not a check of
-what is already on `main`.
+job from the next push that touches them, which is forward protection and not a
+check of what is already on `main`.
 
 ---
 

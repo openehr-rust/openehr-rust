@@ -899,4 +899,32 @@ jobs:
           done
           [ "$bad" -eq 0 ] || exit 1
 
-          cargo mutants --in-diff /tmp/pr.diff -j 2 --timeout 300
+          # `--json` so the count is readable afterwards. A run that mutates
+          # nothing is legitimate — a diff touching only tests, comments, or
+          # attributes yields no mutants, because cargo-mutants does not mutate
+          # `#[cfg(test)]` code — but it is **not** evidence, and in a green
+          # summary it looks identical to a run that tested two hundred.
+          #
+          # The path guard above already covers the other way to get zero (a
+          # diff whose paths do not resolve, which exits 0 saying "No mutants to
+          # filter"). This says which zero it was.
+          cargo mutants --in-diff /tmp/pr.diff -j 2 --timeout 300 --output /tmp/mutants
+          # `outcomes` includes the unmutated baseline run, which is not a
+          # mutant. Counting it would report 16 where cargo-mutants says 15,
+          # and a count that is off by one is a count nobody trusts twice.
+          tested=$(python3 -c "
+          import json, pathlib
+          p = pathlib.Path('/tmp/mutants/mutants.out/outcomes.json')
+          if not p.is_file():
+              print(0)
+          else:
+              o = json.loads(p.read_text())['outcomes']
+              print(sum(1 for x in o if x['scenario'] != 'Baseline'))
+          ")
+          if [ "$tested" -eq 0 ]; then
+            echo "::notice::0 mutants: this diff changed no mutable code in"
+            echo "::notice::${{ matrix.crate }} — tests, comments, or attributes only."
+            echo "::notice::A pass here is the absence of a question, not an answer."
+          else
+            echo "$tested mutants tested, all caught"
+          fi
