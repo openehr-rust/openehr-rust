@@ -94,6 +94,27 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
   - two durations whose approximations agree and whose calendar components
     differ,
   - values of different `DATA_VALUE` classes.
+- **D3.14a** *(added 2026-08-21)* `INTERVAL<T>::contains` MUST treat "not
+  comparable" as **not contained**, at either bound and in either direction.
+
+  `D3.14` says what comparison answers. This says what the one caller that
+  matters does with that answer, and it was load-bearing and undocumented until
+  `A-39` — implemented correctly, relied on by `DvOrdered::is_abnormal`, and
+  written down nowhere.
+
+  **Fail closed.** An undecidable comparison must never admit a value into a
+  range: a reference range that silently included values it cannot order would
+  report them as normal. The operators `>=` and `<=` do this by accident —
+  `None` makes them false — which is why the rewrite in `D3.18c` had to say it
+  on purpose rather than inherit it.
+
+  The consequence runs one step further, and is why `A-39` is a **Medium**
+  rather than a note about test coverage. `is_abnormal` asks
+  `normal_range.contains(&value)`. If a comparison that should have decided
+  returns "not comparable" — because a match arm was deleted, or a variant was
+  added without one — the value is reported as **inside no range**, and
+  therefore as **not abnormal**. A wrong answer that reads as reassurance.
+
 - **D3.15** `DV_QUANTITY` values MUST be comparable only when their `units`
   strings are equal (`S1.9`).
 - **D3.16** `DV_ORDINAL` and `DV_SCALE` values MUST be comparable only when

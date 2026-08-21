@@ -261,6 +261,66 @@ these attributes and this store still cannot hold them; remedy 2 — columns, an
 a table or JSON column for attestations — remains the real fix, and needs a
 migration mechanism this project does not have (`O10.14`).
 
+### D-10 — three fuzz properties that could be deleted without failing anything — **Medium, fixed**
+
+**Found 2026-08-21** by the retrospective mutation pass `spec/audit.md` **W-18**
+left as a residual.
+
+`check_projection`, `check_stored_instant`, and `check_verify_versions` are the
+properties the `openehr-store-fuzz` targets drive. Each was **replaceable with
+`()`** with nothing in this repository failing.
+
+**Why that is worse than an ordinary coverage gap.** These functions are called
+only from fuzz targets, and `cargo test` does not run fuzz targets. A property
+that asserts nothing never crashes, so the `fuzz` job stays green — over three
+properties that had been deleted. The gate and the thing it gates would both
+have reported success.
+
+That is `T11.10` exactly, and `W0.28` states it as a requirement: *a fuzz
+property MUST be shown to fail against a deliberately broken implementation. A
+check that cannot fail is indistinguishable from a control that works.* The
+properties were written on 2026-08-20 and that demonstration was never done.
+
+**Fixed, in three parts, and the third is a limitation rather than a fix:**
+
+1. **`check_verify_versions` was too weak to fail at all.** Its assertions —
+   empty means `Empty`, and the verdict is a function of its input — hold for
+   any input given a correct `verify_versions`. It now **provokes** the answer
+   it is about: for a history that verifies, editing each version's content in
+   turn must make the chain report `ContentAltered` at that version. That is the
+   entire purpose of `M3.16`, and it is falsifiable by construction rather than
+   by imagination.
+
+2. **`conformance::property_tests` now calls all three**, with input that is
+   right and input that is not. `check_stored_instant`'s failing input is
+   constructible — a `StoredInstant` whose derived UTC column disagrees with its
+   authoritative text, which is the defect `M3.31` names — and the test builds
+   one and asserts the property rejects it. That mutant is killed.
+
+3. **The other two now report what they checked**, which is what makes them
+   killable. `check_projection` returns whether the composition projected;
+   `check_verify_versions` returns how many versions had their tamper detection
+   provoked. `property_tests` asserts the count equals the history's length, so
+   a stubbed-out property fails a real test.
+
+   **A `mutants.toml` skip was written first and then deleted.** It was the
+   weaker answer: a skip says *this cannot be checked*, and a return value makes
+   it checkable. The counts are not an artifact of the testing either — the
+   second distinguishes "verified a hundred-version history and re-broke every
+   one of them" from "returned early", which the fuzz target could not otherwise
+   tell apart.
+
+   Asserting only the `true` case left `check_projection -> bool` replaceable
+   with `true`, so the test asserts the other answer too: a composition with no
+   `archetype_details` has nothing to put in `archetype_id` and is refused,
+   which is a **result** and not a failure.
+
+**Residual.** Three mutants in `dialects_are_distinct` and `check_dialect`
+survive, unrelated to this finding and pre-dating it: those helpers are killed
+when measured from `openehr-sqlite`, whose tests call them, and the library
+conformance matrix's `T13.2` row already records that `openehr-store`'s own test
+target does not.
+
 ### D-09 — The conformance matrix contradicted itself — **Medium, fixed**
 
 Found by comparing the matrix against the specification it summarises, after a

@@ -764,7 +764,17 @@ pub fn check_col_sql<D: Dialect + ?Sized>(dialect: &D, ty: crate::ColTy) {
 /// # Panics
 ///
 /// Panics naming the property when one fails.
-pub fn check_projection(version_uid: &str, ehr_id: &str, composition: &Composition) {
+/// Returns whether the composition projected at all — `false` for one with no
+/// `archetype_details`, which is a refusal and not a failure.
+///
+/// It returns anything because otherwise it could not fail. Mutation testing
+/// replaced this whole function with `()` and nothing in this repository
+/// noticed: it is called only from `openehr-store-fuzz`, `cargo test` does not
+/// run fuzz targets, and a property that asserts nothing never crashes — so the
+/// `fuzz` job would have stayed green over a deleted property (`db:D-10`).
+/// Reporting what it checked is what makes that observable to a test.
+#[must_use]
+pub fn check_projection(version_uid: &str, ehr_id: &str, composition: &Composition) -> bool {
     let first = crate::record::CompositionIndexRow::project(version_uid, ehr_id, composition);
     let second = crate::record::CompositionIndexRow::project(version_uid, ehr_id, composition);
 
@@ -775,8 +785,9 @@ pub fn check_projection(version_uid: &str, ehr_id: &str, composition: &Compositi
                 let Some(stored) = instant else { continue };
                 check_stored_instant(which, stored);
             }
+            true
         }
-        (Err(_), Err(_)) => {}
+        (Err(_), Err(_)) => false,
         (a, b) => panic!(
             "projection is not deterministic: one call {} and the other {}",
             if a.is_ok() { "succeeded" } else { "failed" },
@@ -824,12 +835,23 @@ pub fn check_stored_instant(column: &str, stored: &crate::record::StoredInstant)
 /// # Panics
 ///
 /// Panics when the property fails.
-pub fn check_verify_versions(rows: &[crate::record::VersionRow]) {
-    let verdict = crate::integrity::verify_versions(rows, &[]);
+/// Returns how many versions had their tamper detection **provoked** — zero
+/// for an empty container, and zero for a history that did not verify in the
+/// first place, because there is nothing to prove about a chain already broken.
+///
+/// It returns a count for the reason [`check_projection`] returns a bool, and
+/// the count is the more useful of the two: it distinguishes "verified a
+/// hundred-version history and re-broke every one of them" from "returned
+/// early", which the fuzz target could not otherwise tell apart (`db:D-10`).
+#[must_use]
+pub fn check_verify_versions(rows: &[crate::record::VersionRow]) -> usize {
+    use crate::integrity::{Breach, Integrity, verify_versions};
+
+    let verdict = verify_versions(rows, &[]);
     if rows.is_empty() {
         assert_eq!(
             verdict,
-            crate::integrity::Integrity::Empty,
+            Integrity::Empty,
             "an empty container must report Empty, never a verdict about nothing"
         );
     }
@@ -837,9 +859,54 @@ pub fn check_verify_versions(rows: &[crate::record::VersionRow]) {
     // not depend on anything outside the rows.
     assert_eq!(
         verdict,
-        crate::integrity::verify_versions(rows, &[]),
+        verify_versions(rows, &[]),
         "verify_versions is not a function of its input"
     );
+
+    // **The half that can fail.** Everything above holds for any input given a
+    // correct `verify_versions`, which makes it unfalsifiable: the whole
+    // function could be replaced with `()` and no test in this repository would
+    // notice — which is precisely what mutation testing found (`W-18`,
+    // `db:D-10`). `W0.28` requires a property to be shown to fail against a
+    // broken implementation, and a property that cannot fail is a control that
+    // always reports success.
+    //
+    // So the property now **provokes** the answer it is about. A history that
+    // verifies must stop verifying when a byte of its content changes; that is
+    // the entire purpose of the chain (`M3.16`), and it is falsifiable by
+    // construction rather than by imagination.
+    if !matches!(verdict, Integrity::Verified | Integrity::Unkeyed) {
+        return 0;
+    }
+    let mut provoked = 0;
+    {
+        for i in 0..rows.len() {
+            let mut tampered = rows.to_vec();
+            let row = &mut tampered[i];
+            row.data_json = Some(match row.data_json.take() {
+                // A byte that changes the content without changing its length,
+                // so nothing but the digest can notice.
+                Some(json) => format!("{json} "),
+                None => "null ".to_owned(),
+            });
+            match verify_versions(&tampered, &[]) {
+                Integrity::Broken { at, reason, .. } => {
+                    assert_eq!(at, i, "the wrong version was named as altered");
+                    assert_eq!(
+                        reason,
+                        Breach::ContentAltered,
+                        "an edited version was reported as something other than altered"
+                    );
+                }
+                other => panic!(
+                    "editing version {i}'s content left the history reporting {other:?} — \
+                     the chain does not detect the thing it exists to detect"
+                ),
+            }
+            provoked += 1;
+        }
+    }
+    provoked
 }
 
 #[cfg(test)]
@@ -851,7 +918,12 @@ mod property_tests {
     //! test below defines a dialect with exactly the defect the property exists
     //! to catch, and asserts the property rejects it.
 
-    use super::{check_col_sql, check_quote};
+    use super::{
+        CodePhrase, Composition, LocatableAttrs, PartyIdentified, RECORD, SYSTEM, check_col_sql,
+        check_projection, check_quote, check_stored_instant, check_verify_versions,
+        composition_category, sample_composition, sample_version,
+    };
+    use openehr::base::iso8601;
     use crate::{ColTy, Dialect, Placeholder};
 
     /// Escapes nothing — the defect `check_quote` exists to catch.
@@ -948,6 +1020,113 @@ mod property_tests {
             "\u{1F600}",
         ] {
             check_quote(&CollapsedInstants, id);
+        }
+    }
+
+    /// The three properties the `openehr-store-fuzz` targets drive can fail.
+    ///
+    /// **Failure mode, and it was live.** Mutation testing replaced
+    /// `check_projection`, `check_stored_instant`, and `check_verify_versions`
+    /// each with `()` and **nothing in this repository failed** (`db:D-10`).
+    /// They are called only from fuzz targets, which `cargo test` does not run,
+    /// and a fuzz target whose property asserts nothing never crashes — so the
+    /// `fuzz` job would have stayed green over three properties that had been
+    /// deleted.
+    ///
+    /// `W0.28` requires a fuzz property to be **shown to fail** against a
+    /// deliberately broken implementation. These are that demonstration, and
+    /// they are what kills the mutants: a property that can only pass is
+    /// indistinguishable from one that was removed.
+    #[test]
+    fn each_fuzz_property_accepts_what_is_right_and_rejects_what_is_not() {
+        // ---- check_stored_instant ------------------------------------------
+        let good = crate::record::StoredInstant::from_date_time(
+            &"2026-08-01T09:00:00Z"
+                .parse::<iso8601::DateTime>()
+                .expect("literal"),
+        );
+        check_stored_instant("audit_time_committed", &good);
+
+        // The derived column disagreeing with the authoritative text is the
+        // defect `M3.31` is about: SQL and Rust would answer differently about
+        // one record.
+        let skewed = crate::record::StoredInstant {
+            text: good.text.clone(),
+            utc_seconds: Some(good.utc_seconds.expect("an established instant") + 1),
+        };
+        assert!(
+            std::panic::catch_unwind(|| check_stored_instant("skewed", &skewed)).is_err(),
+            "a derived UTC column that disagrees with its text was accepted"
+        );
+
+        // ---- check_projection ----------------------------------------------
+        assert!(
+            check_projection(
+                &format!("{RECORD}::{SYSTEM}::1"),
+                RECORD,
+                &sample_composition("Encounter"),
+            ),
+            "the sample composition must project"
+        );
+
+        // And the other answer. A composition with no `archetype_details` has
+        // nothing to put in `archetype_id` — the column `AQL` filters on — so
+        // `CompositionIndexRow::project` refuses it rather than inventing one.
+        // That refusal is a *result*, not a failure, and asserting only the
+        // `true` case left `-> bool` replaceable with `true` (`db:D-10`).
+        let unrooted = Composition::new(
+            LocatableAttrs::named("Encounter", "openEHR-EHR-COMPOSITION.encounter.v1")
+                .expect("literal"),
+            composition_category::EVENT,
+            PartyIdentified::named("Dr A Nurse").expect("literal").into(),
+            CodePhrase::new("ISO_639-1", "en").expect("literal"),
+            CodePhrase::new("ISO_3166-1", "GB").expect("literal"),
+        )
+        .expect("literal");
+        assert!(
+            !check_projection(&format!("{RECORD}::{SYSTEM}::1"), RECORD, &unrooted),
+            "a composition with no archetype_details must not project"
+        );
+
+        // ---- check_verify_versions -----------------------------------------
+        assert_eq!(
+            check_verify_versions(&[]),
+            0,
+            "an empty container has nothing to provoke"
+        );
+
+        let mut rows = Vec::new();
+        for n in 1..=3u32 {
+            let previous = rows.last().map(|r: &crate::record::VersionRow| r.chain.digest);
+            let version = sample_version(n, (n > 1).then(|| n - 1), n);
+            rows.push(
+                crate::record::VersionRow::project(&version, "ctrb-1", previous, None)
+                    .expect("the sample projects"),
+            );
+        }
+        // A sound history passes, and the count is the evidence that the
+        // tamper provocation inside actually ran — one per version, not zero.
+        assert_eq!(
+            check_verify_versions(&rows),
+            rows.len(),
+            "the tamper provocation did not run for every version"
+        );
+
+        // And the provocation inside `check_verify_versions` is real rather than
+        // decorative — asserted here directly, because the property itself can
+        // only fail if `verify_versions` is broken, and a test cannot break it
+        // from outside.
+        for i in 0..rows.len() {
+            let mut tampered = rows.clone();
+            let edited = format!("{} ", tampered[i].data_json.clone().expect("content"));
+            tampered[i].data_json = Some(edited);
+            match crate::integrity::verify_versions(&tampered, &[]) {
+                crate::integrity::Integrity::Broken { at, reason, .. } => {
+                    assert_eq!(at, i, "the wrong version was named as altered");
+                    assert_eq!(reason, crate::integrity::Breach::ContentAltered);
+                }
+                other => panic!("editing version {i} left the history reporting {other:?}"),
+            }
         }
     }
 }

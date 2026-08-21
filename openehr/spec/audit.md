@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**38 findings, 38 in the table below: 6 High, 23 Medium, 9 Low. 31 fixed or
+**39 findings, 39 in the table below: 6 High, 24 Medium, 9 Low. 32 fixed or
 classified, 7 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -114,6 +114,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-36 | Medium | `DV_URI` and `DV_EHR_URI` enforced their invariants in the constructor only. A `DV_URI` deserialized from `{"value":"nocolon"}` **panicked** in `scheme()`, whose rustdoc said "# Panics — Never"; a `DV_EHR_URI` deserialized from `{"value":"https://example.org/x"}` reported scheme `https`, which is what the type exists to make impossible. `Validate for DataValue` reached both through a `_ => {}` arm, and `LINK.target` was validated nowhere | **fixed** — `scheme()`/`rest()` are total (`D3.30a`), validation checks both types and every `LOCATABLE`'s links, and `openehr-fuzz` has a `uri` target that reproduces the panic in seconds |
 | A-37 | High | The `aql` fuzz target had been **failing in CI since 2026-08-04** and nobody had triaged it. Two defects: the lexer copied a string literal one UTF-8 **byte** at a time, so `'Müller'` lexed to `'MÃ¼ller'` and a `WHERE` against it matched nobody; and the `FROM` renderer omitted the parentheses its own grammar needs, so `Or(Contains(a,b), c)` rendered as text that re-parsed to `Contains(a, Or(b,c))` — a query over different records | **fixed** — slices not bytes, escaped rendering, precedence-correct parentheses (`Q12.15`, `Q12.15a`, `Q12.15b`) |
 | A-38 | Medium | `serde_json` 1.0.151's float parser is **not the inverse of its own serializer** ([serde-rs/json#1336](https://github.com/serde-rs/json/issues/1336)): it reads `1.5777777777770001` one ULP below `core::str::parse`. A magnitude therefore **drifts** across repeated canonical round trips — three applications before it settled in the observed case, with no bound established — and a composition read out of a store is not bit-identical to the one written | open, **upstream** — contained by `db:M3.43`, which stores canonical JSON byte-preserving and digests the stored bytes rather than re-canonicalising, so no false tamper alarm is reachable |
+| A-39 | Medium | Two matches in `DataValue` whose arms could be deleted in silence — `semantic_cmp` (6 of 9) and `is_strictly_comparable_to` (all of them, plus the whole function replaceable with `false`) — and `trim_float`, whose guarded branch produced the same string as its `else` for **every finite `f64`**. Found by the retrospective mutation pass `W-18` required, not by anything failing | **fixed** — one table-driven test per arm with a row-count assertion, and the dead branch deleted rather than tested |
 | A-35 | Medium | Ten types — every `DV_ORDERED` descendant and `DataValue` — implemented `PartialOrd` while deriving `PartialEq` over all their fields, so `a != b` while `a <= b` and `a >= b` were both true. Recorded as the lexical-vs-semantic shape of `A-32` and scoped to five types; the mechanism is `OrderedAttrs`, which every `DV_ORDERED` carries, and it reached five more | **fixed** — no `DV_ORDERED` implements `PartialOrd`; comparison is `DvOrdered::semantic_cmp`, and `INTERVAL<T>` is bounded on a new `SemanticOrd` (`D3.18b`, `D3.18c`) |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
 | A-12 | Medium | The Data Structures model was implemented from prose | **fixed** |
@@ -2002,6 +2003,85 @@ grammar. The test that pinned the limitation was **rewritten rather than
 deleted**, and its doc comment says what it used to assert — a pinned limitation
 and a pinned capability are the same test with the sign flipped, and the history
 is the part worth keeping.
+
+## A-39 — two silent matches and a branch that never ran
+
+**Found 2026-08-21** by the retrospective mutation pass that `W-18` left as a
+residual — nine commits had reached `main` without the `mutants` job ever
+running on them. Nothing had failed. The code was correct; the tests were not
+checking it.
+
+### Deleting a match arm is silent, again
+
+`CLAUDE.md` carries this warning about `path.rs`:
+
+> **A path that resolves to nothing is not an error.** … The consequence is that
+> **deleting a match arm from the navigation table is silent** … Fifty such arms
+> had no test (`A-28`).
+
+The same shape, in a different file, unnoticed. `DataValue::semantic_cmp` is a
+match over nine same-class pairs ending in `_ => None`, and **six of the nine
+arms could be deleted with the whole suite still green**: `Ordinal`, `Scale`,
+`Proportion`, `Date`, `Time`, `Duration`. `DataValue::is_strictly_comparable_to`
+is the same match again and was worse — every arm deletable, and the entire
+function replaceable with `false`.
+
+**The wrong answer is not an error, which is why it is quiet.** A deleted arm
+falls to `_ => None` — *not comparable* — which is a correct answer for a
+quantity against a count and a wrong one for two dates. And it does not stop
+there:
+
+`DvOrdered::is_abnormal` asks `normal_range.contains(&DataValue::…)`, and
+`Interval::contains` reads "not comparable" as "not inside" — deliberately, so
+that an undecidable comparison never admits a value. So a `DV_DATE` **outside**
+its recorded normal range would report as **not abnormal**, and that method's
+own documentation says what happens next: *"a dashboard that renders the first
+as the second is reassuring for the wrong reason."*
+
+**Fixed** by one table-driven test with a row per arm, asserting `Less`,
+`Greater` and `Equal` in both directions, plus `is_strictly_comparable_to` for
+the same rows, plus the cross-class `None` that makes the `_` arm's own job
+visible. It asserts `rows.len() == 9`, so adding a variant to either match
+without adding a row fails — the same instruction `CLAUDE.md` gives for
+`path.rs`.
+
+### A branch that could not change its own output
+
+`trim_float` read:
+
+```rust
+if v.fract() == 0.0 && v.abs() < 1e15 { format!("{v:.0}") } else { format!("{v}") }
+```
+
+Every mutation of that comparison survived — `<` replaced by `==`, by `>`, by
+`<=`. That reads as an untested bound. It is not: **the two branches produce the
+same string for every finite `f64`**, measured across 3,952 values spanning
+`1e-20` to `f64::MAX` in both signs, with zero differences.
+
+Both halves were solving a problem `Display` had already solved. `{:.0}` existed
+to drop the trailing `.0` — `Display` writes `184`, not `184.0`. And
+`v.abs() < 1e15` existed to stop `{:.0}` printing a large float's *exact binary
+value*: `9876543209999998976` where `Display` writes `9876543210000000000` —
+sixteen digits of noise implying precision the value does not have. The guard
+protected a branch that was never needed.
+
+**A test could not have fixed this**, and that is the point worth keeping. Two
+branches with identical output are indistinguishable by any assertion on the
+output, so the surviving mutants were **equivalent mutants over dead code**
+rather than a coverage gap. The remedy was to delete the branch and pin the
+*property* instead: a whole number renders without `.0`, a huge one gains no
+false digits. That test stays, because the property is not this crate's to
+guarantee — it rests on `Display for f64` choosing the shortest round-tripping
+form, and if that ever changed a chart would start reading `184.0 mm[Hg]`.
+
+### What this says about the method
+
+Every finding in this register was found by running something. This one was
+found by running something **at the code rather than at the behaviour** — the
+suite passed, the fuzz targets passed, CI was green, and three of these
+functions were still not doing anything a test would notice. Mutation testing is
+the only check here that asks *what would break if this were wrong*, and it was
+switched off for the branch these changes landed on (`W-18`).
 
 ## Closed findings
 

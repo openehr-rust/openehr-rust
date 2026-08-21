@@ -14,5 +14,8 @@ fuzz_target!(|data: &[u8]| {
     let Ok(rows) = serde_json::from_slice::<Vec<VersionRow>>(data) else {
         return;
     };
-    openehr_store::conformance::check_verify_versions(&rows);
+    // Ignored for the reason `project.rs` gives: arbitrary rows rarely form a
+    // history that verifies, so zero provocations is the common and correct
+    // answer here (`db:D-10`).
+    let _provoked = openehr_store::conformance::check_verify_versions(&rows);
 });

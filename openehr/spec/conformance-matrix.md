@@ -147,7 +147,8 @@ Process requirements; they govern this specification rather than the code.
 | D3.12 | • | `invariants::a_leap_second_is_accepted_and_a_sixty_first_is_not` |
 | D3.13 | • | `iso8601::tests::durations_round_trip_and_reject_disorder` |
 | D3.13a | doc | recorded as a limitation, **A-02** |
-| D3.14 | • | `guarantees::every_undecidable_comparison_answers_none` |
+| D3.14 | • | `guarantees::every_undecidable_comparison_answers_none`; `rm::data_types::tests::every_comparable_variant_of_a_data_value_compares`, which covers the **decidable** half — six arms of `semantic_cmp` were deletable in silence until **A-39** |
+| D3.14a | • | `guarantees::a_reference_range_is_unmoved_by_how_an_instant_is_spelled`, which asserts an incomparable value is excluded rather than admitted (**A-39**) |
 | D3.15 | • | `quantity::tests::different_units_are_not_comparable_in_either_direction` |
 | D3.16 | • | `quantity::tests::ordinals_from_different_terminologies_do_not_compare` |
 | D3.17 | • | `invariants::proportions_of_different_kinds_do_not_compare` |

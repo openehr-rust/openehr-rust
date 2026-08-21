@@ -260,12 +260,31 @@ impl DataValue {
 
 /// Formats a float without a trailing `.0`, so `184.0 mm[Hg]` reads as
 /// `184 mm[Hg]` — which is how it was measured and how it is charted.
+///
+/// `Display` for `f64` already does exactly this, and that is the whole
+/// function. It used to read:
+///
+/// ```text
+/// if v.fract() == 0.0 && v.abs() < 1e15 { format!("{v:.0}") } else { format!("{v}") }
+/// ```
+///
+/// Mutation testing survived every change to that comparison — `<` replaced by
+/// `==`, `>`, and `<=` — which looked like an untested bound and was not. The
+/// two branches produce the **same string for every finite `f64`**, checked
+/// across 3,952 values spanning `1e-20` to `f64::MAX` in both signs (`W-18`).
+///
+/// Both halves of the guard were load-bearing against a version of the problem
+/// that `Display` had already solved. `{:.0}` was there to drop the `.0`, which
+/// `Display` does; and `v.abs() < 1e15` was there to stop `{:.0}` printing a
+/// large float's *exact binary value* — `9876543209999998976` where `Display`
+/// writes `9876543210000000000` — which is sixteen digits of noise implying
+/// precision the value does not have.
+///
+/// So the guard protected a branch that was never needed. It is gone, and the
+/// property it was aiming at is pinned by
+/// `a_whole_number_loses_its_decimal_point_and_a_huge_one_gains_no_digits`.
 fn trim_float(v: f64) -> String {
-    if v.fract() == 0.0 && v.abs() < 1e15 {
-        format!("{v:.0}")
-    } else {
-        format!("{v}")
-    }
+    format!("{v}")
 }
 
 /// `SemanticOrd` for every type an `INTERVAL<T>` is used over here (`D3.18c`).
@@ -375,6 +394,160 @@ impl From<Text> for DataValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every arm of `DataValue::semantic_cmp` actually compares.
+    ///
+    /// **Failure mode, and it is the one `lib:A-28` records about a different
+    /// match.** Deleting an arm here is **silent**: the pair falls to
+    /// `_ => None`, which means "not comparable" — a legitimate answer for two
+    /// values of different classes, and a *wrong* one for two dates. Nothing
+    /// errors. Mutation testing deleted six of these nine arms — `Ordinal`,
+    /// `Scale`, `Proportion`, `Date`, `Time`, `Duration` — and the whole suite
+    /// stayed green (`W-18`).
+    ///
+    /// The consequence is not abstract. `DvOrdered::is_abnormal` asks
+    /// `normal_range.contains(&DataValue::…)`, and `Interval::contains` reads
+    /// "not comparable" as "not inside". So a date outside its recorded normal
+    /// range would report as **not abnormal**, and a dashboard would render
+    /// that as reassurance.
+    ///
+    /// **Adding a variant to `semantic_cmp` means adding a row here**, which is
+    /// the same instruction `CLAUDE.md` gives for `path.rs`'s navigation table.
+    #[test]
+    fn every_comparable_variant_of_a_data_value_compares() {
+        fn symbol(code: &str, rubric: &str) -> DvCodedText {
+            DvCodedText::new(rubric, CodePhrase::new("local", code).unwrap()).unwrap()
+        }
+
+        // One row per arm. `lower` must order strictly below `upper`, and both
+        // must be the same `DataValue` variant.
+        let rows: Vec<(&str, DataValue, DataValue)> = vec![
+            (
+                "Ordinal",
+                DataValue::Ordinal(DvOrdinal::new(1, symbol("at0002", "mild"))),
+                DataValue::Ordinal(DvOrdinal::new(3, symbol("at0004", "severe"))),
+            ),
+            (
+                "Scale",
+                DataValue::Scale(DvScale::new(1.5, symbol("at0002", "mild")).unwrap()),
+                DataValue::Scale(DvScale::new(3.5, symbol("at0004", "severe")).unwrap()),
+            ),
+            (
+                "Quantity",
+                DataValue::Quantity(DvQuantity::new(90.0, "mm[Hg]").unwrap()),
+                DataValue::Quantity(DvQuantity::new(140.0, "mm[Hg]").unwrap()),
+            ),
+            (
+                "Count",
+                DataValue::Count(DvCount::new(1)),
+                DataValue::Count(DvCount::new(2)),
+            ),
+            (
+                "Proportion",
+                DataValue::Proportion(DvProportion::new(1.0, 4.0, ProportionKind::Ratio).unwrap()),
+                DataValue::Proportion(DvProportion::new(1.0, 2.0, ProportionKind::Ratio).unwrap()),
+            ),
+            (
+                "Date",
+                DataValue::Date(DvDate::new("2026-08-01").unwrap()),
+                DataValue::Date(DvDate::new("2026-08-02").unwrap()),
+            ),
+            (
+                "Time",
+                DataValue::Time(DvTime::new("09:00:00").unwrap()),
+                DataValue::Time(DvTime::new("10:00:00").unwrap()),
+            ),
+            (
+                "DateTime",
+                DataValue::DateTime(DvDateTime::new("2026-08-01T09:00:00Z").unwrap()),
+                DataValue::DateTime(DvDateTime::new("2026-08-01T10:00:00Z").unwrap()),
+            ),
+            (
+                "Duration",
+                DataValue::Duration(DvDuration::new("PT1H").unwrap()),
+                DataValue::Duration(DvDuration::new("PT2H").unwrap()),
+            ),
+        ];
+
+        assert_eq!(
+            rows.len(),
+            9,
+            "semantic_cmp has nine arms; a row was added or removed without the other"
+        );
+
+        for (what, lower, upper) in &rows {
+            assert_eq!(
+                lower.semantic_cmp(upper),
+                Some(Ordering::Less),
+                "{what}: the lower value did not order below the upper — the arm \
+                 may have been deleted, which falls through to `None`"
+            );
+            assert_eq!(
+                upper.semantic_cmp(lower),
+                Some(Ordering::Greater),
+                "{what}: comparison is not symmetric"
+            );
+            assert_eq!(
+                lower.semantic_cmp(lower),
+                Some(Ordering::Equal),
+                "{what}: a value did not compare equal to itself"
+            );
+        }
+
+        // And the `_ => None` arm is doing its own job: two different classes
+        // are not comparable in either direction (`D3.14`), which is why a
+        // deleted arm is invisible without this test.
+        let (_, count, _) = &rows[3];
+        let (_, date, _) = &rows[5];
+        assert_eq!(count.semantic_cmp(date), None, "5 is not a date");
+        assert_eq!(date.semantic_cmp(count), None, "nor the other way round");
+
+        // `is_strictly_comparable_to` is a second match over the same nine
+        // pairs and had the identical hole: every arm deletable in silence, and
+        // the whole function replaceable with `false`. It is openEHR's own
+        // predicate, and a caller that asks it before comparing would be told
+        // two dates cannot be compared and would refuse to compare them.
+        for (what, lower, upper) in &rows {
+            assert!(
+                lower.is_strictly_comparable_to(upper),
+                "{what}: two values of one class must be strictly comparable"
+            );
+        }
+        assert!(
+            !count.is_strictly_comparable_to(date),
+            "different classes are not strictly comparable"
+        );
+    }
+
+    /// A whole number renders without `.0`, and a huge one gains no false digits.
+    ///
+    /// **This is the property the old implementation was aiming at**, asserted
+    /// on the output rather than on the branch that used to produce it. The
+    /// branch was dead — `Display` already does both of these — and mutation
+    /// testing found it by surviving every change to its comparison (`W-18`).
+    ///
+    /// It stays a test because the property is what matters and is not this
+    /// crate's to guarantee: it rests on `Display for f64` writing `184` rather
+    /// than `184.0`, and on it choosing the shortest round-tripping form rather
+    /// than the exact binary expansion. If either ever changed, a chart would
+    /// start reading `184.0 mm[Hg]`, or `9876543209999998976`.
+    #[test]
+    fn a_whole_number_loses_its_decimal_point_and_a_huge_one_gains_no_digits() {
+        assert_eq!(trim_float(184.0), "184");
+        assert_eq!(trim_float(0.0), "0");
+        assert_eq!(trim_float(-3.0), "-3");
+        assert_eq!(trim_float(2.5), "2.5", "a real keeps its fraction");
+
+        // The case the deleted `v.abs() < 1e15` guard existed for. `{:.0}`
+        // renders this float's exact binary value, `9876543209999998976`;
+        // shortest-round-trip renders what was meant.
+        assert_eq!(trim_float(9.876_543_21e18), "9876543210000000000");
+        assert_ne!(
+            trim_float(9.876_543_21e18),
+            format!("{:.0}", 9.876_543_21e18),
+            "the exact-binary form leaked into a rendered value"
+        );
+    }
 
     #[test]
     fn every_variant_round_trips_through_its_type_tag() {
