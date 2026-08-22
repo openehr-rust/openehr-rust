@@ -18,7 +18,7 @@ Detailed topic guides live in [`agents/`](agents/index.md).
 Eighteen crates implementing openEHR in Rust: one Reference Model library, one
 engine-agnostic persistence library, six SQL engine crates, an HTTP service, an
 asset generator, and eight fuzz harnesses. The first eight are published to
-crates.io at 0.5.0; the other ten are `publish = false`.
+crates.io at 0.6.0; the other ten are `publish = false`.
 
 | Crate | Role | Level |
 | --- | --- | --- |
@@ -242,17 +242,19 @@ version:
 
 ## Publishing
 
-All eight publishable crates are live on crates.io at **0.5.0**, published
-2026-08-21, and **local matches published** — the per-crate table is in
+All eight publishable crates are live on crates.io at **0.6.0**, published
+2026-08-22, and **local matches published** — the per-crate table is in
 [`agents/publishing.md`](agents/publishing.md), which is the one file to trust
 on this and the one to update first.
 
-0.4.0 was a breaking release, not 0.3.1: `PartialOrd` is gone from every
-`DV_ORDERED` and from `DataValue` (`lib:A-35`), the MSRV moved to N−3, and AQL
-string literals stopped being mangled (`lib:A-37`). 0.5.0 followed the same day,
-and is 0.5.0 rather than 0.4.1 because `lib:Q12.9e` changes what a rendered
-query looks like. Cargo treats `0.4.x` as compatible, so either shipped as a
-patch would have reached a dependent on `cargo update` unasked.
+Each of the last three bumped the minor rather than the patch, for one reason:
+cargo treats `0.x.y` as compatible within `0.x`, so a patch reaches a dependent
+on `cargo update` unasked. 0.4.0 removed `PartialOrd` from every `DV_ORDERED`
+(`lib:A-35`) and moved the MSRV to N−3; 0.5.0 changed what a rendered AQL query
+looks like (`lib:Q12.9e`); 0.6.0 changed what a canonical `DV_QUANTITY` looks
+like, because its magnitude now keeps the digits it was written with
+(`lib:D3.18d`). None of the three breaks a signature and all three change bytes
+somebody may be comparing.
 
 There is no schema migration and there will not be one before 1.0
 (`db:O10.14`). A deployment on a published 0.2.0 schema exports, recreates, and

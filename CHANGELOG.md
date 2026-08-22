@@ -5,7 +5,7 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
-## 0.6.0
+## 0.6.0 — 2026-08-22
 
 **A representation change, and the reason it is not 0.5.1.** The source API is
 additive — `magnitude()` still returns `f64`, `Real` and the `_real` accessors

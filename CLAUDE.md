@@ -13,14 +13,16 @@ plus the things that specifically trip up automated work here.
 ## Layout
 
 Eighteen crates, **each its own Cargo workspace**. There is no root workspace —
-run cargo from inside a crate directory. Eight are published at 0.5.0; the other
+run cargo from inside a crate directory. Eight are published at 0.6.0; the other
 ten are `publish = false`.
 
-**Local matches published: 0.5.0, out 2026-08-21.** Two releases went out that
-day. 0.4.0 was breaking — `PartialOrd` removed from every `DV_ORDERED` and from
-`DataValue` (`lib:A-35`), the MSRV moved to N−3, AQL string literals stopped
-being mangled (`lib:A-37`). 0.5.0 added negative AQL literals (`lib:A-27`) and
-is not 0.4.1 because `lib:Q12.9e` changes rendered query text. Read
+**Local matches published: 0.6.0, out 2026-08-22.** 0.6.0 is the one to know
+about: the Reference Model's reals are `base::Real`, not `f64`, so `1.50 mg` and
+`1.5 mg` are different records and hash differently (`lib:D3.18d`). The `f64`
+accessors are unchanged; `magnitude_real()` is the new one. Three releases went
+out the day before — 0.4.0 removed `PartialOrd` from every `DV_ORDERED`
+(`lib:A-35`) and moved the MSRV to N−3, 0.5.0 added negative AQL literals
+(`lib:A-27`). Read
 [`agents/publishing.md`](agents/publishing.md) before touching a version
 number; it is the only file that tracks this, and four others state the version
 without tracking it (`spec/audit.md` **W-10**).
