@@ -24,7 +24,7 @@ serde = { version = "1", features = ["derive"] }
 # `preserve_order` so that `other_details` and any archetyped ITEM_STRUCTURE
 # passthrough keeps its authored key order: canonical-JSON digests over a
 # BTreeMap-reordered object would not match the sender's.
-serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip", "arbitrary_precision"] }
 # Library errors are enumerable and matched on by callers; `anyhow` would erase
 # the discrimination between "malformed identifier" and "broken invariant".
 thiserror = "2"
@@ -43,7 +43,7 @@ subtle = "2"
 zeroize = { version = "1", features = ["zeroize_derive"] }
 
 [dev-dependencies]
-serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip", "arbitrary_precision"] }
 # Property tests (`A-09`). The example suites check the cases someone thought
 # of; the laws in tests/properties.rs check claims over generated input —
 # parser totality, `D3.10` lexical fidelity, and the partial-order axioms,

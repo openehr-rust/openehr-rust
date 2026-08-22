@@ -7,6 +7,34 @@ together.
 
 ## Unreleased
 
+- **BREAKING (representation, not signature): the Reference Model's real
+  numbers preserve the digits they were written with** (`lib:D3.18d`–`D3.18f`).
+  `1.50 mg` and `1.5 mg` are now different records and hash differently.
+
+  `DV_QUANTITY.magnitude` and `.accuracy`, `DV_SCALE.value`,
+  `DV_PROPORTION.numerator` and `.denominator`, and `DV_COUNT.accuracy` are
+  `openehr::base::Real` instead of `f64`. `serde_json`'s `arbitrary_precision`
+  feature is enabled, which is what makes the literal text reachable.
+
+  **The `f64` accessors are unchanged.** `magnitude()` still returns `f64`;
+  `magnitude_real()` is new and returns the text. Same for `value`, `accuracy`,
+  `numerator`, `denominator`. Code that reads magnitudes compiles untouched.
+
+  What does change for a caller: a struct-literal construction of these types
+  (there is none in the public API — all go through constructors), and any code
+  matching on the field types. Serialized output changes only where the input
+  carried digits an `f64` discards, which is the point.
+
+  Every digit survives, including trailing zeros and significant digits beyond
+  what an `f64` can hold. One measured exception: exponent notation normalises,
+  `1e5` and `1E5` both to `1e+5`, with no digit lost and the value unchanged.
+
+  `db:D-08` is this same loss one layer out — MySQL rewrote a stored `1.10` as
+  `1.1`, changing bytes a content digest covered, and `db:M3.43` moved canonical
+  JSON onto a byte-preserving column for it. The crate had been discarding the
+  digits before storage ever saw them, and `security::canonical`'s own test
+  recorded that as the limit of the guarantee. It no longer is.
+
 - **`serde_json`'s `float_roundtrip` feature is enabled**, closing `lib:A-38`.
   A `DV_QUANTITY` magnitude no longer drifts across repeated canonical round
   trips: `serde_json`'s parser was one ULP off `core::str::parse` for some

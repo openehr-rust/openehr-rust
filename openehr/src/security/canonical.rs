@@ -127,19 +127,47 @@ mod tests {
         );
     }
 
+    /// Two measurements that differ only in their digits stay different.
+    ///
+    /// **This test asserted the opposite until 2026-08-22**, and said so:
+    /// "`serde_json` parses both to the same `f64`, so this test documents the
+    /// limit of the guarantee rather than a difference it can preserve."
+    ///
+    /// The limit is gone. `serde_json`'s `arbitrary_precision` feature keeps a
+    /// number's literal text, and the Reference Model's reals are
+    /// [`Real`](crate::base::Real) rather than `f64` (`D3.18d`). `1.50 mg` was
+    /// measured to two decimal places and `1.5 mg` to one; they are different
+    /// records and now hash differently.
+    ///
+    /// `db:D-08` is the same loss one layer out — MySQL rewrote a stored `1.10`
+    /// as `1.1`, changing bytes a content digest had been taken over, and
+    /// `db:M3.43` moved canonical JSON onto a byte-preserving column for it.
+    /// The crate was losing the digits before storage ever saw them.
     #[test]
     fn measured_precision_is_not_normalised_away() {
-        // The rule-4 case: these are different measurements and must not
-        // collapse to one digest input.
-        let coarse = json!({"magnitude": 1.5});
+        let coarse: Value = serde_json::from_str(r#"{"magnitude": 1.5}"#).unwrap();
         let fine: Value = serde_json::from_str(r#"{"magnitude": 1.50}"#).unwrap();
-        // serde_json parses both to the same f64, so this test documents the
-        // limit of the guarantee rather than a difference it can preserve.
-        assert_eq!(
+        assert_ne!(
             to_canonical_string(&coarse).unwrap(),
-            to_canonical_string(&fine).unwrap()
+            to_canonical_string(&fine).unwrap(),
+            "1.5 and 1.50 collapsed — `arbitrary_precision` may have been dropped"
         );
-        // What is preserved is the distinction between integer and float.
+        assert_eq!(to_canonical_string(&fine).unwrap(), r#"{"magnitude":1.50}"#);
+
+        // And through the typed value, which is the path a document takes.
+        let q: crate::rm::data_types::DvQuantity =
+            serde_json::from_str(r#"{"magnitude":1.50,"units":"mg"}"#).unwrap();
+        assert_eq!(q.magnitude_real().as_str(), "1.50");
+        #[allow(clippy::float_cmp, reason = "1.50 and 1.5 are the same f64 — that is the point")]
+        {
+            assert_eq!(q.magnitude(), 1.5, "what it denotes is unchanged");
+        }
+        assert_eq!(
+            to_canonical_string(&q).unwrap(),
+            r#"{"magnitude":1.50,"units":"mg"}"#
+        );
+
+        // The integer/float distinction is preserved as it always was.
         assert_eq!(to_canonical_string(&json!(1)).unwrap(), "1");
         assert_eq!(to_canonical_string(&json!(1.0)).unwrap(), "1.0");
     }

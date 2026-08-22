@@ -194,6 +194,51 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
 
 ## Quantities and proportions
 
+- **D3.18d** *(added 2026-08-22)* A **real number** in the Reference Model MUST
+  preserve its lexical form, as `D3.10` requires of ISO 8601. `1.50` is not
+  `1.5`.
+
+  **Every digit is preserved**, including trailing zeros and significant digits
+  beyond what an `f64` can hold or distinguish. The one departure, measured
+  rather than assumed: **exponent notation is normalised** to a lowercase `e`
+  with an explicit sign, so `1e5` and `1E5` are both stored as `1e+5`. No digit
+  is lost and the value is unchanged. A clinical magnitude is not written in
+  scientific notation, but "not in practice" is not a guarantee, so the limit is
+  written down and
+  `real::tests::every_digit_survives_and_only_the_exponent_form_is_normalised`
+  asserts it.
+
+  The two are the same decision for the same reason. A `DV_DATE` of `2024-05` is
+  a date known to the month, and a `DV_QUANTITY` of `1.50 mg` is a quantity
+  measured to two decimal places — in both cases the number of digits *is* the
+  clinical content, and a layer that normalises has destroyed it before storage
+  sees it. `db:D-08` is that failure realised: MySQL rewrote a magnitude of
+  `1.10` as `1.1`, and `db:M3.43` moved canonical JSON onto a byte-preserving
+  column because of it.
+
+  Until 2026-08-22 the crate lost the distinction one layer earlier than MySQL
+  did. `DV_QUANTITY.magnitude` was an `f64`, so `1.50` became the same value as
+  `1.5` at **parse** time and no storage rule could recover it.
+  `security::canonical`'s own test recorded that as the limit of the guarantee.
+
+- **D3.18e** *(added 2026-08-22)* A real MUST carry both forms: the text as
+  written, and the `f64` it denotes. The text is **authoritative**; the `f64` is
+  **derived** and is what comparison uses.
+
+  This is `db:M3.31`'s two-column instant rule, in one value instead of two
+  columns, and it produces the same split `D3.18a` and `D3.18b` describe:
+  equality is lexical, because `1.50` and `1.5` are different records; ordering
+  is numeric, because a reference range asks which is larger. The two disagree
+  on values that denote the same number, so a real MUST NOT implement
+  `PartialOrd` — `SemanticOrd` and `DvOrdered::semantic_cmp` carry the ordering
+  (`D3.18c`).
+
+- **D3.18f** *(added 2026-08-22)* Reading a real MUST be total. A value that
+  never passed a constructor — `Deserialize` writes fields directly (`L10.1a`)
+  — still has to be readable, so an accessor MUST NOT panic on one.
+  `D3.30a` says the same about `DV_URI`, for the same reason and after the same
+  defect (`A-36`).
+
 - **D3.19** `DV_QUANTITY` MUST require a finite magnitude and a non-empty
   `units`. A quantity with no units is a number, and openEHR has `DV_COUNT`.
 - **D3.19a** The non-empty requirement in `D3.19` is a **declared narrowing** of

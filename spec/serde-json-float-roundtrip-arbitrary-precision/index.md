@@ -32,32 +32,46 @@ Requirement prefix: `SJ`.
   recorded here as open and upstream. It was neither. The feature already
   existed and this repository had not enabled it.
 
-- **SJ2** This repository MUST NOT enable **`arbitrary_precision`**, and the
-  reason is measured rather than assumed.
+- **SJ2** *(amended 2026-08-22 — was "MUST NOT enable")* Every crate here that
+  depends on `serde_json` MUST enable **`arbitrary_precision`**, and the
+  Reference Model MUST hold its real numbers as
+  [`base::Real`](../../openehr/src/base/real.rs) rather than `f64` (`lib:D3.18d`,
+  `lib:D3.18e`).
 
-  It is **incompatible with this crate's serde layout**. `DATA_VALUE` is
-  `#[serde(tag = "_type")]` and `LocatableAttrs` is `#[serde(flatten)]` into
-  every clinical class; both buffer through an intermediate representation, and
-  under `arbitrary_precision` a number arrives there as a magic map. Every
-  round-trip test fails with:
+  The two halves are one change. Enabling the feature alone **breaks the crate**:
+  `DATA_VALUE` is `#[serde(tag = "_type")]` and `LocatableAttrs` is
+  `#[serde(flatten)]` into every clinical class, both buffer through an
+  intermediate representation, and under `arbitrary_precision` a number arrives
+  there as a magic map —
 
   ```text
   Error("invalid type: map, expected f64", line: 0, column: 0)
   ```
 
-  Four of the crate's round-trip tests, across `DATA_VALUE`, the data
-  structures, paths, and validation.
+  — failing four round-trip tests across data types, data structures, paths and
+  validation. A field typed `Real` deserializes through `serde_json::Number`,
+  which reads that representation, so migrating the fields removes the breakage
+  **and** delivers the benefit. Not two changes: one.
 
-  **And its benefit does not reach this crate's values.** What
-  `arbitrary_precision` preserves is the literal text of a
-  `serde_json::Number` — so `1.50` stops collapsing to `1.5`, which
-  `security::canonical`'s own test documents as the limit of the guarantee. But
-  the Reference Model stores magnitudes as **`f64` fields**, not as `Number`, so
-  a value that passes through `DV_QUANTITY.magnitude` is an `f64` either way and
-  the preservation never applies to it.
+  **This requirement said the opposite for a few hours**, and the reasoning it
+  gave was sound and incomplete. It observed the breakage, observed that the
+  Reference Model stored magnitudes as `f64` so the preservation could not reach
+  them, and concluded the feature was all cost. Both observations were true.
+  The conclusion followed only if the `f64` stayed — and the `f64` was the
+  defect, not a constraint. Kept here rather than rewritten away, because the
+  shape recurs: `lib:A-38` was closed the same day after being filed as
+  unfixable-upstream on an equally sound and equally incomplete argument.
 
-  So the feature costs the crate its serialization and buys it nothing on the
-  path that matters. If preserving a submitted `1.50` ever becomes a
-  requirement, the change is to the **Reference Model's number representation**
-  and not to a cargo feature — `db:M3.43` already keeps the *stored* bytes
-  intact, which is what a content digest is taken over.
+  **What it buys.** `1.50 mg` was measured to two decimal places and `1.5 mg` to
+  one. They are different records, they now hash differently, and the
+  distinction survives from the wire to the digest. `db:D-08` is the same loss
+  one layer out — MySQL rewrote a stored `1.10` as `1.1`, changing bytes a
+  content digest had been taken over, and `db:M3.43` moved canonical JSON onto a
+  byte-preserving column for it. The crate had been discarding the digits before
+  storage ever saw them, and `security::canonical`'s own test recorded that as
+  the limit of the guarantee. It no longer is.
+
+  **What it does not buy.** `f64` accessors are unchanged — `magnitude()` still
+  returns what the number denotes, because a reference range and a comparison
+  need that. The text is reached by `magnitude_real()` and its siblings. A
+  caller who does not care is unaffected.

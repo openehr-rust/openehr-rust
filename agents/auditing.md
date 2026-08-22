@@ -124,6 +124,27 @@ findings, and re-deriving one by hand is how you get a second answer.
 | the six dialects emit different DDL | `openehr-sqlite/tests/dialects.rs` |
 | changed lines are mutation-tested | `mutants` job, on push **and** pull request (**W-18**) |
 
+## Assert both answers of a predicate
+
+Three tests written during the 2026-08-20/22 work asserted only the case that
+motivated them, and in each the motivating case *was* the degenerate value the
+mutant substitutes:
+
+| Test asserted | Mutant that survived |
+| --- | --- |
+| `DvUri::rest() == ""` for the colon-less case | `rest -> ""` |
+| `check_projection(good) == true` | `check_projection -> true` |
+| `!Real::is_finite()` for `1e400` | `is_finite -> false` |
+
+Each test passed against the mutated function. Reading the test does not reveal
+it — the assertion looks correct, and is, for the one input it names. Only
+mutating the function shows that the function was never needed.
+
+**A predicate needs both answers asserted**, and a function returning a value
+needs at least one input whose answer is not the type's default. This is cheap
+to do and invisible to skip, which is why it is written here rather than left to
+be re-learned.
+
 ## What "verified" means
 
 | Not evidence | Evidence |

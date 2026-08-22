@@ -156,6 +156,9 @@ Process requirements; they govern this specification rather than the code.
 | D3.18a | • | resolved: `PartialOrd`/`Ord` removed from the base ISO 8601 types, semantic order is the plain method `semantic_cmp` — `iso8601::tests::eq_is_lexical_and_semantic_cmp_is_not_the_same_question` (`A-32`, fixed) |
 | D3.18b | • | the same resolution over all ten `DV_ORDERED` types and `DATA_VALUE` — `guarantees::equality_and_order_disagree_by_design_and_neither_is_partial_ord` (`A-35`, fixed) |
 | D3.18c | • | `INTERVAL<T>` is bounded on `SemanticOrd`; `guarantees::a_reference_range_is_unmoved_by_how_an_instant_is_spelled` covers the `contains` rewrite |
+| D3.18d | • | `base::real::tests::a_measured_precision_survives_a_round_trip`; `every_digit_survives_and_only_the_exponent_form_is_normalised`, which asserts the one departure |
+| D3.18e | • | `base::real::tests::equality_and_order_answer_different_questions` — lexical equality, numeric order, and no `PartialOrd` |
+| D3.18f | • | `base::real::tests::a_real_that_never_saw_a_constructor_is_still_readable` |
 | D3.19 | • | `quantity::tests::non_finite_magnitudes_are_refused` |
 | D3.19a | doc | declared narrowing; recorded here and in §3 |
 | D3.20, D3.20a | • | `quantity::tests::precision_accepts_the_unlimited_sentinel`; `validation::tests::the_unlimited_precision_sentinel_validates` |

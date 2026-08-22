@@ -23,7 +23,7 @@
 
 use super::DataValue;
 use super::text::{DvCodedText, DvText};
-use crate::base::Interval;
+use crate::base::{Interval, Real};
 use crate::error::ParseError;
 use core::cmp::Ordering;
 use serde::{Deserialize, Serialize};
@@ -369,7 +369,7 @@ ordered_builders!(DvOrdinal, "DvOrdinal");
 /// into an integer ordinal loses them.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DvScale {
-    value: f64,
+    value: Real,
     symbol: DvCodedText,
     #[serde(flatten)]
     ordered: OrderedAttrs,
@@ -388,7 +388,7 @@ impl DvScale {
             return Err(ParseError::invariant("DV_SCALE", "Value_finite"));
         }
         Ok(Self {
-            value,
+            value: Real::from_f64(value),
             symbol,
             ordered: OrderedAttrs::default(),
         })
@@ -397,7 +397,13 @@ impl DvScale {
     /// The position on the scale.
     #[must_use]
     pub fn value(&self) -> f64 {
-        self.value
+        self.value.as_f64()
+    }
+
+    /// The position on the scale, as written (`D3.18e`).
+    #[must_use]
+    pub fn value_real(&self) -> &Real {
+        &self.value
     }
 
     /// The symbol.
@@ -421,7 +427,7 @@ ordered!(
         if !a.is_strictly_comparable_to(b) {
             return None;
         }
-        a.value.partial_cmp(&b.value)
+        a.value.semantic_cmp(&b.value)
     }
 );
 ordered_builders!(DvScale, "DvScale");
@@ -447,7 +453,7 @@ ordered_builders!(DvScale, "DvScale");
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DvQuantity {
-    magnitude: f64,
+    magnitude: Real,
     units: String,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     precision: Option<i32>,
@@ -458,7 +464,7 @@ pub struct DvQuantity {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     magnitude_status: Option<MagnitudeStatus>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    accuracy: Option<f64>,
+    accuracy: Option<Real>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     accuracy_is_percent: Option<bool>,
     #[serde(flatten)]
@@ -500,7 +506,7 @@ impl DvQuantity {
             return Err(ParseError::invariant("DV_QUANTITY", "Units_valid"));
         }
         Ok(Self {
-            magnitude,
+            magnitude: Real::from_f64(magnitude),
             units,
             precision: None,
             units_system: None,
@@ -588,7 +594,7 @@ impl DvQuantity {
         if is_percent && !(0.0..=100.0).contains(&accuracy) {
             return Err(ParseError::invariant("DV_AMOUNT", "Accuracy_validity"));
         }
-        self.accuracy = Some(accuracy);
+        self.accuracy = Some(Real::from_f64(accuracy));
         self.accuracy_is_percent = Some(is_percent);
         Ok(self)
     }
@@ -596,7 +602,17 @@ impl DvQuantity {
     /// The numeric magnitude.
     #[must_use]
     pub fn magnitude(&self) -> f64 {
-        self.magnitude
+        self.magnitude.as_f64()
+    }
+
+    /// The magnitude **as written** — `1.50`, not `1.5` (`D3.18d`).
+    ///
+    /// This is the authoritative form. `magnitude()` returns what it denotes,
+    /// which is what a comparison or a reference range needs and what loses the
+    /// measured precision.
+    #[must_use]
+    pub fn magnitude_real(&self) -> &Real {
+        &self.magnitude
     }
 
     /// The units.
@@ -632,7 +648,13 @@ impl DvQuantity {
     /// The measurement accuracy, if recorded.
     #[must_use]
     pub fn accuracy(&self) -> Option<f64> {
-        self.accuracy
+        self.accuracy.as_ref().map(Real::as_f64)
+    }
+
+    /// The accuracy as written (`D3.18e`).
+    #[must_use]
+    pub fn accuracy_real(&self) -> Option<&Real> {
+        self.accuracy.as_ref()
     }
 
     /// Whether [`DvQuantity::accuracy`] is a percentage of the magnitude.
@@ -649,7 +671,9 @@ impl DvQuantity {
     #[must_use]
     pub fn accuracy_unknown(&self) -> bool {
         #[allow(clippy::float_cmp)]
-        self.accuracy.is_none_or(|a| a == Self::UNKNOWN_ACCURACY)
+        self.accuracy
+            .as_ref()
+            .is_none_or(|a| a.as_f64() == Self::UNKNOWN_ACCURACY)
     }
 
     /// Whether the quantity is a whole number — openEHR's `is_integral`, which
@@ -678,7 +702,7 @@ ordered!(
         if !a.is_strictly_comparable_to(b) {
             return None;
         }
-        a.magnitude.partial_cmp(&b.magnitude)
+        a.magnitude.semantic_cmp(&b.magnitude)
     }
 );
 ordered_builders!(DvQuantity, "DvQuantity");
@@ -697,7 +721,7 @@ pub struct DvCount {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     magnitude_status: Option<MagnitudeStatus>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    accuracy: Option<f64>,
+    accuracy: Option<Real>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     accuracy_is_percent: Option<bool>,
     #[serde(flatten)]
@@ -823,8 +847,8 @@ impl<'de> Deserialize<'de> for ProportionKind {
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DvProportion {
-    numerator: f64,
-    denominator: f64,
+    numerator: Real,
+    denominator: Real,
     #[serde(rename = "type")]
     kind: ProportionKind,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -877,8 +901,8 @@ impl DvProportion {
             _ => {}
         }
         Ok(Self {
-            numerator,
-            denominator,
+            numerator: Real::from_f64(numerator),
+            denominator: Real::from_f64(denominator),
             kind,
             precision: None,
             ordered: OrderedAttrs::default(),
@@ -888,13 +912,25 @@ impl DvProportion {
     /// The numerator.
     #[must_use]
     pub fn numerator(&self) -> f64 {
-        self.numerator
+        self.numerator.as_f64()
+    }
+
+    /// The numerator as written (`D3.18e`).
+    #[must_use]
+    pub fn numerator_real(&self) -> &Real {
+        &self.numerator
     }
 
     /// The denominator.
     #[must_use]
     pub fn denominator(&self) -> f64 {
-        self.denominator
+        self.denominator.as_f64()
+    }
+
+    /// The denominator as written (`D3.18e`).
+    #[must_use]
+    pub fn denominator_real(&self) -> &Real {
+        &self.denominator
     }
 
     /// What kind of proportion this is.
@@ -940,13 +976,13 @@ impl DvProportion {
     /// Whether both parts are whole numbers — openEHR's `is_integral`.
     #[must_use]
     pub fn is_integral(&self) -> bool {
-        self.numerator.fract() == 0.0 && self.denominator.fract() == 0.0
+        self.numerator.as_f64().fract() == 0.0 && self.denominator.as_f64().fract() == 0.0
     }
 
     /// The proportion as a plain number.
     #[must_use]
     pub fn as_ratio(&self) -> f64 {
-        self.numerator / self.denominator
+        self.numerator.as_f64() / self.denominator.as_f64()
     }
 
     /// Whether two proportions can be compared.
