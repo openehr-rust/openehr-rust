@@ -682,14 +682,24 @@ def check_changelog_is_current() -> int:
         return 0
 
     top = re.search(r"^## (.+)$", (ROOT / "CHANGELOG.md").read_text(), re.M)
-    if top and top.group(1).strip().lower().startswith("unreleased"):
+    heading = top.group(1).strip() if top else ""
+    live, local = versions()
+    # Two acceptable states, and the second was a false positive until the
+    # moment 0.6.0 was staged: either the changes are unreleased, or a release
+    # has been **cut and not yet published**, in which case the newest heading
+    # is the staged local version. `agents/publishing.md` is what distinguishes
+    # them, exactly as it does for the manifests.
+    if heading.lower().startswith("unreleased"):
         print(f"{len(changed)} source files changed since the last release; CHANGELOG says Unreleased")
+        return 0
+    if local != live and heading.split("—")[0].strip() == local:
+        print(f"{len(changed)} source files changed; CHANGELOG heads at {local}, staged for release")
         return 0
     print(
         f"::error file=CHANGELOG.md::{len(changed)} library source files have "
         f"changed since the last release ({', '.join(changed[:3])}"
         f"{'…' if len(changed) > 3 else ''}) and the newest heading is "
-        f"{top.group(1) if top else '(none)'!r}, not `Unreleased`"
+        f"{heading!r} — expected `Unreleased`, or {local!r} if a release is staged"
     )
     return 1
 

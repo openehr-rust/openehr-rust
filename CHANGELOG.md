@@ -5,7 +5,21 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
-## Unreleased
+## 0.6.0
+
+**A representation change, and the reason it is not 0.5.1.** The source API is
+additive — `magnitude()` still returns `f64`, `Real` and the `_real` accessors
+are new — but **serialization changes**: a document carrying `1.50` now
+round-trips as `1.50` rather than `1.5`, and its canonical digest differs from
+what 0.5.0 produces for the same input. Cargo treats `0.5.x` as compatible, so a
+patch would reach dependents on `cargo update` and silently change their
+digests.
+
+**Stored data is unaffected.** `db:M3.43` keeps canonical JSON byte-preserving
+and `verify_versions` hashes the bytes that were stored, so records written by
+0.5.0 keep their bytes and still verify. What changes is the bytes produced for
+new commits from input that carried digits an `f64` discards.
+
 
 - **BREAKING (representation, not signature): the Reference Model's real
   numbers preserve the digits they were written with** (`lib:D3.18d`–`D3.18f`).
