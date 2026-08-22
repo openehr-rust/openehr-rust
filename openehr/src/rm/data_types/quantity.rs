@@ -1349,6 +1349,49 @@ mod tests {
         assert_eq!(sedation_2.semantic_cmp(&pain_2), None);
     }
 
+    /// Every `_real` accessor returns the digits, and `accuracy_real` both ways.
+    ///
+    /// **Failure mode, and CI caught it.** `accuracy_real -> None` survived
+    /// mutation on the first run of the `mutants` job over a non-test diff
+    /// (`W-18`): the accessor was added with the `Real` migration and nothing
+    /// called it, so returning "no accuracy recorded" for a quantity that
+    /// records one was invisible. `None` is a legitimate answer here — most
+    /// quantities carry no accuracy — which is exactly why the `Some` case has
+    /// to be asserted, and is the rule `agents/auditing.md` now states.
+    #[test]
+    fn the_lexical_accessors_return_what_was_written() {
+        let q = DvQuantity::new(1.5, "mg").unwrap();
+        assert!(
+            q.accuracy_real().is_none(),
+            "no accuracy was recorded, and that is a fact"
+        );
+
+        // Deserialized, because that is the path digits arrive by: a
+        // constructor takes an `f64` and cannot be given `1.50`.
+        let measured: DvQuantity =
+            serde_json::from_str(r#"{"magnitude":1.50,"units":"mg","accuracy":0.10}"#).unwrap();
+        assert_eq!(measured.magnitude_real().as_str(), "1.50");
+        assert_eq!(
+            measured
+                .accuracy_real()
+                .expect("an accuracy was recorded")
+                .as_str(),
+            "0.10",
+            "the accuracy's own measured precision"
+        );
+
+        let scale: DvScale = serde_json::from_str(
+            r#"{"value":2.50,"symbol":{"value":"moderate","defining_code":{"terminology_id":{"value":"local"},"code_string":"at0003"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(scale.value_real().as_str(), "2.50");
+
+        let proportion: DvProportion =
+            serde_json::from_str(r#"{"numerator":1.0,"denominator":4.00,"type":0}"#).unwrap();
+        assert_eq!(proportion.numerator_real().as_str(), "1.0");
+        assert_eq!(proportion.denominator_real().as_str(), "4.00");
+    }
+
     /// A quantity reports the units annotations it was given.
     ///
     /// `units_system` and `units_display_name` could each answer `None`, `""`
