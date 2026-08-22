@@ -103,7 +103,7 @@ Process requirements; they govern this specification rather than the code.
 | S1.14 | doc | `security` module header |
 | S1.15 | doc | `J9.15`; bounded by `canonical_json::reading_a_composition_stays_within_a_small_stack` |
 | S1.16–S1.17 | • | `terminology::tests::the_codes_that_disagree_between_terminology_repositories_are_the_current_ones` |
-| S1.18 | — | declared departure: ISO 3166 and ISO 639 are not carried, so `COMPOSITION.Territory_valid` and `Language_valid` are not checked (`A-19`) |
+| S1.18 | — | declared departure: ISO 3166 and ISO 639 are not carried, so `COMPOSITION.Territory_valid` and `Language_valid` are not checked. Its closing requirement — that a caller can do the check instead — **is** verified: `guarantees::a_caller_can_read_every_code_the_crate_declines_to_check` (`A-19`) |
 | S1.19 | — | declared exclusion: no demographic repository, so the four `PARTY` graph invariants cannot be checked from a value in hand |
 | S1.20 | — | declared departure: an `EHR_ACCESS` may record no policy, so `Scheme_valid` is not checked. `X11.24`'s fail-closed default is why that is safe |
 

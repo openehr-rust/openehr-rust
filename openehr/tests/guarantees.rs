@@ -1023,3 +1023,82 @@ fn canonical_json_drifts_on_a_high_precision_float() {
         "a digest over fixed bytes must be stable"
     );
 }
+
+/// Every code the crate declines to validate is reachable through its API.
+///
+/// **This pins the premise of a departure, not a behaviour.** `lib:S1.18` and
+/// its neighbours decline to check ten openEHR invariants — `COMPOSITION`'s
+/// language and territory, `DV_TEXT`'s and `ENTRY`'s encoding and language,
+/// `DV_ENCAPSULATED`'s charset and language, `DV_MULTIMEDIA`'s media type —
+/// because the code sets are mutable and a table compiled into a library is
+/// wrong from the day a country changes. Rejecting conformant data is the worse
+/// failure (`D3.5`).
+///
+/// The departure ends with: *"A deployment that needs the check should do it
+/// where the tables can be updated."* That sentence is only true while a caller
+/// can **reach** each code, and reachability is not free — `lib:A-34` is the
+/// finding where `DV_ENCAPSULATED`'s charset and language round-tripped
+/// perfectly and could not be read, because `EncapsulatedAttrs` was exported and
+/// no type returned one. The accessors this test uses were *added* by that
+/// finding.
+///
+/// **Failure mode.** An accessor with no caller can be deleted, or quietly
+/// narrowed, and every test still passes — at which point the departure is
+/// silently worse than declared: the crate does not do the check and the caller
+/// can no longer do it either.
+#[test]
+fn a_caller_can_read_every_code_the_crate_declines_to_check() {
+    // COMPOSITION.language, COMPOSITION.territory — `S1.18`.
+    let composition = composition_containing("irrelevant");
+    assert_eq!(composition.language().code_string(), "en");
+    assert_eq!(composition.territory().code_string(), "GB");
+
+    // ENTRY.language, ENTRY.encoding.
+    let entry = composition
+        .entries()
+        .next()
+        .expect("the fixture holds one entry");
+    // Reached through `Entry::entry_attrs`, because `Entry` is the enum over
+    // the five entry classes and the codes live on the attributes they share.
+    // That indirection is the part worth pinning: it is one accessor away from
+    // the `A-34` shape, where the data was present and unreachable.
+    assert_eq!(entry.entry_attrs().language().code_string(), "en");
+    assert_eq!(entry.entry_attrs().encoding().code_string(), "UTF-8");
+
+    // DV_TEXT.language, DV_TEXT.encoding. Optional, so both answers matter:
+    // absent is a fact, and present must be readable.
+    let plain = DvText::new("x").unwrap();
+    assert!(plain.language().is_none() && plain.encoding().is_none());
+    let tagged = DvText::new("x")
+        .unwrap()
+        .with_language(CodePhrase::new("ISO_639-1", "fr").unwrap())
+        .with_encoding(CodePhrase::new("IANA_character-sets", "UTF-8").unwrap());
+    assert_eq!(tagged.language().expect("set above").code_string(), "fr");
+    assert_eq!(tagged.encoding().expect("set above").code_string(), "UTF-8");
+
+    // DV_ENCAPSULATED.charset and .language, and DV_MULTIMEDIA.media_type.
+    //
+    // These have no builder: they arrive by deserialization, which is the path
+    // that matters — a code the crate will not check is a code that came from
+    // outside it.
+    let multimedia: DvMultimedia = serde_json::from_str(
+        r#"{
+            "media_type": {"terminology_id": {"value": "IANA_media-types"},
+                           "code_string": "image/png"},
+            "charset": {"terminology_id": {"value": "IANA_character-sets"},
+                        "code_string": "UTF-8"},
+            "language": {"terminology_id": {"value": "ISO_639-1"}, "code_string": "de"}
+        }"#,
+    )
+    .expect("a multimedia value with all three codes");
+    assert_eq!(multimedia.media_type().code_string(), "image/png");
+    let encapsulated = multimedia.encapsulated();
+    assert_eq!(
+        encapsulated.charset().expect("set above").code_string(),
+        "UTF-8"
+    );
+    assert_eq!(
+        encapsulated.language().expect("set above").code_string(),
+        "de"
+    );
+}

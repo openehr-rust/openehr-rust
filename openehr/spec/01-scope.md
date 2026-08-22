@@ -101,7 +101,18 @@ reader deciding whether to use this crate needs the reason more than the fact.
   library is wrong from the day a country changes. Validating against a stale
   copy would reject conformant data, which `D3.5`'s own reasoning calls the worse
   failure. A deployment that needs the check should do it where the tables can be
-  updated. Recorded as `A-19`; implementing it remains open.
+  updated.
+
+  **That last sentence is a requirement on this crate, not a shrug.** It holds
+  only while a caller can reach every code the crate declines to check, and
+  `A-34` is the finding where two such codes round-tripped perfectly and could
+  not be read at all. Every one of them is now reachable and
+  `guarantees::a_caller_can_read_every_code_the_crate_declines_to_check` asserts
+  it — so an accessor cannot be deleted, leaving a departure that is silently
+  worse than the one declared here.
+
+  `A-19` is **classified** rather than open: the decision is made, and what was
+  genuinely unresolved was whether the advice above could be followed.
 
 - **S1.19** The crate MUST NOT model a demographic **repository** — an object
   store that can be asked, of a relationship, for its reverse. It models

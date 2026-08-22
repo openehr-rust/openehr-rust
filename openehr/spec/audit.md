@@ -15,17 +15,17 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**39 findings, 39 in the table below: 6 High, 24 Medium, 9 Low. 32 fixed or
-classified, 7 open.** These counts are checked against the table by CI
+**39 findings, 39 in the table below: 6 High, 24 Medium, 9 Low. 33 fixed or
+classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
-verified), and the check should have failed. Every one of the 7 open findings
-is open by a stated reason rather than by omission: **A-02** and **A-08** are
-declared departures the crate does not intend to close; **A-05**, **A-10**,
+verified), and the check should have failed. Every one of the 6 open findings
+is open by a stated reason rather than by omission: **A-02**, **A-08** and
+**A-19** are declared departures the crate does not intend to close; **A-05**, **A-10**,
 **A-30** and **A-38** are recorded limitations or residuals with the reasoning
 for leaving them written beside them — **A-38** is a defect in `serde_json`
-that this repository cannot repair, only contain and report; **A-19** is a declared
-departure (`S1.18`) whose *enforcement* remains open work. **A-09**
+that this repository cannot repair, only contain and report; **A-27** was closed by making the
+decision it recorded as unmade. **A-09**
 (no property-based testing) is closed: `tests/properties.rs` covers the laws, and
 `openehr-fuzz` now drives five targets over the parsers — ISO 8601, the
 identifier grammars, AQL, paths, and canonical-JSON deserialization — run in CI
@@ -95,7 +95,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-09 | Low | No property-based or fuzz testing; mutation verification is not systematic | **fixed** — property tests added (`A-17`); `openehr-fuzz` drives five targets over the parsers, run in CI |
 | A-10 | Low | `X11.24` fail-closed has no provokable error path | open |
 | A-18 | Medium | `ORIGINAL_VERSION` cannot carry a `signature`; openEHR puts it on `VERSION` | **fixed** — field, builder, accessor, round-trip test |
-| A-19 | Medium | `COMPOSITION.Territory_valid` and `Language_valid` are neither enforced nor declared | **declared** as `S1.18`; enforcement open |
+| A-19 | Medium | `COMPOSITION.Territory_valid` and `Language_valid` are neither enforced nor declared | **classified** — declared as `S1.18`, and in-crate enforcement is the wrong answer rather than missing work: ISO 3166-1 and ISO 639-1 change, and a table compiled into a library rejects conformant data from the day one does. What was genuinely open — whether a caller can do the check `S1.18` tells them to — is now pinned by a test |
 | A-20 | Medium | `L10.4` requires openEHR's own invariant names; citations diverged and nothing checked | **fixed** — 15 renamed; the 13 crate *additions* declared under `L10.9`; both checked every build |
 | A-21 | Medium | `EHR.Ehr_status_valid` and `Ehr_access_valid` unenforced; the shared fixture violated both | **fixed** — `Ehr::new` checks, fixture corrected, round-trip assertion strengthened |
 | A-22 | Medium | `DV_MULTIMEDIA`: `Integrity_check_validity` reported for the wrong rule; three checkable invariants unenforced despite the crate shipping their code sets | **fixed** — four checks added, the addition renamed and declared |
@@ -2082,6 +2082,54 @@ suite passed, the fuzz targets passed, CI was green, and three of these
 functions were still not doing anything a test would notice. Mutation testing is
 the only check here that asks *what would break if this were wrong*, and it was
 switched off for the branch these changes landed on (`W-18`).
+
+## A-19 — a departure whose advice nobody had checked was followable
+
+**Classified 2026-08-22.** Opened because `COMPOSITION.Territory_valid` and
+`Language_valid` were neither enforced nor declared; the declaration landed as
+`S1.18` and the row has read *"enforcement open"* ever since, which implied
+work that `S1.18` argues against.
+
+**The register and the specification disagreed, quietly.** `S1.18` does not say
+enforcement is pending. It says implementing it in this crate would be **wrong**:
+ISO 3166-1 and ISO 639-1 are closed, small, and *mutable*, a table compiled into
+a library is wrong from the day a country changes, and validating against a
+stale copy rejects conformant data — which `D3.5`'s own reasoning calls the
+worse failure. That is a decision, and `A-02` and `A-08` are already carried as
+"open, by decision" for departures of exactly this kind.
+
+**What was actually open** is the sentence the departure ends on:
+
+> A deployment that needs the check should do it where the tables can be
+> updated.
+
+That is only true while a caller can **reach** every code the crate declines to
+check, and reachability is not free. `A-34` is the finding where
+`DV_ENCAPSULATED`'s `charset` and `language` round-tripped perfectly and could
+not be read at all — `EncapsulatedAttrs` was exported and no type returned one.
+The accessors that make `S1.18`'s advice followable were *added by that
+finding*, two departures later, by accident of looking at something else.
+
+**Checked, and it holds.** All nine codes behind the ten unenforced invariants
+are reachable through the public API:
+
+| Code | Reached by |
+| --- | --- |
+| `COMPOSITION.language`, `.territory` | direct accessors |
+| `ENTRY.language`, `.encoding` | `Entry::entry_attrs()` — one indirection, the `A-34` shape |
+| `DV_TEXT.language`, `.encoding` | optional accessors; absent is a fact and is asserted too |
+| `DV_ENCAPSULATED.charset`, `.language` | `encapsulated()`, added by `A-34` |
+| `DV_MULTIMEDIA.media_type` | direct accessor |
+
+`guarantees::a_caller_can_read_every_code_the_crate_declines_to_check` pins it.
+The failure mode it guards is specific: an accessor with no caller can be
+deleted or narrowed with every test still green, and at that moment the
+departure becomes **silently worse than declared** — the crate does not do the
+check and the caller can no longer do it either.
+
+The encapsulated codes are reached by deserializing, not by building, because
+`EncapsulatedAttrs` has no builder. That is the right path to test anyway: a
+code the crate will not check is a code that came from outside it.
 
 ## Closed findings
 
