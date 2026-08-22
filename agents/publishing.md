@@ -89,6 +89,31 @@ broken a dependent on `cargo update`.
 1.0** (`db:O10.14`). A deployment on published 0.2.0 exports, recreates, and
 reloads. Say that in the release notes rather than leaving it to be discovered.
 
+## Tagging
+
+- A release is tagged **`v<version>`**, annotated, on the `Record that <version>
+  is published` commit — the one that records the release, not the one that cut
+  it. The distinction matters: what a tag should point at is the tree that was
+  verified against crates.io, and that is the later commit.
+
+`v0.2.0` established both the name and the placement. `openehr-v0.3.0` then used
+a per-crate name that was never continued — these eight crates are versioned in
+lockstep and released together, so one tag per release is right and a per-crate
+scheme would need eight. `v0.3.0` was added later as an alias at the same
+commit; `openehr-v0.3.0` is left in place, because a published tag somebody may
+have fetched is not worth deleting to tidy a name.
+
+**0.4.0 and 0.5.0 went out untagged** and were tagged the following day, after
+the question "are you tracking tasks" prompted a look at what had been missed.
+Tag as part of publishing, not after it — a tag added later points at the right
+commit only because the history was still legible.
+
+```sh
+git tag -a "v$V" "$(git log --format=%H -1 --grep="^Record that $V is published")" \
+  -m "openEHR crates $V"
+git push --tags
+```
+
 ## Order
 
 Dependencies must exist on crates.io before the crates that depend on them. Path
