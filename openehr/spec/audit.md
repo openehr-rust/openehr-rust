@@ -15,16 +15,17 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**39 findings, 39 in the table below: 6 High, 24 Medium, 9 Low. 33 fixed or
-classified, 6 open.** These counts are checked against the table by CI
+**39 findings, 39 in the table below: 6 High, 24 Medium, 9 Low. 34 fixed or
+classified, 5 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
-verified), and the check should have failed. Every one of the 6 open findings
+verified), and the check should have failed. Every one of the 5 open findings
 is open by a stated reason rather than by omission: **A-02**, **A-08** and
 **A-19** are declared departures the crate does not intend to close; **A-05**, **A-10**,
-**A-30** and **A-38** are recorded limitations or residuals with the reasoning
+**A-30** are recorded limitations or residuals with the reasoning
 for leaving them written beside them — **A-38** is a defect in `serde_json`
-that this repository cannot repair, only contain and report; **A-27** was closed by making the
+that this repository could not repair — a conclusion that turned out to be
+wrong, and is the reason that entry is worth reading; **A-27** was closed by making the
 decision it recorded as unmade. **A-09**
 (no property-based testing) is closed: `tests/properties.rs` covers the laws, and
 `openehr-fuzz` now drives five targets over the parsers — ISO 8601, the
@@ -113,7 +114,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-34 | Medium | `DV_ENCAPSULATED`'s `charset` and `language` were preserved across a round trip and **unreadable** — `EncapsulatedAttrs` is exported but no type returned one, so a caller holding a `DV_MULTIMEDIA` or `DV_PARSABLE` could not ask what it declared | **fixed** — an `encapsulated()` accessor on both; found because the two accessors had no reachable caller to test |
 | A-36 | Medium | `DV_URI` and `DV_EHR_URI` enforced their invariants in the constructor only. A `DV_URI` deserialized from `{"value":"nocolon"}` **panicked** in `scheme()`, whose rustdoc said "# Panics — Never"; a `DV_EHR_URI` deserialized from `{"value":"https://example.org/x"}` reported scheme `https`, which is what the type exists to make impossible. `Validate for DataValue` reached both through a `_ => {}` arm, and `LINK.target` was validated nowhere | **fixed** — `scheme()`/`rest()` are total (`D3.30a`), validation checks both types and every `LOCATABLE`'s links, and `openehr-fuzz` has a `uri` target that reproduces the panic in seconds |
 | A-37 | High | The `aql` fuzz target had been **failing in CI since 2026-08-04** and nobody had triaged it. Two defects: the lexer copied a string literal one UTF-8 **byte** at a time, so `'Müller'` lexed to `'MÃ¼ller'` and a `WHERE` against it matched nobody; and the `FROM` renderer omitted the parentheses its own grammar needs, so `Or(Contains(a,b), c)` rendered as text that re-parsed to `Contains(a, Or(b,c))` — a query over different records | **fixed** — slices not bytes, escaped rendering, precedence-correct parentheses (`Q12.15`, `Q12.15a`, `Q12.15b`) |
-| A-38 | Medium | `serde_json` 1.0.151's float parser is **not the inverse of its own serializer** ([serde-rs/json#1336](https://github.com/serde-rs/json/issues/1336)): it reads `1.5777777777770001` one ULP below `core::str::parse`. A magnitude therefore **drifts** across repeated canonical round trips — three applications before it settled in the observed case, with no bound established — and a composition read out of a store is not bit-identical to the one written | open, **upstream** — contained by `db:M3.43`, which stores canonical JSON byte-preserving and digests the stored bytes rather than re-canonicalising, so no false tamper alarm is reachable |
+| A-38 | Medium | `serde_json`'s float parser was not the inverse of its own serializer, so a `DV_QUANTITY` magnitude **drifted** across repeated canonical round trips. Filed as open and upstream ([serde-rs/json#1336](https://github.com/serde-rs/json/issues/1336)); it was neither | **fixed** — `serde_json`'s `float_roundtrip` feature already existed and this repository had not enabled it (`spec/serde-json-float-roundtrip-arbitrary-precision/` `SJ1`) |
 | A-39 | Medium | Two matches in `DataValue` whose arms could be deleted in silence — `semantic_cmp` (6 of 9) and `is_strictly_comparable_to` (all of them, plus the whole function replaceable with `false`) — and `trim_float`, whose guarded branch produced the same string as its `else` for **every finite `f64`**. Found by the retrospective mutation pass `W-18` required, not by anything failing | **fixed** — one table-driven test per arm with a row-count assertion, and the dead branch deleted rather than tested |
 | A-35 | Medium | Ten types — every `DV_ORDERED` descendant and `DataValue` — implemented `PartialOrd` while deriving `PartialEq` over all their fields, so `a != b` while `a <= b` and `a >= b` were both true. Recorded as the lexical-vs-semantic shape of `A-32` and scoped to five types; the mechanism is `OrderedAttrs`, which every `DV_ORDERED` carries, and it reached five more | **fixed** — no `DV_ORDERED` implements `PartialOrd`; comparison is `DvOrdered::semantic_cmp`, and `INTERVAL<T>` is bounded on a new `SemanticOrd` (`D3.18b`, `D3.18c`) |
 | A-11 | Medium | The Common Information Model was implemented from prose | **fixed** |
@@ -2130,6 +2131,58 @@ check and the caller can no longer do it either.
 The encapsulated codes are reached by deserializing, not by building, because
 `EncapsulatedAttrs` has no builder. That is the right path to test anyway: a
 code the crate will not check is a code that came from outside it.
+
+## A-38 — an upstream defect that was a missing feature
+
+**Closed 2026-08-22**, by being handed a specification naming a `serde_json`
+feature I had not looked for.
+
+The finding was accurate about the behaviour and wrong about everything else.
+`serde_json` did parse `1.5777777777770001` one ULP below `core::str::parse`,
+its parser was not the inverse of its serializer, and a magnitude did drift
+across repeated canonical round trips. What was wrong was the conclusion:
+
+> **Open, and upstream.** Nothing in this repository can make `serde_json`'s
+> parser agree with its serializer.
+
+`serde_json` has a **`float_roundtrip`** feature that makes exactly that true,
+and this repository had not enabled it. The fix is one word in thirteen
+manifests. With it the two agree bitwise and canonical form is a fixed point
+from the first application:
+
+```text
+before   4.4444444444444444e-7 → …4454e-7 → …446e-7 → stable
+after    4.4444444444444444e-7 → stable
+```
+
+**Three responses were written down and the real one was not among them.** The
+entry listed: leave it contained, adopt `arbitrary_precision`, report upstream.
+All three took as given that the crate could not fix it. That premise was never
+checked — it came from reducing the defect to a minimal case, confirming it,
+and stopping. Nobody read the feature list of the dependency the finding was
+about.
+
+The upstream report stands and is not wasted: the default parser really is not
+the inverse of the default serializer, which is worth someone's attention
+whatever this repository does. But it was filed as *the* remedy rather than as
+a courtesy, and it delayed the fix by a day.
+
+**`arbitrary_precision` is separately refused**, with evidence, as `SJ2`. It is
+incompatible with this crate's `#[serde(tag)]` and `#[serde(flatten)]` layout —
+four round-trip tests fail with `invalid type: map, expected f64` — and its
+benefit reaches only `serde_json::Number`, where the Reference Model stores
+magnitudes as `f64` fields.
+
+**What the pinning test did.** `canonical_json_drifts_on_a_high_precision_float`
+asserted the drift was **present** and failed the moment it stopped, with the
+message *"If serde-rs/json#1336 was fixed, that is the good outcome: bump
+`serde_json`, delete this test, and close A-38."* It fired on the first run
+after the feature was enabled and told the next reader what to do. It is kept,
+inverted: the property now rests on a cargo feature staying enabled, which is
+one careless edit from silently reverting to drift nothing else would notice.
+
+The two fuzz targets are restored to asserting canonical form is a **fixed
+point**, which was weakened to "must re-parse" while this was open.
 
 ## Closed findings
 

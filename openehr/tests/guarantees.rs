@@ -966,33 +966,26 @@ fn aql_rendering_round_trips_through_the_parser() {
     }
 }
 
-/// A high-precision magnitude drifts across repeated canonical round trips.
+/// A high-precision magnitude survives repeated canonical round trips.
 ///
-/// **This test pins a defect, not a guarantee.** `serde_json` 1.0.151's float
-/// parser is not the inverse of its own serializer — it reads
-/// `1.5777777777770001` one ULP below `core::str::parse` — so serialising and
-/// re-parsing a value moves it. Repeatedly, it *drifts*:
+/// **This test asserted the opposite until 2026-08-22.** `serde_json`'s float
+/// parser was not the inverse of its own serializer, so a magnitude *drifted*:
 ///
 /// ```text
 /// 4.4444444444444444e-7 → 4.4444444444444454e-7 → 4.444444444444446e-7 → stable
 /// ```
 ///
-/// Three applications there, and no bound is established. `A-38`, reported
-/// upstream as <https://github.com/serde-rs/json/issues/1336>.
+/// That was `A-38`, reported as <https://github.com/serde-rs/json/issues/1336>
+/// and recorded here as open and upstream. It was neither: `serde_json` has a
+/// **`float_roundtrip`** feature that makes `f64 → JSON → f64` exact, and this
+/// crate had not enabled it. The fix was one word in thirteen manifests.
 ///
-/// **Failure mode of this test.** It fails when the behaviour changes — an
-/// upstream fix, or a move to `arbitrary_precision`. That is the point: `A-38`
-/// is open with three possible responses written down, and whoever takes one
-/// should find this test telling them what it was.
-///
-/// **What is NOT at risk, and why.** The stored bytes are written once and the
-/// content digest is taken over them (`db:M3.43`);
-/// `openehr_store::integrity::hashed_bytes` hashes `data_json` as bytes rather
-/// than re-canonicalising, so the digest never sees a second application and no
-/// false tamper alarm is reachable. Asserted here so that the containment is
-/// checked and not merely claimed.
+/// The test is kept rather than deleted, pointed the other way. The property is
+/// still not this crate's to guarantee — it now rests on a cargo feature
+/// staying enabled, which is one careless edit away from silently reverting to
+/// drift that nothing else would notice.
 #[test]
-fn canonical_json_drifts_on_a_high_precision_float() {
+fn a_high_precision_magnitude_survives_repeated_canonical_round_trips() {
     let source = r#"{"_type":"DV_QUANTITY","magnitude":0.000000444444444444444444444444444444444444444444441569995,"units":"m"}"#;
     let mut value: DataValue = serde_json::from_str(source).expect("parses");
 
@@ -1003,24 +996,22 @@ fn canonical_json_drifts_on_a_high_precision_float() {
         value = serde_json::from_str(&canonical).expect("re-parses");
     }
 
-    assert_ne!(
-        seen[0], seen[1],
-        "the drift is gone. If serde-rs/json#1336 was fixed, that is the good \
-         outcome: bump `serde_json`, delete this test, and close A-38. Do not \
-         relax the assertion."
-    );
     assert_eq!(
-        seen[2], seen[3],
-        "the drift no longer settles by the third application; A-38 says it did"
+        seen[0], seen[1],
+        "the magnitude moved between the first and second canonicalisation — \
+         `float_roundtrip` may have been dropped from serde_json's features (A-38)"
+    );
+    assert!(
+        seen.iter().all(|s| *s == seen[0]),
+        "canonical form is not a fixed point: {seen:?}"
     );
 
-    // The containment: a digest over the bytes that were stored is stable,
-    // because it is taken over bytes and never re-derived.
-    let stored = seen[0].as_bytes();
+    // The parser and the serializer agree, which is the property underneath.
+    let text = "1.5777777777770001";
     assert_eq!(
-        openehr::security::Digest256::of(stored),
-        openehr::security::Digest256::of(stored),
-        "a digest over fixed bytes must be stable"
+        serde_json::from_str::<f64>(text).expect("parses").to_bits(),
+        text.parse::<f64>().expect("parses").to_bits(),
+        "serde_json and core disagree about a float by one ULP (A-38)"
     );
 }
 

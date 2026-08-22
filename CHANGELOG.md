@@ -7,6 +7,21 @@ together.
 
 ## Unreleased
 
+- **`serde_json`'s `float_roundtrip` feature is enabled**, closing `lib:A-38`.
+  A `DV_QUANTITY` magnitude no longer drifts across repeated canonical round
+  trips: `serde_json`'s parser was one ULP off `core::str::parse` for some
+  inputs, so it was not the inverse of its own serializer.
+
+  Recorded here because the effect is visible to a dependent: a value read back
+  is now bit-identical to the value written, where before it could move. The
+  digest over the *stored* bytes was never affected (`db:M3.43`).
+
+  `arbitrary_precision` is deliberately **not** enabled — it is incompatible
+  with this crate's `#[serde(tag)]` and `#[serde(flatten)]` layout, and its
+  benefit applies to `serde_json::Number` rather than to the `f64` fields the
+  Reference Model uses. See `spec/serde-json-float-roundtrip-arbitrary-precision/`.
+
+
 - **`conformance::check_projection` and `check_verify_versions` now return what
   they checked** — `bool` for whether the composition projected, `usize` for how
   many versions had their tamper detection provoked (`db:D-10`). Not breaking:
