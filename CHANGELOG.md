@@ -5,6 +5,25 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
+## Unreleased
+
+- **`conformance::check_projection` and `check_verify_versions` now return what
+  they checked** — `bool` for whether the composition projected, `usize` for how
+  many versions had their tamper detection provoked (`db:D-10`). Not breaking:
+  a caller ignoring the result still compiles.
+
+  They return anything because otherwise they could not fail. Both were
+  replaceable with `()` and nothing in the repository noticed — they are called
+  only from `openehr-store-fuzz`, `cargo test` does not run fuzz targets, and a
+  property that asserts nothing never crashes. `check_verify_versions` also now
+  **provokes** what it is about: for a history that verifies, editing each
+  version's content must make the chain report `ContentAltered`.
+
+- **No behaviour change in `openehr`**, but two matches in `DataValue` gained
+  the tests that make them non-deletable (`lib:A-39`), and
+  `INTERVAL<T>::contains` treating "not comparable" as *not contained* is now
+  stated as a requirement rather than left implicit (`lib:D3.14a`).
+
 ## 0.5.0 — 2026-08-21
 
 **A feature and a behaviour change, neither an API break.** 0.5.0 rather than

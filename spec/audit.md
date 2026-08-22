@@ -811,11 +811,25 @@ unmutated baseline from `outcomes.json` — including it reports 16 where
 cargo-mutants says 15, and a count that is off by one is a count nobody trusts
 twice.
 
-**Residual.** The retrospective gap is not closed. Only `interval.rs` and
-`uri.rs` were mutated by hand; the AQL lexer and renderer, the validation walk,
-and the three new `conformance` properties were not. They are covered by the
-job from the next push that touches them, which is forward protection and not a
-check of what is already on `main`.
+**Residual — closed 2026-08-21/22.** The whole session diff was mutated by
+hand: `--in-diff` over `d910470..HEAD` in both `openehr` (67 mutants) and
+`openehr-store`. It found `lib:A-39` and `db:D-10`, both now fixed. What remains
+is two timeouts in the AQL lexer, where mutating an index arithmetic stops the
+loop advancing — detected by hanging, which is detection — and three survivors
+in `dialects_are_distinct`, which pre-date this and are killed when measured
+from `openehr-sqlite` as `lib:T13.2` records.
+
+**A second residual, found by being asked whether tasks were being tracked.**
+They were not, other than by the registers. Two `pub fn` signatures changed
+after 0.5.0 shipped and `CHANGELOG.md` said nothing — nobody would have noticed
+until an upgrade. `scripts/check-docs.py` now fails when library source has
+changed since the last release commit and the newest changelog heading is not
+`Unreleased`.
+
+**Still untracked, and stated here so it is not lost:** the git tags. `v0.2.0`
+and `openehr-v0.3.0` use two naming schemes and **nothing was tagged for 0.4.0
+or 0.5.0**, both of which are on crates.io. Choosing the scheme is not this
+finding's to make.
 
 ---
 

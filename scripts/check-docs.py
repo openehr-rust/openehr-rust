@@ -639,6 +639,61 @@ def check_unverified_claims() -> int:
     return bad
 
 
+# --------------------------------------------------------------------------
+# Code changed since the last release means the changelog says so
+# --------------------------------------------------------------------------
+
+
+def check_changelog_is_current() -> int:
+    """If library code changed since the last release, `CHANGELOG.md` says so.
+
+    Two `pub fn` signatures in `openehr-store::conformance` changed after 0.5.0
+    went out and the changelog said nothing, which nobody would have noticed
+    until somebody upgraded and wondered. Found by being asked whether tasks
+    were being tracked, and looking — which is not a method.
+
+    The release commits are found by their message rather than by a tag,
+    because the tags in this repository are stale and use two naming schemes
+    (`v0.2.0` and `openehr-v0.3.0`) and nothing was tagged for 0.4.0 or 0.5.0.
+    Tagging is worth fixing; this check does not wait for it.
+    """
+    import subprocess
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", *args], cwd=ROOT, capture_output=True, text=True, check=False
+        ).stdout.strip()
+
+    release = git("log", "--format=%H", "-1", "--grep=^Record that .* is published")
+    if not release:
+        print(
+            "::warning::no `Record that X is published` commit found, so this "
+            "check cannot tell what has shipped. It is not asserting anything."
+        )
+        return 0
+
+    changed = [
+        f
+        for f in git("diff", "--name-only", f"{release}..HEAD").splitlines()
+        if f.endswith(".rs") and "/src/" in f and not f.startswith("openehr-loco/")
+    ]
+    if not changed:
+        print("no library source changed since the last release")
+        return 0
+
+    top = re.search(r"^## (.+)$", (ROOT / "CHANGELOG.md").read_text(), re.M)
+    if top and top.group(1).strip().lower().startswith("unreleased"):
+        print(f"{len(changed)} source files changed since the last release; CHANGELOG says Unreleased")
+        return 0
+    print(
+        f"::error file=CHANGELOG.md::{len(changed)} library source files have "
+        f"changed since the last release ({', '.join(changed[:3])}"
+        f"{'…' if len(changed) > 3 else ''}) and the newest heading is "
+        f"{top.group(1) if top else '(none)'!r}, not `Unreleased`"
+    )
+    return 1
+
+
 def main() -> int:
     fix = "--fix" in sys.argv
     f = facts()
@@ -650,6 +705,7 @@ def main() -> int:
         | check_audit_summary()
         | check_agent_file_sizes()
         | check_unverified_claims()
+        | check_changelog_is_current()
     )
     checked = 0
     seen: dict[str, int] = {pattern: 0 for _, pattern, _ in PATTERNS}
