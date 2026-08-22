@@ -826,10 +826,23 @@ until an upgrade. `scripts/check-docs.py` now fails when library source has
 changed since the last release commit and the newest changelog heading is not
 `Unreleased`.
 
-**Still untracked, and stated here so it is not lost:** the git tags. `v0.2.0`
-and `openehr-v0.3.0` use two naming schemes and **nothing was tagged for 0.4.0
-or 0.5.0**, both of which are on crates.io. Choosing the scheme is not this
-finding's to make.
+**The git tags, closed 2026-08-22.** This said: "`v0.2.0` and `openehr-v0.3.0`
+use two naming schemes and nothing was tagged for 0.4.0 or 0.5.0, both of which
+are on crates.io. Choosing the scheme is not this finding's to make."
+
+The scheme is `v<version>`, annotated, on the release-record commit, and
+[`../agents/publishing.md`](../agents/publishing.md) now owns it. `v0.3.0`,
+`v0.4.0` and `v0.5.0` exist; `openehr-v0.3.0` stays as history. `v0.2.0` turned
+out never to have been **pushed**, only created locally — so the remotes had no
+release tags at all.
+
+**And this paragraph was wrong for about ten minutes**, which is worth leaving
+in. `W-17` is the finding that a closed gap goes on being described as open
+because nothing watches that direction, and it recurred here within a day of
+being written — in the very entry that records the tags as missing. It was
+caught by re-reading the register after the work, not by any check. There is
+still no mechanism for this direction beyond the one `W-17` added, which only
+covers requirements marked satisfied in a conformance matrix.
 
 ---
 
