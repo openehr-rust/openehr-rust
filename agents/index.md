@@ -35,7 +35,7 @@ six over the dialects, `openehr-fuzz` over the Reference Model parsers, and
 `openehr-store-fuzz` over projection and the integrity check.
 
 The eight publishable crates (`openehr`, `openehr-store`, and the six dialect
-crates) are live on crates.io at **0.6.0**; the other ten — `openehr-loco`,
+crates) are live on crates.io at **0.7.0**; the other ten — `openehr-loco`,
 `openehr-assets`, and the eight fuzz harnesses — are `publish = false`.
 [`publishing.md`](publishing.md) is the file that tracks versions; this
 paragraph restates one and is not the place to change it. Each engine crate

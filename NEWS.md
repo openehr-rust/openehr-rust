@@ -26,7 +26,29 @@ engine would let "valid" mean "the parts I understood were satisfied". §15 is
 written to answer that — every unimplemented construct, incomplete lineage,
 unresolved artefact, and unreachable repository is a refusal, never a pass.
 
-## Latest release — 0.6.0, 2026-08-22
+## Latest release — 0.7.0, 2026-08-26
+
+**The Archetype Model is in scope, and its object model exists.** `S1.4` — the
+requirement that this crate must *not* implement archetypes — is withdrawn, and
+`openehr::am` implements AOM2 as Rust types: archetypes, the constraint tree,
+multiplicities, and archetype terminology, with the AOM2 validity conditions one
+artefact can decide checked at construction.
+
+**Four of thirty-two requirements.** No ADL parser, no flattening, no template
+expansion, no operational template, no retrieval — and no way to check that a
+`COMPOSITION` conforms to the archetype it names. `lib:A-40` tracks the rest.
+
+`unsafe_code` is now forbidden in all eighteen crates twice over: in every
+manifest and at every crate root and fuzz target. The eight fuzz crates had no
+lint table at all before this, so it had been forbidden in none of the 21 fuzz
+targets while the documentation said the tree forbids it.
+
+The release stopped at the mutation-testing gate first: 43 of 147 mutants
+survived in the new module, including one whose failure would have refused
+ordinary archetypes. Three tests killed them, and 0.7.0 went out from a run
+where all 32 CI jobs passed.
+
+## Previous release — 0.6.0, 2026-08-22
 
 **The Reference Model's reals keep the digits they were written with.**
 `DV_QUANTITY.magnitude`, `DV_SCALE.value`, `DV_PROPORTION.numerator` and
@@ -50,7 +72,8 @@ after that was fixed rather than before.
 
 | Version | Date | Headline |
 | --- | --- | --- |
-| **0.6.0** | 2026-08-22 | reals preserve their digits (`lib:D3.18d`) |
+| **0.7.0** | 2026-08-26 | the Archetype Model is in scope (`lib:S1.21`, §15); `openehr::am` is its object model |
+| 0.6.0 | 2026-08-22 | reals preserve their digits (`lib:D3.18d`) |
 | 0.5.0 | 2026-08-21 | AQL accepts negative numeric literals |
 | 0.4.0 | 2026-08-21 | `PartialOrd` removed from every `DV_ORDERED` (`lib:A-35`); MSRV moved to the N−3 formula |
 | 0.3.0 and earlier | 2026-08 | see [`CHANGELOG.md`](CHANGELOG.md) |
@@ -94,7 +117,7 @@ that mentions this project; a written statement.
 Every claim below is backed by something in the repository that can be run or
 read. Nothing else about this project should be quoted as verified.
 
-- Eight crates on crates.io at 0.6.0, released 2026-08-22, implementing the
+- Eight crates on crates.io at 0.7.0, released 2026-08-26, implementing the
   openEHR Reference Model in Rust with SQL persistence for six engines.
 - **`openehr-sqlite` is at conformance level Verified** — a complete store,
   re-checked in continuous integration on every commit. Three dialects

@@ -19,9 +19,20 @@ publish a crate with an open finding against its claims (`W0.21`).
 
 ## State today
 
-**Published 2026-08-22.** All eight publishable crates are live at **0.6.0**
-on crates.io, in the order below. Local is 0.7.0 and NOT yet published. Verified against
+**Published 2026-08-26.** All eight publishable crates are live at **0.7.0**
+on crates.io, in the order below, and local matches published. Verified against
 the registry API rather than read off `cargo publish`'s output.
+
+**The gate earned its keep again on 0.7.0, and harder.** CI on `4f6e418` — the
+commit that cut it — went **red**: the `mutants` job reported **43 of 147
+mutants surviving**, every one of them in the new `openehr::am` module. Nearly
+all were accessors no test asserted, so `CAttribute::rm_attribute_name` could
+have returned `""` and the suite stayed green. Four were logic, and one of those
+would have refused **every archetype whose children exactly fill their
+container** — two mandatory elements under a `0..2` container, which is what a
+blood pressure looks like. Three tests later, `10ef34d` ran 32 jobs green and
+0.7.0 went out from there. A published version is immutable; that defect would
+have been.
 
 **The gate earned its keep on this one.** CI on the commit before the bump
 **failed**: the `mutants` job caught `DvQuantity::accuracy_real -> None`
@@ -53,14 +64,14 @@ formality: the run before 0.4.0's was **red**, and reading it is what produced
 
 | Crate | crates.io | Local |
 | --- | --- | --- |
-| `openehr` | 0.1.0, 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, **0.6.0** | 0.7.0 |
-| `openehr-store` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, **0.6.0** | 0.7.0 |
-| `openehr-sqlite` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, **0.6.0** | 0.7.0 |
-| `openehr-postgresql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, **0.6.0** | 0.7.0 |
-| `openehr-mysql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, **0.6.0** | 0.7.0 |
-| `openehr-mariadb` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, **0.6.0** | 0.7.0 |
-| `openehr-mssql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, **0.6.0** | 0.7.0 |
-| `openehr-oracle` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, **0.6.0** | 0.7.0 |
+| `openehr` | 0.1.0, 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, **0.7.0** | 0.7.0 |
+| `openehr-store` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, **0.7.0** | 0.7.0 |
+| `openehr-sqlite` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, **0.7.0** | 0.7.0 |
+| `openehr-postgresql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, **0.7.0** | 0.7.0 |
+| `openehr-mysql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, **0.7.0** | 0.7.0 |
+| `openehr-mariadb` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, **0.7.0** | 0.7.0 |
+| `openehr-mssql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, **0.7.0** | 0.7.0 |
+| `openehr-oracle` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, **0.7.0** | 0.7.0 |
 
 `openehr-loco`, `openehr-assets`, and the eight fuzz crates are `publish = false`
 and are not on crates.io. `openehr-loco`'s own version moves in lockstep with
