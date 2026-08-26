@@ -21,4 +21,19 @@ MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only
 `OR` means your choice: you may use this software under **any one** of the five,
 whichever suits your project. You do not need to comply with all of them.
 
+Full text of every option is in [`LICENSES/`](LICENSES/) at the repository
+root, one file per SPDX identifier — the [REUSE](https://reuse.software/)
+convention, which exists for repositories that offer more than one licence:
+
+| | |
+| --- | --- |
+| [`LICENSES/MIT.txt`](LICENSES/MIT.txt) | MIT |
+| [`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt) | Apache License 2.0 |
+| [`LICENSES/BSD-3-Clause.txt`](LICENSES/BSD-3-Clause.txt) | BSD 3-Clause |
+| [`LICENSES/GPL-2.0-only.txt`](LICENSES/GPL-2.0-only.txt) | GNU GPL v2.0 only |
+| [`LICENSES/GPL-3.0-only.txt`](LICENSES/GPL-3.0-only.txt) | GNU GPL v3.0 only |
+
+Each crate directory carries its own copy of this file stating the grant; the
+full texts live once, here at the root, rather than eighteen times over.
+
 Copyright (c) 2026 Joel Parker Henderson

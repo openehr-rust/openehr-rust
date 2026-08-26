@@ -60,8 +60,12 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       `spec/professionalization/` Status entry that admitted the check was
       laptop-only is updated. Checker and `scripts/check-docs.py` both green
       locally before push.*
-- [ ] Add `LICENSES/` with the full text of all five licenses in the SPDX
+- [x] Add `LICENSES/` with the full text of all five licenses in the SPDX
       expression (REUSE convention; `fhir-rust/LICENSES/` is the model).
+      *Done 2026-08-26: the five texts copied from the family model into
+      `LICENSES/`, and root `LICENSE.md` references them file by file; the
+      eighteen per-crate `LICENSE.md` copies keep stating the grant, with
+      the full texts living once at the root.*
 
 ### In flight — land it
 

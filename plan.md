@@ -57,8 +57,8 @@ posture. Open items for each are in `tasks.md`.
    crate name all use the openEHR mark with **no `TRADEMARKS.md`, no ™/®
    anywhere, and no disclaimer in README.md, LICENSE.md, CITATION.cff, or
    crate metadata** — the only non-affiliation statements are buried in
-   GOVERNANCE.md §Independence and `openehr/README.md`. Also missing: a
-   `LICENSES/` directory for the five-license SPDX expression.
+   GOVERNANCE.md §Independence and `openehr/README.md`. The `LICENSES/`
+   directory for the five-license SPDX expression was added 2026-08-26.
 
 3. **Security and supply chain.** The in-crate security work is real
    (HMAC-capable audit chain, constant-time verify, redaction with
