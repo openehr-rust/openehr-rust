@@ -5,8 +5,9 @@
 //! interpret is a test that gets deleted (`T13.3`).
 
 use openehr::am::{
-    AM_RELEASE, Archetype, ArchetypeSlot, ArchetypeTerminology, CAttribute, CComplexObject,
-    CObject, CPrimitive, CPrimitiveObject, Cardinality, MultiplicityInterval, TermDefinition,
+    AM_RELEASE, Archetype, ArchetypeSlot, ArchetypeTerminology, CArchetypeRoot, CAttribute,
+    CComplexObject, CObject, CPrimitive, CPrimitiveObject, Cardinality, MultiplicityInterval,
+    TermDefinition,
 };
 use openehr::base::Interval;
 use std::collections::{BTreeMap, BTreeSet};
@@ -201,4 +202,187 @@ fn an_artefact_that_arrived_as_json_is_checkable_by_the_same_rules() {
     assert_eq!(smuggled.rm_type_name(), "EVALUATION");
     // …and the artefact's own rules refuse it, naming the AOM2 validity code.
     assert_eq!(smuggled.check().unwrap_err().reason, "VARDT");
+}
+
+/// Every accessor on every AOM2 type returns what was put into it.
+///
+/// If this broke, an accessor could return `""`, `None`, or an empty slice and
+/// no test would notice — which is `lib:A-28` one level up, and exactly what
+/// `cargo mutants` reported against the first version of this module: 43
+/// surviving mutants, nearly all of them accessors nothing asserted. An
+/// archetype whose `rm_attribute_name()` answers `""` addresses no attribute,
+/// and the failure is silent at every layer above it.
+#[test]
+fn every_accessor_returns_what_was_constructed() {
+    // --- MultiplicityInterval, and the three questions it answers ----------
+    let bounded = MultiplicityInterval::new(0, Some(4)).unwrap();
+    assert_eq!(bounded.lower(), 0);
+    assert_eq!(bounded.upper(), Some(4));
+    assert!(!bounded.is_open());
+    assert!(!bounded.is_mandatory());
+
+    let open = MultiplicityInterval::at_least(2).unwrap();
+    assert_eq!(open.lower(), 2);
+    assert_eq!(open.upper(), None);
+    assert!(open.is_open());
+    assert!(open.is_mandatory());
+
+    assert!(MultiplicityInterval::MANDATORY.is_mandatory());
+    assert!(!MultiplicityInterval::OPTIONAL.is_mandatory());
+
+    // --- Cardinality: ordered and unique are off unless asked for ----------
+    let plain = Cardinality::new(bounded.clone());
+    assert_eq!(plain.interval(), &bounded);
+    assert!(!plain.is_ordered());
+    assert!(!plain.is_unique());
+    assert!(Cardinality::new(bounded.clone()).ordered().is_ordered());
+    assert!(Cardinality::new(bounded.clone()).unique().is_unique());
+
+    // --- TermDefinition ----------------------------------------------------
+    let with_description =
+        TermDefinition::new("Systolic", Some("Peak pressure".to_owned())).unwrap();
+    assert_eq!(with_description.text(), "Systolic");
+    assert_eq!(with_description.description(), Some("Peak pressure"));
+    assert_eq!(TermDefinition::new("Diastolic", None).unwrap().description(), None);
+
+    // --- ArchetypeTerminology ---------------------------------------------
+    let terminology = ArchetypeTerminology::new("en", terms(&["id1", "at0004"])).unwrap();
+    assert_eq!(terminology.original_language(), "en");
+    assert_eq!(terminology.definition("at0004").unwrap().text(), "term at0004");
+    assert_eq!(terminology.definition("at9999"), None);
+    let mut codes: Vec<&str> = terminology.codes().collect();
+    codes.sort_unstable();
+    assert_eq!(codes, ["at0004", "id1"]);
+
+    // --- CAttribute: the name, and the cardinality only a container has ----
+    let leaf = CObject::Primitive(CPrimitiveObject::new(
+        "DV_TEXT",
+        MultiplicityInterval::MANDATORY,
+        CPrimitive::String { list: Vec::new(), pattern: None },
+    ));
+    let single = CAttribute::single("value", MultiplicityInterval::MANDATORY, vec![leaf.clone()])
+        .unwrap();
+    assert_eq!(single.rm_attribute_name(), "value");
+    assert_eq!(single.cardinality(), None);
+    assert_eq!(single.existence(), &MultiplicityInterval::MANDATORY);
+
+    let container = CAttribute::container(
+        "items",
+        MultiplicityInterval::MANDATORY,
+        Cardinality::new(MultiplicityInterval::at_least(1).unwrap()).ordered(),
+        vec![leaf.clone()],
+    )
+    .unwrap();
+    assert_eq!(container.rm_attribute_name(), "items");
+    assert!(container.cardinality().unwrap().is_ordered());
+    assert_eq!(container.children().len(), 1);
+
+    // --- CObject and its variants -----------------------------------------
+    assert_eq!(leaf.rm_type_name(), "DV_TEXT");
+    let CObject::Primitive(primitive) = &leaf else {
+        panic!("built a primitive and got something else");
+    };
+    assert_eq!(primitive.rm_type_name(), "DV_TEXT");
+
+    let slot = ArchetypeSlot::new("CLUSTER", "at0007", MultiplicityInterval::OPTIONAL)
+        .unwrap()
+        .including("archetype_id/value matches {/.*/}")
+        .excluding("archetype_id/value matches {/nothing/}");
+    assert_eq!(slot.node_id(), "at0007");
+    assert_eq!(slot.includes(), ["archetype_id/value matches {/.*/}"]);
+    assert_eq!(slot.excludes(), ["archetype_id/value matches {/nothing/}"]);
+    let slot_object = CObject::Slot(slot);
+    assert_eq!(slot_object.rm_type_name(), "CLUSTER");
+    assert_eq!(slot_object.node_id(), Some("at0007"));
+
+    let root = CArchetypeRoot::new(
+        "CLUSTER",
+        "openEHR-EHR-CLUSTER.device.v1",
+        MultiplicityInterval::MANDATORY,
+    )
+    .unwrap();
+    assert_eq!(root.archetype_ref(), "openEHR-EHR-CLUSTER.device.v1");
+    assert_eq!(CObject::ArchetypeRoot(root).rm_type_name(), "CLUSTER");
+
+    // --- Archetype: the specialisation parent, and the template flag -------
+    let plain_archetype = blood_pressure();
+    assert_eq!(plain_archetype.parent_archetype_id(), None);
+    assert!(!plain_archetype.is_template());
+
+    let parent = "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap();
+    let specialised = blood_pressure().specialising(parent);
+    assert_eq!(
+        specialised.parent_archetype_id().map(ToString::to_string),
+        Some("openEHR-EHR-OBSERVATION.blood_pressure.v2".to_owned())
+    );
+    assert!(blood_pressure().as_template().is_template());
+}
+
+/// `K15.8`: the two node-id syntaxes are told apart at their boundaries.
+///
+/// If this broke, an ADL 2 code would be read as an ADL 1.4 one or the reverse,
+/// and a converted archetype would record the wrong provenance for every node
+/// in it. The cases here are the ones where the rule actually decides something
+/// — one digit against several, a leading zero against none, and a trailing
+/// empty segment, which is malformed rather than either syntax.
+#[test]
+fn the_node_id_syntaxes_are_distinguished_at_their_boundaries() {
+    use openehr::am::NodeIdSyntax;
+
+    // A single digit is ADL 2 even when it is zero: padding is what marks 1.4.
+    assert_eq!(NodeIdSyntax::of("at0"), Some(NodeIdSyntax::Adl2));
+    assert_eq!(NodeIdSyntax::of("id1"), Some(NodeIdSyntax::Adl2));
+    // Several digits with no leading zero is still ADL 2.
+    assert_eq!(NodeIdSyntax::of("at10"), Some(NodeIdSyntax::Adl2));
+    // A leading zero and more than one digit is 1.4's four-digit spelling.
+    assert_eq!(NodeIdSyntax::of("at0004"), Some(NodeIdSyntax::Adl14));
+    assert_eq!(NodeIdSyntax::of("ac0001"), Some(NodeIdSyntax::Adl14));
+    // A trailing or empty specialisation segment is neither syntax.
+    assert_eq!(NodeIdSyntax::of("id1."), None);
+    assert_eq!(NodeIdSyntax::of("id1..2"), None);
+    assert_eq!(NodeIdSyntax::of("id1.x"), None);
+    assert_eq!(NodeIdSyntax::of("id"), None);
+}
+
+/// A container whose children need exactly the cardinality it offers is legal.
+///
+/// If this broke — `>` becoming `>=` in `CAttribute::container` — every
+/// archetype whose children fill their container exactly would be refused, and
+/// that is the ordinary case rather than an edge one: two mandatory elements
+/// under a `0..2` container is what a blood pressure looks like.
+#[test]
+fn children_may_fill_a_container_exactly() {
+    let element = |code: &str| {
+        CObject::Complex(
+            CComplexObject::new(
+                "ELEMENT",
+                Some(code.to_owned()),
+                MultiplicityInterval::MANDATORY,
+                Vec::new(),
+            )
+            .unwrap(),
+        )
+    };
+
+    // Two mandatory children, cardinality 0..2: exactly filled, and accepted.
+    assert!(
+        CAttribute::container(
+            "items",
+            MultiplicityInterval::MANDATORY,
+            Cardinality::new(MultiplicityInterval::new(0, Some(2)).unwrap()),
+            vec![element("at0004"), element("at0005")],
+        )
+        .is_ok()
+    );
+
+    // One more than it can hold is refused.
+    assert!(
+        CAttribute::container(
+            "items",
+            MultiplicityInterval::MANDATORY,
+            Cardinality::new(MultiplicityInterval::new(0, Some(2)).unwrap()),
+            vec![element("at0004"), element("at0005"), element("at0006")],
+        )
+        .is_err()
+    );
 }
