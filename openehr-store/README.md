@@ -1,8 +1,12 @@
 # openehr-store
 
-The engine-agnostic half of openEHR persistence: the storage model, the
+openEHR® store is the engine-agnostic half of openEHR persistence: the storage model, the
 projection from openEHR objects onto rows, the commit rules, and the conformance
 suite every engine runs.
+
+> openEHR® is the registered trademark of the openEHR Foundation. Use of the
+> trademark does not constitute endorsement of this product by openEHR
+> International or openEHR Foundation.
 
 ## Why this crate exists
 

@@ -1,7 +1,11 @@
 # openehr
 
-openEHR Reference Model types, validation, paths, AQL parsing, and
+openEHR® Reference Model types, validation, paths, AQL parsing, and
 change-control security primitives — in Rust.
+
+> openEHR® is the registered trademark of the openEHR Foundation. Use of the
+> trademark does not constitute endorsement of this product by openEHR
+> International or openEHR Foundation.
 
 [openEHR](https://specifications.openehr.org/) specifies clinical information
 as a small, stable **Reference Model** of about ninety classes, plus

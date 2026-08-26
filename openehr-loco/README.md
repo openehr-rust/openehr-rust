@@ -1,7 +1,11 @@
 # openehr-loco
 
-A RESTful openEHR API server on **Axum** and **Loco 1.0.1**, over
+A RESTful openEHR® API server on **Axum** and **Loco 1.0.1**, over
 [`openehr-sqlite`](../openehr-sqlite).
+
+> openEHR® is the registered trademark of the openEHR Foundation. Use of the
+> trademark does not constitute endorsement of this product by openEHR
+> International or openEHR Foundation.
 
 Not published, and it sits **outside the conformance ladder** — every rung there
 is defined by DDL, a `Store` implementation, or a database server, and this

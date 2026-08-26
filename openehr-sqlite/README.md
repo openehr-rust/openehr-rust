@@ -1,6 +1,10 @@
 # openehr-sqlite
 
-openEHR persistence for **SQLite 3** — a complete embedded store.
+openEHR® persistence for **SQLite 3** — a complete embedded store.
+
+> openEHR® is the registered trademark of the openEHR Foundation. Use of the
+> trademark does not constitute endorsement of this product by openEHR
+> International or openEHR Foundation.
 
 ## Install
 
