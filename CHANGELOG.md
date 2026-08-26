@@ -5,7 +5,7 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
-## Unreleased
+## 0.7.0 — 2026-08-26
 
 **`#![forbid(unsafe_code)]` at every crate root and every fuzz target** — 32
 files, added 2026-08-26. The ten buildable crates already forbade it through
