@@ -1,5 +1,11 @@
 //! A `RESTful` openEHR service, on Axum and Loco.
 //!
+//! # Trademarks
+//!
+//! openEHR® is a registered trademark of openEHR International (the openEHR
+//! Foundation). This project is an independent implementation: it is not
+//! affiliated with, endorsed by, or certified by openEHR International.
+//!
 //! # Evidence, in place of a conformance level
 //!
 //! This crate is **outside the ladder**: every rung there is defined by DDL, a

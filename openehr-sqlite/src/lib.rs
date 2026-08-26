@@ -1,5 +1,11 @@
 //! openEHR persistence for **`SQLite` 3**, with a complete embedded store.
 //!
+//! # Trademarks
+//!
+//! openEHR® is a registered trademark of openEHR International (the openEHR
+//! Foundation). This project is an independent implementation: it is not
+//! affiliated with, endorsed by, or certified by openEHR International.
+//!
 //! # Conformance level: **Verified**
 //!
 //! Store level, re-checked in CI on every commit. `SQLite` is bundled and

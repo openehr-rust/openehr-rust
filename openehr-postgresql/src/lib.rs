@@ -6,6 +6,12 @@
 //! share. A dialect owns four things and no more: type spellings, identifier
 //! quoting, placeholder style, and how the engine enforces append-only.
 //!
+//! # Trademarks
+//!
+//! openEHR® is a registered trademark of openEHR International (the openEHR
+//! Foundation). This project is an independent implementation: it is not
+//! affiliated with, endorsed by, or certified by openEHR International.
+//!
 //! # Conformance level: **Schema**
 //!
 //! This crate emits DDL, and that DDL has been executed against

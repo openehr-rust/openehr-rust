@@ -45,6 +45,15 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       `er7-rust/TRADEMARKS.md` (mark-by-mark table, what is and is not
       claimed), adapted to openEHR International's trademark usage terms —
       read those terms first and record what they require.
+      *Progress 2026-08-26: the notice half is largely done —
+      `spec/professionalization/` rule 5 defines the verbatim notice
+      (registration verified at openehr.org/logos/: U.S. 4,272,380, EUIPO
+      002994853, IP Australia 939279), and it is now on the root documents
+      and the published crates' rustdoc. **Two deferrals:** `README.md` and
+      `openehr/src/lib.rs` carry the notice in the working tree only —
+      both also carry the in-flight Archetype Model hunks, so their
+      commits belong to whoever lands that change. `TRADEMARKS.md` itself
+      is still to write.*
 - [ ] Add `LICENSES/` with the full text of all five licenses in the SPDX
       expression (REUSE convention; `fhir-rust/LICENSES/` is the model).
 

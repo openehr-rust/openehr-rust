@@ -8,6 +8,12 @@
 //! `openehr-mysql`, `openehr-mariadb`, `openehr-mssql`, `openehr-oracle` — each
 //! supply one [`Dialect`] and, where they have a driver, one [`Store`].
 //!
+//! # Trademarks
+//!
+//! openEHR® is a registered trademark of openEHR International (the openEHR
+//! Foundation). This project is an independent implementation: it is not
+//! affiliated with, endorsed by, or certified by openEHR International.
+//!
 //! # Why this crate exists at all
 //!
 //! Because the alternative is documented, in this repository, as a failure. The

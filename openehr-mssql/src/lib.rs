@@ -3,6 +3,12 @@
 //! One [`Dialect`]; the model, projection, commit rules, and conformance suite
 //! are in [`openehr_store`].
 //!
+//! # Trademarks
+//!
+//! openEHR® is a registered trademark of openEHR International (the openEHR
+//! Foundation). This project is an independent implementation: it is not
+//! affiliated with, endorsed by, or certified by openEHR International.
+//!
 //! # Conformance level: **Dialect**
 //!
 //! DDL only. No driver, no [`openehr_store::Store`], and nothing here has run
