@@ -89,6 +89,17 @@ defect, no claim beyond what has been run (`W0.3`), and a zero-warning tree.
 [`AGENTS.md`](AGENTS.md) is the operational guide and applies to human and
 machine contributors alike.
 
+## Issues, and what response to expect
+
+**Public issues are read within a week.** That is a target one person can
+usually keep, not a contract — the honest version of every commitment in this
+file. A reply may be "filed, no timeline"; what it will not be is a claim of
+progress nothing substantiates (`W0.3`). The templates in
+`.github/ISSUE_TEMPLATE/` say what makes a report actionable, and the
+contribution valued most here is the *wrong claim* report: documentation
+saying something the software does not do. Vulnerabilities have their own
+channel and their own stated windows — see below.
+
 ## Security reports
 
 [`SECURITY.md`](SECURITY.md) is the policy: email

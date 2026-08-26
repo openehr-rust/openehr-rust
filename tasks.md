@@ -98,7 +98,14 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       MAINTAINERS.md and SECURITY.md.
 - [ ] Add release tags/attestation for 0.6.0 and future releases; consider
       crates.io Trusted Publishing.
-- [ ] Add `.github/ISSUE_TEMPLATE/` and a stated issue-response expectation.
+- [x] Add `.github/ISSUE_TEMPLATE/` and a stated issue-response expectation.
+      *Done 2026-08-26: bug-report template (synthetic-data-only warning,
+      per SECURITY.md, and a redirect for security defects), a wrong-claim
+      template (the contribution this repository values most), and
+      `config.yml` linking private vulnerability reporting (now enabled)
+      and the response expectation; MAINTAINERS.md states the expectation
+      itself — issues read within a week, a target one person can keep,
+      not a contract.*
 
 ### Governance
 
