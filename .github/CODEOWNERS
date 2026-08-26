@@ -1,0 +1,14 @@
+# Code owners for this repository.
+#
+# One line, because there is one maintainer. `MAINTAINERS.md` is the roster and
+# says what that means for anyone depending on this software; this file is only
+# the mechanism GitHub uses to request a review.
+#
+# The owner is written as an email address rather than a handle because that is
+# how the maintainer is identified everywhere else here — `CITATION.cff`,
+# `MAINTAINERS.md`, the commit history. GitHub resolves an email in this file
+# only when it is a verified address on an account with write access; if a
+# review request ever fails to appear, that resolution is the thing to check,
+# and `@joelparkerhenderson` is the equivalent handle.
+
+*       joel@joelparkerhenderson.com

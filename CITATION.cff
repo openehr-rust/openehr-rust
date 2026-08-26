@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+title: "openehr-rust: the openEHR Reference Model and SQL persistence in Rust"
+message: >-
+  If you use this work and you want to cite it,
+  then you can use the metadata from this file.
+type: software
+authors:
+  - given-names: Joel Parker
+    family-names: Henderson
+    email: joel@joelparkerhenderson.com
+    affiliation: joelparkerhenderson.com
+    orcid: 'https://orcid.org/0009-0000-4681-282X'
+identifiers:
+  - type: url
+    value: 'https://github.com/openehr-rust/openehr-rust/'
+    description: Source repository
+  - type: url
+    value: 'https://crates.io/crates/openehr'
+    description: The openehr crate on crates.io
+repository-code: 'https://github.com/openehr-rust/openehr-rust/'
+url: 'https://github.com/openehr-rust/openehr-rust/'
+abstract: >-
+  An implementation of the openEHR Reference Model in Rust — types, validation,
+  openEHR paths, AQL parsing, and change-control security — together with an
+  engine-agnostic persistence layer, SQL dialects for six database engines, and
+  a shared conformance suite. Conformance is stated by evidence level rather
+  than by feature list: SQLite is Verified against a real engine in continuous
+  integration; the other dialects state exactly how far they have been checked.
+keywords:
+  - openEHR
+  - electronic health record
+  - clinical data repository
+  - health informatics
+  - interoperability
+  - Rust
+  - SQL
+license:
+  - MIT
+  - Apache-2.0
+  - BSD-3-Clause
+  - GPL-2.0-only
+  - GPL-3.0-only
+version: 0.6.0
+date-released: '2026-08-22'

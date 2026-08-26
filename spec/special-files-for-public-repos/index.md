@@ -14,3 +14,6 @@ Special files that use top-level markdown:
 - MAINTAINERS.md with Joel Prker Henderson (joel@joelparkerhenderson.com) as sole maintainer (use this as template: https://github.com/rubentalstra/FerroEHR/blob/develop/MAINTAINERS.md)
 - CHANGELOG.md with change log history summries
 - AI_STATEMENT.md (use this as template: https://github.com/rubentalstra/FerroEHR/blob/develop/AI_STATEMENT.md)
+- RFC.md request for comments: what this project wants to learn, what feedback helps, how to send it
+- GOVERNANCE.md who decides, on what basis, and where each decision is recorded
+- SECURITY.md how to report a vulnerability, what is in scope, and what to expect

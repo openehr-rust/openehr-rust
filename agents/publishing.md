@@ -233,6 +233,12 @@ cargo owner --add <user-or-team>
 
 ## After
 
+- **Update [`CITATION.cff`](../CITATION.cff)**: `version` and `date-released`.
+  Nothing checks it — `scripts/check-docs.py` reads Markdown, and a `.cff` is
+  not Markdown — so it is the one restatement of the version with no guard
+  behind it. `W-10` was five files stating a version and one of them being
+  updated; this is the sixth file, and this line is the only thing standing
+  between it and the same finding.
 - Check <https://docs.rs/<crate>> built. A docs.rs failure is usually a doctest
   or an intra-doc link that resolves locally and not in isolation.
 - Tag the release: `git tag openehr-v0.3.0 && git push --tags`.
