@@ -30,6 +30,8 @@
 //! assert_eq!(MysqlDialect.quote("openehr_version"), "`openehr_version`");
 //! ```
 
+#![forbid(unsafe_code)]
+
 use openehr_store::{ColTy, Dialect, Idempotence, Placeholder, Table};
 
 /// The `MySQL` dialect.

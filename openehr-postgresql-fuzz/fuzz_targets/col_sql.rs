@@ -1,6 +1,8 @@
 #![no_main]
 //! Drives `check_col_sql` with arbitrary column types and bounds.
 
+#![forbid(unsafe_code)]
+
 use libfuzzer_sys::fuzz_target;
 use openehr_store::ColTy;
 

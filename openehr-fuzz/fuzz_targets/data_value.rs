@@ -22,6 +22,8 @@
 //!    serialize: the bytes must be identical the second time, because the
 //!    content digest is taken over them.
 
+#![forbid(unsafe_code)]
+
 use libfuzzer_sys::fuzz_target;
 use openehr::rm::data_types::DataValue;
 use openehr::validation::Validate;

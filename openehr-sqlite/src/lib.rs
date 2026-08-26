@@ -42,6 +42,8 @@
 //! );
 //! ```
 
+#![forbid(unsafe_code)]
+
 mod dialect;
 mod store;
 

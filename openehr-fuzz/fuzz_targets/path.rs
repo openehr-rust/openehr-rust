@@ -11,6 +11,8 @@
 //! is totality, since a panic while resolving a caller-supplied path is
 //! reachable by anyone who can ask a question.
 
+#![forbid(unsafe_code)]
+
 use libfuzzer_sys::fuzz_target;
 use openehr::path::Pathable;
 use openehr::rm::common::{Archetyped, LocatableAttrs, PartyIdentified};

@@ -111,8 +111,8 @@ scripts, not intentions, and they are the reason this disclosure is checkable:
   owner, duplicated passages byte for byte, and the audit register against its
   own summary. A generated document that overstates something is the failure
   mode this script exists for.
-- **Lints as gates**: `unsafe_code` is `forbid` — in every buildable crate's
-  manifest *and* as `#![forbid(unsafe_code)]` at every crate root and fuzz
+- **Lints as gates**: `unsafe_code` is `forbid` — in all eighteen crates'
+  manifests *and* as `#![forbid(unsafe_code)]` at every crate root and fuzz
   target — `missing_docs`,
   `missing_errors_doc`, and `missing_panics_doc` are `deny`, clippy runs at
   `pedantic`, and CI sets `RUSTFLAGS="-D warnings"`. Rustdoc examples are

@@ -1,4 +1,5 @@
 #![no_main]
+#![forbid(unsafe_code)]
 //! `DV_URI` and `DV_EHR_URI`, through **both** gates.
 //!
 //! This target exists because of `lib:A-36`, and it was written before the fix

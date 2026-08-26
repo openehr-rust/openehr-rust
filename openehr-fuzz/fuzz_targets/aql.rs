@@ -7,6 +7,8 @@
 //! here can do — but not to nothing: a panic in a query parser is a denial of
 //! service reachable by anyone who can submit a query.
 
+#![forbid(unsafe_code)]
+
 use libfuzzer_sys::fuzz_target;
 use openehr::aql::AqlQuery;
 

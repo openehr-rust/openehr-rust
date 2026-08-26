@@ -26,6 +26,8 @@
 //! assert!(sql.contains("IF NOT EXISTS (SELECT 1 FROM sys.objects"));
 //! ```
 
+#![forbid(unsafe_code)]
+
 use openehr_store::{ColTy, Dialect, Idempotence, ObjectKind, Placeholder, Table};
 
 /// The SQL Server dialect.

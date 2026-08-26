@@ -23,6 +23,8 @@
 //! to the input, which is what keeps this target testing parser logic instead
 //! of rediscovering a stated design decision.
 
+#![forbid(unsafe_code)]
+
 use libfuzzer_sys::fuzz_target;
 use openehr::rm::ehr::Composition;
 use openehr::validation::Validate;

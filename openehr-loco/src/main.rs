@@ -12,6 +12,8 @@
 //! operator actually takes. `W0.3` again — a documented instruction is a claim,
 //! and this one was never run.
 
+#![forbid(unsafe_code)]
+
 use loco_rs::cli;
 use openehr_loco::app::App;
 

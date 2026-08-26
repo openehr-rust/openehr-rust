@@ -89,7 +89,7 @@ jobs:
         working-directory: ${{ matrix.crate }}
         run: cargo doc --no-deps --all-features
 
-  # `spec/rust-msrv-n-minus-3.md`: the MSRV is N-3, a formula rather than a
+  # `spec/rust-msrv-n-minus-3/index.md`: the MSRV is N-3, a formula rather than a
   # number, and this job is the reason the formula is worth more than a number.
   #
   # It derives N from the stable toolchain it just installed, so the expected
@@ -174,7 +174,7 @@ jobs:
           # would destroy the finding. Everything else must match.
           historical() {
             case "$1" in
-              *spec/audit.md:*|*spec/rust-msrv-n-minus-3.md:*|*CHANGELOG.md:*) return 0 ;;
+              *spec/audit.md:*|*spec/rust-msrv-n-minus-3/index.md:*|*CHANGELOG.md:*) return 0 ;;
               *) return 1 ;;
             esac
           }
@@ -209,15 +209,15 @@ jobs:
           # sentence, so that the document defining the formula is itself
           # subject to it.
           want_line="is the current stable release. N is **$STABLE**, so the MSRV is **$WANT**."
-          grep -qF "$want_line" spec/rust-msrv-n-minus-3.md || {
-            echo "::error file=spec/rust-msrv-n-minus-3.md::should contain: $want_line"
+          grep -qF "$want_line" spec/rust-msrv-n-minus-3/index.md || {
+            echo "::error file=spec/rust-msrv-n-minus-3/index.md::should contain: $want_line"
             bad=1
           }
 
           [ "$bad" -eq 0 ] || {
             echo "::error::to fix, from the repository root:"
             echo "::error::  grep -rl 'rust-version = ' --include=Cargo.toml . | xargs sed -i 's/rust-version = \".*\"/rust-version = \"$WANT\"/'"
-            echo "::error::then update the READMEs and spec/rust-msrv-n-minus-3.md to match"
+            echo "::error::then update the READMEs and spec/rust-msrv-n-minus-3/index.md to match"
             exit 1
           }
           echo "18 manifests and every document declare $WANT"

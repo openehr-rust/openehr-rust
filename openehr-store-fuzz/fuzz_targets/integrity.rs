@@ -7,6 +7,8 @@
 //! rows no `Store` would ever have written — which is the point: the function's
 //! subject is a row somebody changed.
 
+#![forbid(unsafe_code)]
+
 use libfuzzer_sys::fuzz_target;
 use openehr_store::record::VersionRow;
 

@@ -48,6 +48,8 @@
 //! check that needs a store, and it is why `M3.43` requires a column that
 //! returns the bytes it was given.
 
+#![forbid(unsafe_code)]
+
 pub mod conformance;
 pub mod dialect;
 pub mod error;

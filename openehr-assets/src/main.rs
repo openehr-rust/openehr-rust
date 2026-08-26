@@ -28,6 +28,8 @@
 //! naming the stale file — so a schema change that forgets to update `assets/`
 //! fails CI rather than leaving a lie in the tree.
 
+#![forbid(unsafe_code)]
+
 use openehr_store::{ColTy, Dialect, TABLES, ddl_script};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;

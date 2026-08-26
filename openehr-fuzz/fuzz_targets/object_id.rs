@@ -5,6 +5,8 @@
 //! then renders differently would break every foreign key in the store, because
 //! the rendered form is what reaches a column (`db:H5.6`).
 
+#![forbid(unsafe_code)]
+
 use libfuzzer_sys::fuzz_target;
 use openehr::base::{
     ArchetypeId, HierObjectId, InternetId, IsoOid, ObjectVersionId, TemplateId, TerminologyId, Uid,

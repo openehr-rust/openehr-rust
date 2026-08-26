@@ -42,6 +42,8 @@
 //! assert_eq!(PostgresqlDialect.col_sql(ColTy::Instant), "text");
 //! ```
 
+#![forbid(unsafe_code)]
+
 use openehr_store::schema::Table;
 use openehr_store::{ColTy, Dialect, Placeholder};
 

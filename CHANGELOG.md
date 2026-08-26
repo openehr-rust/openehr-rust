@@ -5,6 +5,61 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
+## Unreleased
+
+**`#![forbid(unsafe_code)]` at every crate root and every fuzz target** — 32
+files, added 2026-08-26. The ten buildable crates already forbade it through
+`[lints.rust]` in their manifests; the attribute states the same guarantee in
+the source, where removing it is a visible edit to the file it protects rather
+than a line in a manifest.
+
+**The eight fuzz crates were not covered before this.** They carried no
+`[lints]` table, so `unsafe_code` was not forbidden in any of the 21 fuzz
+targets, while this repository's documentation said the tree forbids it. No
+`unsafe` was present — `grep -rn '\bunsafe\b' --include='*.rs'` finds one hit,
+in a comment explaining why a test cannot drive `App::before_run` — so the claim
+was true of the code and false of the configuration.
+
+Both halves are now in place in all eighteen crates: `unsafe_code = "forbid"` in
+every manifest, covering files not yet written, and the attribute in every
+existing root and target, surviving a manifest edit. Verified with
+`cargo fuzz build` across all eight fuzz crates and `cargo test` plus
+`RUSTFLAGS="-D warnings" cargo clippy --all-targets` across the ten buildable
+ones.
+
+**Scope change, specification only — no code changed.** The Archetype Model is
+now in scope. `S1.4` — *the crate MUST NOT implement the Archetype Model* — was
+withdrawn on 2026-08-26 under the new `C0.19`, and `S1.21` plus
+[`openehr/spec/15-archetypes.md`](openehr/spec/15-archetypes.md) require AOM2,
+ADL 2 parsing, ADL 1.4 ingestion, specialisation and flattening, template
+expansion, operational templates, validation of Reference Model data against an
+operational template, and a repository abstraction for retrieval.
+
+**Added: `openehr::am`, the AOM2 object model** (`K15.1`–`K15.4`). `Archetype`,
+`CComplexObject`, `CAttribute`, `CObject`, `CPrimitive`, `ArchetypeSlot`,
+`CArchetypeRoot`, `MultiplicityInterval`, `Cardinality`,
+`ArchetypeTerminology`, and `TermDefinition`, with construction-time checking of
+the AOM2 validity conditions that one artefact decides on its own — `VARDT`,
+`VATDF`, `VACDF`, `VATCD`, `VOKU` — and `Archetype::check` to re-run them on
+anything that arrived as JSON, because `Deserialize` writes fields straight in
+(`L10.1a`). `am::AM_RELEASE` names the targeted release, 2.3.0.
+
+A primitive constraint this crate cannot model becomes
+`CPrimitive::Unsupported` and survives a round trip rather than being dropped:
+a dropped constraint silently widens an archetype, which is the failure the
+withdrawn `S1.4` predicted.
+
+**Twenty-eight of the thirty-two requirements remain unimplemented**, and the
+practically important one is among them: **this crate still cannot tell you
+whether a `COMPOSITION` conforms to its archetype.** No ADL parser, no
+flattening, no template expansion, no operational template, no retrieval. The
+conformance matrix marks each `spec` and `A-40` tracks them. `validate()` is
+unchanged and remains Reference-Model-level.
+
+`L10.2` is amended: validation now has two levels, and a verdict must say which
+one produced it. `S1.5` is unchanged — AQL is still parsed and not executed
+(`K15.29`).
+
 ## 0.6.0 — 2026-08-22
 
 **A representation change, and the reason it is not 0.5.1.** The source API is
@@ -114,7 +169,7 @@ never a silent change in behaviour — which is the property that made the
 
 - **MSRV raised from 1.90 to 1.95, and it is now a rule rather than a number:
   N−3, three Rust releases behind stable**
-  ([`spec/rust-msrv-n-minus-3.md`](spec/rust-msrv-n-minus-3.md)).
+  ([`spec/rust-msrv-n-minus-3/index.md`](spec/rust-msrv-n-minus-3/index.md)).
 
   Raising a floor is breaking for a user below it (`RV6`), so it is recorded
   here rather than left to be discovered by a build error. Cargo refuses with a
@@ -170,7 +225,7 @@ never a silent change in behaviour — which is the property that made the
   re-deriving them, so no false tamper alarm is reachable. Recorded rather than
   worked around; the fix is upstream.
 
-- **The `agents/` directory is lowercase** (`AG1`, `spec/agents-directory-name-is-lowercase.md`).
+- **The `agents/` directory is lowercase** (`AG1`, `spec/agents-directory-name-is-lowercase/index.md`).
   `AGENTS/` became `agents/`; the file `AGENTS.md` keeps its name, which is a
   cross-tool convention. Affects nobody depending on these crates.
 
@@ -265,3 +320,9 @@ itself.
 ## 0.2.0 and earlier
 
 Not tracked here. See the git history and crates.io.
+
+## Trademarks
+
+openEHR® is a registered trademark of openEHR International (the openEHR
+Foundation). This project is an independent implementation: it is not
+affiliated with, endorsed by, or certified by openEHR International.

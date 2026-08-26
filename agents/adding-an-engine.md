@@ -47,7 +47,7 @@ are, not at `0.1.x`.
 
 The same applies to `rust-version`, which is **N−3** and changes on Rust's
 release schedule rather than on anything that happens here
-([`spec/rust-msrv-n-minus-3.md`](../spec/rust-msrv-n-minus-3.md)). Read it from
+([`spec/rust-msrv-n-minus-3/index.md`](../spec/rust-msrv-n-minus-3/index.md)). Read it from
 a sibling too; the `msrv` job checks that every manifest agrees.
 
 ```toml
@@ -78,6 +78,13 @@ unsafe_code = "forbid"
 pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
+```
+
+`src/lib.rs` starts with the same guarantee stated in the source, where a reader
+of the code sees it and a manifest edit cannot silently remove it:
+
+```rust
+#![forbid(unsafe_code)]
 ```
 
 **Three CI jobs assert the crate count.** `msrv`, `layering`, and `claims` each

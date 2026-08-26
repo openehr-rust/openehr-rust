@@ -3,6 +3,8 @@
 //!
 //! Drives `openehr_store::conformance::check_projection` (`W0.26`).
 
+#![forbid(unsafe_code)]
+
 use libfuzzer_sys::fuzz_target;
 use openehr::rm::ehr::Composition;
 

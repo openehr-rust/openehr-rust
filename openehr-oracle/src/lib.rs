@@ -29,6 +29,8 @@
 //! assert_eq!(OracleDialect.col_sql(ColTy::Bool), "NUMBER(1)");
 //! ```
 
+#![forbid(unsafe_code)]
+
 use openehr_store::{ColTy, Dialect, Idempotence, ObjectKind, Placeholder, Table};
 
 /// The Oracle dialect.

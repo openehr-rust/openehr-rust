@@ -10,6 +10,8 @@
 //!    `2024-05-01`, and a parser that normalises has destroyed a clinical
 //!    distinction before storage ever sees it.
 
+#![forbid(unsafe_code)]
+
 use libfuzzer_sys::fuzz_target;
 use openehr::base::iso8601::{Date, DateTime, Duration, Time};
 

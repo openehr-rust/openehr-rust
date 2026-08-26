@@ -48,6 +48,8 @@
 //! assert_eq!(MariadbDialect.quote("openehr_version"), "`openehr_version`");
 //! ```
 
+#![forbid(unsafe_code)]
+
 use openehr_store::{ColTy, Dialect, Placeholder, Table};
 
 /// The `MariaDB` dialect.
