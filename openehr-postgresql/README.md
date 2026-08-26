@@ -31,8 +31,8 @@ println!("{}", ddl_script(&PostgresqlDialect));
 
 ```toml
 [dependencies]
-openehr-postgresql = "0.2"
-openehr-store = "0.2"
+openehr-postgresql = "0.7"
+openehr-store = "0.7"
 ```
 
 Requires Rust 1.95+ (edition 2024).

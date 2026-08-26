@@ -12,14 +12,14 @@ own idea of what a health record is.
 
 ```toml
 [dependencies]
-openehr = "0.2"
+openehr = "0.7"
 ```
 
 ## Install
 
 ```toml
 [dependencies]
-openehr = "0.2"
+openehr = "0.7"
 ```
 
 Requires Rust 1.95+ (edition 2024).

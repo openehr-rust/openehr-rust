@@ -5,15 +5,18 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
-## Unreleased
+## 0.7.1 — 2026-08-26
 
-**Trademark notice reworded to the owner-specified text** (2026-08-26): every
-page that carries the notice now reads "openEHR® is the registered trademark of
-the openEHR Foundation. Use of the trademark does not constitute endorsement of
+**Trademark notice reworded to the owner-specified text.** Every page that
+carries the notice now reads "openEHR® is the registered trademark of the
+openEHR Foundation. Use of the trademark does not constitute endorsement of
 this product by openEHR International or openEHR Foundation.", and
 `scripts/check-trademarks.py` enforces that wording. The 0.7.0 crates on
-crates.io carry the previous wording; the new wording ships with the next
-release.
+crates.io carry the previous wording, which a published version keeps forever;
+this release exists so the crate pages and rustdoc show the owner-specified
+text. No code changed — the release is the notice, plus the install snippets
+in the eight crate READMEs moving off a stale `"0.2"` to `"0.7"`, since those
+READMEs are what crates.io renders.
 
 ## 0.7.0 — 2026-08-26
 

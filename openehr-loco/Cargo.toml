@@ -6,7 +6,7 @@
 # out here, depends inward, and can be deleted without touching either.
 [package]
 name = "openehr-loco"
-version = "0.7.0"
+version = "0.7.1"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
@@ -50,9 +50,9 @@ axum = "0.8"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip", "arbitrary_precision"] }
-openehr = { path = "../openehr", version = "0.7.0" }
-openehr-store = { path = "../openehr-store", version = "0.7.0" }
-openehr-sqlite = { path = "../openehr-sqlite", version = "0.7.0" }
+openehr = { path = "../openehr", version = "0.7.1" }
+openehr-store = { path = "../openehr-store", version = "0.7.1" }
+openehr-sqlite = { path = "../openehr-sqlite", version = "0.7.1" }
 # Loco's `Hooks` is an `#[async_trait]` trait, so implementing it needs the
 # same macro.
 async-trait = "0.1"
