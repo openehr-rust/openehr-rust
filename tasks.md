@@ -84,11 +84,15 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
 
 ### Privacy and patient data
 
-- [ ] **Add root `PHI.md`** for a clinician/CISO reader, consolidating
+- [x] **Add root `PHI.md`** for a clinician/CISO reader, consolidating
       `openehr/spec/11-security.md` §PHI-in-output, the redaction behavior,
       and the compliance mappings — carrying the mappings' honesty forward
       (HIPAA §164.312(b)/(c)(1) Partial at the database layer; "components,
       not certified systems"). Model: `fhir-rust/PHI.md`'s Q&A table.
+      *Done 2026-08-26: PHI.md at root; every row cites a `lib:`/`db:`
+      requirement or a mapping; reads-not-audited (`db:PR12.5`), no-erasure
+      (`db:M3.18`), and both Partial HIPAA rows carried forward verbatim in
+      spirit; `scripts/check-docs.py` green after the change.*
 
 ### Outreach
 
