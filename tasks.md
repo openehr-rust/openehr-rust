@@ -148,10 +148,16 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
 
 ### Audit and harmonization
 
-- [ ] Re-sync `spec/special-files-for-public-repos/index.md` with the
+- [x] Re-sync `spec/special-files-for-public-repos/index.md` with the
       canonical `fhir-rust` version (the local 19-line copy omits
       CODE_OF_CONDUCT.md, PHI.md, TRADEMARKS.md, LICENSES/, FUNDING.yml,
-      and index.md).
+      and index.md). *Done 2026-08-26: list synced with the canon (which
+      itself lists neither TRADEMARKS.md nor index.md; index.md is noted in
+      the status section, TRADEMARKS.md stays with its own open item
+      above), status section written to this repository's actual state —
+      everything exists except FUNDING.yml, whose absence is the recorded
+      open decision — and the HL7 notes adapted to the openEHR rule 5
+      machinery.*
 - [ ] Decide whether `spec/databases/conformance-matrix.md` gets
       machine-derived like the library matrix (`plan.md` §Open decisions).
 

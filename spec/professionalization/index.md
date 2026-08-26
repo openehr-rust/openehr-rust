@@ -79,9 +79,10 @@ listing remains optional.) This paragraph is the registration.
 
 - **Rule 1: met.** `plan.md` and `tasks.md` are committed at the root
   (commit `f1f091d`), and every `[x]` added today names its evidence.
-- **Rule 2: partly met.** The special files exist; the local copy of the
-  canonical list predates the family's and its re-sync is an open `tasks.md`
-  item under Audit and harmonization.
+- **Rule 2: met, with one recorded absence.** The special files exist and
+  the canonical list was re-synced from the family 2026-08-26; the one
+  listed file that does not exist, `.github/FUNDING.yml`, is a recorded
+  open decision rather than a gap (the list's own status section says so).
 - **Rule 3: partly met.** SECURITY.md's known-gaps section is accurate: the
   repository-settings gap it named (private vulnerability reporting,
   Dependabot, secret scanning) was closed 2026-08-26 and the section updated
@@ -106,10 +107,10 @@ listing remains optional.) This paragraph is the registration.
   compliance or certification.
 - **Rule 7: met.** `CODE_OF_CONDUCT.md` at the root (commit `f1f091d`) with
   the claim-accuracy clause citing `W0.3`.
-- **Rule 8: in progress.** This file is the family template adapted;
-  CODEOWNERS moved to the repository root 2026-08-26 to match all four
-  siblings, and the special-files re-sync is the remaining open
-  harmonization item.
+- **Rule 8: met for the named items.** This file is the family template
+  adapted; CODEOWNERS moved to the repository root 2026-08-26 to match all
+  four siblings, and the special-files list was re-synced from the
+  canonical `fhir-rust` copy the same day.
 - **Rule 9: met as a gate.** No outreach has been executed;
   `help/outreach/index.md` §11 blocks on the conduct file (closed
   2026-08-26) and the repository security settings (closed 2026-08-26).
