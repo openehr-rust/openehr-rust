@@ -24,6 +24,7 @@ say:
 | `_type` is required where the declared type is abstract | which classes emit it and which infer it on input (`J9.4`) |
 | access control is scheme-agnostic | that an unevaluatable scheme denies and round-trips (`X11.3`) |
 | — | what is out of scope, and how the code says so (`S1.9`) |
+| how an archetype constrains the RM | what happens when a constraint uses something the crate cannot evaluate (`K15.20`) |
 
 Where openEHR is ambiguous or its own documents disagree, the resolution is
 recorded with the reason, not silently chosen. Where this crate departs from
@@ -67,6 +68,16 @@ departs from; an undeclared departure is a defect, not a decision.
   control, the audit chain, redaction, and PHI in output.
 - **12.** [Paths and query](12-paths-and-query.md) — `Q12.x`. openEHR path
   syntax and navigation; AQL lexing, parsing, and static checks.
+
+### The Archetype Model
+
+- **15.** [Archetypes and templates](15-archetypes.md) — `K15.x`. AOM2, ADL 2
+  and ADL 1.4, specialisation and flattening, templates and operational
+  templates, validation of data against an archetype, and retrieval.
+  **Added 2026-08-26**, when `S1.4` — the exclusion of the Archetype Model —
+  was withdrawn under `C0.19`. Every requirement in it is in force and
+  **unimplemented**; the matrix records them as `spec` and
+  [`audit.md`](audit.md) **A-40** is the finding that keeps the gap visible.
 
 ### Assurance
 

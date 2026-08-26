@@ -15,9 +15,19 @@ Requirement prefix: `L10`.
 
 ## What validation means, and what it does not
 
-- **L10.2** Validation is **Reference-Model-level only**. Wherever it is
-  offered, the documentation MUST state that a passing composition can still
-  violate its archetype, because archetypes are out of scope (`S1.4`).
+- **L10.2** *(amended 2026-08-26 — `S1.4` was withdrawn and the Archetype Model
+  brought into scope by `S1.21`)* Validation has **two levels**, and a verdict
+  MUST say which one produced it: Reference-Model validation (this section), and
+  archetype validation against an operational template (§15, `K15.19`). The two
+  MUST NOT be merged into one verdict — "not a valid `COMPOSITION`" and "a valid
+  `COMPOSITION` that does not conform to this template" are repaired
+  differently.
+
+  **While §15 is unimplemented**, the crate offers Reference-Model validation
+  only, and wherever it is offered the documentation MUST state that a passing
+  composition can still violate its archetype. That sentence stays until the
+  matrix says archetype validation exists — not until the specification says it
+  should (`K15.30`, `C0.11`).
 - **L10.3** Validation MUST collect every violation, not the first. A caller
   fixing a rejected composition wants the whole list; one violation per round
   trip turns a five-minute fix into five deployments.

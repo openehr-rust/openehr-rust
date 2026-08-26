@@ -15,12 +15,14 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**39 findings, 39 in the table below: 6 High, 24 Medium, 9 Low. 34 fixed or
-classified, 5 open.** These counts are checked against the table by CI
+**41 findings, 41 in the table below: 6 High, 25 Medium, 10 Low. 35 fixed or
+classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
-verified), and the check should have failed. Every one of the 5 open findings
-is open by a stated reason rather than by omission: **A-02**, **A-08** and
+verified), and the check should have failed. Every one of the 6 open findings
+is open by a stated reason rather than by omission — **A-40** is the newest and
+the largest, an entire specification section in force with no code behind it —
+and the rest: **A-02**, **A-08** and
 **A-19** are declared departures the crate does not intend to close; **A-05**, **A-10**,
 **A-30** are recorded limitations or residuals with the reasoning
 for leaving them written beside them — **A-38** is a defect in `serde_json`
@@ -124,6 +126,8 @@ in the documentation, which is the class this register most exists to catch.
 | A-15 | High | Append-only was enforced in the schema on two engines of five | **fixed**, verified on PostgreSQL 18 and MySQL 8.4 |
 | A-16 | High | `Time`/`DateTime` panicked on a multi-byte character in the offset | **fixed**, regression pinned |
 | A-17 | Medium | The first property tests passed vacuously | **fixed**, mutation-verified |
+| A-40 | Medium | The Archetype Model is specified and mostly not implemented: §15 and `S1.21` are in force, 28 of 32 requirements with no code | open — object model built 2026-08-26; no parser, flattening, template expansion, retrieval, or archetype validation |
+| A-41 | Low | The conformance matrix's own totals went stale a second time — 291 claimed, 300 in one sentence, 311 in the rows | **fixed** — re-derived mechanically to 344 on 2026-08-26 |
 
 ---
 
@@ -2190,3 +2194,94 @@ point**, which was weakened to "must re-parse" while this was open.
 evidence is the reason each fix is trusted and because each leaves a residual
 that is still live — an inference about `DV_SCALE`, and unbounded recursion
 depth. A finding is not deleted when it is fixed; it is marked.
+
+## A-40 — an entire section in force, and nothing behind it
+
+**Severity: Medium. Status: open — object model built 2026-08-26; no parser,
+flattening, template expansion, retrieval, or archetype validation.**
+
+**What happened.** `S1.4` — *the crate MUST NOT implement the Archetype Model* —
+was withdrawn on 2026-08-26 and replaced by `S1.21` and
+[§15](15-archetypes.md): AOM2 as types, ADL 2 parsing, ADL 1.4 ingestion,
+specialisation and flattening, template expansion, operational templates,
+validation against an operational template, and a repository abstraction for
+retrieval. Thirty-one requirements in §15 plus `S1.21`, all in force from the
+day they were written.
+
+**The gap, as it stands.** `K15.1`–`K15.4` are implemented and tested:
+`openehr::am` is the AOM2 object model — `ARCHETYPE`, the constraint tree,
+multiplicities, and archetype terminology — with construction-time checking of
+the AOM2 validity conditions decidable from one artefact (`VARDT`, `VATDF`,
+`VACDF`, `VATCD`, `VOKU`), a lossless JSON round trip, and an `Unsupported`
+primitive-constraint variant so an unmodellable constraint is carried rather
+than dropped.
+
+**Twenty-eight requirements have no code.** No ADL 2 parser (`K15.5`–`K15.7`),
+no ADL 1.4 ingestion (`K15.8`–`K15.10`), no flattening (`K15.11`–`K15.13`), no
+template expansion or operational template (`K15.14`–`K15.17`), **no validation
+of data against an archetype** (`K15.18`–`K15.23`), and no retrieval
+(`K15.24`–`K15.27`). For a caller, the practically important sentence is the
+middle one: this crate still cannot tell you whether a `COMPOSITION` conforms to
+the archetype it names.
+
+**Why this is a finding rather than a plan.** `C0.9` — a gap that is not written
+down reads as a pass. A specification section with no code is the most flattering
+possible document about a crate, and this repository has already been caught
+believing its own documentation twice (**W-09**, **A-26**). The register is where
+the distance between the specification and the code is kept visible, and 32
+requirements is the largest such distance this crate has carried.
+
+**Evidence a reader can check.** `grep -rln "K15\." openehr/src` returns the
+`am` module and `lib.rs`, and nothing else — no parser module, no archetype
+validator. Twenty-eight §15 rows in
+[`conformance-matrix.md`](conformance-matrix.md) read `spec`, a status that did
+not exist before this reversal and means exactly this; four read `•` and name
+the tests that earn them.
+
+**What holds in the meantime.** `K15.30`: every entry point that would implement
+§15 refuses explicitly, and no documentation may state or imply that this crate
+validates against archetypes. `openehr::am`'s own module header carries the
+table of what is and is not built, and `validation`'s header keeps the sentence
+that a passing composition may still violate its archetype. `K15.31`: a partial implementation is not
+described as archetype support — parsing without validation is a parser, and
+must be called one. `L10.2`, amended, keeps the sentence that a passing
+composition may still violate its archetype in place until the matrix says
+otherwise.
+
+**Residual, and it is real.** The scope reversal leaves citations elsewhere in
+the repository that point at a withdrawn requirement while stating a reason that
+is no longer the reason: `openehr-store/src/store.rs`,
+`openehr-store/src/schema.rs`, `openehr-fuzz/README.md`, and the engine crates'
+"not implemented anywhere (`lib:S1.4`)" rows. Every one of them remains
+**factually** correct about the code — nothing implements archetypes — and every
+one now cites a withdrawn decision instead of an unbuilt requirement. They are
+not rewritten here on purpose: `W0.6` says a citation's whole value is that it
+does not change, and a mass rewrite during a specification change is how a
+citation stops meaning anything. They are re-pointed when the code they describe
+changes, and this paragraph is the record that they are known.
+
+## A-41 — the matrix's totals went stale, again
+
+**Severity: Low. Status: fixed — re-derived mechanically to 344 on 2026-08-26.**
+
+**What happened.** [`conformance-matrix.md`](conformance-matrix.md) stated three
+different totals at once: a sentence claiming *300 ids, 300 covered*, a totals
+table summing to **291**, and rows covering **311**. All three were written to be
+derived from the tables, and none was re-derived after the requirements that
+followed them.
+
+**Why the existing guard did not catch it.** The `claims` job re-derives
+*coverage* — every requirement has exactly one row — which is what **A-26**
+asked for, and it passed the whole time. Coverage and tally are different
+claims, and only one of them was mechanised. That is **A-26** one level down: the
+boast moved from "every id has a row" to "here is how many of each", and the new
+boast had no check.
+
+**Fix.** Both numbers re-derived by expanding every `Id` cell and counting
+statuses: 344 requirements, 344 covered, and a per-status tally that now includes
+the `spec` and `withdrawn` statuses this reversal introduced.
+
+**Residual.** The tally is still hand-transcribed into the file. The honest
+statement is in the matrix itself — it names the method, so the next reader can
+re-run it — and mechanising the tally the way coverage is mechanised is the
+better fix, not yet done.

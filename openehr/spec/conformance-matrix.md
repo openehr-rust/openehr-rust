@@ -22,6 +22,8 @@ test that exercises it; test names below are real and runnable with
 | **doc** | A documentation requirement; satisfied by prose, not by code |
 | **type** | Enforced by the type system. A runtime test for it could not fail (`T13.2`), so writing one would be theatre. |
 | **—** | Deliberately not implemented; see [`01-scope.md`](01-scope.md) |
+| **spec** | Specified and **not implemented**: the requirement is in force, no code claims it, and the gap is tracked in [`audit.md`](audit.md). Distinct from **—**, which is a decision not to implement, and from **open**, which is a defect against something the crate purports to do |
+| **withdrawn** | The requirement no longer stands. Its identifier is permanent (`C0.5`) and its text is kept where it was, marked, so a citation to it still resolves (`C0.18`, `C0.19`) |
 | **open** | Not satisfied; tracked in [`audit.md`](audit.md) |
 
 Doctests count as tests: they compile and run in CI (`T13.8`).
@@ -29,7 +31,7 @@ Doctests count as tests: they compile and run in CI (`T13.8`).
 ## Totals
 
 Counted mechanically from the tables below, with every requirement id in
-`spec/*.md` checked to appear exactly once — **300 ids, 300 covered, none
+`spec/*.md` checked to appear exactly once — **344 ids, 344 covered, none
 missing**.
 
 A hand-written total in a file like this is a number nobody rechecks, and this
@@ -42,15 +44,32 @@ and comparing against the requirements the specification defines. A new
 requirement with no row fails the build; so does a row for a requirement that
 does not exist, and so does an id covered twice.
 
-| Status | Count | 2026-07-31 |
+**Re-derived 2026-08-26**, mechanically, from the rows below — and the previous
+numbers were wrong, which is the second time this table has drifted from its own
+tables. It said 291 total against 300 in the sentence above while the rows held
+311, because CI re-derives *coverage* and nothing re-derived the *tally*.
+**A-41** is the finding; the counts below were produced by expanding every `Id`
+cell and counting statuses, and re-running that is how they should be checked
+again.
+
+| Status | 2026-08-26 | 2026-07-31 |
 | --- | --- | --- |
-| • verified | 237 | 175 |
-| doc | 32 | 30 |
+| • verified | 258 | 175 |
+| doc | 33 | 30 |
+| **spec** — in force, unimplemented | 28 | — |
 | type | 13 | — |
-| — out of scope | 6 | 6 |
+| — out of scope | 8 | 6 |
 | ? implemented, untested | 3 | 54 |
+| withdrawn | 1 | — |
 | open | 0 | 4 |
-| **total requirements** | **291** | 269 |
+| **total requirements** | **344** | 269 |
+
+The **spec** rows are §15 plus `S1.21`, added on 2026-08-26 when `S1.4` was
+withdrawn and the Archetype Model brought into scope. There were 32 of them that
+day; `K15.1`–`K15.4` — the AOM2 object model — were implemented and tested the
+same day, leaving **28**. They remain the largest block of unsatisfied
+requirements this crate has ever carried, and they are counted here rather than
+described elsewhere so that the size of the gap is a number a reader can see.
 
 Three things moved these numbers, and they are not the same thing.
 
@@ -87,13 +106,15 @@ Process requirements; they govern this specification rather than the code.
 | C0.7–C0.11 | doc | this file, and [`audit.md`](audit.md) |
 | C0.12–C0.14 | • | `I2.15` and `R4.9` are the two declared departures |
 | C0.15–C0.18 | doc | commit conventions |
+| C0.19 | doc | `S1.4` is the first exclusion reversed under it — withdrawn in place, reason kept, §15 named |
 
 ## §1 Scope — `S1`
 
 | Id | Status | Evidence |
 | --- | --- | --- |
 | S1.1–S1.3 | • | `canonical_json::a_composition_covering_every_modelled_class_round_trips` |
-| S1.4–S1.7 | — | not implemented, by decision |
+| S1.4 | withdrawn | reversed 2026-08-26; the Archetype Model is in scope under `S1.21` and §15. Text kept in place, marked (`C0.19`) |
+| S1.5–S1.7 | — | not implemented, by decision |
 | S1.8 | • | `time_specification::tests::unimplemented_accessors_refuse_rather_than_guess` |
 | S1.9 | • | `quantity::tests::different_units_are_not_comparable_in_either_direction` |
 | S1.10 | • | `text::tests::rubric_checking_reports_unchecked_separately_from_valid` |
@@ -102,6 +123,7 @@ Process requirements; they govern this specification rather than the code.
 | S1.13 | • | `canonical_json` round trip covers `DV_PARSABLE` and time specifications |
 | S1.14 | doc | `security` module header |
 | S1.15 | doc | `J9.15`; bounded by `canonical_json::reading_a_composition_stays_within_a_small_stack` |
+| S1.21 | spec | §15 in full; nothing implemented — **A-40** |
 | S1.16–S1.17 | • | `terminology::tests::the_codes_that_disagree_between_terminology_repositories_are_the_current_ones` |
 | S1.18 | — | declared departure: ISO 3166 and ISO 639 are not carried, so `COMPOSITION.Territory_valid` and `Language_valid` are not checked. Its closing requirement — that a caller can do the check instead — **is** verified: `guarantees::a_caller_can_read_every_code_the_crate_declines_to_check` (`A-19`) |
 | S1.19 | — | declared exclusion: no demographic repository, so the four `PARTY` graph invariants cannot be checked from a value in hand |
@@ -398,5 +420,33 @@ Process requirements; they govern this specification rather than the code.
 | T13.9 | — | no test in this crate self-skips |
 | T13.10 | • | this file |
 | T13.11 | • | `reading_a_composition_stays_within_a_small_stack` names its toolchain, method, and figures |
-| T13.12–T13.13 | • | `cargo clippy --all-targets` is clean with the lint table in `Cargo.toml` |
+| T13.12–T13.13 | • | `cargo clippy --all-targets` is clean with the lint table in `Cargo.toml`, and `#![forbid(unsafe_code)]` at the crate root states it in the source as well — belt and braces, because a manifest edit removes the one and not the other |
 | T13.14 | • | every `#[allow]` in the crate carries a reason |
+
+## §15 Archetypes and templates — `K15`
+
+The section was added on 2026-08-26 when `S1.4` was withdrawn. **Four rows are
+satisfied and twenty-eight are not**: `openehr::am` is the AOM2 object model,
+and no code in this crate parses ADL, flattens an archetype, expands a template,
+reads an operational template, retrieves an artefact, or validates data against
+one. **A-40** tracks the rest.
+
+This table exists so that the gap is counted rather than described. A row moves
+off **spec** when the code implements it *and* a named test exercises it
+(`C0.7`) — not when a parser lands, and not when a README says so (`K15.30`,
+`K15.31`).
+
+| Id | Status | Evidence |
+| --- | --- | --- |
+| K15.1 | • | `am::archetype::tests::a_definition_constraining_the_wrong_rm_class_is_refused`, `…a_node_the_terminology_does_not_define_is_refused`, `…a_code_specialised_deeper_than_its_archetype_is_refused`, `…a_terminology_constraint_naming_no_value_set_is_refused`; `am::constraint::tests::two_constraints_on_one_attribute_are_refused` |
+| K15.2 | • | `archetype_model::the_targeted_archetype_model_release_is_named`; `am::AM_RELEASE` is 2.3.0 and an artefact's own declared versions round-trip unenforced |
+| K15.3 | • | `archetype_model::an_archetype_round_trips_through_json_unchanged`, `…a_constraint_this_crate_cannot_model_survives_rather_than_disappearing`. **Scope:** the only serialisation this crate accepts today is its own JSON. ADL and the AM ITS forms are `K15.5`, `K15.8`, and `K15.16`, all below |
+| K15.4 | • | `archetype_model::an_archetype_is_constructible_without_a_parser` |
+| K15.5–K15.7 | spec | ADL 2 parsing, and the refusal discipline that replaces recovery |
+| K15.8–K15.10 | spec | ADL 1.4 ingestion, provenance, and the assertion subset |
+| K15.11–K15.13 | spec | specialisation, flattening, and the narrowing check |
+| K15.14–K15.17 | spec | template expansion and operational templates, both directions |
+| K15.18–K15.23 | spec | validation against an operational template, and its separateness from `L10.x` |
+| K15.24–K15.27 | spec | the repository abstraction, provenance, and the refusal on retrieval failure |
+| K15.28–K15.29 | spec | the boundaries this section does **not** move: authoring, publishing, AQL execution |
+| K15.30–K15.31 | spec | the honesty gate while the rest is unbuilt — refuse, and do not describe a parser as archetype support |

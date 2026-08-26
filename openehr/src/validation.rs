@@ -25,10 +25,18 @@
 //! Validation here is **RM-level**: the invariants stated in the openEHR class
 //! definitions. It is not archetype validation. Checking that
 //! `openEHR-EHR-OBSERVATION.blood_pressure.v2` permits exactly these elements
-//! at these node ids requires the archetype, and archetypes are out of scope
-//! (`S1.4`). A composition that passes here can still violate its archetype,
-//! and the documentation says so rather than letting "valid" be read as more
-//! than it is.
+//! at these node ids requires the archetype, and this crate cannot do it.
+//!
+//! That used to be a decision — `S1.4`, the crate MUST NOT implement the
+//! Archetype Model — and since 2026-08-26 it is an unbuilt requirement: `S1.21`
+//! and §15 require archetype validation, [`crate::am`] holds the AOM2 object
+//! model it will need, and `K15.18` is not implemented. `L10.2` splits the two
+//! verdicts and requires this sentence to stay until the conformance matrix
+//! says archetype validation exists (`K15.30`).
+//!
+//! **So a composition that passes here can still violate its archetype**, and
+//! the documentation says so rather than letting "valid" be read as more than
+//! it is.
 //!
 //! ```
 //! use openehr::validation::Validate;

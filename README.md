@@ -2,6 +2,10 @@
 
 **openEHR in Rust**: the Reference Model, and persistence for six SQL engines.
 
+> openEHR® is a registered trademark of openEHR International (the openEHR
+> Foundation). This project is an independent implementation: it is not
+> affiliated with, endorsed by, or certified by openEHR International.
+
 [openEHR](https://specifications.openehr.org/) is a specification for clinical
 information — a small, stable **Reference Model** of about ninety classes, plus
 **archetypes** that constrain it into clinical content. These crates implement
@@ -67,14 +71,17 @@ Full definitions in [`spec/index.md`](spec/index.md); current status in
 
 ```toml
 [dependencies]
-openehr = "0.2"
+openehr = "0.6"
 
 # and, if you want persistence:
-openehr-store = "0.2"
-openehr-sqlite = "0.2"
+openehr-store = "0.6"
+openehr-sqlite = "0.6"
 ```
 
-Requires Rust 1.95+ (edition 2024).
+Requires Rust 1.95+ (edition 2024). There are no Cargo features to choose, and
+the eight published crates are versioned in lockstep — take the same minor
+version of each. Fuller instructions, including building from source and
+verifying a dialect against a real engine: [`INSTALL.md`](INSTALL.md).
 
 ## Tutorial 1 — build a composition
 
@@ -446,11 +453,21 @@ coverage it does not have is worse than a small one.
 
 | Not implemented | Why |
 | --- | --- |
-| Archetypes and templates (ADL, AOM2) | a parser and a constraint engine, each larger than the crate |
-| AQL **execution** | needs an archetype engine; AQL parses and checks, and returns no rows |
+| AQL **execution** | needs a repository of versioned data; AQL parses and checks, and returns no rows |
 | UCUM unit conversion | a wrong conversion is a thousand-fold dosing error |
 | External terminology lookup | needs a terminology server; codes are carried opaquely |
 | HL7 `GTS`/`PIVL` timing evaluation | a partial timing engine is right most of the time |
+
+**Archetypes: the object model is built, and nothing above it is.** They were
+excluded outright until 2026-08-26, when `lib:S1.4` was withdrawn and
+[`openehr/spec/15-archetypes.md`](openehr/spec/15-archetypes.md) took its place.
+`openehr::am` now holds AOM2 as Rust types — archetypes, the constraint tree,
+multiplicities, terminology, with the artefact-level validity conditions checked
+at construction. **Twenty-eight of the thirty-two requirements have no code**:
+no ADL parser, no flattening, no template expansion, no operational template, no
+retrieval, and **no way to check that a composition conforms to the archetype it
+names**. The conformance matrix marks each `spec`, and `lib:A-40` keeps the gap
+countable.
 
 This table is the **library's** scope. `openehr-loco` (above) is a separate,
 optional, unpublished crate that puts a narrow REST API in front of the store —
@@ -568,6 +585,25 @@ crate directory. Eight are published (`openehr`, `openehr-store`, and the six
 dialect crates); the other ten — `openehr-loco`, `openehr-assets`, and the
 eight fuzz harnesses — are not.
 
+## Project documents
+
+| Document | What it answers |
+| --- | --- |
+| [`INSTALL.md`](INSTALL.md) | how to install it, run it, and build it from source |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | what would help most, the rules a patch is held to, and the honest answer about money |
+| [`RFC.md`](RFC.md) | what this project does not know, and the kinds of feedback that change it |
+| [`CHANGELOG.md`](CHANGELOG.md) | what changed in each release, and why it was that version number |
+| [`NEWS.md`](NEWS.md) | the short form of the above, what is coming, and the press contact |
+| [`COMPARISONS.md`](COMPARISONS.md) | how this differs from EHRbase, FerroEHR, Archie, and the commercial platforms — including when to choose one of those instead |
+| [`BENCHMARKS.md`](BENCHMARKS.md) | what is measured, one dated measurement, and why nothing is gated on timing |
+| [`MAINTAINERS.md`](MAINTAINERS.md) | who ships a fix, and what happens if they cannot |
+| [`GOVERNANCE.md`](GOVERNANCE.md) | who decides, on what basis, and where each decision is recorded |
+| [`SECURITY.md`](SECURITY.md) | how to report a vulnerability, what is in scope, and this project's own posture gaps |
+| [`AI_STATEMENT.md`](AI_STATEMENT.md) | how this code was written, what checks it, and what that does not prove |
+| [`CITATION.cff`](CITATION.cff) | how to cite this work |
+| [`LICENSE.md`](LICENSE.md) | five licences, your choice of any one |
+| [`help/outreach/index.md`](help/outreach/index.md) | where this project is being taken to its professional audience |
+
 ## Contributing
 
 Read [`AGENTS.md`](AGENTS.md), and [`agents/`](agents/index.md) for topic guides:
@@ -593,7 +629,7 @@ The tree is at zero clippy warnings under `pedantic`, with `missing_docs`,
 The MSRV is **N−3** — three Rust releases behind stable, currently 1.95 — and CI
 re-derives that number from the toolchain rather than trusting a constant, so it
 will fail on a stale one within six weeks of every Rust release. That is
-deliberate; see [`spec/rust-msrv-n-minus-3.md`](spec/rust-msrv-n-minus-3.md).
+deliberate; see [`spec/rust-msrv-n-minus-3/index.md`](spec/rust-msrv-n-minus-3/index.md).
 
 ## Licence
 

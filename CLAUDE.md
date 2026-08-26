@@ -104,7 +104,8 @@ warnings — keep it there.**
   to nothing. New requirements start after the highest previously used ordinal,
   so §3 begins at `M3.19`. Do not renumber.
 - **Two spec trees allocate the same identifiers.** `lib:S1.4` (no Archetype
-  Model) and `db:S1.4` (declare an engine floor) are different requirements.
+  Model — **withdrawn 2026-08-26**, reversed by `lib:S1.21` and §15, and still
+  resolving because ids are permanent) and `db:S1.4` (declare an engine floor) are different requirements.
   Qualify citations with `lib:` or `db:` (`W0.5`).
 - **A published version is immutable, and one here is permanently wrong.**
   `openehr` 0.1.0 went out with a `repository` pointing at an unrelated project.
@@ -197,7 +198,7 @@ warnings — keep it there.**
 - **The MSRV is a formula, not a number** (`RV1`): N−3, currently 1.95. The
   `msrv` job re-derives it from the stable toolchain, so it goes red within six
   weeks of every Rust release. That is deliberate; fix the number, do not pin
-  the toolchain ([`spec/rust-msrv-n-minus-3.md`](spec/rust-msrv-n-minus-3.md)).
+  the toolchain ([`spec/rust-msrv-n-minus-3/index.md`](spec/rust-msrv-n-minus-3/index.md)).
 - **No `DV_ORDERED` implements `PartialOrd`, and neither does `DataValue`**
   (`lib:D3.18b`). `a < b` and `a.partial_cmp(&b)` do not compile on `DvQuantity`,
   `DvDateTime`, `DvCount`, … — call `DvOrdered::semantic_cmp`, which needs the

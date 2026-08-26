@@ -71,6 +71,18 @@ and what a claim made in it means.
   against [`audit.md`](audit.md) — does it close a finding, or open one?
 - **C0.18** A requirement withdrawn because the behaviour was removed MUST keep
   its identifier and be marked *withdrawn*, with the release in which it went.
+- **C0.19** *(added 2026-08-26)* An **exclusion that is reversed** — a `MUST NOT`
+  that becomes something the crate does — MUST be withdrawn rather than deleted
+  or rewritten: it keeps its identifier (`C0.5`), is marked *withdrawn* with the
+  date, names the section that now specifies the behaviour, and **preserves the
+  reason it gave**.
+
+  The reason is the part worth keeping. An exclusion is an argument about a risk,
+  and reversing the decision does not retire the risk — it transfers it to
+  whoever now has to answer it. `S1.4` is the first case: it excluded the
+  Archetype Model because a partial constraint engine lets "valid" mean "the
+  parts I understood were satisfied", and §15 has to answer that sentence rather
+  than inherit a blank page.
 
 ## Vocabulary
 

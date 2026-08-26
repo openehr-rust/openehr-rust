@@ -43,7 +43,7 @@ the prefixes `C0`, `S1`, `R4`, and others. They do not mean the same things:
 
 | Id | In [`openehr/spec/`](../openehr/spec/index.md) | In [`spec/databases/`](databases/index.md) |
 | --- | --- | --- |
-| `S1.4` | the crate MUST NOT implement the Archetype Model | a port MUST declare a minimum engine version |
+| `S1.4` | the crate MUST NOT implement the Archetype Model — *withdrawn 2026-08-26, reversed by `lib:S1.21`; the identifier is permanent and still resolves* | a port MUST declare a minimum engine version |
 | `R4.x` | Data structures — `ITEM_STRUCTURE`, `CLUSTER`, null flavours | Shredding and reconstruction |
 | `C0.x` | conformance framework for the library | conformance framework for the ports |
 
@@ -71,7 +71,7 @@ right to; the mistake was assuming one flat namespace.
   | Prefix | Document |
   | --- | --- |
   | `W0` | this file |
-  | `RV` | [`rust-msrv-n-minus-3.md`](rust-msrv-n-minus-3.md) — the Rust MSRV |
+  | `RV` | [`rust-msrv-n-minus-3/index.md`](rust-msrv-n-minus-3/index.md) — the Rust MSRV |
 
 ## Conformance levels
 
@@ -408,7 +408,7 @@ is genuinely worse. The rules below keep the copies and make them mechanical.
 
 - **W0.33** *(added 2026-08-20)* The minimum supported Rust version is a
   repository-wide requirement, not a per-crate one, and is specified in
-  [`rust-msrv-n-minus-3.md`](rust-msrv-n-minus-3.md): **N−3**, three stable
+  [`rust-msrv-n-minus-3/index.md`](rust-msrv-n-minus-3/index.md): **N−3**, three stable
   releases behind current, declared identically by all eighteen crates and
   **compiled** by CI rather than asserted (`RV1`–`RV3`).
 
@@ -436,7 +436,7 @@ Someone new to the repository should read, in order:
 4. [`audit.md`](audit.md) — what is known to be wrong today.
 
 Anyone about to build the tree should also read
-[`rust-msrv-n-minus-3.md`](rust-msrv-n-minus-3.md), which is one page and
+[`rust-msrv-n-minus-3/index.md`](rust-msrv-n-minus-3/index.md), which is one page and
 explains why CI will one day fail on their unrelated pull request.
 
 Contributors should also read [`AGENTS.md`](../AGENTS.md), which is operational

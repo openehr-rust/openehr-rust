@@ -68,7 +68,7 @@ coverage it does not have is worse than a small one.
 
 | Not implemented | Why |
 | --- | --- |
-| Archetypes and templates (AM, ADL, AOM2) | a parser and a constraint engine, each larger than this crate |
+| ADL parsing, flattening, templates, and **archetype validation of data** | **specified, not built.** `S1.4` excluded the Archetype Model until 2026-08-26; [§15](spec/15-archetypes.md) now requires it. `am` is the AOM2 object model (`K15.1`–`K15.4`); the other 28 requirements have no code (`A-40`), so a composition that passes `validate()` may still violate its archetype. A partial constraint engine stays prohibited — `K15.20` refuses rather than passes |
 | AQL **execution** | needs a repository; `aql` parses and checks, and returns no rows |
 | Terminology lookup beyond openEHR's own | needs a terminology server; external codes are carried opaquely |
 | UCUM unit conversion | a wrong conversion is a thousand-fold dosing error |
@@ -222,7 +222,7 @@ cargo fmt --all -- --check
 MSRV is **N−3** — three Rust releases behind stable, currently **1.95** — and is
 `rust-version` in every `Cargo.toml`. Rust edition 2024. The policy, and the CI
 job that re-derives the number rather than trusting it, are in
-[`spec/rust-msrv-n-minus-3.md`](../spec/rust-msrv-n-minus-3.md).
+[`spec/rust-msrv-n-minus-3/index.md`](../spec/rust-msrv-n-minus-3/index.md).
 
 ## Benchmarks
 

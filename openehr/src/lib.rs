@@ -73,11 +73,18 @@
 //! assert_eq!(back, composition);
 //! ```
 //!
+//! # Trademarks
+//!
+//! openEHR® is a registered trademark of openEHR International (the openEHR
+//! Foundation). This project is an independent implementation: it is not
+//! affiliated with, endorsed by, or certified by openEHR International.
+//!
 //! # What is here
 //!
 //! | Module | openEHR component |
 //! | --- | --- |
 //! | [`base`] | BASE: identifiers, references, intervals, ISO 8601 |
+//! | [`am`] | AM: the AOM2 object model — archetypes, constraints, terminology |
 //! | [`rm::data_types`] | RM: Data Types (`DV_*`) |
 //! | [`rm::data_structures`] | RM: Data Structures (`ITEM_*`, `CLUSTER`, `ELEMENT`, `HISTORY`) |
 //! | [`rm::common`] | RM: Common (archetyping, parties, audit, change control) |
@@ -96,12 +103,19 @@
 //!
 //! | Not implemented | Why |
 //! | --- | --- |
-//! | Archetypes and templates (AM, ADL, AOM2) | a parser and a constraint engine, each larger than this crate |
 //! | AQL **execution** | needs a repository; [`aql`] parses and checks, and returns no rows |
 //! | Terminology lookup beyond openEHR's own | needs a terminology server; external codes are carried opaquely |
 //! | UCUM unit conversion | a wrong conversion is a thousand-fold dosing error |
 //! | REST service, persistence, EHR Extract | out of scope; see `spec/01-scope.md` |
 //! | HL7 `GTS` / `PIVL` timing evaluation | returns [`Error::Unsupported`] rather than a guess |
+//!
+//! **Archetypes are a special case, and the honest statement is longer.** They
+//! were excluded outright until 2026-08-26; `S1.4` is now withdrawn and §15
+//! requires them. [`am`] is the AOM2 object model, and it is all that exists:
+//! **no ADL parser, no flattening, no template expansion, and no way to check
+//! that a `COMPOSITION` conforms to its archetype.** [`validation`] is
+//! Reference-Model-level and stays that way until the conformance matrix says
+//! otherwise (`K15.30`). See `spec/15-archetypes.md` and finding `A-40`.
 //!
 //! Where an openEHR operation is defined and not implemented, this crate
 //! returns [`Error::Unsupported`] naming the spec section that records the
@@ -142,6 +156,9 @@
 //! and in these docs — `S1.4`, `Q12.9`, `X11.7` — so prose can be traced back
 //! to a decision.
 
+#![forbid(unsafe_code)]
+
+pub mod am;
 pub mod aql;
 pub mod base;
 pub mod error;

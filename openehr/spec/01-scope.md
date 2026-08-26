@@ -18,13 +18,28 @@ Requirement prefix: `S1`.
 The exclusions below are decisions, not omissions. Each names why, because a
 reader deciding whether to use this crate needs the reason more than the fact.
 
-- **S1.4** The crate MUST NOT implement the **Archetype Model** — ADL, AOM2,
-  templates, or archetype-constraint validation. An archetype is a constraint
-  language with its own parser and its own conformance rules; implementing a
-  partial one would let "valid" mean "the parts I understood were satisfied".
-  Consequence: [validation](10-validation.md) is Reference-Model-level only,
-  and `L10.2` requires that to be stated wherever validation is offered.
-- **S1.5** The crate MUST NOT execute AQL. Executing means resolving archetype
+- **S1.4** *(withdrawn 2026-08-26 — reversed; the Archetype Model is now in
+  scope, specified in [§15](15-archetypes.md) and required by `S1.21`)* The
+  crate MUST NOT implement the **Archetype Model** — ADL, AOM2, templates, or
+  archetype-constraint validation. An archetype is a constraint language with
+  its own parser and its own conformance rules; implementing a partial one would
+  let "valid" mean "the parts I understood were satisfied". Consequence:
+  [validation](10-validation.md) is Reference-Model-level only, and `L10.2`
+  requires that to be stated wherever validation is offered.
+
+  **The text above is kept, not deleted** (`C0.19`). Its reasoning is the
+  standing objection §15 has to answer, and it does: `K15.6` refuses an
+  unimplemented construct instead of skipping it, `K15.12` refuses an incomplete
+  lineage, `K15.20` refuses a partial pass, and `K15.27` refuses a retrieval
+  failure. The prohibition on a partial constraint engine survives the
+  withdrawal of the prohibition on any constraint engine at all.
+
+  **What was true while it stood** is still true of the code today: nothing in
+  this crate parses ADL or validates against an archetype. That is now a gap
+  against `S1.21` rather than a decision — [`audit.md`](audit.md) **A-40** — and
+  `K15.30` is what stops the documentation from moving before the code does.
+- **S1.5** *(unchanged by the reversal of `S1.4`; see `K15.29`)* The crate MUST
+  NOT execute AQL. Executing means resolving archetype
   paths against a repository of versioned objects, and the crate has no
   repository. It parses and statically checks AQL instead (§12).
 - **S1.6** The crate MUST NOT implement the **EHR Extract** model or the
@@ -56,6 +71,24 @@ reader deciding whether to use this crate needs the reason more than the fact.
 - **S1.13** A type whose openEHR definition includes an unimplemented operation
   MUST still round-trip that type's data losslessly (§9). Not interpreting a
   value is not a licence to lose it.
+
+## What the crate is, continued
+
+- **S1.21** *(added 2026-08-26)* The crate MUST implement the **Archetype
+  Model** — AOM2 as types, ADL 2 parsing, ADL 1.4 ingestion, specialisation and
+  flattening, template expansion, operational templates, validation of Reference
+  Model data against an operational template, and a repository abstraction for
+  retrieval — as specified in [§15](15-archetypes.md).
+
+  This reverses `S1.4`. It is stated here as well as in §15 because §1 is where
+  a reader decides whether this crate does what they need, and an exclusion that
+  has been withdrawn in another file is an exclusion the reader will still
+  believe.
+
+  **In force and unsatisfied.** No part of §15 is implemented. `K15.30` requires
+  every entry point that would implement it to refuse explicitly and forbids any
+  documentation claiming otherwise, and **A-40** keeps the gap in the register
+  until the code closes it (`C0.9`).
 
 ## Boundaries the caller must supply
 
