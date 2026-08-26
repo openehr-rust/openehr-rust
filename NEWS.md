@@ -112,7 +112,7 @@ that mentions this project; a written statement.
 Every claim below is backed by something in the repository that can be run or
 read. Nothing else about this project should be quoted as verified.
 
-- Eight crates on crates.io at 0.7.1, released 2026-08-26, implementing the
+- Eight crates on crates.io at 0.7.2, released 2026-08-26, implementing the
   openEHR Reference Model in Rust with SQL persistence for six engines.
 - **`openehr-sqlite` is at conformance level Verified** — a complete store,
   re-checked in continuous integration on every commit. Three dialects

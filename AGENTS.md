@@ -18,7 +18,7 @@ Detailed topic guides live in [`agents/`](agents/index.md).
 Eighteen crates implementing openEHR in Rust: one Reference Model library, one
 engine-agnostic persistence library, six SQL engine crates, an HTTP service, an
 asset generator, and eight fuzz harnesses. The first eight are published to
-crates.io at 0.7.1; the other ten are `publish = false`.
+crates.io at 0.7.2; the other ten are `publish = false`.
 
 | Crate | Role | Level |
 | --- | --- | --- |
@@ -260,7 +260,7 @@ version:
 
 ## Publishing
 
-All eight publishable crates are live on crates.io at **0.7.1**, published
+All eight publishable crates are live on crates.io at **0.7.2**, published
 2026-08-26, and **local matches published** — the per-crate table is in
 [`agents/publishing.md`](agents/publishing.md), which is the one file to trust
 on this and the one to update first.

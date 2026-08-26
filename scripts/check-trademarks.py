@@ -30,6 +30,10 @@ defect class as a count nobody re-checks (`W0.39`).
 - `src/lib.rs` of every **published** crate (derived from the manifests, the
   way `check-docs.py` derives it): the rustdoc a crates.io or docs.rs reader
   lands on. Doc comments only — string literals and code are not prose.
+- The `description` of every publishable crate's `Cargo.toml`: what crates.io
+  shows in search results and at the top of the crate page. Required shape is
+  `<short description>. <notice> This project is an independent work.` — the
+  notice verbatim after a full stop, closed by the independent-work sentence.
 
 `openehr/spec/**`, `spec/**`, and `agents/**` are deliberately out: the
 specification trees use the mark in nearly every file, a notice per section
@@ -63,6 +67,10 @@ NOTICE = (
     "the trademark does not constitute endorsement of this product by "
     "openEHR International or openEHR Foundation."
 )
+
+# The sentence that closes every publishable crate's `description`, after
+# the notice — the owner-specified three-part shape of 2026-08-26.
+TRAILER = "This project is an independent work."
 
 # Root documents exempt from the rule, each for a stated reason (see the
 # module docstring). An exemption with no reason would be a divergence that
@@ -129,6 +137,50 @@ def published_lib_roots() -> list[pathlib.Path]:
     return out
 
 
+def check_descriptions() -> int:
+    """Every publishable crate's `description` carries the notice verbatim.
+
+    The description is what crates.io shows in search results and at the top
+    of the crate page — a surface the README notice does not cover, and the
+    one place the owner directed the notice to appear (2026-08-26). The
+    owner-specified shape is `<short description>. <notice> <trailer>`: the
+    notice verbatim, separated from the short description by a full stop —
+    which is exactly what `openehr-mysql` got wrong once, running "DDL"
+    straight into "openEHR®" with no stop — and closed by the
+    independent-work sentence.
+    """
+    tail = f"{NOTICE} {TRAILER}"
+    bad = 0
+    checked = 0
+    for manifest in sorted(ROOT.glob("*/Cargo.toml")):
+        package = tomllib.loads(manifest.read_text()).get("package", {})
+        if package.get("publish") is False:
+            continue
+        checked += 1
+        rel = manifest.relative_to(ROOT)
+        description = package.get("description", "")
+        if not description.endswith(tail):
+            print(
+                f"::error file={rel}::`description` does not end with the "
+                "trademark notice verbatim followed by "
+                f"{TRAILER!r} (spec/professionalization/index.md rule 5)"
+            )
+            bad = 1
+        elif not description[: -len(tail)].endswith(". "):
+            print(
+                f"::error file={rel}::`description` runs into the trademark "
+                "notice without a full stop — the shape is "
+                "`<short description>. <notice> <independent-work sentence>`"
+            )
+            bad = 1
+    if not bad:
+        print(
+            f"{checked} publishable crate descriptions end with the notice "
+            "verbatim and the independent-work sentence"
+        )
+    return bad
+
+
 def main() -> int:
     targets: list[tuple[pathlib.Path, str]] = []
     for path in sorted(ROOT.glob("*.md")):
@@ -140,7 +192,7 @@ def main() -> int:
     for path in published_lib_roots():
         targets.append((path, "rs"))
 
-    bad = 0
+    bad = check_descriptions()
     uses = 0
     for path, kind in targets:
         text = path.read_text(encoding="utf-8")

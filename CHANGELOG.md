@@ -5,6 +5,37 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
+## 0.7.3 — 2026-08-26
+
+**Every crate `description` gets the owner-specified three-part shape, and
+the checker enforces it.** The shape is `<short description>. <notice> This
+project is an independent work.` — 0.7.2's descriptions carry the notice but
+not the closing independent-work sentence, and `openehr-mysql`'s runs "DDL"
+straight into "openEHR®" with no full stop. Both are immutable in 0.7.2;
+this release is the remedy. `openehr-loco` carries the same shape by the
+lockstep convention even though it is never published.
+
+**`scripts/check-trademarks.py` now verifies the descriptions**: every
+publishable manifest's `description` must end with the notice verbatim
+followed by the independent-work sentence, with a full stop between the
+short description and the notice. Both failure modes were plant-tested
+against a deliberately broken manifest and reported on exactly that
+manifest.
+
+No code changed.
+
+## 0.7.2 — 2026-08-26
+
+**The trademark notice reaches the crate `description` and gets prominent in
+the crate READMEs.** Every publishable crate's `Cargo.toml` `description` —
+what crates.io shows in search results and at the top of the crate page — now
+carries the notice verbatim, the crate READMEs open with it as a blockquote,
+and the short descriptions write the mark as `openEHR®`.
+
+Released ahead of the process in `agents/publishing.md`: the description
+shape was not yet final (see 0.7.3), and the inter-crate pins, staged state,
+and this changelog moved afterwards. No code changed.
+
 ## 0.7.1 — 2026-08-26
 
 **Trademark notice reworded to the owner-specified text.** Every page that
