@@ -26,7 +26,21 @@ engine would let "valid" mean "the parts I understood were satisfied". §15 is
 written to answer that — every unimplemented construct, incomplete lineage,
 unresolved artefact, and unreachable repository is a refusal, never a pass.
 
-## Latest release — 0.7.0, 2026-08-26
+## Latest release — 0.7.1, 2026-08-26
+
+**The owner-specified trademark notice ships.** Every page that carries the
+notice — the crate READMEs crates.io renders and the rustdoc Trademarks
+sections — now reads: "openEHR® is the registered trademark of the openEHR
+Foundation. Use of the trademark does not constitute endorsement of this
+product by openEHR International or openEHR Foundation."
+`scripts/check-trademarks.py` enforces that wording in CI.
+
+No code changed. A published version is immutable, so the 0.7.0 pages keep
+the previous wording forever; this release exists so the pages people read
+carry the specified text. The crate READMEs' install snippets also move off
+a stale `"0.2"` to `"0.7"`.
+
+## Previous release — 0.7.0, 2026-08-26
 
 **The Archetype Model is in scope, and its object model exists.** `S1.4` — the
 requirement that this crate must *not* implement archetypes — is withdrawn, and
@@ -48,31 +62,12 @@ survived in the new module, including one whose failure would have refused
 ordinary archetypes. Three tests killed them, and 0.7.0 went out from a run
 where all 32 CI jobs passed.
 
-## Previous release — 0.6.0, 2026-08-22
-
-**The Reference Model's reals keep the digits they were written with.**
-`DV_QUANTITY.magnitude`, `DV_SCALE.value`, `DV_PROPORTION.numerator` and
-`.denominator`, and the accuracy fields are `openehr::base::Real` rather than
-`f64`, so `1.50 mg` and `1.5 mg` are different records and hash differently
-(`lib:D3.18d`).
-
-The `f64` accessors are unchanged — `magnitude()` still returns `f64`, and
-`magnitude_real()` is the new one — so code that reads magnitudes compiles
-untouched. What changes is serialization: a document carrying `1.50` now
-round-trips as `1.50`. That is why it is 0.6.0 and not 0.5.1. Records already
-stored are unaffected; canonical JSON is byte-preserving (`db:M3.43`) and
-verification hashes the bytes that were stored.
-
-The release also waited on a red build: the `mutants` job caught
-`DvQuantity::accuracy_real` surviving mutation — an accessor nothing tested —
-and everything else was green. A published version is immutable, so it went out
-after that was fixed rather than before.
-
 ## Recent releases
 
 | Version | Date | Headline |
 | --- | --- | --- |
-| **0.7.0** | 2026-08-26 | the Archetype Model is in scope (`lib:S1.21`, §15); `openehr::am` is its object model |
+| **0.7.1** | 2026-08-26 | the owner-specified trademark notice ships on every crate page |
+| 0.7.0 | 2026-08-26 | the Archetype Model is in scope (`lib:S1.21`, §15); `openehr::am` is its object model |
 | 0.6.0 | 2026-08-22 | reals preserve their digits (`lib:D3.18d`) |
 | 0.5.0 | 2026-08-21 | AQL accepts negative numeric literals |
 | 0.4.0 | 2026-08-21 | `PartialOrd` removed from every `DV_ORDERED` (`lib:A-35`); MSRV moved to the N−3 formula |
@@ -117,7 +112,7 @@ that mentions this project; a written statement.
 Every claim below is backed by something in the repository that can be run or
 read. Nothing else about this project should be quoted as verified.
 
-- Eight crates on crates.io at 0.7.0, released 2026-08-26, implementing the
+- Eight crates on crates.io at 0.7.1, released 2026-08-26, implementing the
   openEHR Reference Model in Rust with SQL persistence for six engines.
 - **`openehr-sqlite` is at conformance level Verified** — a complete store,
   re-checked in continuous integration on every commit. Three dialects

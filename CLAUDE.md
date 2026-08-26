@@ -13,7 +13,7 @@ plus the things that specifically trip up automated work here.
 ## Layout
 
 Eighteen crates, **each its own Cargo workspace**. There is no root workspace —
-run cargo from inside a crate directory. Eight are published at 0.7.0; the other
+run cargo from inside a crate directory. Eight are published at 0.7.1; the other
 ten are `publish = false`.
 
 **Local matches published: 0.6.0, out 2026-08-22.** 0.6.0 is the one to know
