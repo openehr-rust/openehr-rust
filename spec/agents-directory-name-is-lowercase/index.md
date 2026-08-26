@@ -1,12 +1,12 @@
 # The agents directory is named `agents`, lowercase
 
 **Normative.** Requirement prefix: `AG`. RFC 2119 keywords, per
-[`index.md`](index.md).
+[`index.md`](../index.md).
 
 - **AG1** A directory holding guidance for AI agents MUST be named **`agents`**,
   in lowercase. It was `AGENTS/` until 2026-08-21.
 
-- **AG2** The **file** [`AGENTS.md`](../AGENTS.md) keeps its uppercase name.
+- **AG2** The **file** [`AGENTS.md`](../../AGENTS.md) keeps its uppercase name.
   That is not an inconsistency to be tidied away: `AGENTS.md` is a cross-tool
   convention that agents look for by exact name, so renaming it would make this
   repository's guidance invisible to the tools it is written for. `AG1` binds
@@ -42,14 +42,14 @@ git mv AGENTS agents-tmp && git mv agents-tmp agents
 
 Recorded because the obvious command silently does nothing, and a rename that
 appears to have worked and has not is exactly the class of thing
-[`audit.md`](audit.md) is full of.
+[`audit.md`](../audit.md) is full of.
 
 ## What had to change with it
 
 Ten files referenced `AGENTS/` by path: `README.md`, `CLAUDE.md`, `AGENTS.md`,
 `CHANGELOG.md`, three files under `spec/`, one guide,
-[`scripts/check-docs.py`](../scripts/check-docs.py), and
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml). The last two matter
+[`scripts/check-docs.py`](../../scripts/check-docs.py), and
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml). The last two matter
 most — a checker that looks for a file at a path that no longer exists reports
 nothing and passes.
 

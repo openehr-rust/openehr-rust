@@ -1,13 +1,13 @@
 # Rust minimum supported version: N−3
 
 **Normative.** Requirement prefix: `RV`. RFC 2119 keywords, per
-[`index.md`](index.md).
+[`index.md`](../index.md).
 
 **The minimum supported Rust version (MSRV) of this repository is N−3**, where N
 is the current stable release. N is **1.98**, so the MSRV is **1.95**.
 
-This is its own document rather than a section of [`index.md`](index.md) for the
-reason [`databases/search-adjuncts.md`](databases/search-adjuncts.md) is: it is
+This is its own document rather than a section of [`index.md`](../index.md) for the
+reason [`databases/search-adjuncts.md`](../databases/search-adjuncts.md) is: it is
 one decision that several places depend on and no section owns — eighteen
 manifests, nine READMEs, one `agents/` guide, and a CI job. It is also the only
 requirement in this tree whose **correct value changes on a schedule nobody
@@ -27,7 +27,7 @@ which is the whole method — six crates passed and **`openehr-loco` failed**: i
 own framework, `loco-rs` 1.0.1, requires 1.94. "Requires Rust 1.90+" had been
 wrong for that crate since the day it was written, and nothing in the repository
 could tell. That is `W0.3` exactly, and the six that did build were luck rather
-than verification. See [`audit.md`](audit.md) **W-09**.
+than verification. See [`audit.md`](../audit.md) **W-09**.
 
 **It had no rule behind it, so it could not be wrong.** 1.90 was committed on
 2026-08-01 (`9a7ecf6`), when stable was 1.97 — the number was seven releases old
@@ -59,7 +59,7 @@ either right or loudly wrong, and never quietly either.
   server (`W0.11`): a crate is at Verified only once CI has run green, and an
   MSRV is true only once a compiler of that version has agreed.
 
-  The `msrv` job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
+  The `msrv` job in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
   derives N from the stable toolchain it just installed, computes N−3, installs
   *that*, and runs `cargo test` for every crate under it.
 
@@ -71,7 +71,7 @@ either right or loudly wrong, and never quietly either.
   ```
 
   and the same job checks the manifests and the prose together. Nine READMEs and
-  [`agents/adding-an-engine.md`](../agents/adding-an-engine.md) carry it. A
+  [`agents/adding-an-engine.md`](../../agents/adding-an-engine.md) carry it. A
   README that names a floor the manifest does not is the `W0.2` failure — a
   descriptive file disagreeing with the thing it describes — and here it is
   mechanically preventable, so it MUST be prevented mechanically.
@@ -89,7 +89,7 @@ either right or loudly wrong, and never quietly either.
   A red `msrv` job MUST NOT be worked around by pinning the toolchain, by
   loosening the check to a lower bound, or by marking the job
   `continue-on-error`. Each of those converts a check into a decoration, which
-  is the defect class in [`audit.md`](audit.md) that this repository has
+  is the defect class in [`audit.md`](../audit.md) that this repository has
   committed most often.
 
 - **RV6** Raising the floor is a **breaking change for a user below it**, so a
