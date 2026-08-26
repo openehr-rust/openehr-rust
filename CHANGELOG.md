@@ -5,6 +5,16 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
+## Unreleased
+
+**Trademark notice reworded to the owner-specified text** (2026-08-26): every
+page that carries the notice now reads "openEHR® is the registered trademark of
+the openEHR Foundation. Use of the trademark does not constitute endorsement of
+this product by openEHR International or openEHR Foundation.", and
+`scripts/check-trademarks.py` enforces that wording. The 0.7.0 crates on
+crates.io carry the previous wording; the new wording ships with the next
+release.
+
 ## 0.7.0 — 2026-08-26
 
 **`#![forbid(unsafe_code)]` at every crate root and every fuzz target** — 32
@@ -323,6 +333,6 @@ Not tracked here. See the git history and crates.io.
 
 ## Trademarks
 
-openEHR® is a registered trademark of openEHR International (the openEHR
-Foundation). This project is an independent implementation: it is not
-affiliated with, endorsed by, or certified by openEHR International.
+openEHR® is the registered trademark of the openEHR Foundation. Use of the
+trademark does not constitute endorsement of this product by openEHR
+International or openEHR Foundation.

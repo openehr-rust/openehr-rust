@@ -250,5 +250,8 @@ Any of these, at your option — MIT, Apache-2.0, BSD-3-Clause, GPL-2.0-only, or
 GPL-3.0-only. See [`LICENSE.md`](LICENSE.md).
 
 openEHR specifications are published by the openEHR Foundation under CC-BY-SA;
-this crate is an independent implementation and is not endorsed by or affiliated
-with the openEHR Foundation.
+this crate is an independent implementation.
+
+openEHR® is the registered trademark of the openEHR Foundation. Use of the
+trademark does not constitute endorsement of this product by openEHR
+International or openEHR Foundation.

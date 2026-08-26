@@ -25,21 +25,20 @@ and [`tasks.md`](../../tasks.md); this file holds the rules.
 4. **CI enforces what documents claim.** Every check a document says this
    repository runs (tests, clippy, fmt, MSRV, trademark rules, doc gates)
    runs in CI on every push. A laptop-only check is a claim, not a guarantee.
-5. **Trademark discipline.** The mark is **openEHR**, a registered trademark
-   of openEHR International (the openEHR Foundation) — U.S. Reg. No.
-   4,272,380, EUIPO Reg. 002994853, IP Australia Reg. 939279, verified at
+5. **Trademark discipline.** The mark is **openEHR**, the registered
+   trademark of the openEHR Foundation — U.S. Reg. No. 4,272,380, EUIPO Reg.
+   002994853, IP Australia Reg. 939279, verified at
    <https://openehr.org/logos/> on 2026-08-26. This project uses the mark in
    its own name and is not affiliated with its owner, which is exactly the
    arrangement in which a missing notice misleads a reader.
 
    The binding rule: **every root document and every top-level published
    crate's rustdoc that uses the mark in prose carries the following notice
-   verbatim**, including its non-affiliation sentence:
+   verbatim**, in the exact wording the owner specified on 2026-08-26:
 
-   > openEHR® is a registered trademark of openEHR International (the
-   > openEHR Foundation). This project is an independent implementation: it
-   > is not affiliated with, endorsed by, or certified by openEHR
-   > International.
+   > openEHR® is the registered trademark of the openEHR Foundation. Use of
+   > the trademark does not constitute endorsement of this product by
+   > openEHR International or openEHR Foundation.
 
    The Foundation's own usage terms (same page, same date) additionally ask
    that third-party use of the mark carry the ® symbol and, beyond fair use,

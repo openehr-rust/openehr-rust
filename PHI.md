@@ -165,6 +165,6 @@ to this project than a guessed one.
 
 ## Trademarks
 
-openEHR® is a registered trademark of openEHR International (the
-openEHR Foundation). This project is an independent implementation: it is not affiliated with, endorsed
-by, or certified by openEHR International.
+openEHR® is the registered trademark of the openEHR Foundation. Use of the
+trademark does not constitute endorsement of this product by openEHR
+International or openEHR Foundation.

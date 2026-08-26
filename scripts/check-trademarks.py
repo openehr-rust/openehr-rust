@@ -7,13 +7,13 @@ Run from the repository root:
 
 Exit status 0 when every file in scope that uses the mark in prose carries the
 notice verbatim, 1 otherwise. The rule is `spec/professionalization/index.md`
-rule 5; the notice below is the verbatim text that rule binds, including the
-non-affiliation sentence.
+rule 5; the notice below is the verbatim text that rule binds, as the owner
+specified it on 2026-08-26.
 
 # What this exists to prevent
 
 This project's organisation, repository, and crate names all use a mark it
-does not own — openEHR, a registered trademark of openEHR International
+does not own — openEHR, the registered trademark of the openEHR Foundation
 (U.S. Reg. No. 4,272,380, EUIPO Reg. 002994853, IP Australia Reg. 939279).
 A reader who meets the name with no notice may reasonably conclude the
 project is official. The notice is the floor of honest behaviour here, and a
@@ -59,10 +59,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # The verbatim notice of professionalization rule 5. Line wrapping, comment
 # markers, and blockquote prefixes may differ per file; the words may not.
 NOTICE = (
-    "openEHR® is a registered trademark of openEHR International (the "
-    "openEHR Foundation). This project is an independent implementation: it "
-    "is not affiliated with, endorsed by, or certified by openEHR "
-    "International."
+    "openEHR® is the registered trademark of the openEHR Foundation. Use of "
+    "the trademark does not constitute endorsement of this product by "
+    "openEHR International or openEHR Foundation."
 )
 
 # Root documents exempt from the rule, each for a stated reason (see the
