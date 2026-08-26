@@ -79,8 +79,9 @@ posture. Open items for each are in `tasks.md`.
 5. **Outreach.** `help/outreach/index.md` (~440 lines) is a full campaign
    plan with the right governing rule (never say safe/compliant/certified/
    clinically) and a readiness checklist that correctly blocks on the
-   conduct file. There is no public site and no root `index.md` — the only
-   family repo without a landing surface.
+   conduct file. A root `index.md` routes evaluators to the project
+   documents as of 2026-08-26; there is still no public site (`plan.md`
+   §Open decisions).
 
 6. **Audit and harmonization.** Three registers, counts machine-checked, and
    `scripts/check-docs.py` as the doc gate — the strongest audit machinery

@@ -126,8 +126,13 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
 
 ### Outreach
 
-- [ ] Add a root `index.md` routing evaluators to the project documents
-      (every sibling has one).
+- [x] Add a root `index.md` routing evaluators to the project documents
+      (every sibling has one). *Done 2026-08-26: `index.md` at the root,
+      modeled on `fhir-rust`'s routing tables scaled to this repository —
+      evaluating / building / contributing / auditing routes, the
+      crate-level table (checked against the matrix by
+      `scripts/check-docs.py`), a one-hour reading order, and the rule 5
+      trademark notice; every relative link verified to resolve.*
 - [ ] Decide the site question (`plan.md` §Open decisions); if yes, the
       `hl7-rust`/`er7-rust` in-repo SvelteKit pattern is the model.
 - [ ] Decide the funding question: CONTRIBUTING.md says no funding vehicle
