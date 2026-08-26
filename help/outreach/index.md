@@ -461,3 +461,9 @@ All accessed 2026-08-25.
 - [Healthcare IT News](https://www.himss.org/hitn/),
   [Becker's Health IT](https://www.beckershospitalreview.com/healthcare-information-technology/),
   [Open Health News press releases](https://www.openhealthnews.com/resources/news/press-release)
+
+## Trademarks
+
+openEHR® is a registered trademark of openEHR International (the openEHR
+Foundation). This project is an independent implementation: it is not
+affiliated with, endorsed by, or certified by openEHR International.

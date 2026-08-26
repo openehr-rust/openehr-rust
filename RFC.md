@@ -220,6 +220,6 @@ decisions are supposed to rest on.
 
 ## Trademarks
 
-openEHR is a trademark of openEHR International (the openEHR Foundation). This
-project is an independent implementation: it is not affiliated with, endorsed
+openEHR® is a registered trademark of openEHR International (the
+openEHR Foundation). This project is an independent implementation: it is not affiliated with, endorsed
 by, or certified by openEHR International.

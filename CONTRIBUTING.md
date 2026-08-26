@@ -144,3 +144,9 @@ reports go to joel@joelparkerhenderson.com rather than to a public issue, under
 [`SECURITY.md`](SECURITY.md) — which also says what to expect, and what to do if
 this project goes quiet on you. Who decides what, and how a disagreement is
 settled, is [`GOVERNANCE.md`](GOVERNANCE.md).
+
+## Trademarks
+
+openEHR® is a registered trademark of openEHR International (the openEHR
+Foundation). This project is an independent implementation: it is not
+affiliated with, endorsed by, or certified by openEHR International.

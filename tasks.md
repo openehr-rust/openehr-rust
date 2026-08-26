@@ -54,6 +54,14 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       both also carry the in-flight Archetype Model hunks, so their
       commits belong to whoever lands that change. `TRADEMARKS.md` itself
       is still to write.*
+- [ ] **Wire `scripts/check-trademarks.py` into CI** once the in-flight
+      changes land. The checker exists, is enforced by
+      `spec/professionalization/` rule 5, and runs green standalone —
+      including three files whose notices are uncommitted (`README.md`,
+      `openehr/src/lib.rs`, `CHANGELOG.md`, all carrying in-flight hunks).
+      Adding the CI job needs `.github/workflows/ci.yml` plus a row each in
+      `AGENTS.md` and `spec/audit.md` (the `claims` gate binds the trio),
+      and all three carry in-flight hunks as of 2026-08-26.
 - [ ] Add `LICENSES/` with the full text of all five licenses in the SPDX
       expression (REUSE convention; `fhir-rust/LICENSES/` is the model).
 
@@ -124,3 +132,9 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       and index.md).
 - [ ] Decide whether `spec/databases/conformance-matrix.md` gets
       machine-derived like the library matrix (`plan.md` §Open decisions).
+
+## Trademarks
+
+openEHR® is a registered trademark of openEHR International (the openEHR
+Foundation). This project is an independent implementation: it is not
+affiliated with, endorsed by, or certified by openEHR International.

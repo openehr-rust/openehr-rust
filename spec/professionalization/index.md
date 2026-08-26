@@ -87,19 +87,21 @@ paragraph is the registration until then.
   2026-08-26; the gaps it names (repository settings, signing, SBOM) are open
   `tasks.md` items, not yet closed.
 - **Rule 4: partly met.** The documentation gate (`scripts/check-docs.py`,
-  the CI `claims` job) runs on every push. `scripts/check-trademarks.py` is
-  specified by rule 5 and not yet written at the time of this assessment;
-  when it exists, wiring it into CI requires edits to `ci.yml`, `AGENTS.md`,
-  and `spec/audit.md`, all of which carry unrelated in-flight changes, so a
-  `tasks.md` item will track the wiring until those land.
-- **Rule 5: in progress.** As of this assessment the notice exists on
-  `CODE_OF_CONDUCT.md`, `PHI.md`, and `RFC.md` (in the pre-registration
-  wording, to be upgraded to the verbatim registered form above); the
-  remaining root documents and the crate rustdoc are the next two changes in
-  sequence. `README.md` and `openehr/src/lib.rs` will carry the notice in
-  the working tree only, their commits deferred to whoever lands the
-  in-flight Archetype Model change, since both files carry its hunks.
-  **Scope decision:** `openehr/spec/**`, `spec/databases/**`, and the other
+  the CI `claims` job) runs on every push. `scripts/check-trademarks.py`
+  exists and runs green from the repository root, but is **not yet a CI
+  job**: adding one requires edits to `ci.yml`, `AGENTS.md`, and
+  `spec/audit.md` (the `claims` gate binds the trio), and all three carry
+  unrelated in-flight changes as of 2026-08-26; a `tasks.md` item tracks the
+  wiring until those land. Until then the check is exactly what rule 4 calls
+  a laptop-only check, and this line is the admission.
+- **Rule 5: met in the working tree, not yet fully in history.**
+  `scripts/check-trademarks.py` passes: every in-scope file using the mark
+  in prose carries the notice verbatim. Three of those files carry it
+  **uncommitted only** — `README.md` and `openehr/src/lib.rs` (which also
+  carry the in-flight Archetype Model hunks) and `CHANGELOG.md` (which also
+  carries the in-flight unsafe-sweep entry) — so the green is a statement
+  about the working tree, and their commits belong to whoever lands those
+  changes. **Scope decision:** `openehr/spec/**`, `spec/databases/**`, and the other
   specification and agent-guide trees are deliberately out of the checker's
   scope — they use the mark in nearly every file, a notice per specification
   section would drown the text it annotates, and the root documents those

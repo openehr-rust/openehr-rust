@@ -117,3 +117,9 @@ posture. Open items for each are in `tasks.md`.
 - A-40's 28 unimplemented requirements are correctly labeled `spec` in the
   matrix today; the risk is a future page summarizing them as capability.
   The matrix, not prose, is the status document.
+
+## Trademarks
+
+openEHR® is a registered trademark of openEHR International (the openEHR
+Foundation). This project is an independent implementation: it is not
+affiliated with, endorsed by, or certified by openEHR International.
