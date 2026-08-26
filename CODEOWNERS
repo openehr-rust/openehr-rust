@@ -4,6 +4,12 @@
 # says what that means for anyone depending on this software; this file is only
 # the mechanism GitHub uses to request a review.
 #
+# At the repository root rather than `.github/`, deliberately: GitHub accepts
+# either location, and the four sibling repositories (`hl7-rust`, `er7-rust`,
+# `fhir-rust`, `snomed-rust`) all keep it at the root — professionalization
+# rule 8 says conventions sync through the family rather than drifting
+# independently, and this file moved on 2026-08-26 to match.
+#
 # The owner is written as an email address rather than a handle because that is
 # how the maintainer is identified everywhere else here — `CITATION.cff`,
 # `MAINTAINERS.md`, the commit history. GitHub resolves an email in this file

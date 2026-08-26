@@ -87,8 +87,8 @@ posture. Open items for each are in `tasks.md`.
    in the family alongside `fhir-rust`. Harmonization items: re-sync
    `spec/special-files-for-public-repos/index.md` with the canonical
    `fhir-rust` version (the local copy lists neither the conduct file, nor
-   PHI, nor LICENSES/, nor FUNDING), and move CODEOWNERS where the family
-   convention and this plan agree it lives.
+   PHI, nor LICENSES/, nor FUNDING). CODEOWNERS moved to the repository
+   root 2026-08-26, matching all four siblings.
 
 ## Open decisions (awaiting a call, not code)
 

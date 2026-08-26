@@ -77,7 +77,7 @@ continuity plan with nobody behind it.
 
 The route is ordinary and it is open: send patches, take part in the issue
 tracker, and take responsibility for an area. What changes when someone does:
-this file gains a row, [`.github/CODEOWNERS`](.github/CODEOWNERS) gains their
+this file gains a row, [`CODEOWNERS`](CODEOWNERS) gains their
 address on the areas they own, and the identity table above gains a second
 holder wherever the identity permits one — `cargo owner --add` on the crates,
 and a second organisation owner on GitHub. Those three edits are the whole

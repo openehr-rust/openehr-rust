@@ -105,8 +105,12 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       the claim-accuracy clause citing `W0.3` and the single-maintainer
       reporting limitation; CONTRIBUTING.md §Conduct and the outreach
       readiness table now point at it instead of naming the gap.*
-- [ ] Decide CODEOWNERS placement (`.github/CODEOWNERS` vs root — siblings
-      use root) and align the family convention.
+- [x] Decide CODEOWNERS placement (`.github/CODEOWNERS` vs root — siblings
+      use root) and align the family convention. *Done 2026-08-26: moved to
+      `/CODEOWNERS` — all four siblings keep it at the root, and
+      professionalization rule 8 syncs conventions through the family; the
+      file's own comment records the rationale, and MAINTAINERS.md's link
+      follows it.*
 
 ### Privacy and patient data
 
