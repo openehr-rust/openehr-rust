@@ -28,7 +28,7 @@ it, and no environment approved to store it.
 
 ### What to include
 
-The version (`openehr 0.7.1`, a commit, or both), what you did, what you
+The version (`openehr 0.7.3`, a commit, or both), what you did, what you
 expected, what happened, and why you think it is a security problem rather than
 a defect. A failing test is the strongest possible form of this.
 
