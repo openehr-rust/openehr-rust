@@ -62,10 +62,12 @@ posture. Open items for each are in `tasks.md`.
 
 3. **Security and supply chain.** The in-crate security work is real
    (HMAC-capable audit chain, constant-time verify, redaction with
-   distinctive-marker tests). The repository-level posture is self-declared
-   and open: private vulnerability reporting, Dependabot, and secret
-   scanning all disabled (checked 2026-08-26), commits and tags unsigned, no
-   SBOM, no release attestation. All settings-level, all cheap to close.
+   distinctive-marker tests). The settings-level half of the repository
+   posture closed 2026-08-26: private vulnerability reporting, Dependabot
+   alerts, automated security fixes, and secret scanning are enabled, each
+   verified with a `GET`, and `.github/dependabot.yml` registers every
+   workspace with routine version-update PRs capped off. Still open:
+   commits and tags unsigned, no SBOM, no release attestation.
 
 4. **Privacy and patient data.** PHI rules are specified
    (`openehr/spec/11-security.md`, the compliance mappings, `redact.rs`) but

@@ -82,9 +82,10 @@ listing remains optional.) This paragraph is the registration.
 - **Rule 2: partly met.** The special files exist; the local copy of the
   canonical list predates the family's and its re-sync is an open `tasks.md`
   item under Audit and harmonization.
-- **Rule 3: partly met.** SECURITY.md's known-gaps section is accurate as of
-  2026-08-26; the gaps it names (repository settings, signing, SBOM) are open
-  `tasks.md` items, not yet closed.
+- **Rule 3: partly met.** SECURITY.md's known-gaps section is accurate: the
+  repository-settings gap it named (private vulnerability reporting,
+  Dependabot, secret scanning) was closed 2026-08-26 and the section updated
+  in the same change; signing and SBOM remain open `tasks.md` items.
 - **Rule 4: met for the documentation gates.** `scripts/check-docs.py` runs
   in the CI `claims` job, and `scripts/check-trademarks.py` runs in the CI
   `trademarks` job — wired 2026-08-26, once the in-flight changes that had
@@ -109,5 +110,5 @@ listing remains optional.) This paragraph is the registration.
   special-files re-sync and CODEOWNERS placement are the open harmonization
   items.
 - **Rule 9: met as a gate.** No outreach has been executed;
-  `help/outreach/index.md` §11 blocks on the conduct file (now closed) and
-  the repository security settings (still open).
+  `help/outreach/index.md` §11 blocks on the conduct file (closed
+  2026-08-26) and the repository security settings (closed 2026-08-26).

@@ -77,10 +77,19 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
 
 ### Security and supply chain
 
-- [ ] **Flip the three disabled repository settings** — private
+- [x] **Flip the three disabled repository settings** — private
       vulnerability reporting, Dependabot, secret scanning — and update
-      SECURITY.md's known-gaps section in the same change (it currently,
-      correctly, says they are off as of 2026-08-26).
+      SECURITY.md's known-gaps section in the same change. *Done 2026-08-26:
+      private vulnerability reporting, Dependabot alerts, automated security
+      fixes, and secret scanning enabled via the GitHub API, each verified
+      with a `GET` after the change (push protection remains off, recorded
+      in SECURITY.md). Every document repeating the gap updated in the same
+      change: SECURITY.md (three places), PHI.md, RFC.md, plan.md,
+      `spec/professionalization/` Status, `help/outreach/index.md`. Plus
+      `.github/dependabot.yml` registering all eighteen workspaces with
+      version-update PRs capped at zero — security-only posture, the limit
+      chosen because the sibling `fhir-rust` got 47 major-bump PRs in an
+      hour on default limits.*
 - [ ] Sign commits and tags going forward; record the posture change in
       MAINTAINERS.md and SECURITY.md.
 - [ ] Add release tags/attestation for 0.6.0 and future releases; consider

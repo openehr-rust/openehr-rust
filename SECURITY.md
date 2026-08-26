@@ -4,10 +4,12 @@
 
 **Email joel@joelparkerhenderson.com.** Put `SECURITY` in the subject.
 
-That is the only private channel. GitHub's private vulnerability reporting is
-**not enabled** on this repository (checked 2026-08-26), so opening a draft
-advisory is not available to you; enabling it is a known gap, and until it is
-done, email is what there is.
+Or use GitHub's private vulnerability reporting — enabled on this repository
+2026-08-26 — to open a draft advisory at
+<https://github.com/openehr-rust/openehr-rust/security/advisories/new>. Both
+channels reach the same one maintainer; use whichever you prefer. (An earlier
+revision of this file correctly said private reporting was not enabled and
+email was the only private channel; that gap is closed.)
 
 **Do not open a public issue for a vulnerability** until it is fixed or until
 the window below has passed.
@@ -26,7 +28,7 @@ it, and no environment approved to store it.
 
 ### What to include
 
-The version (`openehr 0.6.0`, a commit, or both), what you did, what you
+The version (`openehr 0.7.0`, a commit, or both), what you did, what you
 expected, what happened, and why you think it is a security problem rather than
 a defect. A failing test is the strongest possible form of this.
 
@@ -94,10 +96,11 @@ straightforward.
   too if the schema depends on the behaviour.
 - The openEHR specifications. Report those to openEHR International; if this
   project implemented one wrongly, that is in scope.
-- Dependency advisories: report upstream first. Dependabot is **disabled** on
-  this repository (checked 2026-08-26), so a dependency advisory that affects
-  these crates may well reach the maintainer through you rather than through
-  automation.
+- Dependency advisories: report upstream first. Dependabot alerts and
+  automated security fixes are **enabled** on this repository (2026-08-26),
+  so an advisory affecting these crates should reach the maintainer through
+  automation — but every crate here pins a committed `Cargo.lock`, so tell
+  this project too if the advisory affects a pinned version.
 
 ## Documented boundaries that are not vulnerabilities
 
@@ -141,8 +144,13 @@ none (`W0.3`):
 
 - **Commits and tags are not signed** (`git log --format=%G?` reports `N`).
   Authorship is attested by GitHub's account controls and nothing stronger.
-- **GitHub private vulnerability reporting, Dependabot, and secret scanning are
-  all disabled** on the repository, checked 2026-08-26.
+- ~~**GitHub private vulnerability reporting, Dependabot, and secret scanning
+  are all disabled** on the repository, checked 2026-08-26.~~ Closed
+  2026-08-26, later the same day: all four settings — private vulnerability
+  reporting, Dependabot alerts, automated security fixes, secret scanning —
+  are enabled, each verified with a `GET` after the change. Secret scanning
+  **push protection** remains off, so a pushed secret is reported rather
+  than blocked.
 - **No SBOM is published**, and no release artefacts are attested.
 - **The bus factor is one**, and every publishing identity terminates at one
   account ([`MAINTAINERS.md`](MAINTAINERS.md)). A report arriving while the

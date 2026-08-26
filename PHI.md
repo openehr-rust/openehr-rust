@@ -146,8 +146,9 @@ Stated here so you find them from this page rather than from an audit:
   document that distinguishes the six, and checking it for the engine you
   actually deploy is the audit step that gets skipped.
 - **Repository-level posture gaps are self-declared** in
-  [`SECURITY.md`](SECURITY.md): commits and tags unsigned, no SBOM, private
-  vulnerability reporting disabled as of 2026-08-26.
+  [`SECURITY.md`](SECURITY.md): commits and tags unsigned, no SBOM. (Private
+  vulnerability reporting, Dependabot, and secret scanning, disabled when
+  this file was written, were enabled 2026-08-26.)
 - **Open findings live in three audit registers** —
   [`spec/audit.md`](spec/audit.md), [`openehr/spec/audit.md`](openehr/spec/audit.md),
   [`spec/databases/audit.md`](spec/databases/audit.md) — and this project
