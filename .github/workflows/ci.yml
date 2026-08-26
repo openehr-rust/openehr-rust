@@ -59,7 +59,7 @@ jobs:
           # as nine that pass (`spec/audit.md` W-12).
           - openehr-assets
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         run: |
@@ -113,7 +113,7 @@ jobs:
     name: MSRV is N-3, declared everywhere, and builds
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Derive N-3 from the current stable release
         id: msrv
@@ -263,7 +263,7 @@ jobs:
     name: examples
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - uses: Swatinem/rust-cache@v2
@@ -314,7 +314,7 @@ jobs:
       matrix:
         crate: [openehr, openehr-store]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - uses: Swatinem/rust-cache@v2
@@ -339,7 +339,7 @@ jobs:
       matrix:
         engine: [postgresql, mysql, mariadb]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
@@ -397,7 +397,7 @@ jobs:
           # take input from outside the process (`W0.26`).
           - { engine: store,      crate: openehr-store,      targets: "project integrity" }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install nightly Rust
         run: |
@@ -444,7 +444,7 @@ jobs:
     name: assets are current
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - uses: Swatinem/rust-cache@v2
@@ -465,7 +465,7 @@ jobs:
     name: dependencies run inward only
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # `db:S1.7` and the whole architecture: `openehr` knows nothing of
       # storage, `openehr-store` knows nothing of any engine, and the service
@@ -527,7 +527,7 @@ jobs:
     name: the trademark notice is carried verbatim
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Every in-scope use of the openEHR mark carries the notice
         run: python3 scripts/check-trademarks.py
 
@@ -535,7 +535,7 @@ jobs:
     name: conformance claims match evidence
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: No crate claims a level with no evidence here
         run: |
@@ -826,7 +826,7 @@ jobs:
       matrix:
         crate: [openehr, openehr-store, openehr-sqlite, openehr-loco]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
