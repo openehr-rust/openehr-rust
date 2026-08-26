@@ -151,6 +151,7 @@ exists. It runs, on every push and pull request:
 | `fuzz` | a bounded run of every fuzz target (`W0.27`); a crash, panic, or abort fails the build |
 | `layering` | that `openehr` and `openehr-store` depend inward only, dev-dependencies included, against a crate list **derived** from the tree (**W-13**) |
 | `claims` | that `openehr-mssql` and `openehr-oracle` still claim only **Dialect**; that both conformance matrices cover every requirement exactly once and do not contradict themselves; that this file's summary paragraph counts itself correctly; that the licence expression is harmonized across every crate (`W0.22`); that no requirement marked satisfied calls itself unverified (**W-17**); and that the documentation's countable claims match the tree (`scripts/check-docs.py`) |
+| `trademarks` | `scripts/check-trademarks.py`: every root document and every published crate's rustdoc that uses the openEHR mark in prose carries the professionalization rule 5 notice verbatim (added 2026-08-26, once the changes it was deferred behind had landed) |
 | `mutants` | `cargo-mutants --in-diff` over the lines a push or a pull request changed, scoped to the diff because a full run is hours per crate. Pull-request-only until **W-18** |
 
 The `schema` jobs **fail rather than skip** when no container runtime is present

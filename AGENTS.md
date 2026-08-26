@@ -155,6 +155,7 @@ arm64, and the Oracle images need registry authentication. Both crates stay at
 | `fuzz` | a short regression run of every fuzz target — a crash, panic, or abort fails the build; this is a gate, not a campaign |
 | `layering` | `openehr` and `openehr-store` depend inward only, including dev-dependencies. The crate list is **derived** from the tree, not written here: it used to name nine of seventeen and could not see a cycle through the eight it skipped (**W-13**) |
 | `claims` | that mssql and oracle still claim only Dialect, that the library matrix covers every requirement exactly once, that the conformance matrix does not contradict itself, that the audit summary counts itself correctly, and that **all eighteen** crates declare the same five licences (**W-14**) |
+| `trademarks` | `scripts/check-trademarks.py`: every root document and every published crate's rustdoc that uses the openEHR mark in prose carries the notice of professionalization rule 5 verbatim, non-affiliation sentence included |
 | `mutants` | `cargo-mutants --in-diff` over the lines a **push or a pull request** changed, per crate touched. It was pull-request-only until 2026-08-21, so nine commits made straight to `main` bypassed it entirely while it reported `skipped` (**W-18**) — see [`agents/auditing.md`](agents/auditing.md) |
 
 Two rules it follows, both from the specification rather than habit: the schema

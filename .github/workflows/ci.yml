@@ -516,6 +516,21 @@ jobs:
           [ "$bad" -eq 0 ] || exit 1
           echo "openehr and openehr-store depend only inward, checked against all $n crates"
 
+  # Professionalization rule 5: every root document and every published crate's
+  # rustdoc that uses the openEHR mark in prose carries the trademark notice
+  # verbatim, non-affiliation sentence included. The checker existed and ran
+  # green from one laptop before this job did — which rule 4 calls a claim, not
+  # a guarantee, and the specification's own Status section said so. Same
+  # principle as `verify-schema.sh`: CI invokes the script a contributor runs
+  # locally, not a parallel implementation in YAML.
+  trademarks:
+    name: the trademark notice is carried verbatim
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every in-scope use of the openEHR mark carries the notice
+        run: python3 scripts/check-trademarks.py
+
   claims:
     name: conformance claims match evidence
     runs-on: ubuntu-latest

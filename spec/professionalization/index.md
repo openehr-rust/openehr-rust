@@ -72,11 +72,10 @@ and [`tasks.md`](../../tasks.md); this file holds the rules.
 
 Assessed 2026-08-26. This specification allocates no `W0.x` identifiers and
 no prefix of its own; its rules are cited as "professionalization rule N".
-Registration in `spec/index.md`'s prefix table is therefore not required, and
-listing this directory there is deferred anyway: that file's working tree
-carries an unrelated in-flight change (the `lib:S1.4` withdrawal note), and
-landing it from here would commit someone else's half-done work. This
-paragraph is the registration until then.
+Registration in `spec/index.md`'s prefix table is therefore not required.
+(An earlier revision deferred even listing the directory there because that
+file carried an in-flight change; the change landed 2026-08-26, and the
+listing remains optional.) This paragraph is the registration.
 
 - **Rule 1: met.** `plan.md` and `tasks.md` are committed at the root
   (commit `f1f091d`), and every `[x]` added today names its evidence.
@@ -86,22 +85,17 @@ paragraph is the registration until then.
 - **Rule 3: partly met.** SECURITY.md's known-gaps section is accurate as of
   2026-08-26; the gaps it names (repository settings, signing, SBOM) are open
   `tasks.md` items, not yet closed.
-- **Rule 4: partly met.** The documentation gate (`scripts/check-docs.py`,
-  the CI `claims` job) runs on every push. `scripts/check-trademarks.py`
-  exists and runs green from the repository root, but is **not yet a CI
-  job**: adding one requires edits to `ci.yml`, `AGENTS.md`, and
-  `spec/audit.md` (the `claims` gate binds the trio), and all three carry
-  unrelated in-flight changes as of 2026-08-26; a `tasks.md` item tracks the
-  wiring until those land. Until then the check is exactly what rule 4 calls
-  a laptop-only check, and this line is the admission.
-- **Rule 5: met in the working tree, not yet fully in history.**
-  `scripts/check-trademarks.py` passes: every in-scope file using the mark
-  in prose carries the notice verbatim. Three of those files carry it
-  **uncommitted only** — `README.md` and `openehr/src/lib.rs` (which also
-  carry the in-flight Archetype Model hunks) and `CHANGELOG.md` (which also
-  carries the in-flight unsafe-sweep entry) — so the green is a statement
-  about the working tree, and their commits belong to whoever lands those
-  changes. **Scope decision:** `openehr/spec/**`, `spec/databases/**`, and the other
+- **Rule 4: met for the documentation gates.** `scripts/check-docs.py` runs
+  in the CI `claims` job, and `scripts/check-trademarks.py` runs in the CI
+  `trademarks` job — wired 2026-08-26, once the in-flight changes that had
+  deferred it landed, with the rows the `claims` gate requires in `AGENTS.md`
+  and `spec/audit.md`. An earlier revision of this entry admitted the
+  trademark check was laptop-only; it no longer is.
+- **Rule 5: met.** `scripts/check-trademarks.py` passes, in CI on every push
+  (rule 4): every in-scope file using the mark in prose carries the notice
+  verbatim, and the three files that carried it uncommitted-only as of
+  2026-08-26 (`README.md`, `openehr/src/lib.rs`, `CHANGELOG.md`) landed with
+  the Archetype Model change they were deferred behind. **Scope decision:** `openehr/spec/**`, `spec/databases/**`, and the other
   specification and agent-guide trees are deliberately out of the checker's
   scope — they use the mark in nearly every file, a notice per specification
   section would drown the text it annotates, and the root documents those

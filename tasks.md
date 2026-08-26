@@ -45,35 +45,35 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       `er7-rust/TRADEMARKS.md` (mark-by-mark table, what is and is not
       claimed), adapted to openEHR International's trademark usage terms —
       read those terms first and record what they require.
-      *Progress 2026-08-26: the notice half is largely done —
+      *Progress 2026-08-26: the notice half is done —
       `spec/professionalization/` rule 5 defines the verbatim notice
       (registration verified at openehr.org/logos/: U.S. 4,272,380, EUIPO
-      002994853, IP Australia 939279), and it is now on the root documents
-      and the published crates' rustdoc. **Two deferrals:** `README.md` and
-      `openehr/src/lib.rs` carry the notice in the working tree only —
-      both also carry the in-flight Archetype Model hunks, so their
-      commits belong to whoever lands that change. `TRADEMARKS.md` itself
-      is still to write.*
-- [ ] **Wire `scripts/check-trademarks.py` into CI** once the in-flight
-      changes land. The checker exists, is enforced by
-      `spec/professionalization/` rule 5, and runs green standalone —
-      including three files whose notices are uncommitted (`README.md`,
-      `openehr/src/lib.rs`, `CHANGELOG.md`, all carrying in-flight hunks).
-      Adding the CI job needs `.github/workflows/ci.yml` plus a row each in
-      `AGENTS.md` and `spec/audit.md` (the `claims` gate binds the trio),
-      and all three carry in-flight hunks as of 2026-08-26.
+      002994853, IP Australia 939279), it is on the root documents and the
+      published crates' rustdoc, and the two deferred files (`README.md`,
+      `openehr/src/lib.rs`) landed with the Archetype Model change
+      (`fe01c63`–`30273ef`). `TRADEMARKS.md` itself is still to write.*
+- [x] **Wire `scripts/check-trademarks.py` into CI** once the in-flight
+      changes land. *Done 2026-08-26: the in-flight changes landed
+      (`fe01c63`–`30273ef`), and CI now has a `trademarks` job running the
+      same script a contributor runs locally, with the rows the `claims`
+      gate requires in `AGENTS.md` and `spec/audit.md`; the
+      `spec/professionalization/` Status entry that admitted the check was
+      laptop-only is updated. Checker and `scripts/check-docs.py` both green
+      locally before push.*
 - [ ] Add `LICENSES/` with the full text of all five licenses in the SPDX
       expression (REUSE convention; `fhir-rust/LICENSES/` is the model).
 
 ### In flight — land it
 
-- [ ] **Commit the untracked professionalization batch** (SECURITY.md,
+- [x] **Commit the untracked professionalization batch** (SECURITY.md,
       GOVERNANCE.md, CONTRIBUTING.md, MAINTAINERS.md, CITATION.cff,
       `.github/CODEOWNERS`, `help/`, `spec/serial-comma/`, AI_STATEMENT.md,
       BENCHMARKS.md, COMPARISONS.md, INSTALL.md, NEWS.md, RFC.md) together
-      with the Archetype Model diff already in flight — run the CI `claims`
-      checks and `scripts/check-docs.py` locally first. Until this lands,
-      none of it is visible on GitHub. Ask before pushing.
+      with the Archetype Model diff already in flight. *Done 2026-08-26 by
+      the owner: landed across `3fafca2`–`30273ef` (conduct file, PHI.md,
+      RFC.md, professionalization spec, trademark notices, CITATION/
+      MAINTAINERS/CODEOWNERS, Archetype Model, 0.7.0), pushed, and the tree
+      is clean — `git status` shows nothing uncommitted.*
 
 ### Security and supply chain
 
