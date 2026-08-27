@@ -111,10 +111,14 @@ posture. Open items for each are in `tasks.md`.
 
 ## Risks & watch items
 
-- The unqualified use of the openEHR mark in the org and crate names is the
-  one item on this list with third-party legal exposure; it should be
-  resolved (notice now, contact with openEHR International if needed) before
-  any outreach.
+- ~~The unqualified use of the openEHR mark in the org and crate names is
+  the one item on this list with third-party legal exposure~~ — resolved
+  2026-08-27: openEHR granted permission to use their trademarks
+  (owner-reported; correspondence held by the maintainer;
+  [`TRADEMARKS.md`](TRADEMARKS.md) §Permission is the record). The notice
+  wording is unchanged, and adopting any permission-referencing wording
+  awaits the grant's own terms — that follow-up is the remaining watch
+  item on this axis, not an exposure.
 - The uncommitted document batch has zero external effect until it lands and
   can rot against the moving tree.
 - A-40's 28 unimplemented requirements are correctly labeled `spec` in the

@@ -102,6 +102,11 @@ openEHR's specifications are the authority for what openEHR is; this repository
 is one implementation's reading of them, with its disagreements written down as
 declared departures.
 
+openEHR granted this project permission to use their trademarks (2026-08-27,
+owner-reported; [`TRADEMARKS.md`](TRADEMARKS.md) §Permission is the record).
+Permission to use a mark is not affiliation: everything in the paragraph above
+remains true and stays.
+
 ## Changing this file
 
 By pull request, like everything else. This file is **descriptive** (`W0.2`) —

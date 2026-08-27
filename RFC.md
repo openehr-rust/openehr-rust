@@ -133,6 +133,16 @@ documents and crate rustdoc, but a notice is the floor, not the answer.
   public announcement, rather than after? If you have been through this with
   another standards body's mark, what did the conversation look like?
 
+**Resolved 2026-08-27.** openEHR granted this project permission to use their
+trademarks — owner-reported, with the correspondence held by the maintainer;
+[`TRADEMARKS.md`](TRADEMARKS.md) §Permission is the record. The second
+question answered itself in the right order: the contact happened before any
+public announcement. The notices stay, unchanged — permission is not
+affiliation — and adopting any permission-referencing wording awaits the
+grant's own terms. The section is kept because the first question, whether
+the naming reads clearly to an outside evaluator, remains worth an outside
+answer.
+
 ### 10. Funding: is "no funding vehicle" a signal or a smell?
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) §Money says it plainly: no Sponsors, no

@@ -42,11 +42,14 @@ and [`tasks.md`](../../tasks.md); this file holds the rules.
 
    The Foundation's own usage terms (same page, same date) additionally ask
    that third-party use of the mark carry the ® symbol and, beyond fair use,
-   a Product Use Licence; this project holds no such licence and therefore
-   does not use the Foundation's "used with permission" attribution text,
-   which would be a false statement here. The exposure of the unlicensed
-   name itself is an open decision tracked in `plan.md` §Risks and asked
-   openly in `RFC.md` §9.
+   a Product Use Licence. **2026-08-27: openEHR granted this project
+   permission to use their trademarks** — owner-reported, correspondence
+   held by the maintainer, recorded in `TRADEMARKS.md` §Permission. That
+   resolves the exposure question `plan.md` §Risks tracked and `RFC.md` §9
+   asked. The Foundation's "used with permission" attribution text is still
+   **not yet** used: the grant's exact wording is not in the repository, so
+   any permission-referencing wording waits on the grant's own terms, and
+   the notice above stays exactly as the owner specified it.
 
    The notice is enforced by `scripts/check-trademarks.py`, run the way the
    other documentation gates are (rule 4).

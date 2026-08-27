@@ -63,6 +63,16 @@ repository on 2026-08-25.
 | Five-way licence disjunction (MIT, Apache-2.0, BSD-3-Clause, GPL-2.0, GPL-3.0) | One sentence in the README: "take whichever you need; most take MIT or Apache-2.0" | Permissive in effect, unusual in form. An unexplained licence list becomes a legal review, and a legal review becomes a delay |
 | No statement of how the code was written | Add `AI_STATEMENT.md` | See below. This is not optional in this particular community, this particular month |
 
+**The trademark axis cleared 2026-08-27.** The exposure that `plan.md` §Risks
+said must be resolved before any outreach — the unqualified use of the openEHR
+mark in the org and crate names — is resolved: openEHR granted permission to
+use their trademarks (owner-reported; [`TRADEMARKS.md`](../../TRADEMARKS.md)
+§Permission is the record), and `TRADEMARKS.md` itself now exists at the root.
+Outreach is no longer blocked on this axis. Nothing here launches anything:
+the remaining gates in this section, and the sequence in §11, still govern
+when anything goes out. The notices stay as they are; wording that references
+the permission waits on the grant's own terms.
+
 **On the AI statement.** On 2026-08-24, FerroEHR — a Rust openEHR CDR —
 was announced on the openEHR forum, and a respondent specifically praised "the
 transparency with the AI_STATEMENT" published in its repository. This repository

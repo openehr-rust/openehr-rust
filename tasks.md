@@ -37,7 +37,7 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
 
 ### Compliance — licensing and trademarks (highest exposure)
 
-- [ ] **Add `TRADEMARKS.md` and a visible non-affiliation notice.** The org,
+- [x] **Add `TRADEMARKS.md` and a visible non-affiliation notice.** The org,
       repository, and crate name all use the openEHR mark with no notice
       anywhere a reader looks first: README.md, LICENSE.md, CITATION.cff,
       and crate metadata carry nothing; the only statements are
@@ -52,6 +52,14 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       published crates' rustdoc, and the two deferred files (`README.md`,
       `openehr/src/lib.rs`) landed with the Archetype Model change
       (`fe01c63`–`30273ef`). `TRADEMARKS.md` itself is still to write.*
+      *Done 2026-08-27: `TRADEMARKS.md` at the root, on the `er7-rust`
+      model — mark-by-mark table with the verified registrations, the
+      verbatim notice, what is and is not claimed — unblocked by openEHR
+      granting permission to use their trademarks (owner-reported,
+      2026-08-27; correspondence held by the maintainer). The notice
+      wording is unchanged, and adopting any permission-referencing
+      wording is the recorded follow-up awaiting the grant's own terms —
+      see `TRADEMARKS.md` §Permission.*
 - [x] **Wire `scripts/check-trademarks.py` into CI** once the in-flight
       changes land. *Done 2026-08-26: the in-flight changes landed
       (`fe01c63`–`30273ef`), and CI now has a `trademarks` job running the
