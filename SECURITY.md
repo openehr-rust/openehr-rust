@@ -143,17 +143,17 @@ Stated because a security policy that hides its own weaknesses is worse than
 none (`W0.3`):
 
 - ~~**Commits and tags are not signed** (`git log --format=%G?` reports
-  `N`).~~ Closed locally, 2026-08-27: this repository's `git config` now
-  signs commits and tags with an SSH key
-  (`SHA256:Ah1MPQNTLGuOy0JwLcU7LbnhSa7cRVqMaDggXwllRXc`), and `git log
-  --format=%G?` reports `G` from that commit forward. **Not yet closed on
-  the account side**:
-  the key is not yet registered with GitHub or GitLab as a signing key —
-  that step needs an interactive browser action neither `gh` nor an
-  automated session can complete — so new commits will show **Unverified**
-  on both platforms until it is. See
+  `N`).~~ Closed, 2026-08-27: this repository's `git config` signs commits
+  and tags with an SSH key
+  (`SHA256:Ah1MPQNTLGuOy0JwLcU7LbnhSa7cRVqMaDggXwllRXc`), `git log
+  --format=%G?` reports `G` from that commit forward, and the key is
+  registered with **GitHub** as a signing key — confirmed independently via
+  `gh api repos/openehr-rust/openehr-rust/commits/<sha>`, which reports
+  `verified: true`. **Not yet closed on GitLab**: the mirror has no
+  equivalent registration yet, so the same signed commit shows Verified on
+  GitHub and Unverified on GitLab until the key is added there by hand. See
   [`MAINTAINERS.md`](MAINTAINERS.md#publishing-identities) for the exact
-  residual steps. Every commit before 2026-08-27 is unsigned and stays that
+  residual step. Every commit before 2026-08-27 is unsigned and stays that
   way; authorship there is attested by GitHub's account controls and
   nothing stronger.
 - ~~**GitHub private vulnerability reporting, Dependabot, and secret scanning

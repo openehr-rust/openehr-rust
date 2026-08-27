@@ -109,18 +109,24 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       (`SHA256:Ah1MPQNTLGuOy0JwLcU7LbnhSa7cRVqMaDggXwllRXc`,
       passphrase-protected, loaded into `ssh-agent` via
       `ssh-add --apple-use-keychain` by the owner mid-session), verified
-      working end to end — `git log --format=%G?` reports `G` — and
-      exercised on the commit that configured it (amended in once the
-      passphrase became available; it could not be signed at commit time).
+      working end to end — `git log --format=%G?` reports `G`. The commit
+      that configured signing (`cd54314`) landed unsigned, because the
+      passphrase could not be supplied through this channel and was already
+      public by the time it was available; it stays unsigned rather than
+      being amended and force-pushed over published history, and the next
+      commit (`a4d3e40`) is the first one this repository actually signs.
       MAINTAINERS.md gains a signing-key row in the publishing-identities
       table and SECURITY.md's known-gaps entry is struck through with the
-      closure recorded. **Residual, and stated rather than hidden**: the
-      key is not yet registered with GitHub or GitLab as a signing key —
-      that needs an interactive browser step
-      (`gh auth refresh -h github.com -s admin:ssh_signing_key` then
-      `gh ssh-key add <path> --type signing`; GitLab has no CLI here and
-      needs the web UI) — so new commits verify locally but show
-      Unverified on both platforms until the owner completes it.*
+      closure recorded.
+      **GitHub registration done the same day** by the owner: the key is
+      registered as a signing key
+      (`gh ssh-key list` shows it, added type `signing`), confirmed
+      independently via `gh api .../commits/<sha>` reporting
+      `verified: true` rather than by trusting the local claim alone.
+      **GitLab remains the residual**: no CLI here, needs the key added by
+      hand under Preferences → SSH Keys, usage type Signing Key — until
+      then the same commit shows Verified on GitHub and Unverified on the
+      GitLab mirror.*
 - [ ] Add release tags/attestation for 0.6.0 and future releases; consider
       crates.io Trusted Publishing.
 - [x] Add `.github/ISSUE_TEMPLATE/` and a stated issue-response expectation.

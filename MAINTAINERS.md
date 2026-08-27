@@ -48,18 +48,21 @@ configured this. Every commit and tag before it is unsigned and stays that
 way — a history cannot be signed retroactively without rewriting it, and
 rewriting published history is worse than the gap it would close.
 
-**GitHub and GitLab account registration is the residual step, and it needs a
-human.** Adding a signing key to an account is an interactive action neither
-`gh` nor this session can complete unattended: GitHub requires the
-`admin:ssh_signing_key` OAuth scope, granted via
-`gh auth refresh -h github.com -s admin:ssh_signing_key` (opens a browser),
-then `gh ssh-key add <path> --type signing`; GitLab has no equivalent CLI
-here and needs the key added by hand under **Preferences → SSH Keys**, usage
-type **Signing Key**. Until both are done, `git log --show-signature` verifies
-locally but GitHub/GitLab will show new commits as **Unverified** rather than
-**Verified** — a real, temporary gap, not a documentation lag: check
-`git log --format='%G?'` on the latest commit, or the badge on the commit
-page, before trusting either.
+**GitHub account registration is done.** The owner completed the interactive
+step — `gh auth refresh -h github.com -s admin:ssh_signing_key`, then
+`gh ssh-key add <path> --type signing` — on 2026-08-27, and it is verified
+independently of the local claim above:
+`gh api repos/openehr-rust/openehr-rust/commits/<sha>` reports
+`{"verified": true, "reason": "valid"}` for commits signed with this key. The
+GitHub commit page shows **Verified**.
+
+**GitLab registration is the remaining residual, and it needs a human.**
+There is no CLI equivalent here — the key must be added by hand under
+**Preferences → SSH Keys**, usage type **Signing Key**. Until then, a commit
+pushed to the GitLab mirror shows **Unverified** there even though the same
+commit is **Verified** on GitHub — a real, temporary, platform-specific gap,
+not a documentation lag: check the badge on each platform's commit page
+separately rather than assuming one implies the other.
 
 Do not treat authorship in history before 2026-08-27, or in any commit while
 account registration is pending, as attested by anything stronger than
