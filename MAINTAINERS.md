@@ -33,12 +33,37 @@ An inventory nobody has written down is an inventory nobody can hand over.
 | The GitHub organisation `openehr-rust` and the repository under it | the source, issues, releases, and every repository setting | the maintainer's account, sole collaborator | GitHub's own account and organisation recovery, between GitHub and the account holder. There is no second organisation owner |
 | A crates.io API token, used from a workstation | the eight published crates | the maintainer, on his own machine. **There is no Trusted Publishing and no publish workflow** — `.github/workflows/` holds `ci.yml` and nothing else, and `agents/publishing.md` documents publishing as a manual `cargo publish` after `cargo login` | none. A leaked token is revoked at crates.io; a lost one is reissued by the same account. Crate ownership moves only by `cargo owner`, which needs that account |
 | Git tags | which commit a release refers to | the maintainer | not applicable; tags are public and reproducible from history |
+| The SSH commit- and tag-signing key (`SHA256:Ah1MPQNTLGuOy0JwLcU7LbnhSa7cRVqMaDggXwllRXc`, ed25519) | the verified signature on a commit or tag, from the point it was configured | the maintainer, passphrase-protected, on his own hardware | none: the private key is not escrowed. A successor would generate a new key and re-establish trust from a signed statement on the repository; commits made before the key existed, or before an account trusts it, stay unsigned regardless |
 
-**Commits and tags in this repository are not cryptographically signed**
-(`git log --format=%G?` reports `N`). Do not treat authorship in the history as
-attested by anything stronger than GitHub's account controls. If that matters to
-your adoption, say so on the tracker — it is a solvable gap, and it is listed
-here rather than left for you to discover.
+**Commit and tag signing is configured, starting 2026-08-27, and is not
+retroactive.** `git config` for this repository (not global — other
+repositories on this machine are unaffected unless configured separately)
+sets `gpg.format ssh`, `user.signingkey` to the key above, and
+`commit.gpgsign` / `tag.gpgsign` to `true`; `~/.ssh/allowed_signers` is set
+for local verification (`git log --show-signature`). Every commit and tag
+before `143b4e8` is unsigned and stays that way — a history cannot be signed
+retroactively without rewriting it, and rewriting published history is worse
+than the gap it would close.
+
+**GitHub and GitLab account registration is the residual step, and it needs a
+human.** Adding a signing key to an account is an interactive action neither
+`gh` nor this session can complete unattended: GitHub requires the
+`admin:ssh_signing_key` OAuth scope, granted via
+`gh auth refresh -h github.com -s admin:ssh_signing_key` (opens a browser),
+then `gh ssh-key add <path> --type signing`; GitLab has no equivalent CLI
+here and needs the key added by hand under **Preferences → SSH Keys**, usage
+type **Signing Key**. Until both are done, `git log --show-signature` verifies
+locally but GitHub/GitLab will show new commits as **Unverified** rather than
+**Verified** — a real, temporary gap, not a documentation lag: check
+`git log --format='%G?'` on the latest commit, or the badge on the commit
+page, before trusting either.
+
+Do not treat authorship in history before 2026-08-27, or in any commit while
+account registration is pending, as attested by anything stronger than
+GitHub's or GitLab's account controls. If that matters to your adoption, check
+the date and the account-verification badge rather than assuming from this
+paragraph alone — a description is not a certificate, which is `W0.2`'s point
+applied to this file rather than to a spec.
 
 There is no container image, no hosted service, no documentation domain, no
 Zenodo deposit, and no DOI. docs.rs builds the API documentation from the
