@@ -26,7 +26,21 @@ engine would let "valid" mean "the parts I understood were satisfied". §15 is
 written to answer that — every unimplemented construct, incomplete lineage,
 unresolved artefact, and unreachable repository is a refusal, never a pass.
 
-## Latest release — 0.7.3, 2026-08-26
+## Latest release — 0.7.4, 2026-08-27
+
+**openEHR granted permission to use their trademarks, and every notice now
+says so in the Foundation's own words.** The grant is owner-reported and
+recorded in [`TRADEMARKS.md`](TRADEMARKS.md), new at the root. At the
+owner's direction, every notice site — the crate descriptions and rustdoc
+on crates.io and docs.rs, the crate READMEs, and every root and help
+document — carries the attribution openehr.org/logos/ prescribes, verbatim:
+"openEHR® is the registered trademark of the openEHR Foundation and is used
+with the permission of openEHR International. Use of the trademark does not
+constitute endorsement of this product by openEHR International or openEHR
+Foundation." Permission is not affiliation: the Independence statement in
+`GOVERNANCE.md` stands unchanged. No code changed.
+
+## Previous release — 0.7.3, 2026-08-26
 
 **The trademark notice is everywhere a crates.io reader looks, in the
 owner-specified shape.** Every publishable crate's `description` — what
@@ -41,25 +55,12 @@ absent and `openehr-mysql`'s description lacked a full stop before the
 notice. A published version is immutable, so 0.7.3 is the remedy. No code
 changed in either release.
 
-## Previous release — 0.7.1, 2026-08-26
-
-**The owner-specified trademark notice ships.** Every page that carries the
-notice — the crate READMEs crates.io renders and the rustdoc Trademarks
-sections — now reads: "openEHR® is the registered trademark of the openEHR
-Foundation. Use of the trademark does not constitute endorsement of this
-product by openEHR International or openEHR Foundation."
-`scripts/check-trademarks.py` enforces that wording in CI.
-
-No code changed. A published version is immutable, so the 0.7.0 pages keep
-the previous wording forever; this release exists so the pages people read
-carry the specified text. The crate READMEs' install snippets also move off
-a stale `"0.2"` to `"0.7"`.
-
 ## Recent releases
 
 | Version | Date | Headline |
 | --- | --- | --- |
-| **0.7.3** | 2026-08-26 | crate descriptions carry the notice in the owner-specified shape, checker-enforced |
+| **0.7.4** | 2026-08-27 | every notice becomes the Foundation's prescribed attribution, stating the granted permission |
+| 0.7.3 | 2026-08-26 | crate descriptions carry the notice in the owner-specified shape, checker-enforced |
 | 0.7.2 | 2026-08-26 | the notice reaches the descriptions and gets prominent in the crate READMEs |
 | 0.7.1 | 2026-08-26 | the owner-specified trademark notice ships on every crate page |
 | 0.7.0 | 2026-08-26 | the Archetype Model is in scope (`lib:S1.21`, §15); `openehr::am` is its object model |
@@ -107,7 +108,7 @@ that mentions this project; a written statement.
 Every claim below is backed by something in the repository that can be run or
 read. Nothing else about this project should be quoted as verified.
 
-- Eight crates on crates.io at 0.7.3, released 2026-08-26, implementing the
+- Eight crates on crates.io at 0.7.4, released 2026-08-27, implementing the
   openEHR Reference Model in Rust with SQL persistence for six engines.
 - **`openehr-sqlite` is at conformance level Verified** — a complete store,
   re-checked in continuous integration on every commit. Three dialects

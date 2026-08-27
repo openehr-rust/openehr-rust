@@ -20,7 +20,7 @@ this afternoon, one of the projects below is the better answer.
 
 | Project | Language | Licence | What it is | Activity (2026-08-26) |
 | --- | --- | --- | --- | --- |
-| **openehr-rust** (this) | Rust | MIT / Apache-2.0 / BSD-3-Clause / GPL-2.0 / GPL-3.0, your choice | RM library + SQL persistence layer + six dialects + embedded SQLite store | public history from 2026-08-01; eight crates on crates.io at 0.7.3 |
+| **openehr-rust** (this) | Rust | MIT / Apache-2.0 / BSD-3-Clause / GPL-2.0 / GPL-3.0, your choice | RM library + SQL persistence layer + six dialects + embedded SQLite store | public history from 2026-08-01; eight crates on crates.io at 0.7.4 |
 | [**EHRbase**](https://github.com/ehrbase/ehrbase) | Java | Apache-2.0 | the reference open-source **CDR**: REST API, AQL, templates, PostgreSQL | 380 stars, actively developed |
 | [**FerroEHR**](https://github.com/rubentalstra/FerroEHR) | Rust | MIT | a **CDR** in Rust: ITS-REST 1.1.0, AQL 1.1, ADL 2.4 templates, PostgreSQL 18, with a published conformance catalogue of roughly 1,100 cases | announced 2026-08-24, actively developed |
 | [**Archie**](https://github.com/openEHR/archie) | Java | Apache-2.0 | the reference **library** for archetypes: ADL and AOM parsing, plus RM classes | 67 stars, actively developed |
