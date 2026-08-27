@@ -103,23 +103,24 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       chosen because the sibling `fhir-rust` got 47 major-bump PRs in an
       hour on default limits.*
 - [x] Sign commits and tags going forward; record the posture change in
-      MAINTAINERS.md and SECURITY.md. *Done 2026-08-27, partially: this
-      repository's `git config` (local, not global) now signs commits and
-      tags with an SSH key the owner supplied
+      MAINTAINERS.md and SECURITY.md. *Done 2026-08-27: this repository's
+      `git config` (local, not global) signs commits and tags with an SSH
+      key the owner supplied
       (`SHA256:Ah1MPQNTLGuOy0JwLcU7LbnhSa7cRVqMaDggXwllRXc`,
-      passphrase-protected), verifiable locally with
-      `git log --show-signature`. MAINTAINERS.md gains a signing-key row in
-      the publishing-identities table and SECURITY.md's known-gaps entry is
-      struck through with the closure recorded. **Residual, and stated
-      rather than hidden**: the key is not yet registered with GitHub or
-      GitLab as a signing key — that needs an interactive browser step
+      passphrase-protected, loaded into `ssh-agent` via
+      `ssh-add --apple-use-keychain` by the owner mid-session), verified
+      working end to end — `git log --format=%G?` reports `G` — and
+      exercised on the commit that configured it (amended in once the
+      passphrase became available; it could not be signed at commit time).
+      MAINTAINERS.md gains a signing-key row in the publishing-identities
+      table and SECURITY.md's known-gaps entry is struck through with the
+      closure recorded. **Residual, and stated rather than hidden**: the
+      key is not yet registered with GitHub or GitLab as a signing key —
+      that needs an interactive browser step
       (`gh auth refresh -h github.com -s admin:ssh_signing_key` then
       `gh ssh-key add <path> --type signing`; GitLab has no CLI here and
       needs the web UI) — so new commits verify locally but show
-      Unverified on both platforms until the owner completes it. This
-      very change had to be committed unsigned for the same reason: the
-      passphrase cannot be supplied non-interactively, and asking for it
-      through this channel would be worse than leaving one commit unsigned.*
+      Unverified on both platforms until the owner completes it.*
 - [ ] Add release tags/attestation for 0.6.0 and future releases; consider
       crates.io Trusted Publishing.
 - [x] Add `.github/ISSUE_TEMPLATE/` and a stated issue-response expectation.

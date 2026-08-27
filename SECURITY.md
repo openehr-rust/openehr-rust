@@ -143,10 +143,11 @@ Stated because a security policy that hides its own weaknesses is worse than
 none (`W0.3`):
 
 - ~~**Commits and tags are not signed** (`git log --format=%G?` reports
-  `N`).~~ Partially closed 2026-08-27: this repository's `git config` now
+  `N`).~~ Closed locally, 2026-08-27: this repository's `git config` now
   signs commits and tags with an SSH key
-  (`SHA256:Ah1MPQNTLGuOy0JwLcU7LbnhSa7cRVqMaDggXwllRXc`), verifiable locally
-  with `git log --show-signature`. **Not yet closed on the account side**:
+  (`SHA256:Ah1MPQNTLGuOy0JwLcU7LbnhSa7cRVqMaDggXwllRXc`), and `git log
+  --format=%G?` reports `G` from that commit forward. **Not yet closed on
+  the account side**:
   the key is not yet registered with GitHub or GitLab as a signing key —
   that step needs an interactive browser action neither `gh` nor an
   automated session can complete — so new commits will show **Unverified**

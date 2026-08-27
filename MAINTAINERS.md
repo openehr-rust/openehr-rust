@@ -35,15 +35,18 @@ An inventory nobody has written down is an inventory nobody can hand over.
 | Git tags | which commit a release refers to | the maintainer | not applicable; tags are public and reproducible from history |
 | The SSH commit- and tag-signing key (`SHA256:Ah1MPQNTLGuOy0JwLcU7LbnhSa7cRVqMaDggXwllRXc`, ed25519) | the verified signature on a commit or tag, from the point it was configured | the maintainer, passphrase-protected, on his own hardware | none: the private key is not escrowed. A successor would generate a new key and re-establish trust from a signed statement on the repository; commits made before the key existed, or before an account trusts it, stay unsigned regardless |
 
-**Commit and tag signing is configured, starting 2026-08-27, and is not
-retroactive.** `git config` for this repository (not global — other
-repositories on this machine are unaffected unless configured separately)
-sets `gpg.format ssh`, `user.signingkey` to the key above, and
-`commit.gpgsign` / `tag.gpgsign` to `true`; `~/.ssh/allowed_signers` is set
-for local verification (`git log --show-signature`). Every commit and tag
-before `143b4e8` is unsigned and stays that way — a history cannot be signed
-retroactively without rewriting it, and rewriting published history is worse
-than the gap it would close.
+**Commit and tag signing is configured and exercised, starting 2026-08-27,
+and is not retroactive.** `git config` for this repository (not global —
+other repositories on this machine are unaffected unless configured
+separately) sets `gpg.format ssh`, `user.signingkey` to the key above, and
+`commit.gpgsign` / `tag.gpgsign` to `true`; `~/.ssh/allowed_signers` verifies
+locally (`git log --show-signature`). The key is passphrase-protected and
+loaded into `ssh-agent` via `ssh-add --apple-use-keychain`, so it survives a
+reboot without the passphrase being typed again. `git log --format=%G?`
+reports `G` — a good local signature — starting at the commit that
+configured this. Every commit and tag before it is unsigned and stays that
+way — a history cannot be signed retroactively without rewriting it, and
+rewriting published history is worse than the gap it would close.
 
 **GitHub and GitLab account registration is the residual step, and it needs a
 human.** Adding a signing key to an account is an interactive action neither
