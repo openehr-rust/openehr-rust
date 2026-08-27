@@ -5,6 +5,28 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
+## 0.7.4 — 2026-08-27
+
+**The notice becomes the Foundation's own prescribed attribution.** openEHR
+granted this project permission to use their trademarks (owner-reported,
+2026-08-27; `TRADEMARKS.md` §Permission is the record), and at the owner's
+direction every notice site — the crate descriptions and rustdoc that ship
+to crates.io and docs.rs, the crate READMEs, and every root and help
+document — now carries the attribution openehr.org/logos/ prescribes,
+verbatim: "openEHR® is the registered trademark of the openEHR Foundation
+and is used with the permission of openEHR International. Use of the
+trademark does not constitute endorsement of this product by openEHR
+International or openEHR Foundation." The descriptions keep the three-part
+shape; `scripts/check-trademarks.py`'s enforced constant moved with the
+wording and was plant-tested against a broken rustdoc section and a broken
+description. `TRADEMARKS.md` is new at the root: the mark-by-mark table
+with the verified registrations, what is and is not claimed, and the dated
+permission record.
+
+The 0.7.1–0.7.3 crates on crates.io carry the previous wording, which a
+published version keeps forever; this release exists so the pages people
+read state the permission in the mark owner's own words. No code changed.
+
 ## 0.7.3 — 2026-08-26
 
 **Every crate `description` gets the owner-specified three-part shape, and
@@ -367,6 +389,7 @@ Not tracked here. See the git history and crates.io.
 
 ## Trademarks
 
-openEHR® is the registered trademark of the openEHR Foundation. Use of the
-trademark does not constitute endorsement of this product by openEHR
-International or openEHR Foundation.
+openEHR® is the registered trademark of the openEHR Foundation and is used with
+the permission of openEHR International. Use of the trademark does not
+constitute endorsement of this product by openEHR International or openEHR
+Foundation.

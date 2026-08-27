@@ -137,9 +137,10 @@ documents and crate rustdoc, but a notice is the floor, not the answer.
 trademarks — owner-reported, with the correspondence held by the maintainer;
 [`TRADEMARKS.md`](TRADEMARKS.md) §Permission is the record. The second
 question answered itself in the right order: the contact happened before any
-public announcement. The notices stay, unchanged — permission is not
-affiliation — and adopting any permission-referencing wording awaits the
-grant's own terms. The section is kept because the first question, whether
+public announcement. The notices remain — permission is not affiliation —
+and later the same day they moved to the Foundation's own prescribed
+attribution, which states the permission (see `TRADEMARKS.md`
+§Permission). The section is kept because the first question, whether
 the naming reads clearly to an outside evaluator, remains worth an outside
 answer.
 
@@ -231,6 +232,7 @@ decisions are supposed to rest on.
 
 ## Trademarks
 
-openEHR® is the registered trademark of the openEHR Foundation. Use of the
-trademark does not constitute endorsement of this product by openEHR
-International or openEHR Foundation.
+openEHR® is the registered trademark of the openEHR Foundation and is used with
+the permission of openEHR International. Use of the trademark does not
+constitute endorsement of this product by openEHR International or openEHR
+Foundation.

@@ -8,9 +8,10 @@
 //!
 //! # Trademarks
 //!
-//! openEHR® is the registered trademark of the openEHR Foundation. Use of
-//! the trademark does not constitute endorsement of this product by openEHR
-//! International or openEHR Foundation.
+//! openEHR® is the registered trademark of the openEHR Foundation and is used
+//! with the permission of openEHR International. Use of the trademark does not
+//! constitute endorsement of this product by openEHR International or openEHR
+//! Foundation.
 //!
 //! # Conformance level: **Schema**
 //!

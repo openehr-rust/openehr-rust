@@ -6,11 +6,11 @@
 
 [package]
 name = "openehr"
-version = "0.7.3"
+version = "0.7.4"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
-description = "openEHR® Reference Model types, validation, paths, AQL parsing, and change-control security primitives. openEHR® is the registered trademark of the openEHR Foundation. Use of the trademark does not constitute endorsement of this product by openEHR International or openEHR Foundation. This project is an independent work."
+description = "openEHR® Reference Model types, validation, paths, AQL parsing, and change-control security primitives. openEHR® is the registered trademark of the openEHR Foundation and is used with the permission of openEHR International. Use of the trademark does not constitute endorsement of this product by openEHR International or openEHR Foundation. This project is an independent work."
 keywords = ["openehr", "ehr", "healthcare", "archetype", "aql"]
 categories = ["data-structures", "science", "encoding"]
 repository = "https://github.com/openehr-rust/openehr-rust"

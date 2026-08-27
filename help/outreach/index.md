@@ -70,8 +70,8 @@ use their trademarks (owner-reported; [`TRADEMARKS.md`](../../TRADEMARKS.md)
 §Permission is the record), and `TRADEMARKS.md` itself now exists at the root.
 Outreach is no longer blocked on this axis. Nothing here launches anything:
 the remaining gates in this section, and the sequence in §11, still govern
-when anything goes out. The notices stay as they are; wording that references
-the permission waits on the grant's own terms.
+when anything goes out. Every notice now carries the Foundation's own
+prescribed attribution, which states the permission.
 
 **On the AI statement.** On 2026-08-24, FerroEHR — a Rust openEHR CDR —
 was announced on the openEHR forum, and a respondent specifically praised "the
@@ -474,6 +474,7 @@ All accessed 2026-08-25.
 
 ## Trademarks
 
-openEHR® is the registered trademark of the openEHR Foundation. Use of the
-trademark does not constitute endorsement of this product by openEHR
-International or openEHR Foundation.
+openEHR® is the registered trademark of the openEHR Foundation and is used with
+the permission of openEHR International. Use of the trademark does not
+constitute endorsement of this product by openEHR International or openEHR
+Foundation.

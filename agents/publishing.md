@@ -20,7 +20,7 @@ publish a crate with an open finding against its claims (`W0.21`).
 ## State today
 
 **Published 2026-08-26.** All eight publishable crates are live at **0.7.3**
-on crates.io, in the order below, and local matches published. Verified against
+on crates.io, in the order below. Local is 0.7.4 and NOT yet published. Verified against
 the registry API rather than read off `cargo publish`'s output.
 
 **0.7.2 went out ahead of this file's process** (2026-08-26): the versions
@@ -74,18 +74,18 @@ formality: the run before 0.4.0's was **red**, and reading it is what produced
 
 | Crate | crates.io | Local |
 | --- | --- | --- |
-| `openehr` | 0.1.0, 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.3 |
-| `openehr-store` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.3 |
-| `openehr-sqlite` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.3 |
-| `openehr-postgresql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.3 |
-| `openehr-mysql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.3 |
-| `openehr-mariadb` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.3 |
-| `openehr-mssql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.3 |
-| `openehr-oracle` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.3 |
+| `openehr` | 0.1.0, 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.4 |
+| `openehr-store` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.4 |
+| `openehr-sqlite` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.4 |
+| `openehr-postgresql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.4 |
+| `openehr-mysql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.4 |
+| `openehr-mariadb` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.4 |
+| `openehr-mssql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.4 |
+| `openehr-oracle` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, **0.7.3** | 0.7.4 |
 
 `openehr-loco`, `openehr-assets`, and the eight fuzz crates are `publish = false`
 and are not on crates.io. `openehr-loco`'s own version moves in lockstep with
-the published crates for consistency (0.7.3 locally) even though it is never
+the published crates for consistency (0.7.4 locally) even though it is never
 itself published.
 
 This table was wrong until 2026-08-02, and again briefly during the 0.3.0

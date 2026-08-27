@@ -60,12 +60,15 @@ import tomllib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# The verbatim notice of professionalization rule 5. Line wrapping, comment
+# The verbatim notice of professionalization rule 5 — the Foundation's own
+# prescribed attribution at openehr.org/logos/, adopted 2026-08-27 after
+# openEHR granted permission to use the trademarks. Line wrapping, comment
 # markers, and blockquote prefixes may differ per file; the words may not.
 NOTICE = (
-    "openEHR® is the registered trademark of the openEHR Foundation. Use of "
-    "the trademark does not constitute endorsement of this product by "
-    "openEHR International or openEHR Foundation."
+    "openEHR® is the registered trademark of the openEHR Foundation and is "
+    "used with the permission of openEHR International. Use of the "
+    "trademark does not constitute endorsement of this product by openEHR "
+    "International or openEHR Foundation."
 )
 
 # The sentence that closes every publishable crate's `description`, after

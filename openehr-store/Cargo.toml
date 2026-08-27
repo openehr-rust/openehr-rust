@@ -10,18 +10,18 @@
 
 [package]
 name = "openehr-store"
-version = "0.7.3"
+version = "0.7.4"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
-description = "openEHR® store persistence in agnostic way: storage model, SQL dialect trait, commit semantics, and a conformance suite. openEHR® is the registered trademark of the openEHR Foundation. Use of the trademark does not constitute endorsement of this product by openEHR International or openEHR Foundation. This project is an independent work."
+description = "openEHR® store persistence in agnostic way: storage model, SQL dialect trait, commit semantics, and a conformance suite. openEHR® is the registered trademark of the openEHR Foundation and is used with the permission of openEHR International. Use of the trademark does not constitute endorsement of this product by openEHR International or openEHR Foundation. This project is an independent work."
 keywords = ["openehr", "ehr", "database", "sql", "healthcare"]
 categories = ["database"]
 repository = "https://github.com/openehr-rust/openehr-rust"
 readme = "README.md"
 
 [dependencies]
-openehr = { path = "../openehr", version = "0.7.3" }
+openehr = { path = "../openehr", version = "0.7.4" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip", "arbitrary_precision"] }
 thiserror = "2"

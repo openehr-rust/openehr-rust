@@ -34,11 +34,14 @@ and [`tasks.md`](../../tasks.md); this file holds the rules.
 
    The binding rule: **every root document and every top-level published
    crate's rustdoc that uses the mark in prose carries the following notice
-   verbatim**, in the exact wording the owner specified on 2026-08-26:
+   verbatim** — since 2026-08-27 the Foundation's own prescribed attribution
+   from <https://openehr.org/logos/>, which superseded the wording the owner
+   specified on 2026-08-26 (see the dated paragraph below):
 
-   > openEHR® is the registered trademark of the openEHR Foundation. Use of
-   > the trademark does not constitute endorsement of this product by
-   > openEHR International or openEHR Foundation.
+   > openEHR® is the registered trademark of the openEHR Foundation and is used
+   > with the permission of openEHR International. Use of the trademark does
+   > not constitute endorsement of this product by openEHR International or
+   > openEHR Foundation.
 
    The Foundation's own usage terms (same page, same date) additionally ask
    that third-party use of the mark carry the ® symbol and, beyond fair use,
@@ -46,10 +49,12 @@ and [`tasks.md`](../../tasks.md); this file holds the rules.
    permission to use their trademarks** — owner-reported, correspondence
    held by the maintainer, recorded in `TRADEMARKS.md` §Permission. That
    resolves the exposure question `plan.md` §Risks tracked and `RFC.md` §9
-   asked. The Foundation's "used with permission" attribution text is still
-   **not yet** used: the grant's exact wording is not in the repository, so
-   any permission-referencing wording waits on the grant's own terms, and
-   the notice above stays exactly as the owner specified it.
+   asked. Later the same day the owner directed that the notice reference
+   the permission, and the notice above became the Foundation's own
+   prescribed attribution, verbatim from openehr.org/logos/ (re-checked
+   2026-08-27) — the "used with the permission" wording is now in use
+   because the mark's owner prescribes that exact text and the permission
+   it states has been granted.
 
    The notice is enforced by `scripts/check-trademarks.py`, run the way the
    other documentation gates are (rule 4).

@@ -56,10 +56,10 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       model — mark-by-mark table with the verified registrations, the
       verbatim notice, what is and is not claimed — unblocked by openEHR
       granting permission to use their trademarks (owner-reported,
-      2026-08-27; correspondence held by the maintainer). The notice
-      wording is unchanged, and adopting any permission-referencing
-      wording is the recorded follow-up awaiting the grant's own terms —
-      see `TRADEMARKS.md` §Permission.*
+      2026-08-27; correspondence held by the maintainer). Later the same
+      day the owner directed the notice to reference the permission, and
+      every notice site moved to the Foundation's prescribed attribution
+      from openehr.org/logos/ — see `TRADEMARKS.md` §Permission.*
 - [x] **Wire `scripts/check-trademarks.py` into CI** once the in-flight
       changes land. *Done 2026-08-26: the in-flight changes landed
       (`fe01c63`–`30273ef`), and CI now has a `trademarks` job running the
@@ -178,6 +178,7 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
 
 ## Trademarks
 
-openEHR® is the registered trademark of the openEHR Foundation. Use of the
-trademark does not constitute endorsement of this product by openEHR
-International or openEHR Foundation.
+openEHR® is the registered trademark of the openEHR Foundation and is used with
+the permission of openEHR International. Use of the trademark does not
+constitute endorsement of this product by openEHR International or openEHR
+Foundation.

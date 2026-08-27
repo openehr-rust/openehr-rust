@@ -7,9 +7,10 @@ rule 5 and [`scripts/check-trademarks.py`](scripts/check-trademarks.py).
 
 ## Notice
 
-> openEHR® is the registered trademark of the openEHR Foundation. Use of the
-> trademark does not constitute endorsement of this product by openEHR
-> International or openEHR Foundation.
+> openEHR® is the registered trademark of the openEHR Foundation and is used
+> with the permission of openEHR International. Use of the trademark does not
+> constitute endorsement of this product by openEHR International or openEHR
+> Foundation.
 
 ## What this project uses, and how
 
@@ -19,16 +20,18 @@ rule 5 and [`scripts/check-trademarks.py`](scripts/check-trademarks.py).
 
 ## Permission
 
-**2026-08-27 — permission to use the trademarks granted by openEHR.** This is
-owner-reported: the correspondence is held by the maintainer, and the grant's
-exact wording is not in this repository. Until it is, two things follow:
-
-- The notice above stays exactly as the owner specified it on 2026-08-26,
-  everywhere it appears.
-- This project does **not** use the Foundation's "used with permission"
-  attribution text or any other permission-referencing wording. Adopting any
-  such wording is the recorded follow-up, and it waits on the grant's own
-  terms.
+**2026-08-27 — permission to use the trademarks granted by openEHR, and
+referenced in the notice.** The grant is owner-reported: the correspondence
+is held by the maintainer. Later the same day the owner directed that the
+notice reference the permission, and the wording adopted is the
+**Foundation's own prescribed attribution**, taken verbatim from
+[openehr.org/logos/](https://openehr.org/logos/) (re-checked 2026-08-27) —
+that page prescribes the exact formulation in the Notice above, so no
+wording was composed here. The alternative, minimally editing the previous
+owner-specified notice, was not used: where the mark's owner publishes its
+own required text, using anything else would be a second formulation to
+defend. `scripts/check-trademarks.py` enforces the new wording everywhere,
+including every publishable crate's `description`.
 
 Before this grant, the unqualified use of the mark in the project's names was
 tracked as this repository's one item of third-party legal exposure

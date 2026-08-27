@@ -115,10 +115,10 @@ posture. Open items for each are in `tasks.md`.
   the one item on this list with third-party legal exposure~~ — resolved
   2026-08-27: openEHR granted permission to use their trademarks
   (owner-reported; correspondence held by the maintainer;
-  [`TRADEMARKS.md`](TRADEMARKS.md) §Permission is the record). The notice
-  wording is unchanged, and adopting any permission-referencing wording
-  awaits the grant's own terms — that follow-up is the remaining watch
-  item on this axis, not an exposure.
+  [`TRADEMARKS.md`](TRADEMARKS.md) §Permission is the record). Every
+  notice now carries the Foundation's own prescribed attribution, which
+  states the permission — adopted the same day at the owner's direction.
+  Nothing remains open on this axis.
 - The uncommitted document batch has zero external effect until it lands and
   can rot against the moving tree.
 - A-40's 28 unimplemented requirements are correctly labeled `spec` in the
@@ -127,6 +127,7 @@ posture. Open items for each are in `tasks.md`.
 
 ## Trademarks
 
-openEHR® is the registered trademark of the openEHR Foundation. Use of the
-trademark does not constitute endorsement of this product by openEHR
-International or openEHR Foundation.
+openEHR® is the registered trademark of the openEHR Foundation and is used with
+the permission of openEHR International. Use of the trademark does not
+constitute endorsement of this product by openEHR International or openEHR
+Foundation.

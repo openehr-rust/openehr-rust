@@ -3,9 +3,10 @@
 openEHR® Reference Model types, validation, paths, AQL parsing, and
 change-control security primitives — in Rust.
 
-> openEHR® is the registered trademark of the openEHR Foundation. Use of the
-> trademark does not constitute endorsement of this product by openEHR
-> International or openEHR Foundation.
+> openEHR® is the registered trademark of the openEHR Foundation and is used
+> with the permission of openEHR International. Use of the trademark does not
+> constitute endorsement of this product by openEHR International or openEHR
+> Foundation.
 
 [openEHR](https://specifications.openehr.org/) specifies clinical information
 as a small, stable **Reference Model** of about ninety classes, plus
@@ -256,6 +257,7 @@ GPL-3.0-only. See [`LICENSE.md`](LICENSE.md).
 openEHR specifications are published by the openEHR Foundation under CC-BY-SA;
 this crate is an independent implementation.
 
-openEHR® is the registered trademark of the openEHR Foundation. Use of the
-trademark does not constitute endorsement of this product by openEHR
-International or openEHR Foundation.
+openEHR® is the registered trademark of the openEHR Foundation and is used with
+the permission of openEHR International. Use of the trademark does not
+constitute endorsement of this product by openEHR International or openEHR
+Foundation.

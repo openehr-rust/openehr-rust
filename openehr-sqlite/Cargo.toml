@@ -2,19 +2,19 @@
 
 [package]
 name = "openehr-sqlite"
-version = "0.7.3"
+version = "0.7.4"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
-description = "openEHR® persistence for SQLite: schema dialect and a complete embedded store. openEHR® is the registered trademark of the openEHR Foundation. Use of the trademark does not constitute endorsement of this product by openEHR International or openEHR Foundation. This project is an independent work."
+description = "openEHR® persistence for SQLite: schema dialect and a complete embedded store. openEHR® is the registered trademark of the openEHR Foundation and is used with the permission of openEHR International. Use of the trademark does not constitute endorsement of this product by openEHR International or openEHR Foundation. This project is an independent work."
 keywords = ["openehr", "ehr", "sqlite", "healthcare", "sql"]
 categories = ["database"]
 repository = "https://github.com/openehr-rust/openehr-rust"
 readme = "README.md"
 
 [dependencies]
-openehr = { path = "../openehr", version = "0.7.3" }
-openehr-store = { path = "../openehr-store", version = "0.7.3" }
+openehr = { path = "../openehr", version = "0.7.4" }
+openehr-store = { path = "../openehr-store", version = "0.7.4" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip", "arbitrary_precision"] }
 # `bundled` compiles a known SQLite rather than linking whatever the host
 # ships. The generated DDL and the JSON1 functions the store uses are
@@ -32,11 +32,11 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # distinctness check covered five of six dialects and the one it omitted was a
 # byte-identical copy of `openehr-mysql`. An incomplete guard reports the same
 # green as a complete one.
-openehr-postgresql = { path = "../openehr-postgresql", version = "0.7.3" }
-openehr-mysql = { path = "../openehr-mysql", version = "0.7.3" }
-openehr-mariadb = { path = "../openehr-mariadb", version = "0.7.3" }
-openehr-mssql = { path = "../openehr-mssql", version = "0.7.3" }
-openehr-oracle = { path = "../openehr-oracle", version = "0.7.3" }
+openehr-postgresql = { path = "../openehr-postgresql", version = "0.7.4" }
+openehr-mysql = { path = "../openehr-mysql", version = "0.7.4" }
+openehr-mariadb = { path = "../openehr-mariadb", version = "0.7.4" }
+openehr-mssql = { path = "../openehr-mssql", version = "0.7.4" }
+openehr-oracle = { path = "../openehr-oracle", version = "0.7.4" }
 
 [lints.rust]
 missing_docs = "deny"
