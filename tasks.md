@@ -173,8 +173,21 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       everything exists except FUNDING.yml, whose absence is the recorded
       open decision — and the HL7 notes adapted to the openEHR rule 5
       machinery.*
-- [ ] Decide whether `spec/databases/conformance-matrix.md` gets
+- [x] Decide whether `spec/databases/conformance-matrix.md` gets
       machine-derived like the library matrix (`plan.md` §Open decisions).
+      *Done 2026-08-27: not exact-once — the file's five-topic-table shape
+      makes a requirement legitimately appearing more than once correct rather
+      than a defect, unlike the library matrix's single linear walk. Built the
+      floor that shape does allow instead
+      (`scripts/check-databases-matrix-coverage.py`: mentioned at least once),
+      ran it, and filed what it found as `db:D-11`: 144 of 221 requirements —
+      including `M3.19` and all of `V9` — have never been mentioned in the
+      file at all. Not wired into CI (would fail on day one for a pre-existing
+      gap, not a regression); `spec/audit.md`'s `claims` row corrected, since
+      it had been overclaiming an exactly-once check on both matrices when
+      only the library one has ever had one. The underlying gap (144
+      unassessed requirements) is real engineering work and stays open under
+      `db:D-11`, not closed by this decision.*
 
 ## Trademarks
 

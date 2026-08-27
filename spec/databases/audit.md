@@ -471,6 +471,70 @@ service and nowhere below, so the finding stays open for anyone embedding
 `openehr-store` directly — which is the case `PR12.5` was written for and the
 one that has not changed.
 
+### D-11 — Most requirements have never been assessed against the matrix — **Medium, open**
+
+Found by writing the coverage check the library matrix already has
+(`.github/workflows/ci.yml`, "Every requirement has exactly one row in the
+library matrix") and pointing it at this file instead.
+
+**Found.** This file's own header says *"Assessed 2026-08-02. Anything not in
+this file is not claimed."* That sentence is safe against overclaiming — an
+absent requirement asserts nothing false — but it is silent about how much is
+absent, and the answer is most of it:
+**144 of 221 requirements defined in `spec/databases/*.md` have zero mentions
+anywhere in this file** — not a **•**, not a **✗**, not a **~**, not a **doc**,
+not even a row in the "Not implemented" table. `scripts/check-databases-matrix-
+coverage.py` reproduces the count.
+
+By section:
+
+| Prefix | Missing | Prefix | Missing | Prefix | Missing |
+| --- | --- | --- | --- | --- | --- |
+| `C0` | 21 of 22 | `M3` | 13 of 32 | `T11` | 14 of 17 |
+| `G2` | 8 of 14 | `O10` | 13 of 15 | `W16` | 18 of 20 |
+| `H5` | 7 of 16 | `P6` | 9 of 13 | `X15` | 10 of 18 |
+| `S1` | 14 of 16 | `PR12` | 6 of 20 | `R4` | 4 of 11 |
+| `V9` | 7 of 7 | | | | |
+
+`C0` and `W16` are largely framework sections — normative language and
+repository conventions — and the library matrix's precedent (`lib:C0.1`–`C0.18`
+marked **doc**) suggests most of those 39 will resolve the same way once looked
+at. That does not shrink the finding: the library matrix actually *has* a `doc`
+row for each of its own `C0` requirements, stating that it is prose rather than
+code. This file has never stated anything about 21 of its own 22. And the gap
+is not confined to framework text — `M3.19`, *"The canonical JSON of a
+version's content **is** the record"*, the sentence the whole storage model is
+built on, has never been mentioned in the file that is supposed to record what
+is true of the storage model today. Neither has `S1.1`, the core's founding
+scope statement, nor `V9`, entirely — all seven of its requirements.
+
+**Why it happened.** The library matrix is one linear walk through every
+requirement in order, so a missing one is a visible gap in a sequence. This
+file is five topic tables assembled by hand — per-engine, store-level, service,
+cross-cutting, "not implemented" — and nothing ever walked the specification
+section by section and asked, of each requirement, which table it belongs in.
+`D-09` fixed this file *contradicting* itself; nothing has ever checked it for
+*completeness*, because until `scripts/check-databases-matrix-coverage.py`
+nothing could, cheaply, given the multi-table shape (`db:C0.20`'s "not thereby
+verified" caveat is doing real work here, and so is
+`scripts/check-databases-matrix-coverage.py`'s own docstring on why it checks a
+floor rather than exact-once).
+
+**Not fixed.** Closing this means reading each of the 144 requirements against
+six engine crates and the store, and recording an honest mark — `•`, `~`, `?`,
+`✗`, `—`, or `doc` — which is real assessment work, not something this finding
+or a script can manufacture. Filing 144 guessed rows to make a count look
+better would be a worse defect than the one being recorded (`W0.3`).
+`plan.md`'s "Open decisions" names the recommended path: assess in batches by
+section, starting with `M3` and `S1` since they are the requirements most
+likely to already be silently satisfied by existing, tested code.
+
+**Residual.** The diagnostic script is not wired into CI (see its own
+docstring): it would fail on every push today for a pre-existing gap rather
+than a regression, which is a different kind of red build than every other gate
+in this repository asserts. Once the 144 are assessed, wiring it in is
+mechanical — the library matrix is the working example.
+
 ## Closed
 
 ### D-05 — The specification required the architecture the code rejects — **High, fixed**

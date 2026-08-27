@@ -99,9 +99,24 @@ posture. Open items for each are in `tasks.md`.
 - **Site.** Whether to stand up a `openehr-rust.github.io` landing surface
   (the `hl7-rust`/`er7-rust` pattern) before or after the outreach
   prerequisites close. Outreach §6.5 presumes one exists.
-- **`spec/databases/conformance-matrix.md`** remains hand-assessed apart from
+- ~~**`spec/databases/conformance-matrix.md`** remains hand-assessed apart from
   one CI check; deciding whether to machine-derive it like the library
-  matrix is a real cost/benefit call.
+  matrix is a real cost/benefit call.~~ — answered 2026-08-27, with evidence
+  rather than a guess: **not exact-once, not yet.** The library matrix's shape
+  (one linear walk, one row per requirement) makes "exactly once" a coherent
+  question; this file is five topic tables in which a requirement can
+  legitimately appear more than once (`PR12.5` correctly appears in both the
+  service table and "not implemented in the store", for different true
+  reasons), so porting the library's exact-once checker verbatim would flag
+  correct rows as defects. `scripts/check-databases-matrix-coverage.py` checks
+  the floor that shape does allow — mentioned **at least once**, not
+  necessarily marked right — and running it found the real cost: **144 of 221
+  requirements have never been assessed at all** (`db:D-11`), including `M3.19`
+  ("canonical JSON... **is** the record") and every one of `V9`. The script is
+  written and correct, deliberately **not wired into CI** until the 144 are
+  assessed (see the script's own docstring for why a red-on-day-one gate is the
+  wrong shape here), and the recommended path is in `db:D-11`: assess in
+  batches by section, `M3` and `S1` first.
 
 ## Non-goals (for now)
 
