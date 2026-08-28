@@ -127,8 +127,23 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       `.../repository/commits/<sha>/signature` reports
       `"verification_status":"verified"` against the same key. The same
       commit now shows Verified on both platforms.*
-- [ ] Add release tags/attestation for 0.6.0 and future releases; consider
-      crates.io Trusted Publishing.
+- [x] Add release tags for 0.6.0 and future releases. *Done, verified
+      2026-08-28 rather than assumed: `v0.2.0` through `v0.7.4` all exist
+      (`git tag -l`), one per published version with none missing, and
+      match on all three remotes (`git ls-remote --tags` against GitHub,
+      GitLab, and Codeberg agrees with local). `agents/publishing.md`'s
+      tag-as-part-of-publishing step already covers keeping this true going
+      forward.*
+- [ ] Build provenance attestation for release artifacts; consider crates.io
+      Trusted Publishing. **Genuinely open, not merely undone**: this
+      repository publishes by design outside CI — `cargo publish` from the
+      maintainer's own machine, documented in `MAINTAINERS.md` as a
+      deliberate choice, not a gap. Attestation and Trusted Publishing both
+      presuppose a CI-driven publish step; adding one changes how releases
+      actually happen, which is the owner's call, not a checklist item to
+      execute unilaterally. An attestation of a CI-built package that is
+      *not* the artifact `cargo publish` actually uploads would be evidence
+      about the wrong object.
 - [x] Add `.github/ISSUE_TEMPLATE/` and a stated issue-response expectation.
       *Done 2026-08-26: bug-report template (synthetic-data-only warning,
       per SECURITY.md, and a redirect for security defects), a wrong-claim
