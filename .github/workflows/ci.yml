@@ -115,6 +115,27 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # This is the job that needs the headroom: ten crates, one runner, no
+      # shared workspace target (there is no root workspace), building and
+      # testing in sequence a few steps below. `ubuntu-latest` preinstalls
+      # several GB of toolchains this workflow never touches -- .NET, the
+      # Android SDK and NDK, GHC, a CodeQL bundle -- and none of them is a
+      # build dependency of anything here. `df -h` before and after is the
+      # evidence, in the log, rather than a comment asserting a number nobody
+      # checked (`W0.3`); if a future runner image moves one of these paths,
+      # or this workflow starts needing one, that shows up here as "before"
+      # and "after" barely differing, not as a silent no-op.
+      - name: Free preinstalled runner bloat before building anything
+        run: |
+          echo "::group::disk space before"
+          df -h /
+          echo "::endgroup::"
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          echo "::group::disk space after"
+          df -h /
+          echo "::endgroup::"
+
       - name: Derive N-3 from the current stable release
         id: msrv
         run: |
@@ -252,6 +273,14 @@ jobs:
             echo "::group::$d on ${{ steps.msrv.outputs.msrv }}"
             ( cd "$d" && cargo +${{ steps.msrv.outputs.msrv }} test --all-features ) \
               || { echo "::error::$d does not build or test on ${{ steps.msrv.outputs.msrv }}"; bad=1; }
+            # Freed the moment this crate is done, not at the end of the loop.
+            # The single `rust-cache` step above has no `workspaces:` and so
+            # never touches any of these ten `target/` dirs (`Swatinem/rust-
+            # cache@v2` only caches directories it is told about), so nothing
+            # here is undoing that step's work -- there is no per-crate cache
+            # to defeat. Left in place across all ten, on the runner freed of
+            # bloat above, this loop is the actual budget this job runs on.
+            rm -rf "$d/target"
             echo "::endgroup::"
           done
           [ "$bad" -eq 0 ] || exit 1
@@ -829,6 +858,22 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      # `cargo-mutants` builds a separate copy of the crate per mutant it
+      # tests, which is real disk weight independent of anything `rust-cache`
+      # below manages -- freeing the same preinstalled bloat the `msrv` job
+      # frees, for the same reason: none of it is a dependency of this job,
+      # and `df -h` before and after is the evidence rather than an assertion.
+      - name: Free preinstalled runner bloat before building anything
+        run: |
+          echo "::group::disk space before"
+          df -h /
+          echo "::endgroup::"
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          echo "::group::disk space after"
+          df -h /
+          echo "::endgroup::"
 
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
