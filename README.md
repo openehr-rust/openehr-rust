@@ -85,6 +85,15 @@ the eight published crates are versioned in lockstep — take the same minor
 version of each. Fuller instructions, including building from source and
 verifying a dialect against a real engine: [`INSTALL.md`](INSTALL.md).
 
+Published by `cargo publish` from the maintainer's own machine — no CI publish
+workflow, no [Trusted Publishing](https://crates.io/docs/trusted-publishing)
+yet, by stated policy rather than oversight
+([`spec/trusted-publishing/index.md`](spec/trusted-publishing/index.md)):
+adopted once it is production-ready across every forge this repository
+mirrors to (GitHub, GitLab, Codeberg) and every destination it publishes to
+(crates.io). Full publishing identities and what each can do:
+[`MAINTAINERS.md`](MAINTAINERS.md#publishing-identities).
+
 ## Tutorial 1 — build a composition
 
 A blood-pressure observation inside an encounter composition. Every constructor

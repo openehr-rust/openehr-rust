@@ -163,7 +163,15 @@ none (`W0.3`):
   are enabled, each verified with a `GET` after the change. Secret scanning
   **push protection** remains off, so a pushed secret is reported rather
   than blocked.
-- **No SBOM is published**, and no release artefacts are attested.
+- **No SBOM is published**, and no release artefacts are attested. Publishing
+  uses a long-lived crates.io API token from the maintainer's workstation, not
+  [Trusted Publishing](https://crates.io/docs/trusted-publishing)'s
+  short-lived, OIDC-issued ones — stated policy rather than an oversight:
+  [`spec/trusted-publishing/index.md`](spec/trusted-publishing/index.md)
+  adopts it once it is production-ready across every forge this repository
+  pushes to (GitHub, GitLab, Codeberg) and every destination it publishes to
+  (crates.io), because adopting it for one forge while mirrored to three
+  would leave the mirrors' provenance an unanswered question.
 - **The bus factor is one**, and every publishing identity terminates at one
   account ([`MAINTAINERS.md`](MAINTAINERS.md)). A report arriving while the
   maintainer is unavailable will sit until they return.

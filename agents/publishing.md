@@ -245,12 +245,42 @@ cargo publish
 ```
 
 Requires `cargo login` with a token from <https://crates.io/settings/tokens>.
+No CI publish workflow exists — publishing is this manual step, from the
+maintainer's own machine, on purpose (`spec/trusted-publishing/index.md`, and
+see the section below).
 
 After the first publish of a crate, add the other owners:
 
 ```sh
 cargo owner --add <user-or-team>
 ```
+
+### Trusted Publishing — not yet, and the condition that changes it
+
+[Trusted Publishing](https://crates.io/docs/trusted-publishing) replaces a
+long-lived API token with a short-lived one that crates.io issues per run,
+after verifying — via OpenID Connect — that the workflow requesting it really
+is this repository's CI, on this branch. It removes the token row from
+`MAINTAINERS.md`'s publishing-identities table entirely: there is nothing
+long-lived to leak, rotate, or reissue.
+
+**Not adopted here, and not because it is a bad idea.** This repository's own
+stated policy (`spec/trusted-publishing/index.md`) is to adopt Trusted
+Publishing once it is production-ready **across every forge this repository
+actually pushes to** — GitHub.com, GitLab.com, and Codeberg.org, all three
+real remotes today (`MAINTAINERS.md`) — **and across every destination it
+actually publishes to**, which for this repository is crates.io. Adopting it
+for one forge while the repository is mirrored to three would make the
+mirrors' provenance a second-class question nobody had answered, which is
+exactly the kind of undeclared departure `db:C0.16` calls a defect elsewhere
+in this tree.
+
+When the condition is met, the change here is small and mechanical, not a
+redesign: a `publish.yml` workflow using each registry's OIDC action, the
+`cargo publish` step above moves into it, and `MAINTAINERS.md`'s token row is
+deleted rather than amended. Revisit this section when it happens; until
+then, `cargo publish` from a workstation, exactly as documented above, is the
+whole publishing surface.
 
 ## After
 

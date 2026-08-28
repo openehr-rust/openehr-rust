@@ -134,16 +134,27 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       GitLab, and Codeberg agrees with local). `agents/publishing.md`'s
       tag-as-part-of-publishing step already covers keeping this true going
       forward.*
-- [ ] Build provenance attestation for release artifacts; consider crates.io
-      Trusted Publishing. **Genuinely open, not merely undone**: this
-      repository publishes by design outside CI — `cargo publish` from the
-      maintainer's own machine, documented in `MAINTAINERS.md` as a
-      deliberate choice, not a gap. Attestation and Trusted Publishing both
-      presuppose a CI-driven publish step; adding one changes how releases
-      actually happen, which is the owner's call, not a checklist item to
-      execute unilaterally. An attestation of a CI-built package that is
-      *not* the artifact `cargo publish` actually uploads would be evidence
-      about the wrong object.
+- [x] Build provenance attestation for release artifacts; consider crates.io
+      Trusted Publishing. *Decided 2026-08-28, per
+      `spec/free-open-source-funding/index.md`'s sibling
+      `spec/trusted-publishing/index.md`: **not yet, on a stated condition,
+      not a flat no.** Adopt Trusted Publishing once it is production-ready
+      across every forge this repository actually pushes to — GitHub,
+      GitLab, and Codeberg, all three real remotes today, verified against
+      `git remote get-url --all --push origin` rather than assumed — and
+      across every destination it actually publishes to, which for this
+      repository is crates.io. `cargo publish` from the maintainer's own
+      machine stays the whole publishing surface until then. Documented
+      everywhere the manual-publish fact was already stated so the reason
+      reads next to the fact rather than living only in this checklist:
+      `agents/publishing.md` (a new subsection with what changes and how
+      small that change is when the condition is met), `MAINTAINERS.md`'s
+      publishing-identities row, `SECURITY.md`'s known-gaps entry, and
+      `README.md`'s Install section. Attestation was bundled with this item
+      originally and is not pursued separately: it presupposes the same
+      CI-driven publish step Trusted Publishing would introduce, and
+      attesting a CI-built package that is not the artefact `cargo publish`
+      actually uploads would be evidence about the wrong object.*
 - [x] Add `.github/ISSUE_TEMPLATE/` and a stated issue-response expectation.
       *Done 2026-08-26: bug-report template (synthetic-data-only warning,
       per SECURITY.md, and a redirect for security defects), a wrong-claim
