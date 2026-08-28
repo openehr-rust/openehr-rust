@@ -56,20 +56,22 @@ independently of the local claim above:
 `{"verified": true, "reason": "valid"}` for commits signed with this key. The
 GitHub commit page shows **Verified**.
 
-**GitLab registration is the remaining residual, and it needs a human.**
-There is no CLI equivalent here — the key must be added by hand under
-**Preferences → SSH Keys**, usage type **Signing Key**. Until then, a commit
-pushed to the GitLab mirror shows **Unverified** there even though the same
-commit is **Verified** on GitHub — a real, temporary, platform-specific gap,
-not a documentation lag: check the badge on each platform's commit page
-separately rather than assuming one implies the other.
+**GitLab registration is done too.** The owner added the same key by hand
+under **Preferences → SSH Keys**, usage type **Signing Key** — there is no
+CLI equivalent on this platform, so this one genuinely needed the web UI.
+Verified independently, the same way as GitHub, against GitLab's commit
+signature endpoint (`.../repository/commits/<sha>/signature`), which reports
+`"verification_status":"verified"` against key `jph-code-signing`,
+`"usage_type":"signing"`. Both platforms show the same commit as
+**Verified**.
 
-Do not treat authorship in history before 2026-08-27, or in any commit while
-account registration is pending, as attested by anything stronger than
-GitHub's or GitLab's account controls. If that matters to your adoption, check
-the date and the account-verification badge rather than assuming from this
-paragraph alone — a description is not a certificate, which is `W0.2`'s point
-applied to this file rather than to a spec.
+Do not treat authorship in any commit before 2026-08-27 as attested by
+anything stronger than GitHub's or GitLab's account controls — signing is not
+retroactive, and neither platform's badge on an old commit means what it
+means on a new one. If that matters to your adoption, check the date and the
+verification badge on the platform you are actually looking at, rather than
+assuming from this paragraph alone — a description is not a certificate,
+which is `W0.2`'s point applied to this file rather than to a spec.
 
 There is no container image, no hosted service, no documentation domain, no
 Zenodo deposit, and no DOI. docs.rs builds the API documentation from the

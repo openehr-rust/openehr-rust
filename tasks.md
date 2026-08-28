@@ -118,15 +118,15 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       MAINTAINERS.md gains a signing-key row in the publishing-identities
       table and SECURITY.md's known-gaps entry is struck through with the
       closure recorded.
-      **GitHub registration done the same day** by the owner: the key is
-      registered as a signing key
-      (`gh ssh-key list` shows it, added type `signing`), confirmed
-      independently via `gh api .../commits/<sha>` reporting
-      `verified: true` rather than by trusting the local claim alone.
-      **GitLab remains the residual**: no CLI here, needs the key added by
-      hand under Preferences → SSH Keys, usage type Signing Key — until
-      then the same commit shows Verified on GitHub and Unverified on the
-      GitLab mirror.*
+      **Fully closed 2026-08-28**: GitHub registration done the same day
+      the key was configured (`gh ssh-key list` shows it, type `signing`),
+      and GitLab registered by hand the next day (no CLI there — added
+      under Preferences → SSH Keys, usage type Signing Key). Both confirmed
+      independently rather than trusted: `gh api .../commits/<sha>` reports
+      `verified: true` on GitHub; GitLab's
+      `.../repository/commits/<sha>/signature` reports
+      `"verification_status":"verified"` against the same key. The same
+      commit now shows Verified on both platforms.*
 - [ ] Add release tags/attestation for 0.6.0 and future releases; consider
       crates.io Trusted Publishing.
 - [x] Add `.github/ISSUE_TEMPLATE/` and a stated issue-response expectation.

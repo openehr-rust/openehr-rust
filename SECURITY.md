@@ -147,14 +147,14 @@ none (`W0.3`):
   and tags with an SSH key
   (`SHA256:Ah1MPQNTLGuOy0JwLcU7LbnhSa7cRVqMaDggXwllRXc`), `git log
   --format=%G?` reports `G` from that commit forward, and the key is
-  registered with **GitHub** as a signing key — confirmed independently via
-  `gh api repos/openehr-rust/openehr-rust/commits/<sha>`, which reports
-  `verified: true`. **Not yet closed on GitLab**: the mirror has no
-  equivalent registration yet, so the same signed commit shows Verified on
-  GitHub and Unverified on GitLab until the key is added there by hand. See
-  [`MAINTAINERS.md`](MAINTAINERS.md#publishing-identities) for the exact
-  residual step. Every commit before 2026-08-27 is unsigned and stays that
-  way; authorship there is attested by GitHub's account controls and
+  registered as a signing key on **both** remotes — confirmed independently,
+  not taken on trust: `gh api repos/openehr-rust/openehr-rust/commits/<sha>`
+  reports `verified: true` on GitHub, and GitLab's
+  `.../repository/commits/<sha>/signature` reports
+  `"verification_status":"verified"` against the same key. See
+  [`MAINTAINERS.md`](MAINTAINERS.md#publishing-identities) for both checks in
+  full. Every commit before 2026-08-27 is unsigned and stays that way;
+  authorship there is attested by each platform's account controls and
   nothing stronger.
 - ~~**GitHub private vulnerability reporting, Dependabot, and secret scanning
   are all disabled** on the repository, checked 2026-08-26.~~ Closed
