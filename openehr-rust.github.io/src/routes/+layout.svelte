@@ -72,8 +72,7 @@
 		</p>
 		<div class="site-footer-links">
 			<a href={ORGANIZATION}>GitHub</a>
-			<a href={REPOSITORIES.core}>openehr</a>
-			<a href={REPOSITORIES.databases}>openehr-databases</a>
+			<a href={REPOSITORIES.core}>openehr-rust</a>
 			<a href="/spec/">Specification</a>
 		</div>
 	</div>

@@ -1,7 +1,12 @@
 # openehr
 
-openEHR Reference Model types, validation, paths, AQL parsing, and
+openEHR® Reference Model types, validation, paths, AQL parsing, and
 change-control security primitives — in Rust.
+
+> openEHR® is the registered trademark of the openEHR Foundation and is used
+> with the permission of openEHR International. Use of the trademark does not
+> constitute endorsement of this product by openEHR International or openEHR
+> Foundation.
 
 [openEHR](https://specifications.openehr.org/) specifies clinical information
 as a small, stable **Reference Model** of about ninety classes, plus
@@ -12,8 +17,17 @@ own idea of what a health record is.
 
 ```toml
 [dependencies]
-openehr = "0.1"
+openehr = "0.7"
 ```
+
+## Install
+
+```toml
+[dependencies]
+openehr = "0.7"
+```
+
+Requires Rust 1.95+ (edition 2024).
 
 ## What it does
 
@@ -59,7 +73,7 @@ coverage it does not have is worse than a small one.
 
 | Not implemented | Why |
 | --- | --- |
-| Archetypes and templates (AM, ADL, AOM2) | a parser and a constraint engine, each larger than this crate |
+| ADL parsing, flattening, templates, and **archetype validation of data** | **specified, not built.** `S1.4` excluded the Archetype Model until 2026-08-26; [§15](spec/15-archetypes.md) now requires it. `am` is the AOM2 object model (`K15.1`–`K15.4`); the other 28 requirements have no code (`A-40`), so a composition that passes `validate()` may still violate its archetype. A partial constraint engine stays prohibited — `K15.20` refuses rather than passes |
 | AQL **execution** | needs a repository; `aql` parses and checks, and returns no rows |
 | Terminology lookup beyond openEHR's own | needs a terminology server; external codes are carried opaquely |
 | UCUM unit conversion | a wrong conversion is a thousand-fold dosing error |
@@ -82,12 +96,27 @@ could detect.
 ```rust
 let may: Date = "2024-05".parse()?;
 let may_17: Date = "2024-05-17".parse()?;
-assert_eq!(may.partial_cmp(&may_17), None);   // May which day?
+assert_eq!(may.semantic_cmp(&may_17), None);  // May which day?
 
 let mg = DvQuantity::new(5.0, "mg")?;
 let ml = DvQuantity::new(5.0, "mL")?;
-assert_eq!(mg.partial_cmp(&ml), None);        // not the same dose of anything
+assert_eq!(mg.semantic_cmp(&ml), None);       // not the same dose of anything
 ```
+
+It is `semantic_cmp` and not `partial_cmp` on purpose, and the reason is worth
+one paragraph because it will otherwise look like an oversight.
+
+Equality here is **record identity**: a `DV_QUANTITY` that records
+`precision: 1` is a different stored value from one that records `2`, and
+`2026-08-01T12:00:00+01:00` is a different stored value from `…T11:00:00Z` —
+the text is what round-trips and what a content digest is taken over. Ordering
+compares only the magnitude, so those pairs order **equal** while comparing
+**unequal**. Rust's `PartialOrd` requires `a == b` exactly when `partial_cmp`
+reports `Equal`, so implementing it would mean shipping `a != b` alongside
+`a <= b && a >= b` — invisible inside this crate, and a wrong answer inside a
+caller's `binary_search` or `dedup_by`. So no `DV_ORDERED` implements
+`PartialOrd`; comparison is a named method (`D3.18b`, formerly the finding
+`A-35`).
 
 **Absence is structured.** openEHR's four null flavours are four different
 clinical facts, and this crate will not let them collapse:
@@ -123,7 +152,7 @@ let element: Element = serde_json::from_str(
         "null_flavour":{"value":"unknown","defining_code":
           {"terminology_id":{"value":"openehr"},"code_string":"253"}}}"#,
 )?;
-assert_eq!(element.validate().violations()[0].invariant, "Null_flavour_indicated");
+assert_eq!(element.validate().violations()[0].invariant, "Inv_null_flavour_indicated");
 ```
 
 ## Security
@@ -195,13 +224,40 @@ cargo clippy --all-targets      # pedantic, with missing_docs/errors/panics deni
 cargo fmt --all -- --check
 ```
 
-MSRV is `rust-version` in `Cargo.toml` (currently 1.90), Rust edition 2024.
+MSRV is **N−3** — three Rust releases behind stable, currently **1.95** — and is
+`rust-version` in every `Cargo.toml`. Rust edition 2024. The policy, and the CI
+job that re-derives the number rather than trusting it, are in
+[`spec/rust-msrv-n-minus-3/index.md`](../spec/rust-msrv-n-minus-3/index.md).
+
+## Benchmarks
+
+```sh
+cargo bench                     # criterion; results in target/criterion/
+cargo bench -- --test           # one iteration each, which is what CI runs
+```
+
+`benches/rm.rs` measures the paths a whole document travels — deserialization
+(the widest untrusted surface), validation (gate two, one full traversal),
+canonical JSON (taken over by a content digest, so it runs twice per round
+trip), path resolution, AQL parsing, and ISO 8601 parsing, which is the hottest
+because openEHR times are preserved lexically and every instant in a document is
+parsed as text.
+
+**A number here is not a conformance claim** (`W0.3`, `W0.34`). No requirement in
+this repository is stated in seconds and no crate's conformance level depends on
+a timing. CI runs the benchmarks with `--test` and gates on nothing: wall-clock
+on a shared runner varies by more than most real regressions, and a threshold
+that fails for unrelated reasons is one somebody silences.
 
 ## Licence
 
-MIT OR Apache-2.0, at your option. See [`LICENSE-MIT`](LICENSE-MIT) and
-[`LICENSE-APACHE`](LICENSE-APACHE).
+Any of these, at your option — MIT, Apache-2.0, BSD-3-Clause, GPL-2.0-only, or
+GPL-3.0-only. See [`LICENSE.md`](LICENSE.md).
 
 openEHR specifications are published by the openEHR Foundation under CC-BY-SA;
-this crate is an independent implementation and is not endorsed by or affiliated
-with the openEHR Foundation.
+this crate is an independent implementation.
+
+openEHR® is the registered trademark of the openEHR Foundation and is used with
+the permission of openEHR International. Use of the trademark does not
+constitute endorsement of this product by openEHR International or openEHR
+Foundation.

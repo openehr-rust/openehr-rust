@@ -1,20 +1,33 @@
 // Mapping between vendored content files and site routes.
 //
 // Content paths are always relative to content/, e.g. "crates/openehr.md".
-// The vendored files are copied verbatim from two repositories, so their links
-// are written for those repositories' directory layouts, not for this site's
+// The vendored files are copied verbatim from the openehr-rust monorepo
+// (openehr-rust/openehr-rust), so their links are written for that
+// repository's directory layout -- every crate a sibling directory at its
+// root, this site included, one level down -- not for this site's flattened
 // URL space. Everything here exists to translate the former into the latter,
 // and to send anything this site does not publish back to GitHub rather than
 // leaving a dead relative link in the rendered page.
+//
+// This module used to assume a two-repository split (a standalone `openehr`
+// repo plus a separate `openehr-databases` monorepo for everything else),
+// inherited from elsewhere and never true of this repository. Two defects
+// followed from that: `DATABASE_CRATES` omitted `openehr-mariadb`, a real,
+// published crate, so it never got a page; and every "view on GitHub" link
+// for something this site does not publish resolved against a repository
+// that does not exist (`site.js`'s `REPOSITORIES.databases`), which is a
+// dead link on a live page rather than something `scripts/check-docs.py` in
+// the parent monorepo could ever catch on its own.
 
 import { REPOSITORIES } from './site.js';
 
-/** Database crates live together in the openehr-databases monorepo. */
+/** The six other crates in the same conformance ladder as openehr-store. */
 const DATABASE_CRATES = new Set([
 	'openehr-store',
 	'openehr-sqlite',
 	'openehr-postgresql',
 	'openehr-mysql',
+	'openehr-mariadb',
 	'openehr-mssql',
 	'openehr-oracle'
 ]);
@@ -52,7 +65,14 @@ function crateOf(file) {
 	return match ? match[1] : null;
 }
 
-/** A blob URL for a path inside the repository that owns `crate`. */
+/**
+ * A blob URL for a path inside the repository that owns `crate`.
+ *
+ * `REPOSITORIES.core` and `.databases` are the same URL today -- one
+ * monorepo, not two -- kept as separate keys because a future split back into
+ * multiple repositories is exactly the kind of change this indirection exists
+ * to absorb without touching every call site again.
+ */
 function blobUrl(crate, path) {
 	if (crate === null || crate === 'openehr') {
 		return `${REPOSITORIES.core}/blob/main/${path}`;
@@ -61,18 +81,18 @@ function blobUrl(crate, path) {
 }
 
 /**
- * Where a link inside a vendored file points, expressed as a repository path.
- *
- * The core crate's README and its spec/ live at the root of the openehr repo,
- * so their relative links need no adjustment. The database crate READMEs are
- * each one directory down inside the openehr-databases monorepo, and the site
- * flattens that directory away — so a link written relative to the crate has
- * to have the crate directory put back before it means anything upstream.
+ * Where a link inside a vendored file points, expressed as a path in the real
+ * repository (openehr-rust/openehr-rust) that owns it -- not this site's
+ * flattened content/ layout. Every crate is a sibling directory at that
+ * repository's root, so this needs no per-crate directory translation; it
+ * only has to know which fake filename each crate's content was vendored
+ * under, so that resolving a relative link against it lands in the right
+ * directory (`contentPath` only ever looks at the directory part).
  */
 function repositoryPath(href, fromFile) {
 	const crate = crateOf(fromFile);
-	if (crate === null) return contentPath(href, fromFile); // spec/<file>.md
-	if (crate === 'openehr') return contentPath(href, 'openehr/README.md').replace(/^openehr\//, '');
+	if (crate === null) return contentPath(href, `openehr/${fromFile}`); // openehr/spec/<file>.md
+	if (crate === 'openehr') return contentPath(href, 'openehr/README.md');
 	const base = fromFile.endsWith('-conformance.md') ? `${crate}/spec/x.md` : `${crate}/README.md`;
 	return contentPath(href, base);
 }
@@ -92,8 +112,12 @@ function publishedContentPath(href, fromFile) {
 	const path = repositoryPath(href, fromFile);
 
 	if (crate === 'openehr') {
-		// Only the core crate's spec/ is published as /spec/.
-		return path.startsWith('spec/') ? path : null;
+		// Only the core crate's spec/ is published as /spec/. `repositoryPath`
+		// returns the real repo path (`openehr/spec/...`); translate back to
+		// this site's flattened content path (`spec/...`) before returning it,
+		// since a caller checks this against `routeFor`, which speaks site
+		// paths, not repository ones.
+		return path.startsWith('openehr/spec/') ? path.slice('openehr/'.length) : null;
 	}
 
 	// openehr-store's conformance suite is published under its crate page.

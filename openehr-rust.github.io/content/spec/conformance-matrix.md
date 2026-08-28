@@ -4,7 +4,11 @@
 the file to distrust last: if it disagrees with the code, the code wins and this
 file has a defect.
 
-**Assessed:** 2026-08-01, against `rustc 1.96.1`, `openehr` 0.1.0.
+**Assessed:** 2026-08-02, against `rustc 1.97.1`, `openehr` 0.2.0. Rows touched
+by **A-36** were re-derived 2026-08-20 against `openehr` 0.3.0 and `rustc 1.98.0`;
+the rest carry the earlier date and have not been re-checked since, which is
+stated rather than papered over (`W0.10`). The `D3.18b`/`D3.18c` rows were
+derived 2026-08-21 with **A-35**.
 **Method:** each requirement read against the code that implements it and the
 test that exercises it; test names below are real and runnable with
 `cargo test <name>`.
@@ -18,6 +22,8 @@ test that exercises it; test names below are real and runnable with
 | **doc** | A documentation requirement; satisfied by prose, not by code |
 | **type** | Enforced by the type system. A runtime test for it could not fail (`T13.2`), so writing one would be theatre. |
 | **—** | Deliberately not implemented; see [`01-scope.md`](01-scope.md) |
+| **spec** | Specified and **not implemented**: the requirement is in force, no code claims it, and the gap is tracked in [`audit.md`](audit.md). Distinct from **—**, which is a decision not to implement, and from **open**, which is a defect against something the crate purports to do |
+| **withdrawn** | The requirement no longer stands. Its identifier is permanent (`C0.5`) and its text is kept where it was, marked, so a citation to it still resolves (`C0.18`, `C0.19`) |
 | **open** | Not satisfied; tracked in [`audit.md`](audit.md) |
 
 Doctests count as tests: they compile and run in CI (`T13.8`).
@@ -25,19 +31,45 @@ Doctests count as tests: they compile and run in CI (`T13.8`).
 ## Totals
 
 Counted mechanically from the tables below, with every requirement id in
-`spec/*.md` checked to appear exactly once — 291 ids, 291 covered, none
-missing. A hand-written total in a file like this is a number nobody rechecks;
-this one was derived from the rows.
+`spec/*.md` checked to appear exactly once — **344 ids, 344 covered, none
+missing**.
 
-| Status | Count | 2026-07-31 |
+A hand-written total in a file like this is a number nobody rechecks, and this
+one proved the point: it said 291 of 291 while six requirements added after the
+assessment had no row at all — `S1.18`, `S1.19`, `S1.20`, `L10.9`, `L10.10`,
+`L10.11`. "Derived from the rows" was true once and then was not.
+
+**CI now re-derives it** on every push, expanding the ranges in the `Id` column
+and comparing against the requirements the specification defines. A new
+requirement with no row fails the build; so does a row for a requirement that
+does not exist, and so does an id covered twice.
+
+**Re-derived 2026-08-26**, mechanically, from the rows below — and the previous
+numbers were wrong, which is the second time this table has drifted from its own
+tables. It said 291 total against 300 in the sentence above while the rows held
+311, because CI re-derives *coverage* and nothing re-derived the *tally*.
+**A-41** is the finding; the counts below were produced by expanding every `Id`
+cell and counting statuses, and re-running that is how they should be checked
+again.
+
+| Status | 2026-08-26 | 2026-07-31 |
 | --- | --- | --- |
-| • verified | 237 | 175 |
-| doc | 32 | 30 |
+| • verified | 258 | 175 |
+| doc | 33 | 30 |
+| **spec** — in force, unimplemented | 28 | — |
 | type | 13 | — |
-| — out of scope | 6 | 6 |
+| — out of scope | 8 | 6 |
 | ? implemented, untested | 3 | 54 |
+| withdrawn | 1 | — |
 | open | 0 | 4 |
-| **total requirements** | **291** | 269 |
+| **total requirements** | **344** | 269 |
+
+The **spec** rows are §15 plus `S1.21`, added on 2026-08-26 when `S1.4` was
+withdrawn and the Archetype Model brought into scope. There were 32 of them that
+day; `K15.1`–`K15.4` — the AOM2 object model — were implemented and tested the
+same day, leaving **28**. They remain the largest block of unsatisfied
+requirements this crate has ever carried, and they are counted here rather than
+described elsewhere so that the size of the gap is a number a reader can see.
 
 Three things moved these numbers, and they are not the same thing.
 
@@ -74,13 +106,15 @@ Process requirements; they govern this specification rather than the code.
 | C0.7–C0.11 | doc | this file, and [`audit.md`](audit.md) |
 | C0.12–C0.14 | • | `I2.15` and `R4.9` are the two declared departures |
 | C0.15–C0.18 | doc | commit conventions |
+| C0.19 | doc | `S1.4` is the first exclusion reversed under it — withdrawn in place, reason kept, §15 named |
 
 ## §1 Scope — `S1`
 
 | Id | Status | Evidence |
 | --- | --- | --- |
 | S1.1–S1.3 | • | `canonical_json::a_composition_covering_every_modelled_class_round_trips` |
-| S1.4–S1.7 | — | not implemented, by decision |
+| S1.4 | withdrawn | reversed 2026-08-26; the Archetype Model is in scope under `S1.21` and §15. Text kept in place, marked (`C0.19`) |
+| S1.5–S1.7 | — | not implemented, by decision |
 | S1.8 | • | `time_specification::tests::unimplemented_accessors_refuse_rather_than_guess` |
 | S1.9 | • | `quantity::tests::different_units_are_not_comparable_in_either_direction` |
 | S1.10 | • | `text::tests::rubric_checking_reports_unchecked_separately_from_valid` |
@@ -89,7 +123,11 @@ Process requirements; they govern this specification rather than the code.
 | S1.13 | • | `canonical_json` round trip covers `DV_PARSABLE` and time specifications |
 | S1.14 | doc | `security` module header |
 | S1.15 | doc | `J9.15`; bounded by `canonical_json::reading_a_composition_stays_within_a_small_stack` |
+| S1.21 | spec | §15 in full; nothing implemented — **A-40** |
 | S1.16–S1.17 | • | `terminology::tests::the_codes_that_disagree_between_terminology_repositories_are_the_current_ones` |
+| S1.18 | — | declared departure: ISO 3166 and ISO 639 are not carried, so `COMPOSITION.Territory_valid` and `Language_valid` are not checked. Its closing requirement — that a caller can do the check instead — **is** verified: `guarantees::a_caller_can_read_every_code_the_crate_declines_to_check` (`A-19`) |
+| S1.19 | — | declared exclusion: no demographic repository, so the four `PARTY` graph invariants cannot be checked from a value in hand |
+| S1.20 | — | declared departure: an `EHR_ACCESS` may record no policy, so `Scheme_valid` is not checked. `X11.24`'s fail-closed default is why that is safe |
 
 ## §2 Identifiers — `I2`
 
@@ -131,11 +169,18 @@ Process requirements; they govern this specification rather than the code.
 | D3.12 | • | `invariants::a_leap_second_is_accepted_and_a_sixty_first_is_not` |
 | D3.13 | • | `iso8601::tests::durations_round_trip_and_reject_disorder` |
 | D3.13a | doc | recorded as a limitation, **A-02** |
-| D3.14 | • | `guarantees::every_undecidable_comparison_answers_none` |
+| D3.14 | • | `guarantees::every_undecidable_comparison_answers_none`; `rm::data_types::tests::every_comparable_variant_of_a_data_value_compares`, which covers the **decidable** half — six arms of `semantic_cmp` were deletable in silence until **A-39** |
+| D3.14a | • | `guarantees::a_reference_range_is_unmoved_by_how_an_instant_is_spelled`, which asserts an incomparable value is excluded rather than admitted (**A-39**) |
 | D3.15 | • | `quantity::tests::different_units_are_not_comparable_in_either_direction` |
 | D3.16 | • | `quantity::tests::ordinals_from_different_terminologies_do_not_compare` |
 | D3.17 | • | `invariants::proportions_of_different_kinds_do_not_compare` |
 | D3.18 | • | `iso8601::tests::offsets_normalise_before_comparison` |
+| D3.18a | • | resolved: `PartialOrd`/`Ord` removed from the base ISO 8601 types, semantic order is the plain method `semantic_cmp` — `iso8601::tests::eq_is_lexical_and_semantic_cmp_is_not_the_same_question` (`A-32`, fixed) |
+| D3.18b | • | the same resolution over all ten `DV_ORDERED` types and `DATA_VALUE` — `guarantees::equality_and_order_disagree_by_design_and_neither_is_partial_ord` (`A-35`, fixed) |
+| D3.18c | • | `INTERVAL<T>` is bounded on `SemanticOrd`; `guarantees::a_reference_range_is_unmoved_by_how_an_instant_is_spelled` covers the `contains` rewrite |
+| D3.18d | • | `base::real::tests::a_measured_precision_survives_a_round_trip`; `every_digit_survives_and_only_the_exponent_form_is_normalised`, which asserts the one departure |
+| D3.18e | • | `base::real::tests::equality_and_order_answer_different_questions` — lexical equality, numeric order, and no `PartialOrd` |
+| D3.18f | • | `base::real::tests::a_real_that_never_saw_a_constructor_is_still_readable` |
 | D3.19 | • | `quantity::tests::non_finite_magnitudes_are_refused` |
 | D3.19a | doc | declared narrowing; recorded here and in §3 |
 | D3.20, D3.20a | • | `quantity::tests::precision_accepts_the_unlimited_sentinel`; `validation::tests::the_unlimited_precision_sentinel_validates` |
@@ -152,8 +197,9 @@ Process requirements; they govern this specification rather than the code.
 | D3.27 | • | `encapsulated::tests::sha1_is_readable_but_not_writable` |
 | D3.28 | • | `invariants::parsable_content_needs_a_formalism` |
 | D3.29 | • | `encapsulated::tests::base64_round_trips_including_padding_lengths` |
-| D3.30 | • | `uri::tests::schemes_are_checked_not_assumed` |
-| D3.31 | • | `uri::tests::ehr_uri_refuses_an_external_target` |
+| D3.30 | • | `uri::tests::schemes_are_checked_not_assumed`; `guarantees::a_uri_that_never_saw_a_constructor_is_reported_rather_than_panicking`; `guarantees::an_empty_uri_is_reported_under_openehrs_own_invariant_name` |
+| D3.30a | • | `guarantees::a_uri_that_never_saw_a_constructor_is_reported_rather_than_panicking` |
+| D3.31 | • | `uri::tests::ehr_uri_refuses_an_external_target`; `guarantees::an_ehr_uri_deserialized_with_a_foreign_scheme_is_reported`; `guarantees::a_link_target_is_validated_on_every_locatable_that_carries_it` |
 | D3.32 | doc | `uri` module header |
 | D3.33 | • | `basic::tests::an_empty_identifier_is_refused` |
 | D3.34 | • | `basic::tests::display_never_reveals_the_identifier` |
@@ -294,10 +340,12 @@ Process requirements; they govern this specification rather than the code.
 | L10.3 | • | `validation::tests::every_violation_is_reported_not_just_the_first` |
 | L10.4 | • | `validation::tests::a_coded_text_that_contradicts_its_own_code_is_reported` |
 | L10.5 | • | `guarantees::a_validation_report_names_paths_and_never_values` |
-| L10.5a | • | `invariants::every_validation_check_fires_on_a_document_that_breaks_it` attributes an empty name to `DV_TEXT.Value_valid` |
+| L10.5a | • | `invariants::every_validation_check_fires_on_a_document_that_breaks_it` attributes an empty name to `DV_TEXT.Valid_value` |
 | L10.6 | • | `invariants::every_validation_check_fires_on_a_document_that_breaks_it` drives twelve of them from JSON; the `DV_ORDERED` pair have their own tests |
 | L10.7 | • | `invariants::violations_are_reported_in_document_order_and_that_order_is_stable` |
 | L10.8 | • | `text::tests::rubric_checking_reports_unchecked_separately_from_valid` |
+| L10.9–L10.10 | • | the crate-added register in [`10-validation.md`](10-validation.md); `openehr-assets` fails the build when it and the generated report disagree |
+| L10.11 | • | the unenforced register, same file, same check — in both directions (`D-09` is the same defect one tree over) |
 
 ## §11 Security — `X11`
 
@@ -316,7 +364,7 @@ Process requirements; they govern this specification rather than the code.
 | X11.9 | • | `audit_chain::tests::removing_an_entry_from_the_middle_breaks_the_link` |
 | X11.10 | doc | `audit_chain` module header |
 | X11.11 | • | `audit_chain::tests::a_clean_chain_verifies_and_an_edited_one_does_not` |
-| X11.12 | ? | `subtle::ConstantTimeEq`; timing is not measured |
+| X11.12 | ? | `Mac` implements neither `PartialEq` nor `Eq`, so `==` beside the one comparison does not compile; `guarantees::a_forged_tag_is_refused` pins the behaviour. Timing is still not measured, and the absence of the derive is not itself tested — see `Mac`'s documentation for why a `compile_fail` for it passed for the wrong reason |
 | X11.13 | • | `audit_chain::tests::an_unheld_key_is_reported_as_such_and_not_as_forgery`, `…::a_forged_tag_under_a_held_key_is_a_finding`, `…::an_unkeyed_chain_does_not_claim_full_verification` |
 | X11.14 | • | `audit_chain::tests::key_rotation_is_additive` |
 | X11.15 | • | `invariants::a_chain_begins_where_it_begins_and_says_when_it_began_late` |
@@ -328,7 +376,7 @@ Process requirements; they govern this specification rather than the code.
 | X11.21 | • | `redact::tests::a_redacted_composition_is_still_valid` |
 | X11.22 | • | `guarantees::redaction_masks_and_reports_a_count_not_a_category` |
 | X11.23 | • | `redact::tests::a_reason_appears_and_does_not_disclose_the_category` |
-| X11.24 | ? | `redact` returns `Result` and yields nothing on error. The error path cannot currently be provoked — every `Composition` this crate can build serializes — so there is no honest test. Tracked as **A-10** |
+| X11.24 | ? | `redact` returns `Result` and yields nothing on error, and the error path cannot be provoked. The premise is now tested — `guarantees::no_document_this_crate_can_build_carries_a_non_finite_float` — because `serde_json` writes `null` for a non-finite float rather than failing, so the constructors are the only barrier (**A-10**) |
 | X11.25 | • | `guarantees::redaction_masks_and_reports_a_count_not_a_category` |
 
 ## §12 Paths and query — `Q12`
@@ -345,19 +393,25 @@ Process requirements; they govern this specification rather than the code.
 | Q12.8 | • | `path::tests::predicates_round_trip_through_display_in_long_form` |
 | Q12.9 | • | `aql::tests::the_canonical_blood_pressure_query_parses`, `…::aggregates_and_distinct_parse`, `…::not_contains_parses_and_keeps_its_negation`, `…::like_and_offset_parse` |
 | Q12.9a | • | `guarantees::aql_refuses_what_it_does_not_model_and_says_where_that_is_recorded` |
+| Q12.9b | • | signed numeric literals parse, resolved at operand position — `aql::a_sign_is_a_number_where_a_value_belongs_and_nowhere_else` (`A-27`, fixed) |
+| Q12.9d | • | `LIMIT -5` and `OFFSET -1` refused with a message naming the reason — `aql::a_negative_limit_or_offset_is_refused_rather_than_clamped` |
+| Q12.9e | • | a real renders with a decimal point so it lexes back a real — `guarantees::aql_rendering_round_trips_through_the_parser`, which compares trees |
+| Q12.9c | • | declared limitation: no node-id predicate shorthand — `aql::only_a_dashed_and_dotted_word_standing_alone_is_an_archetype_id` (`A-30`) |
 | Q12.10 | — | no execution API exists |
 | Q12.11 | • | `aql::tests::keywords_are_case_insensitive` |
 | Q12.12 | • | `aql::tests::malformed_queries_report_an_offset` |
 | Q12.13 | • | `aql::tests::parameters_are_collected_from_every_clause_and_deduplicated` |
 | Q12.14 | • | `guarantees::aql_catches_a_path_rooted_at_an_unbound_alias` |
-| Q12.15 | • | `aql::tests::a_parsed_query_reparses_from_its_own_rendering`; cosmetic spacing difference noted in **A-05** |
+| Q12.15 | • | `aql::tests::a_parsed_query_reparses_from_its_own_rendering`; `guarantees::aql_rendering_round_trips_through_the_parser`, which compares the **tree** and not only the text; cosmetic spacing difference noted in **A-05** |
+| Q12.15a | • | `guarantees::aql_rendering_round_trips_through_the_parser` over the `CONTAINS`/`OR` shapes that broke it (**A-37**) |
+| Q12.15b | • | `guarantees::an_aql_string_literal_is_not_mangled_by_the_lexer` (**A-37**) |
 
 ## §13 Conformance testing — `T13`
 
 | Id | Status | Evidence |
 | --- | --- | --- |
 | T13.1 | • | 222 of 276 requirements cite a test; 3 remain `?` and are named above |
-| T13.2 | ? | four checks in `tests/invariants.rs` were mutation-verified on 2026-08-01 (units, denominator, proportion precision, null omission) and one in `validation` (document order); the rest of the suite is not systematically mutation-tested — **A-09** |
+| T13.2 | ? | `cargo-mutants` over every module of meaningful size in `openehr` (all now 0 or equivalent survivors — see the `lib:A-09` table in `spec/audit.md` for the full per-module count) plus `openehr-sqlite/{store,dialect}.rs`, `openehr-store/{integrity,record,dialect}.rs`, `openehr-loco`'s auth/controllers/access/app/tasks/views, and the five schema-level engine crates' `Dialect` impls. `openehr-store/conformance.rs` — the logic those numbers actually exercise — is measured from `openehr-sqlite`, not from `openehr-store` itself, because nothing in `openehr-store`'s own test target calls it. Not in CI as a standing gate (the `mutants` job covers only a PR's diff); `openehr-postgresql`/`mysql`/`mariadb`/`mssql`/`oracle`'s `store.rs`-equivalent logic doesn't exist (Schema level, no `Store` impl) and `App::before_run` has one structural residual — see `spec/audit.md` — and the six `-fuzz` crates are untouched — **A-09** |
 | T13.3 | • | every test in `tests/guarantees.rs` states its failure mode |
 | T13.4 | • | `canonical_json` |
 | T13.5–T13.6 | • | `tests/guarantees.rs` |
@@ -366,5 +420,33 @@ Process requirements; they govern this specification rather than the code.
 | T13.9 | — | no test in this crate self-skips |
 | T13.10 | • | this file |
 | T13.11 | • | `reading_a_composition_stays_within_a_small_stack` names its toolchain, method, and figures |
-| T13.12–T13.13 | • | `cargo clippy --all-targets` is clean with the lint table in `Cargo.toml` |
+| T13.12–T13.13 | • | `cargo clippy --all-targets` is clean with the lint table in `Cargo.toml`, and `#![forbid(unsafe_code)]` at the crate root states it in the source as well — belt and braces, because a manifest edit removes the one and not the other |
 | T13.14 | • | every `#[allow]` in the crate carries a reason |
+
+## §15 Archetypes and templates — `K15`
+
+The section was added on 2026-08-26 when `S1.4` was withdrawn. **Four rows are
+satisfied and twenty-eight are not**: `openehr::am` is the AOM2 object model,
+and no code in this crate parses ADL, flattens an archetype, expands a template,
+reads an operational template, retrieves an artefact, or validates data against
+one. **A-40** tracks the rest.
+
+This table exists so that the gap is counted rather than described. A row moves
+off **spec** when the code implements it *and* a named test exercises it
+(`C0.7`) — not when a parser lands, and not when a README says so (`K15.30`,
+`K15.31`).
+
+| Id | Status | Evidence |
+| --- | --- | --- |
+| K15.1 | • | `am::archetype::tests::a_definition_constraining_the_wrong_rm_class_is_refused`, `…a_node_the_terminology_does_not_define_is_refused`, `…a_code_specialised_deeper_than_its_archetype_is_refused`, `…a_terminology_constraint_naming_no_value_set_is_refused`; `am::constraint::tests::two_constraints_on_one_attribute_are_refused` |
+| K15.2 | • | `archetype_model::the_targeted_archetype_model_release_is_named`; `am::AM_RELEASE` is 2.3.0 and an artefact's own declared versions round-trip unenforced |
+| K15.3 | • | `archetype_model::an_archetype_round_trips_through_json_unchanged`, `…a_constraint_this_crate_cannot_model_survives_rather_than_disappearing`. **Scope:** the only serialisation this crate accepts today is its own JSON. ADL and the AM ITS forms are `K15.5`, `K15.8`, and `K15.16`, all below |
+| K15.4 | • | `archetype_model::an_archetype_is_constructible_without_a_parser` |
+| K15.5–K15.7 | spec | ADL 2 parsing, and the refusal discipline that replaces recovery |
+| K15.8–K15.10 | spec | ADL 1.4 ingestion, provenance, and the assertion subset |
+| K15.11–K15.13 | spec | specialisation, flattening, and the narrowing check |
+| K15.14–K15.17 | spec | template expansion and operational templates, both directions |
+| K15.18–K15.23 | spec | validation against an operational template, and its separateness from `L10.x` |
+| K15.24–K15.27 | spec | the repository abstraction, provenance, and the refusal on retrieval failure |
+| K15.28–K15.29 | spec | the boundaries this section does **not** move: authoring, publishing, AQL execution |
+| K15.30–K15.31 | spec | the honesty gate while the rest is unbuilt — refuse, and do not describe a parser as archetype support |

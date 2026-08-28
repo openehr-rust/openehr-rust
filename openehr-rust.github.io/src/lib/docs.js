@@ -42,6 +42,7 @@ export const crates = [
 	'openehr-sqlite',
 	'openehr-postgresql',
 	'openehr-mysql',
+	'openehr-mariadb',
 	'openehr-mssql',
 	'openehr-oracle'
 ]

@@ -190,8 +190,13 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       crate-level table (checked against the matrix by
       `scripts/check-docs.py`), a one-hour reading order, and the rule 5
       trademark notice; every relative link verified to resolve.*
-- [ ] Decide the site question (`plan.md` §Open decisions); if yes, the
-      `hl7-rust`/`er7-rust` in-repo SvelteKit pattern is the model.
+- [x] Decide the site question (`plan.md` §Open decisions); if yes, the
+      `hl7-rust`/`er7-rust` in-repo SvelteKit pattern is the model. *Done
+      2026-08-28: yes, and the owner built it —
+      [openehr-rust.github.io](https://openehr-rust.github.io), confirmed
+      live rather than assumed (HTTP 200, a real rendered page with the
+      project's own title and meta description). This repository's own
+      `README.md` and `index.md` had no link to it; both now do.*
 - [ ] Decide the funding question: CONTRIBUTING.md says no funding vehicle
       exists; either create one and add `.github/FUNDING.yml`, or keep the
       statement and record the decision.

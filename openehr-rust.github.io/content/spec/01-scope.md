@@ -18,13 +18,28 @@ Requirement prefix: `S1`.
 The exclusions below are decisions, not omissions. Each names why, because a
 reader deciding whether to use this crate needs the reason more than the fact.
 
-- **S1.4** The crate MUST NOT implement the **Archetype Model** — ADL, AOM2,
-  templates, or archetype-constraint validation. An archetype is a constraint
-  language with its own parser and its own conformance rules; implementing a
-  partial one would let "valid" mean "the parts I understood were satisfied".
-  Consequence: [validation](10-validation.md) is Reference-Model-level only,
-  and `L10.2` requires that to be stated wherever validation is offered.
-- **S1.5** The crate MUST NOT execute AQL. Executing means resolving archetype
+- **S1.4** *(withdrawn 2026-08-26 — reversed; the Archetype Model is now in
+  scope, specified in [§15](15-archetypes.md) and required by `S1.21`)* The
+  crate MUST NOT implement the **Archetype Model** — ADL, AOM2, templates, or
+  archetype-constraint validation. An archetype is a constraint language with
+  its own parser and its own conformance rules; implementing a partial one would
+  let "valid" mean "the parts I understood were satisfied". Consequence:
+  [validation](10-validation.md) is Reference-Model-level only, and `L10.2`
+  requires that to be stated wherever validation is offered.
+
+  **The text above is kept, not deleted** (`C0.19`). Its reasoning is the
+  standing objection §15 has to answer, and it does: `K15.6` refuses an
+  unimplemented construct instead of skipping it, `K15.12` refuses an incomplete
+  lineage, `K15.20` refuses a partial pass, and `K15.27` refuses a retrieval
+  failure. The prohibition on a partial constraint engine survives the
+  withdrawal of the prohibition on any constraint engine at all.
+
+  **What was true while it stood** is still true of the code today: nothing in
+  this crate parses ADL or validates against an archetype. That is now a gap
+  against `S1.21` rather than a decision — [`audit.md`](audit.md) **A-40** — and
+  `K15.30` is what stops the documentation from moving before the code does.
+- **S1.5** *(unchanged by the reversal of `S1.4`; see `K15.29`)* The crate MUST
+  NOT execute AQL. Executing means resolving archetype
   paths against a repository of versioned objects, and the crate has no
   repository. It parses and statically checks AQL instead (§12).
 - **S1.6** The crate MUST NOT implement the **EHR Extract** model or the
@@ -57,6 +72,24 @@ reader deciding whether to use this crate needs the reason more than the fact.
   MUST still round-trip that type's data losslessly (§9). Not interpreting a
   value is not a licence to lose it.
 
+## What the crate is, continued
+
+- **S1.21** *(added 2026-08-26)* The crate MUST implement the **Archetype
+  Model** — AOM2 as types, ADL 2 parsing, ADL 1.4 ingestion, specialisation and
+  flattening, template expansion, operational templates, validation of Reference
+  Model data against an operational template, and a repository abstraction for
+  retrieval — as specified in [§15](15-archetypes.md).
+
+  This reverses `S1.4`. It is stated here as well as in §15 because §1 is where
+  a reader decides whether this crate does what they need, and an exclusion that
+  has been withdrawn in another file is an exclusion the reader will still
+  believe.
+
+  **In force and unsatisfied.** No part of §15 is implemented. `K15.30` requires
+  every entry point that would implement it to refuse explicitly and forbids any
+  documentation claiming otherwise, and **A-40** keeps the gap in the register
+  until the code closes it (`C0.9`).
+
 ## Boundaries the caller must supply
 
 - **S1.14** The crate MUST NOT authenticate. It records who acted; establishing
@@ -76,3 +109,74 @@ reader deciding whether to use this crate needs the reason more than the fact.
 - **S1.17** Where the current terminology disagrees with the older
   `openEHR/terminology` repository, the current one governs, and the divergence
   MUST be recorded where the codes are defined (see `src/terminology.rs`).
+
+- **S1.18** *Departure from `COMPOSITION.Territory_valid` and
+  `COMPOSITION.Language_valid`.* The crate MUST NOT validate `territory` against
+  ISO 3166-1 or `language` against ISO 639-1. It checks `CODE_PHRASE`
+  well-formedness only (`D3.5`), so `ISO_639-1::zz` is accepted although `zz` is
+  not a language.
+
+  **What openEHR requires.** RM 1.1.0 states both as invariants on `COMPOSITION`:
+  `code_set(Code_set_id_countries).has_code(territory)` and
+  `code_set(Code_set_id_languages).has_code(language)`. These are code sets
+  openEHR names, so `S1.10` — which excludes *external* terminologies like
+  SNOMED CT — does not cover them. This is a genuine departure and is declared
+  here because an undeclared one is a defect rather than a decision (`C0.12`,
+  `C0.14`).
+
+  **What survives.** Structural validity: the code is well-formed and names the
+  right terminology id. What is lost is membership — a caller may store a
+  syntactically valid code that denotes no country or language, and nothing here
+  will say so.
+
+  **Why declared rather than implemented.** Both code sets are closed, small, and
+  *mutable*: ISO 3166-1 gains and retires codes, and a table compiled into a
+  library is wrong from the day a country changes. Validating against a stale
+  copy would reject conformant data, which `D3.5`'s own reasoning calls the worse
+  failure. A deployment that needs the check should do it where the tables can be
+  updated.
+
+  **That last sentence is a requirement on this crate, not a shrug.** It holds
+  only while a caller can reach every code the crate declines to check, and
+  `A-34` is the finding where two such codes round-tripped perfectly and could
+  not be read at all. Every one of them is now reachable and
+  `guarantees::a_caller_can_read_every_code_the_crate_declines_to_check` asserts
+  it — so an accessor cannot be deleted, leaving a departure that is silently
+  worse than the one declared here.
+
+  `A-19` is **classified** rather than open: the decision is made, and what was
+  genuinely unresolved was whether the advice above could be followed.
+
+- **S1.19** The crate MUST NOT model a demographic **repository** — an object
+  store that can be asked, of a relationship, for its reverse. It models
+  demographic *values*: a `PARTY` holds its relationships, and nothing holds the
+  parties.
+
+  **What this makes unenforceable.** Four openEHR invariants constrain the
+  demographic graph rather than any one object:
+  `PARTY.Relationships_validity` and `PARTY_RELATIONSHIP.Source_valid` require a
+  relationship's source to be the party holding it;
+  `PARTY.Reverse_relationships_validity` and `PARTY_RELATIONSHIP.Target_valid`
+  require the repository to answer for the other end. None can be checked from a
+  value in hand, and this crate never has more than that.
+
+  Declared because the alternative is that four unenforced invariants look like
+  four oversights (`C0.14`). A deployment holding a demographic repository is
+  the layer that can check them, in the same way a deployment is the layer that
+  authenticates (`S1.14`).
+
+- **S1.20** *Departure from `EHR_ACCESS.Scheme_valid`.* The crate MUST allow an
+  `EHR_ACCESS` with **no** access-control settings, and therefore does not
+  enforce openEHR's requirement that its derived `scheme` be non-empty.
+
+  **What openEHR requires.** `scheme` is derived from the concrete `settings`
+  instance and `Scheme_valid` states `not scheme.is_empty`, so every
+  `EHR_ACCESS` must carry a policy.
+
+  **Why this departs.** "No access policy has been set" and "the policy is
+  deny-all" are different facts about a record, and a type that cannot express
+  the first forces every caller to assert the second. `EhrAccess::new` records
+  no policy deliberately, and a reader can tell the two apart. The cost is that
+  a record can exist with no policy, which a deployment MUST NOT read as
+  permission — `X11.24` already requires the fail-closed default, and this
+  departure is why that requirement matters.

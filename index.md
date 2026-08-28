@@ -17,6 +17,7 @@ specification and says which one governs which code.
 
 | | |
 | --- | --- |
+| [openehr-rust.github.io](https://openehr-rust.github.io) | the project's landing page |
 | [README](README.md) | what this is, in five minutes |
 | [Conformance matrix — library](openehr/spec/conformance-matrix.md) | what the Reference Model crate actually satisfies today |
 | [Conformance matrix — databases](spec/databases/conformance-matrix.md) | per-engine status; the only document that distinguishes the six |

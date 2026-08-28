@@ -94,6 +94,27 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
   - two durations whose approximations agree and whose calendar components
     differ,
   - values of different `DATA_VALUE` classes.
+- **D3.14a** *(added 2026-08-21)* `INTERVAL<T>::contains` MUST treat "not
+  comparable" as **not contained**, at either bound and in either direction.
+
+  `D3.14` says what comparison answers. This says what the one caller that
+  matters does with that answer, and it was load-bearing and undocumented until
+  `A-39` — implemented correctly, relied on by `DvOrdered::is_abnormal`, and
+  written down nowhere.
+
+  **Fail closed.** An undecidable comparison must never admit a value into a
+  range: a reference range that silently included values it cannot order would
+  report them as normal. The operators `>=` and `<=` do this by accident —
+  `None` makes them false — which is why the rewrite in `D3.18c` had to say it
+  on purpose rather than inherit it.
+
+  The consequence runs one step further, and is why `A-39` is a **Medium**
+  rather than a note about test coverage. `is_abnormal` asks
+  `normal_range.contains(&value)`. If a comparison that should have decided
+  returns "not comparable" — because a match arm was deleted, or a variant was
+  added without one — the value is reported as **inside no range**, and
+  therefore as **not abnormal**. A wrong answer that reads as reassurance.
+
 - **D3.15** `DV_QUANTITY` values MUST be comparable only when their `units`
   strings are equal (`S1.9`).
 - **D3.16** `DV_ORDINAL` and `DV_SCALE` values MUST be comparable only when
@@ -103,8 +124,120 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
   match.
 - **D3.18** Times carrying UTC offsets MUST be normalised to UTC before
   comparison.
+- **D3.18a** *Resolved by design, not by compromise.* `Eq` on `Time`, `Date`,
+  `DateTime` and `Duration` is **lexical** — two values are equal when they
+  were written the same way — while chronological (or, for `Duration`, length)
+  order compares what the value denotes under `D3.18`. So `11:00:00Z` and
+  `12:00:00+01:00` order equal semantically and are **not** `==`.
+
+  These types therefore do **not** implement `PartialOrd`/`Ord`. Rust requires
+  `a == b` wherever `partial_cmp` reports `Some(Equal)`, and no fixed
+  implementation of both traits together can satisfy that here — lexical
+  equality is record identity (`db:M3.28`: the text is the stored value, `.5`
+  and `.50` are different strings a record must round-trip, and `Hash` must
+  agree with `Eq`), while semantic ordering is what a query needs, and neither
+  moves without losing the other. Semantic comparison is instead a plain method,
+  `semantic_cmp(&self, other: &Self) -> Option<Ordering>`, so `<`, `sort()`,
+  and `dedup()` simply do not exist for these types — there is no operator
+  that could silently mean the wrong one.
+
+  Formerly recorded as the open finding `A-32`; closed once the trait impl
+  was removed rather than left to disagree with `Eq`. Pinned by
+  `iso8601::eq_is_lexical_and_semantic_cmp_is_not_the_same_question`.
+
+- **D3.18b** *(added 2026-08-21)* `D3.18a` binds **every `DV_ORDERED`
+  descendant and `DATA_VALUE`**, not only the base ISO 8601 types. None of them
+  implements `PartialOrd`; semantic comparison is the named method
+  `DvOrdered::semantic_cmp`, and `DataValue::semantic_cmp` for the enum.
+
+  `D3.18a` was written about lexical form, because that is where the
+  disagreement was first seen. **That is not the mechanism, only one instance of
+  it.** Every `DV_ORDERED` carries `OrderedAttrs` — normal range, normal status,
+  other reference ranges — and every one of them derives `PartialEq` over all
+  its fields while comparing only its magnitude. So:
+
+  | These two values | `==` | `partial_cmp` |
+  | --- | --- | --- |
+  | `DV_DATE_TIME` `11:00:00Z` and `12:00:00+01:00` | false | `Some(Equal)` |
+  | `DV_QUANTITY` `5 mg` with `precision` 1 and with 2 | false | `Some(Equal)` |
+  | `DV_QUANTITY` `5 mg` with and without `units_display_name` | false | `Some(Equal)` |
+  | `DV_COUNT` `5` with and without a normal range | false | `Some(Equal)` |
+  | `DV_PROPORTION` `1/4` with `precision` 1 and with 2 | false | `Some(Equal)` |
+
+  Rust requires `a == b` if and only if `partial_cmp` reports `Some(Equal)`, so
+  each row is a broken trait contract: `a != b` while `a <= b` and `a >= b` are
+  both true. Nothing inside this crate depended on it — every comparison here
+  goes through the ordering consistently — which is exactly why it survived. A
+  caller's `binary_search`, `dedup_by`, `max_by`, or `sort_by` is where it
+  surfaces, in someone else's code.
+
+  Neither trait can move. Field equality is **record identity**: a
+  `DV_QUANTITY` that records its precision is not the same stored value as one
+  that does not, `db:M3.28` requires the text a record round-trips to be exactly
+  what arrived, and a content digest is taken over those bytes (`db:M3.43`).
+  Magnitude ordering is what a query and a reference range need. Making `==`
+  semantic would make a canonicaliser that rewrote `1.10` as `1.1` pass its own
+  round-trip test, which is `db:D-08` reintroduced.
+
+  Formerly the open finding `A-35`, which named five types; the survey that
+  closed it found **ten**.
+
+- **D3.18c** *(added 2026-08-21)* `INTERVAL<T>` MUST NOT be bounded on
+  `PartialOrd`. It is bounded on `SemanticOrd` — a trait this crate defines,
+  whose single method is the same partial comparison — and implemented for the
+  primitives an interval is used over and for every type in `D3.18b`.
+
+  A blanket `impl<T: PartialOrd> SemanticOrd for T` is deliberately **not**
+  written: it would collide with the explicit impls under Rust's coherence
+  rules, and more to the point it would let a type that has the `D3.18b` defect
+  reach `INTERVAL<T>` again without anyone deciding that it should.
 
 ## Quantities and proportions
+
+- **D3.18d** *(added 2026-08-22)* A **real number** in the Reference Model MUST
+  preserve its lexical form, as `D3.10` requires of ISO 8601. `1.50` is not
+  `1.5`.
+
+  **Every digit is preserved**, including trailing zeros and significant digits
+  beyond what an `f64` can hold or distinguish. The one departure, measured
+  rather than assumed: **exponent notation is normalised** to a lowercase `e`
+  with an explicit sign, so `1e5` and `1E5` are both stored as `1e+5`. No digit
+  is lost and the value is unchanged. A clinical magnitude is not written in
+  scientific notation, but "not in practice" is not a guarantee, so the limit is
+  written down and
+  `real::tests::every_digit_survives_and_only_the_exponent_form_is_normalised`
+  asserts it.
+
+  The two are the same decision for the same reason. A `DV_DATE` of `2024-05` is
+  a date known to the month, and a `DV_QUANTITY` of `1.50 mg` is a quantity
+  measured to two decimal places — in both cases the number of digits *is* the
+  clinical content, and a layer that normalises has destroyed it before storage
+  sees it. `db:D-08` is that failure realised: MySQL rewrote a magnitude of
+  `1.10` as `1.1`, and `db:M3.43` moved canonical JSON onto a byte-preserving
+  column because of it.
+
+  Until 2026-08-22 the crate lost the distinction one layer earlier than MySQL
+  did. `DV_QUANTITY.magnitude` was an `f64`, so `1.50` became the same value as
+  `1.5` at **parse** time and no storage rule could recover it.
+  `security::canonical`'s own test recorded that as the limit of the guarantee.
+
+- **D3.18e** *(added 2026-08-22)* A real MUST carry both forms: the text as
+  written, and the `f64` it denotes. The text is **authoritative**; the `f64` is
+  **derived** and is what comparison uses.
+
+  This is `db:M3.31`'s two-column instant rule, in one value instead of two
+  columns, and it produces the same split `D3.18a` and `D3.18b` describe:
+  equality is lexical, because `1.50` and `1.5` are different records; ordering
+  is numeric, because a reference range asks which is larger. The two disagree
+  on values that denote the same number, so a real MUST NOT implement
+  `PartialOrd` — `SemanticOrd` and `DvOrdered::semantic_cmp` carry the ordering
+  (`D3.18c`).
+
+- **D3.18f** *(added 2026-08-22)* Reading a real MUST be total. A value that
+  never passed a constructor — `Deserialize` writes fields directly (`L10.1a`)
+  — still has to be readable, so an accessor MUST NOT panic on one.
+  `D3.30a` says the same about `DV_URI`, for the same reason and after the same
+  defect (`A-36`).
 
 - **D3.19** `DV_QUANTITY` MUST require a finite magnitude and a non-empty
   `units`. A quantity with no units is a number, and openEHR has `DV_COUNT`.
@@ -175,11 +308,29 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
 
 ## URIs
 
-- **D3.30** `DV_URI` MUST require a well-formed scheme and MUST refuse spaces
-  and control characters.
-- **D3.31** `DV_EHR_URI` MUST require the scheme `ehr`. `LINK.target` is typed
-  `DV_EHR_URI` precisely so that a link cannot point out of the record without
-  saying so.
+- **D3.30** *(amended 2026-08-20)* `DV_URI` MUST require a well-formed scheme
+  and MUST refuse spaces and control characters, **at both gates** (`L10.1`,
+  `L10.1a`) — in the constructor, and in validation.
+- **D3.31** *(amended 2026-08-20)* `DV_EHR_URI` MUST require the scheme `ehr`,
+  **at both gates**. `LINK.target` is typed `DV_EHR_URI` precisely so that a
+  link cannot point out of the record without saying so.
+
+  Both requirements said only "MUST require", and the crate satisfied that
+  reading in the constructor alone. `DV_EHR_URI` is `#[serde(transparent)]` over
+  `DV_URI`, whose `Deserialize` is derived, so a link target arriving as JSON
+  reached neither check: `{"value":"https://example.org/x"}` deserialized into a
+  `DV_EHR_URI` whose scheme was `https`, and `{"value":"nocolon"}` deserialized
+  into a `DV_URI` that **panicked** when its scheme was read. See
+  [`audit.md`](audit.md) **A-36**. "At both gates" is now written into the
+  requirement, because "MUST require" was read as "the constructor requires"
+  once and would be again.
+
+- **D3.30a** *(added 2026-08-20)* Reading any part of a `DV_URI` — its scheme,
+  or the remainder — MUST be **total**. A value that never passed a constructor
+  is a value this crate is obliged to be able to look at, and the accessor's
+  answer for one with no scheme is the empty string, which compares unequal to
+  every real scheme and so fails closed. An accessor that panics converts a
+  malformed document into a denial of service against the process reading it.
 - **D3.32** Validity of a `DV_EHR_URI` is **structural only**. The crate cannot
   resolve it, and documentation MUST NOT let "valid" be read as "resolvable".
 

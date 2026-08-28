@@ -105,7 +105,6 @@
 		This site renders the crates' own documentation. The crates are the source of truth.
 	</p>
 	<div class="section-links">
-		<a href={REPOSITORIES.core}>github.com/openehr-rust/openehr</a>
-		<a href={REPOSITORIES.databases}>github.com/openehr-rust/openehr-databases</a>
+		<a href={REPOSITORIES.core}>github.com/openehr-rust/openehr-rust</a>
 	</div>
 </section>

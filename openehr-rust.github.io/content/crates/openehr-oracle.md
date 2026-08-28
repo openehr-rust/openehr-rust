@@ -1,6 +1,11 @@
 # openehr-oracle
 
-openEHR persistence for **Oracle Database 23ai** — the schema dialect.
+openEHR® persistence for **Oracle Database 23ai** — the schema dialect.
+
+> openEHR® is the registered trademark of the openEHR Foundation and is used
+> with the permission of openEHR International. Use of the trademark does not
+> constitute endorsement of this product by openEHR International or openEHR
+> Foundation.
 
 ## Conformance level: Dialect
 
@@ -19,20 +24,30 @@ use openehr_store::ddl_script;
 println!("{}", ddl_script(&OracleDialect));
 ```
 
+## Install
+
+```toml
+[dependencies]
+openehr-oracle = "0.7"
+openehr-store = "0.7"
+```
+
+Requires Rust 1.95+ (edition 2024).
+
 ## What this crate owns
 
 Four things: type spellings, identifier quoting, placeholder style, and how the
 engine enforces append-only. Everything else — which tables exist, which
 columns, which indexes, the projection from openEHR objects onto rows, the
 commit rules, the conformance suite — lives in
-[`openehr-store`](../openehr-store) and is shared by all five engines.
+[`openehr-store`](../openehr-store) and is shared by all six engines.
 
 That boundary is deliberate, and this crate is the reason it exists. The
 sibling FHIR monorepo in this repository gave each of six ports a full copy of
 the DDL generator, and **its Oracle port spent the fork's whole life emitting
 MySQL types** (**F-08**) — a file copied with three lines changed, which nothing
 ever compared. A dialect that owns only spellings cannot do that;
-`openehr-sqlite/tests/dialects.rs` compares all five; and this crate's own
+`openehr-sqlite/tests/dialects.rs` compares all six; and this crate's own
 tests assert that its DDL contains no `TINYINT`.
 
 ## Oracle Database 23ai specifics
@@ -67,6 +82,35 @@ cargo test
 The tests are golden: they assert the SQL this crate emits, including
 assertions that it is *not* another engine's SQL.
 
+## What is not here
+
+| Not here | Why |
+| --- | --- |
+| A `Store` | This crate is a dialect. Level **Dialect** means the schema is emitted, not that this crate can talk to a database. |
+| A driver dependency | A dependency implies a capability, and readers reasonably infer one (`W16.4`). |
+| Archetype or template validation | Not implemented anywhere in this project (`lib:S1.4`). |
+| AQL execution | Parsed and statically checked by `openehr`, never executed (`S1.6`). |
+
+## Fuzzing
+
+Identifier quoting is fuzzed by
+[`openehr-oracle-fuzz`](../openehr-oracle-fuzz), because an identifier that
+escapes its own delimiter is SQL injection and archetype ids reach a `WHERE`
+clause from caller input. Run in CI on every push.
+
+## Specification
+
+This crate implements the shared persistence specification; it defines nothing
+of its own beyond its dialect.
+
+- [`spec/databases/`](../spec/databases/index.md) — the storage model, the
+  dialect boundary, the conformance ladder
+- [`spec/databases/conformance-matrix.md`](../spec/databases/conformance-matrix.md)
+  — what is verified for **this** engine today
+- [`spec/audit.md`](../spec/audit.md) — known gaps
+
 ## Licence
 
-MIT OR Apache-2.0.
+
+Any of these, at your option — MIT, Apache-2.0, BSD-3-Clause, GPL-2.0-only, or
+GPL-3.0-only. See [`LICENSE.md`](LICENSE.md).

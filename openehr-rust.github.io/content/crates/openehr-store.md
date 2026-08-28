@@ -1,22 +1,45 @@
 # openehr-store
 
-The engine-agnostic half of openEHR persistence: the storage model, the
+openEHR® store is the engine-agnostic half of openEHR persistence: the storage model, the
 projection from openEHR objects onto rows, the commit rules, and the conformance
 suite every engine runs.
 
-## Why a sixth crate exists when five were asked for
+> openEHR® is the registered trademark of the openEHR Foundation and is used
+> with the permission of openEHR International. Use of the trademark does not
+> constitute endorsement of this product by openEHR International or openEHR
+> Foundation.
+
+## Why this crate exists
 
 Because the alternative is documented, in this repository, as a failure.
 
 The sibling FHIR monorepo here has six ports, each carrying a byte-identical
 copy of one core, a shell script written to police the copies, and an audit
 finding for the copy that drifted anyway — an Oracle DDL emitter quietly
-producing MySQL types for as long as the fork existed. One crate that five
+producing MySQL types for as long as the fork existed. One crate that six
 depend on cannot drift from itself.
 
-So the five engine crates own exactly four things each: type spellings,
+So the six engine crates own exactly four things each: type spellings,
 identifier quoting, placeholder style, and append-only enforcement. Everything
 else is here.
+
+That boundary is necessary and was not sufficient. `openehr-mariadb` was a
+name-substituted copy of `openehr-mysql` — byte-identical DDL, a struct still
+called `MysqlDialect` — and the cross-dialect comparison that exists to catch
+precisely this compared five dialects while that one was the sixth. Both are
+fixed; the lesson kept is that a guard is only as wide as its input list. See
+[`spec/audit.md`](../spec/audit.md) **W-01**.
+
+## Install
+
+```toml
+[dependencies]
+openehr-store = "0.7"
+openehr = "0.7"
+```
+
+Requires Rust 1.95+ (edition 2024). This crate emits DDL and defines the traits;
+it opens no connections and depends on no driver.
 
 ## The storage model
 
@@ -57,6 +80,16 @@ time with no offset, a date with no time — because that is the same answer the
 library gives. A column that guessed would make SQL disagree with Rust about the
 same record.
 
+## Seeing it work
+
+This crate has no `Store` of its own — it defines the trait, the schema, the
+projection, and the commit rules, and an engine crate implements against them.
+The runnable demonstration therefore lives one crate over:
+
+```sh
+cd ../openehr-sqlite && cargo run --example 01_store_a_record
+```
+
 ## The conformance suite
 
 Written once, here, and called by each engine's own tests against a real
@@ -65,16 +98,63 @@ once: the sibling monorepo's concurrency and redaction suites existed only for
 PostgreSQL, and porting them to two more engines immediately found three defects
 that had been shipping.
 
-`conformance::dialects_are_distinct` compares all five dialects' DDL and fails
-if any two match — the F-08 defect, made impossible to reintroduce.
+`conformance::dialects_are_distinct` compares all six dialects' DDL and fails if
+any two match — the F-08 defect, made detectable. It is driven from
+`openehr-sqlite/tests/dialects.rs`, which is also where the list of dialects to
+compare lives, and a companion test ties that list's length to the number of
+engine crates so a new engine cannot be added without being compared.
 
 ## Conformance levels
 
 Defined in [`spec/conformance.md`](spec/conformance.md), with a table of where
-each engine crate stands. Short version: `openehr-sqlite` is at **Store** and
-verified against a real database; the other four are at **Dialect** and have
-never had a statement parsed by the engine they name.
+each engine crate stands, under the ladder set out in
+[`spec/index.md`](../spec/index.md) (`W0.8`).
+
+| Crate | Level |
+| --- | --- |
+| `openehr-sqlite` | **Verified** — the full suite against a real in-process database, in CI on every push |
+| `openehr-postgresql` | **Schema** — DDL executed against PostgreSQL 18 |
+| `openehr-mysql` | **Schema** — DDL executed against MySQL 8.4 |
+| `openehr-mariadb` | **Schema** — DDL executed against MariaDB 11.4 |
+| `openehr-mssql` | **Dialect** — no server has parsed it |
+| `openehr-oracle` | **Dialect** — no server has parsed it |
+
+`openehr-sqlite` reached **Verified** on 2026-08-01: [run 30713623082](https://github.com/openehr-rust/openehr-rust/actions/runs/30713623082) is green across
+all nineteen jobs. The three Schema claims are now checked by CI on every push
+rather than attested once. See [`spec/audit.md`](../spec/audit.md) **W-02**.
+
+## Specification
+
+- [`spec/databases/`](../spec/databases/index.md) — the normative core: storage
+  model (`M3.x`), dialect boundary (`X15.x`), commit rules (`H5.x`)
+- [`spec/databases/conformance-matrix.md`](../spec/databases/conformance-matrix.md)
+  — per-engine status
+- [`spec/audit.md`](../spec/audit.md) — known gaps
+
+## Benchmarks
+
+```sh
+cargo bench                     # criterion; results in target/criterion/
+cargo bench -- --test           # one iteration each, which is what CI runs
+```
+
+`benches/store.rs` measures the two hot pure functions: the projection from a
+composition onto rows, and `verify_versions`. Everything else in a commit is a
+round trip to a database server, which no benchmark in this process can measure
+honestly.
+
+`verify_versions` is measured at 1, 10, and 100 versions, because the question
+is not how fast one row is but whether the walk is **linear**. A check that
+quietly became quadratic would pass every test in the suite and be noticed first
+by whoever verified a record with ten years of history in it.
+
+**A number here is not a conformance claim** (`W0.3`, `W0.34`). No requirement in
+this repository is stated in seconds and no crate's conformance level depends on
+a timing. CI runs the benchmarks with `--test` and gates on nothing: wall-clock
+on a shared runner varies by more than most real regressions, and a threshold
+that fails for unrelated reasons is one somebody silences.
 
 ## Licence
 
-MIT OR Apache-2.0.
+Any of these, at your option — MIT, Apache-2.0, BSD-3-Clause, GPL-2.0-only, or
+GPL-3.0-only. See [`LICENSE.md`](LICENSE.md).

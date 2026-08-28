@@ -96,9 +96,15 @@ posture. Open items for each are in `tasks.md`.
 - **Funding surface.** CONTRIBUTING.md states there is no funding vehicle;
   `.github/FUNDING.yml` is therefore a decision to create one, not a missing
   file. Decide, then make the files agree.
-- **Site.** Whether to stand up a `openehr-rust.github.io` landing surface
+- ~~**Site.** Whether to stand up a `openehr-rust.github.io` landing surface
   (the `hl7-rust`/`er7-rust` pattern) before or after the outreach
-  prerequisites close. Outreach §6.5 presumes one exists.
+  prerequisites close.~~ — answered 2026-08-28: yes, and it exists. The owner
+  stood up `openehr-rust.github.io` directly (its own repository, the same
+  in-repo SvelteKit/Lily-theme pattern the siblings use) — confirmed live
+  (`curl` returns 200, a real rendered page with the project's own title and
+  description, not a placeholder) rather than taken on trust. Linked from
+  this repository's own front doors, `README.md` and `index.md`, which had
+  no reference to it until now.
 - ~~**`spec/databases/conformance-matrix.md`** remains hand-assessed apart from
   one CI check; deciding whether to machine-derive it like the library
   matrix is a real cost/benefit call.~~ — answered 2026-08-27, with evidence
