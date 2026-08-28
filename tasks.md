@@ -197,9 +197,18 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       live rather than assumed (HTTP 200, a real rendered page with the
       project's own title and meta description). This repository's own
       `README.md` and `index.md` had no link to it; both now do.*
-- [ ] Decide the funding question: CONTRIBUTING.md says no funding vehicle
+- [x] Decide the funding question: CONTRIBUTING.md says no funding vehicle
       exists; either create one and add `.github/FUNDING.yml`, or keep the
-      statement and record the decision.
+      statement and record the decision. *Done 2026-08-28, per
+      `spec/free-open-source-funding/index.md`: GitHub Sponsors under the
+      owner's personal account, verified live (API `sponsorsListing`,
+      `github.com/sponsors/joelparkerhenderson` returns 200) before
+      `.github/FUNDING.yml` was added; CONTRIBUTING.md's Money section and
+      NEWS.md updated to match. **Open Collective, also asked for, is not
+      done**: `joelparkerhenderson` there is an auto-generated `INDIVIDUAL`
+      profile, not a `COLLECTIVE`; `opencollective.com/openehr-rust` 404s;
+      creating a real one needs the owner to choose a fiscal host through
+      Open Collective's own application flow.*
 - [ ] Execute `help/outreach/index.md`'s sequence only after the trademark
       notice, conduct file, and repository security settings above are done
       — its own checklist already blocks on them.

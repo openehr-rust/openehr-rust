@@ -93,9 +93,22 @@ posture. Open items for each are in `tasks.md`.
 
 ## Open decisions (awaiting a call, not code)
 
-- **Funding surface.** CONTRIBUTING.md states there is no funding vehicle;
+- ~~**Funding surface.** CONTRIBUTING.md states there is no funding vehicle;
   `.github/FUNDING.yml` is therefore a decision to create one, not a missing
-  file. Decide, then make the files agree.
+  file.~~ — answered 2026-08-28, per `spec/free-open-source-funding/index.md`:
+  GitHub Sponsors, under the maintainer's personal account, no legal entity.
+  Verified live before acting on it rather than assumed —
+  `sponsorsListing.slug` present and `isPublic: true` via the GitHub API,
+  `github.com/sponsors/joelparkerhenderson` returns 200 — then
+  `.github/FUNDING.yml` added and `CONTRIBUTING.md`/`NEWS.md` brought into
+  line. **Open Collective was asked for and is not done**: the spec's own
+  acceptance check was "verify GitHub Sponsors is set up correctly," and
+  running the equivalent check for Open Collective found `joelparkerhenderson`
+  is only an auto-generated `INDIVIDUAL` profile (everyone who uses the site
+  gets one), not a `COLLECTIVE`, and `opencollective.com/openehr-rust` 404s.
+  Creating a real one means choosing a fiscal host through Open Collective's
+  own interactive application flow — a decision, and one this session cannot
+  make or complete on the owner's behalf.
 - ~~**Site.** Whether to stand up a `openehr-rust.github.io` landing surface
   (the `hl7-rust`/`er7-rust` pattern) before or after the outreach
   prerequisites close.~~ — answered 2026-08-28: yes, and it exists. The owner

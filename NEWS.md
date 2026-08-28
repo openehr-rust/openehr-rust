@@ -3,6 +3,18 @@
 Release notes with their reasoning live in [`CHANGELOG.md`](CHANGELOG.md); this
 page is the short form, plus what is coming and how to reach a human.
 
+## GitHub Sponsors is open, 2026-08-28
+
+Under the maintainer's personal account —
+[github.com/sponsors/joelparkerhenderson](https://github.com/sponsors/joelparkerhenderson) —
+verified live rather than assumed, and now the target of `.github/FUNDING.yml`
+and the repository's "Sponsor" button. There is still no legal entity behind
+this project and still no other channel: **no Open Collective**. A profile
+exists on that platform because the maintainer has one, the same as any user
+of the site, but no Collective for this project exists and no fiscal host has
+been chosen — do not trust a page claiming otherwise. What sponsoring does and
+does not buy you is in [`CONTRIBUTING.md`](CONTRIBUTING.md#money).
+
 ## Specification change — the Archetype Model is in scope, 2026-08-26
 
 `S1.4` excluded archetypes, ADL, templates, and archetype-constraint validation

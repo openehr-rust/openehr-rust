@@ -100,10 +100,16 @@ against you; an undisclosed one, discovered later, is a different conversation.
 
 ## Money
 
-**There is no funding vehicle, and nothing here is asking for donations.** No
-GitHub Sponsors, no Open Collective, no fiscal host, no legal entity, and no
-account to send money to. Saying so plainly is better than an unmaintained
-sponsor button.
+**GitHub Sponsors is open, under the maintainer's personal account — there is
+still no legal entity, and no other channel.** [`github.com/sponsors/joelparkerhenderson`](https://github.com/sponsors/joelparkerhenderson)
+is the one real place to send money; `.github/FUNDING.yml` points there so it
+also shows as the "Sponsor" button on the repository. Nothing above what
+GitHub Sponsors itself provides is promised in return — no tiers with
+deliverables, no SLA, no say over the roadmap. **Open Collective is not set
+up.** A profile exists on that platform because the maintainer has one, the
+same as any user of the site; there is no Collective for this project, no
+fiscal host chosen, and no page to send money to there. Do not trust a page
+claiming otherwise.
 
 If you want to fund work rather than wait for it, the useful shapes are:
 
