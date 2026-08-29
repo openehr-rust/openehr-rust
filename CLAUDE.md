@@ -13,16 +13,21 @@ plus the things that specifically trip up automated work here.
 ## Layout
 
 Eighteen crates, **each its own Cargo workspace**. There is no root workspace —
-run cargo from inside a crate directory. Eight are published at 0.7.4; the other
+run cargo from inside a crate directory. Eight are published at 0.8.0; the other
 ten are `publish = false`.
 
-**Local matches published: 0.6.0, out 2026-08-22.** 0.6.0 is the one to know
-about: the Reference Model's reals are `base::Real`, not `f64`, so `1.50 mg` and
-`1.5 mg` are different records and hash differently (`lib:D3.18d`). The `f64`
-accessors are unchanged; `magnitude_real()` is the new one. Three releases went
-out the day before — 0.4.0 removed `PartialOrd` from every `DV_ORDERED`
-(`lib:A-35`) and moved the MSRV to N−3, 0.5.0 added negative AQL literals
-(`lib:A-27`). Read
+**Local matches published: 0.8.0, out 2026-08-29.** 0.8.0 is the one to know
+about: the MSRV floor moved from N−3 to N−2 — 1.95 to 1.96 — which `RV6`
+required to ship as a minor bump, not a patch, because it breaks a consumer
+building below the new floor. `spec/rust-msrv-n-minus-2/index.md` replaced
+the N−3 document; the `RV1`–`RV8` requirement identifiers carried over
+unchanged. Earlier the same season: 0.7.0 brought the Archetype Model into
+scope (`openehr::am`, `lib:A-40`); 0.6.0 made the Reference Model's reals
+`base::Real` rather than `f64`, so `1.50 mg` and `1.5 mg` are different
+records and hash differently (`lib:D3.18d`) — the `f64` accessors are
+unchanged, and `magnitude_real()` is the new one; 0.4.0 removed `PartialOrd`
+from every `DV_ORDERED` (`lib:A-35`) and moved the MSRV to N−3 in the first
+place, and 0.5.0 added negative AQL literals (`lib:A-27`). Read
 [`agents/publishing.md`](agents/publishing.md) before touching a version
 number; it is the only file that tracks this, and four others state the version
 without tracking it (`spec/audit.md` **W-10**).

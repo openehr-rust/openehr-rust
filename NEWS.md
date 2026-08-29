@@ -38,7 +38,28 @@ engine would let "valid" mean "the parts I understood were satisfied". §15 is
 written to answer that — every unimplemented construct, incomplete lineage,
 unresolved artefact, and unreachable repository is a refusal, never a pass.
 
-## Latest release — 0.7.4, 2026-08-27
+## Latest release — 0.8.0, 2026-08-29
+
+**The MSRV floor moves from N−3 to N−2 — 1.95 to 1.96.** Shipped as a minor
+version, not a patch: `RV1` in
+[`spec/rust-msrv-n-minus-2/index.md`](spec/rust-msrv-n-minus-2/index.md)
+now tracks stable two releases back instead of three, and `RV6` forbids
+shipping that as anything but a release a consumer expects to break in.
+Cargo refuses the build on a floor beneath the new minimum rather than
+miscompiling, but a dependency silently dropping support for a toolchain
+is a thing worth reading about before it happens, not discovering from a
+build error.
+
+`rust-version = "1.96"` in all eighteen manifests, the `msrv` CI job's
+derivation moved from `stable − 3` to `stable − 2`, and every prose
+statement of the floor updated to match. Verified before publishing, not
+only declared: `cargo +1.96 test --all-features` run for real across all
+ten buildable crates — including `openehr-sqlite`, which compiles its own
+bundled SQLite, and `openehr-loco`, whose `loco-rs` dependency needs only
+1.94 — and CI ran green on the exact commit that cut the release before
+any crate went out. No public API changed.
+
+## Previous release — 0.7.4, 2026-08-27
 
 **openEHR granted permission to use their trademarks, and every notice now
 says so in the Foundation's own words.** The grant is owner-reported and
@@ -52,7 +73,7 @@ constitute endorsement of this product by openEHR International or openEHR
 Foundation." Permission is not affiliation: the Independence statement in
 `GOVERNANCE.md` stands unchanged. No code changed.
 
-## Previous release — 0.7.3, 2026-08-26
+## 0.7.3, 2026-08-26
 
 **The trademark notice is everywhere a crates.io reader looks, in the
 owner-specified shape.** Every publishable crate's `description` — what
@@ -71,7 +92,8 @@ changed in either release.
 
 | Version | Date | Headline |
 | --- | --- | --- |
-| **0.7.4** | 2026-08-27 | every notice becomes the Foundation's prescribed attribution, stating the granted permission |
+| **0.8.0** | 2026-08-29 | the MSRV floor moves from N−3 to N−2 (`lib:RV1`); 1.95 to 1.96 |
+| 0.7.4 | 2026-08-27 | every notice becomes the Foundation's prescribed attribution, stating the granted permission |
 | 0.7.3 | 2026-08-26 | crate descriptions carry the notice in the owner-specified shape, checker-enforced |
 | 0.7.2 | 2026-08-26 | the notice reaches the descriptions and gets prominent in the crate READMEs |
 | 0.7.1 | 2026-08-26 | the owner-specified trademark notice ships on every crate page |
@@ -120,7 +142,7 @@ that mentions this project; a written statement.
 Every claim below is backed by something in the repository that can be run or
 read. Nothing else about this project should be quoted as verified.
 
-- Eight crates on crates.io at 0.7.4, released 2026-08-27, implementing the
+- Eight crates on crates.io at 0.8.0, released 2026-08-29, implementing the
   openEHR Reference Model in Rust with SQL persistence for six engines.
 - **`openehr-sqlite` is at conformance level Verified** — a complete store,
   re-checked in continuous integration on every commit. Three dialects
