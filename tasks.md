@@ -101,7 +101,19 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       `.github/dependabot.yml` registering all eighteen workspaces with
       version-update PRs capped at zero — security-only posture, the limit
       chosen because the sibling `fhir-rust` got 47 major-bump PRs in an
-      hour on default limits.*
+      hour on default limits.
+      **Re-verified 2026-08-29** against `spec/dependabot/index.md`'s two
+      requirements, live rather than assumed from the 08-26 record:
+      `gh api repos/openehr-rust/openehr-rust/automated-security-fixes`
+      reports `{"enabled":true,"paused":false}`, and
+      `.../vulnerability-alerts` returns `204` (enabled; GitHub's API
+      returns `404` when it is not). `.github/dependabot.yml` gained a
+      nineteenth and twentieth entry in the meantime — `npm` for
+      `/openehr-rust.github.io`, added fixing the Dependabot Updates
+      failure at `c38f9fc` — matching the same `open-pull-requests-limit: 0`
+      posture as every cargo entry. Nothing was found to fix; both halves
+      of that spec were already true, and now confirmed rather than
+      assumed twice.*
 - [x] Sign commits and tags going forward; record the posture change in
       MAINTAINERS.md and SECURITY.md. *Done 2026-08-27: this repository's
       `git config` (local, not global) signs commits and tags with an SSH
