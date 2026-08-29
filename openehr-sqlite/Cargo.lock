@@ -189,7 +189,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "openehr"
-version = "0.7.4"
+version = "0.8.0"
 dependencies = [
  "hmac",
  "serde",
@@ -202,7 +202,7 @@ dependencies = [
 
 [[package]]
 name = "openehr-mariadb"
-version = "0.7.4"
+version = "0.8.0"
 dependencies = [
  "openehr",
  "openehr-store",
@@ -211,7 +211,7 @@ dependencies = [
 
 [[package]]
 name = "openehr-mssql"
-version = "0.7.4"
+version = "0.8.0"
 dependencies = [
  "openehr",
  "openehr-store",
@@ -220,7 +220,7 @@ dependencies = [
 
 [[package]]
 name = "openehr-mysql"
-version = "0.7.4"
+version = "0.8.0"
 dependencies = [
  "openehr",
  "openehr-store",
@@ -229,7 +229,7 @@ dependencies = [
 
 [[package]]
 name = "openehr-oracle"
-version = "0.7.4"
+version = "0.8.0"
 dependencies = [
  "openehr",
  "openehr-store",
@@ -238,7 +238,7 @@ dependencies = [
 
 [[package]]
 name = "openehr-postgresql"
-version = "0.7.4"
+version = "0.8.0"
 dependencies = [
  "openehr",
  "openehr-store",
@@ -247,7 +247,7 @@ dependencies = [
 
 [[package]]
 name = "openehr-sqlite"
-version = "0.7.4"
+version = "0.8.0"
 dependencies = [
  "openehr",
  "openehr-mariadb",
@@ -262,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "openehr-store"
-version = "0.7.4"
+version = "0.8.0"
 dependencies = [
  "openehr",
  "serde",
