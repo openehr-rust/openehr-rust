@@ -89,7 +89,7 @@ jobs:
         working-directory: ${{ matrix.crate }}
         run: cargo doc --no-deps --all-features
 
-  # `spec/rust-msrv-n-minus-3/index.md`: the MSRV is N-3, a formula rather than a
+  # `spec/rust-msrv-n-minus-2/index.md`: the MSRV is N-2, a formula rather than a
   # number, and this job is the reason the formula is worth more than a number.
   #
   # It derives N from the stable toolchain it just installed, so the expected
@@ -110,7 +110,7 @@ jobs:
   # lower bound. Either turns a check into a decoration, which is the defect
   # class the whole audit register is about.
   msrv:
-    name: MSRV is N-3, declared everywhere, and builds
+    name: MSRV is N-2, declared everywhere, and builds
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -136,7 +136,7 @@ jobs:
           df -h /
           echo "::endgroup::"
 
-      - name: Derive N-3 from the current stable release
+      - name: Derive N-2 from the current stable release
         id: msrv
         run: |
           set -eu
@@ -148,10 +148,10 @@ jobs:
               echo "::error::could not parse a minor version from rustc --version"
               exit 1 ;;
           esac
-          [ "$n" -gt 3 ] || { echo "::error::stable minor $n makes N-3 nonsense"; exit 1; }
+          [ "$n" -gt 2 ] || { echo "::error::stable minor $n makes N-2 nonsense"; exit 1; }
           echo "stable=1.$n"   >> "$GITHUB_OUTPUT"
-          echo "msrv=1.$((n - 3))" >> "$GITHUB_OUTPUT"
-          echo "stable is 1.$n, so N-3 is 1.$((n - 3))"
+          echo "msrv=1.$((n - 2))" >> "$GITHUB_OUTPUT"
+          echo "stable is 1.$n, so N-2 is 1.$((n - 2))"
 
       # Checked separately from the build, and before it, so that "the number
       # went stale" and "the code stopped compiling on the floor" stay
@@ -195,7 +195,7 @@ jobs:
           # would destroy the finding. Everything else must match.
           historical() {
             case "$1" in
-              *spec/audit.md:*|*spec/rust-msrv-n-minus-3/index.md:*|*CHANGELOG.md:*) return 0 ;;
+              *spec/audit.md:*|*spec/rust-msrv-n-minus-2/index.md:*|*CHANGELOG.md:*) return 0 ;;
               *) return 1 ;;
             esac
           }
@@ -230,15 +230,15 @@ jobs:
           # sentence, so that the document defining the formula is itself
           # subject to it.
           want_line="is the current stable release. N is **$STABLE**, so the MSRV is **$WANT**."
-          grep -qF "$want_line" spec/rust-msrv-n-minus-3/index.md || {
-            echo "::error file=spec/rust-msrv-n-minus-3/index.md::should contain: $want_line"
+          grep -qF "$want_line" spec/rust-msrv-n-minus-2/index.md || {
+            echo "::error file=spec/rust-msrv-n-minus-2/index.md::should contain: $want_line"
             bad=1
           }
 
           [ "$bad" -eq 0 ] || {
             echo "::error::to fix, from the repository root:"
             echo "::error::  grep -rl 'rust-version = ' --include=Cargo.toml . | xargs sed -i 's/rust-version = \".*\"/rust-version = \"$WANT\"/'"
-            echo "::error::then update the READMEs and spec/rust-msrv-n-minus-3/index.md to match"
+            echo "::error::then update the READMEs and spec/rust-msrv-n-minus-2/index.md to match"
             exit 1
           }
           echo "18 manifests and every document declare $WANT"

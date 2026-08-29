@@ -92,10 +92,11 @@ python3 scripts/check-docs.py          # --fix rewrites copies from their owner
 (cd openehr-store && cargo bench -- --test)
 ```
 
-The MSRV is **N−3** — three Rust releases behind stable, currently 1.95 — and
-the `msrv` job re-derives that number rather than trusting a constant, so it
-goes red within six weeks of every Rust release. Fix the number; do not pin the
-toolchain. See [`spec/rust-msrv-n-minus-3/index.md`](spec/rust-msrv-n-minus-3/index.md).
+The MSRV is **N−2** — two Rust releases behind stable, currently 1.96 (raised
+from N−3 on 2026-08-29) — and the `msrv` job re-derives that number rather than
+trusting a constant, so it goes red within six weeks of every Rust release. Fix
+the number; do not pin the toolchain. See
+[`spec/rust-msrv-n-minus-2/index.md`](spec/rust-msrv-n-minus-2/index.md).
 
 Lints are `deny`, not `warn`: `missing_docs`, `missing_errors_doc`,
 `missing_panics_doc`; `unsafe_code` is `forbid`. Clippy runs at `pedantic`. The
@@ -147,7 +148,7 @@ arm64, and the Oracle images need registry authentication. Both crates stay at
 | Job | Covers |
 | --- | --- |
 | `test` | clippy, tests, and docs for each of the ten buildable crates separately — one `--workspace` invocation would silently miss one, since each crate is its own workspace. `openehr-assets` was absent from this list and its nine tests had never run (`spec/audit.md` **W-12**) |
-| `msrv` | derives N−3 from the stable toolchain it just installed, checks every manifest and document declares exactly that, then **builds and tests on it**. See [`spec/rust-msrv-n-minus-3/index.md`](spec/rust-msrv-n-minus-3/index.md); this job is expected to go red within six weeks of every Rust release, and that is the point |
+| `msrv` | derives N−2 from the stable toolchain it just installed, checks every manifest and document declares exactly that, then **builds and tests on it**. See [`spec/rust-msrv-n-minus-2/index.md`](spec/rust-msrv-n-minus-2/index.md); this job is expected to go red within six weeks of every Rust release, and that is the point |
 | `examples` | the five runnable tutorials in `openehr`, plus the persistence tutorial in `openehr-sqlite` |
 | `bench` | `cargo bench -- --test`: every criterion benchmark runs once. Nothing is gated on wall-clock (`W0.35`) — a threshold on a shared runner fails for unrelated reasons and gets silenced |
 | `schema` | `verify-schema.sh` against real PostgreSQL, MySQL, and MariaDB containers |

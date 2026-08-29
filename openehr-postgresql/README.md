@@ -40,7 +40,7 @@ openehr-postgresql = "0.7"
 openehr-store = "0.7"
 ```
 
-Requires Rust 1.95+ (edition 2024).
+Requires Rust 1.96+ (edition 2024).
 
 ## What this crate owns
 

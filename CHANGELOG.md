@@ -5,6 +5,22 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
+## Unreleased
+
+**BREAKING: the MSRV floor moved from N−3 to N−2 — 1.95 to 1.96.** `RV1`
+([`spec/rust-msrv-n-minus-2/index.md`](spec/rust-msrv-n-minus-2/index.md)) now
+tracks stable two minor releases back instead of three; `RV6` requires this to
+be stated here and to not go out as a patch, because raising the floor breaks
+a consumer building below it — Cargo refuses the build with a clear message
+rather than miscompiling, but "your dependency silently stopped supporting
+your toolchain" is a thing a user is entitled to read before it happens.
+
+`rust-version = "1.96"` in all eighteen manifests, the `msrv` CI job's
+derivation changed from `N − 3` to `N − 2`, and every prose statement of the
+floor updated to match — `python3 scripts/check-docs.py` and the `msrv` job's
+own manifest/prose check both pass against the new number. Nothing else about
+the public API changed.
+
 ## 0.7.4 — 2026-08-27
 
 **The notice becomes the Foundation's own prescribed attribution.** openEHR
@@ -235,7 +251,7 @@ never a silent change in behaviour — which is the property that made the
 
 - **MSRV raised from 1.90 to 1.95, and it is now a rule rather than a number:
   N−3, three Rust releases behind stable**
-  ([`spec/rust-msrv-n-minus-3/index.md`](spec/rust-msrv-n-minus-3/index.md)).
+  (`spec/rust-msrv-n-minus-3/index.md` (superseded 2026-08-29 by `spec/rust-msrv-n-minus-2/index.md`)).
 
   Raising a floor is breaking for a user below it (`RV6`), so it is recorded
   here rather than left to be discovered by a build error. Cargo refuses with a

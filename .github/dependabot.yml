@@ -13,7 +13,7 @@
 # repository ran this file with default limits and got 47 PRs in the first
 # hour, many of them major bumps, each triggering full CI — and this
 # repository upgrades deliberately, with verification, under an MSRV floor
-# (spec/rust-msrv-n-minus-3). With the limit at 0 dependabot still watches
+# (spec/rust-msrv-n-minus-2). With the limit at 0 dependabot still watches
 # every lockfile, raises alerts, and opens PRs for SECURITY advisories
 # (automated security fixes are enabled repository-side). Raising a limit is
 # one line here when the posture changes.

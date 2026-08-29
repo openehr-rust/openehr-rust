@@ -61,7 +61,7 @@ NUMBER = r"(?:\d+|" + "|".join(sorted(WORDS.values(), key=len, reverse=True)) + 
 
 # Registers of history. A finding that quotes the count a file *used* to carry
 # is doing its job, and rewriting it would destroy the finding (`W0.6`).
-# The three audit registers and the changelog. `spec/rust-msrv-n-minus-3/index.md` is
+# The three audit registers and the changelog. `spec/rust-msrv-n-minus-2/index.md` is
 # deliberately NOT here: its historical passage quotes a *version*, not a count,
 # so its counts are live claims and are checked like anyone else's.
 HISTORICAL = {

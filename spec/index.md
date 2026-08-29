@@ -71,7 +71,7 @@ right to; the mistake was assuming one flat namespace.
   | Prefix | Document |
   | --- | --- |
   | `W0` | this file |
-  | `RV` | [`rust-msrv-n-minus-3/index.md`](rust-msrv-n-minus-3/index.md) — the Rust MSRV |
+  | `RV` | [`rust-msrv-n-minus-2/index.md`](rust-msrv-n-minus-2/index.md) — the Rust MSRV |
 
 ## Conformance levels
 
@@ -406,11 +406,12 @@ is genuinely worse. The rules below keep the copies and make them mechanical.
 
 ## Toolchain
 
-- **W0.33** *(added 2026-08-20)* The minimum supported Rust version is a
-  repository-wide requirement, not a per-crate one, and is specified in
-  [`rust-msrv-n-minus-3/index.md`](rust-msrv-n-minus-3/index.md): **N−3**, three stable
-  releases behind current, declared identically by all eighteen crates and
-  **compiled** by CI rather than asserted (`RV1`–`RV3`).
+- **W0.33** *(added 2026-08-20, offset raised 2026-08-29)* The minimum
+  supported Rust version is a repository-wide requirement, not a per-crate one,
+  and is specified in
+  [`rust-msrv-n-minus-2/index.md`](rust-msrv-n-minus-2/index.md): **N−2**, two
+  stable releases behind current, declared identically by all eighteen crates
+  and **compiled** by CI rather than asserted (`RV1`–`RV3`).
 
   It is a separate document because it is the one requirement here whose correct
   value changes on a schedule nobody in this repository controls. See
@@ -436,7 +437,7 @@ Someone new to the repository should read, in order:
 4. [`audit.md`](audit.md) — what is known to be wrong today.
 
 Anyone about to build the tree should also read
-[`rust-msrv-n-minus-3/index.md`](rust-msrv-n-minus-3/index.md), which is one page and
+[`rust-msrv-n-minus-2/index.md`](rust-msrv-n-minus-2/index.md), which is one page and
 explains why CI will one day fail on their unrelated pull request.
 
 Contributors should also read [`AGENTS.md`](../AGENTS.md), which is operational

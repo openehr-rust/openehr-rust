@@ -1,69 +1,154 @@
-# Rust MSRV — current N-2
+# Rust minimum supported version: N−2
 
-This workspace's **Minimum Supported Rust Version (MSRV)** is **the current
-stable Rust release minus two**: if the current stable release is `1.N`, the
-MSRV is `1.(N-2)`.
+**Normative.** Requirement prefix: `RV`. RFC 2119 keywords, per
+[`index.md`](../index.md).
 
-This is a project policy that governs the Rust
-toolchain the code in this workspace may assume.
+**The minimum supported Rust version (MSRV) of this repository is N−2**, where N
+is the current stable release. N is **1.98**, so the MSRV is **1.96**.
 
-## The rule
+*(Raised from N−3 to N−2 on 2026-08-29. The identifiers below — `RV1`–`RV8` —
+are unchanged, per `C0.5`: identifiers are permanent, and moving the document
+that owns them is not a reason to renumber. The previous document lived at
+`spec/rust-msrv-n-minus-3/index.md`; it stated N−3, currently 1.95, and every
+citation to it in the tree pointed at that path. This document replaces it in
+full, at a new path, because the whole document's subject — "why N−3" — became
+"why N−2", not a detail inside an otherwise-unchanged page.)*
 
-- Let `1.N.0` be the latest stable Rust release published by the Rust project.
-- The MSRV MUST be `1.(N-2).0`.
-- Code, tests, benchmarks, fuzz targets, and examples MUST compile with the
-  MSRV toolchain. A language or standard-library feature stabilized after the
-  MSRV MUST NOT be used.
-- Only the minor version is pinned. Patch releases of the MSRV minor version
-  (`1.(N-2).x`) are all acceptable; the recorded value uses `.0`.
-- Pre-release channels (beta, nightly) are never the MSRV and MUST NOT be
-  required by any workspace target, including the fuzz targets — see
-  [rust-fuzz.md](../rust-fuzz.md), which keeps the nightly-only fuzz crate outside
-  the workspace precisely so this rule holds.
+This is its own document rather than a section of [`index.md`](../index.md) for the
+reason [`databases/search-adjuncts.md`](../databases/search-adjuncts.md) is: it is
+one decision that several places depend on and no section owns — eighteen
+manifests, nine READMEs, one `agents/` guide, and a CI job. It is also the only
+requirement in this tree whose **correct value changes on a schedule nobody
+here controls**, which is a property worth writing down next to the rule rather
+than discovering later.
 
-## Where the MSRV is recorded
+## Why a formula rather than a number
 
-| Location                             | Form                                                   |
-| ------------------------------------ | ------------------------------------------------------ |
-| `Cargo.toml` (`[workspace.package]`) | `rust-version = "1.(N-2)"`                             |
-| each `crates/*/Cargo.toml`           | `rust-version.workspace = true`                        |
-| `.github/workflows/ci.yml`           | an `msrv` job pinning `dtolnay/rust-toolchain@1.(N-2)` |
+A number is what every other repository writes, and it is what this one wrote
+before either MSRV document existed: `rust-version = "1.90"`, in seventeen
+manifests, dated by nothing. Two things were wrong with it, and they are the
+two failure modes this whole specification tree is about.
 
-`rust-version` is the single source of truth inside the workspace: `cargo`
-refuses to build a crate with a toolchain older than it, and downstream
-consumers see it in the published crate metadata. Every member crate inherits
-it from `[workspace.package]`; a member MUST NOT declare its own value.
+**It was not checked, and it was false.** No job ever built this repository on
+1.90. Run by hand — `cargo +1.90 check --all-targets --all-features`, per crate,
+which is the whole method — six crates passed and **`openehr-loco` failed**: its
+own framework, `loco-rs` 1.0.1, requires 1.94. "Requires Rust 1.90+" had been
+wrong for that crate since the day it was written, and nothing in the repository
+could tell. That is `W0.3` exactly, and the six that did build were luck rather
+than verification. See [`audit.md`](../audit.md) **W-09**.
 
-## Maintenance
+**It had no rule behind it, so it could not be wrong.** 1.90 was committed on
+2026-08-01 (`9a7ecf6`), when stable was 1.97 — the number was seven releases old
+on the day it arrived, and eight by the time anyone looked at it. Nothing could
+report that, because there was nothing to report it against: a bare number is
+consistent with itself no matter what it says. A formula has the opposite
+property. It is re-derived from the outside world on every CI run, so it is
+either right or loudly wrong, and never quietly either.
 
-When a new stable Rust release `1.N` appears, the MSRV becomes `1.(N-2)`
-**in the same change** that observes the release:
+## Why N−2 rather than N−3
 
-1. Set `rust-version` in the root `Cargo.toml` to `1.(N-2)`.
-2. Set the pinned toolchain in the CI `msrv` job to the same value.
-3. Run `cargo +1.(N-2) check --all-targets --workspace` and fix anything that
-   the older toolchain rejects — the MSRV is a floor the code must meet, not a
-   ceiling on what the code may need.
+The formula's correctness does not depend on which offset it uses; N−3 held
+from this document's first version until 2026-08-29, when the offset itself —
+not the mechanism — changed by request. The trade-off is real and is stated
+rather than smoothed over: N−2 tracks stable more closely, at the cost of a
+narrower window for a consumer who upgrades their own toolchain infrequently.
+`RV1` below states exactly how much narrower.
 
-Raising the MSRV is therefore routine and expected, not a breaking change to
-be avoided. Lowering it below N-2 (to support an older consumer) is a design
-decision for `plan.md`, not a convenience.
+## The policy
 
-## CI enforcement
+- **RV1** The MSRV of every crate in this repository is **N−2**, where **N** is
+  the current stable release of Rust and N−2 is two *minor* releases earlier.
 
-CI MUST verify the MSRV, not merely declare it. The `msrv` job installs the
-exact pinned toolchain and runs `cargo check --all-targets --workspace` with
-it. `cargo check` (not `cargo build`) is sufficient and fast: the MSRV question
-is "does this compile", and the `test` job already answers "does this work" on
-stable.
+  Rust ships stable every six weeks, so N−2 is a twelve-week window — six weeks
+  narrower than N−3's eighteen. A user who upgrades their toolchain at least
+  once a quarter was always covered under N−3; under N−2 a quarter (roughly
+  thirteen weeks) can occasionally run one week past the window, depending on
+  release timing. That is the accepted cost of tracking stable more closely,
+  not an oversight.
 
-The `msrv` job is separate from the `test` job so a failure names the cause
-directly: `test` red means a behavior regression, `msrv` red means the code
-started requiring a newer toolchain than the policy allows.
+- **RV2** Every crate MUST declare that version as `rust-version` in its
+  `Cargo.toml`, and all eighteen MUST declare the **same** value. A per-crate
+  MSRV would mean the repository has no MSRV: a user building `openehr-sqlite`
+  gets `openehr` and `openehr-store` too, so the effective floor is the highest
+  of the three whatever the manifests say. One number, or none.
 
-## Current value
+- **RV3** The declared MSRV MUST be **built and tested on that exact toolchain in
+  CI**, not merely declared. An MSRV nothing compiles against is a claim, and a
+  claim about a toolchain is worth precisely what it is worth about a database
+  server (`W0.11`): a crate is at Verified only once CI has run green, and an
+  MSRV is true only once a compiler of that version has agreed.
 
-As of the most recent update to this document, stable Rust is **1.98**, so the
-MSRV is **1.96**. If stable has moved on since, this document is stale in its
-example only — the rule above is what binds, and `Cargo.toml` must be brought
-back in line with it.
+  The `msrv` job in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
+  derives N from the stable toolchain it just installed, computes N−2, installs
+  *that*, and runs `cargo test` for every crate under it.
+
+- **RV4** Every prose statement of the MSRV MUST name the same number as the
+  manifests. The grep-able form is:
+
+  ```
+  Requires Rust <version>+ (edition 2024).
+  ```
+
+  and the same job checks the manifests and the prose together. Nine READMEs and
+  [`agents/adding-an-engine.md`](../../agents/adding-an-engine.md) carry it. A
+  README that names a floor the manifest does not is the `W0.2` failure — a
+  descriptive file disagreeing with the thing it describes — and here it is
+  mechanically preventable, so it MUST be prevented mechanically.
+
+- **RV5** **The number is expected to go stale, and CI is expected to say so.**
+  Within six weeks of every Rust release this repository will fail its `msrv`
+  job on a commit that changed nothing about Rust versions.
+
+  That is the cost, it is deliberate, and the alternative is worse. A floor that
+  only moves when somebody remembers is the 1.90 situation again, and the whole
+  point of `RV1` is that nobody has to remember. The failure is cheap: one
+  number, in eighteen manifests and ten documents, changed by the command the
+  job's own error message prints.
+
+  A red `msrv` job MUST NOT be worked around by pinning the toolchain, by
+  loosening the check to a lower bound, or by marking the job
+  `continue-on-error`. Each of those converts a check into a decoration, which
+  is the defect class in [`audit.md`](../audit.md) that this repository has
+  committed most often.
+
+- **RV6** Raising the floor is a **breaking change for a user below it**, so a
+  release whose MSRV moved MUST say so in its changelog entry, and MUST NOT be
+  published as a patch bump. Cargo will refuse the build with a clear message
+  rather than miscompile, so the damage is bounded — but "your dependency
+  silently stopped supporting your toolchain" is still a thing a user is
+  entitled to read before it happens (`agents/publishing.md`). The move from
+  N−3 to N−2 on 2026-08-29 is itself such a change, recorded in
+  [`CHANGELOG.md`](../../CHANGELOG.md).
+
+- **RV7** A dependency MUST NOT be added whose own MSRV is newer than N−2.
+  Its floor becomes this repository's floor regardless of what these manifests
+  declare, and the `msrv` job is what discovers it — at which point the choice
+  is to drop the dependency or to raise `RV1`, and `RV1` is not raised for the
+  convenience of one dependency.
+
+- **RV8** The edition is **2024** and is independent of `RV1`. Edition 2024
+  requires 1.85; N−2 has been above that since 1.87 and this policy keeps it
+  above. Should Rust ever ship an edition this repository wants before N−2
+  supports it, the edition waits — `RV1` governs.
+
+## What this does not cover
+
+Stated so that "not examined" and "examined and sound" stay distinguishable
+(`W0.3`):
+
+- **The eight fuzz crates are not built by the `msrv` job.** `cargo fuzz`
+  requires a nightly toolchain, so their `rust-version` is declared for
+  consistency with `RV2` and is not evidence of anything. Their real floor is
+  whatever nightly `cargo-fuzz` needs, which no job here pins.
+
+- **N−2 is verified; nothing between N−2 and N is.** The job builds exactly two
+  toolchains, stable and N−2. A break that appears only on 1.97 would reach a
+  user before it reached CI. This is judged an acceptable gap — the compiler is
+  not that discontinuous — rather than an unnoticed one. It is a narrower gap
+  than N−3's, by exactly the one release the offset moved.
+
+- **The MSRV is verified by compiling, not by the resolver.** `cargo test`
+  under N−2 uses the committed `Cargo.lock`, so it proves this dependency graph
+  builds on N−2, not that a fresh `cargo update` would. `RV7` is the rule;
+  `-Z minimal-versions` and `cargo-msrv` are the tools that would check it, and
+  neither is run here.

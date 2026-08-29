@@ -2,10 +2,10 @@
 
 ## Requirements
 
-- **Requires Rust 1.95+ (edition 2024).** The minimum supported version is a
-  formula, not a number — N−3, where N is current stable — and it moves on the
+- **Requires Rust 1.96+ (edition 2024).** The minimum supported version is a
+  formula, not a number — N−2, where N is current stable — and it moves on the
   Rust release schedule rather than on this project's
-  ([`spec/rust-msrv-n-minus-3/index.md`](spec/rust-msrv-n-minus-3/index.md)).
+  ([`spec/rust-msrv-n-minus-2/index.md`](spec/rust-msrv-n-minus-2/index.md)).
 - **Nothing else** for the library and the SQLite store. `openehr-sqlite`
   bundles its own SQLite through `rusqlite`'s `bundled` feature rather than
   linking whatever the host ships, because the emitted DDL and the JSON1

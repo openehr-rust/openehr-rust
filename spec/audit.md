@@ -143,7 +143,7 @@ exists. It runs, on every push and pull request:
 | Job | Covers |
 | --- | --- |
 | `test` | `clippy --all-targets`, `test`, and `doc` for each of the ten buildable crates separately, because each is its own workspace and a single `--workspace` invocation would silently cover one of them |
-| `msrv` | that the MSRV is N−3, declared identically everywhere, and **builds** — see [`rust-msrv-n-minus-3/index.md`](rust-msrv-n-minus-3/index.md) and **W-09** |
+| `msrv` | that the MSRV is N−2, declared identically everywhere, and **builds** — see [`rust-msrv-n-minus-2/index.md`](rust-msrv-n-minus-2/index.md) and **W-09** (fixed when the floor was N−3; the offset since raised to N−2, `RV1`) |
 | `examples` | the five runnable tutorials the README points at, plus `openehr-sqlite`'s persistence tutorial |
 | `bench` | every criterion benchmark runs once (`--test`); nothing is gated on wall-clock (`W0.35`, `W0.36`) |
 | `schema` | `verify-schema.sh` against real PostgreSQL 18, MySQL 8.4, and MariaDB 11.4 containers |
@@ -421,7 +421,7 @@ assertion with no check behind it, reporting the same green as a verified one.
 next one just as unchecked:
 
 1. **A rule instead of a number.**
-   [`rust-msrv-n-minus-3/index.md`](rust-msrv-n-minus-3/index.md) sets the MSRV at **N−3** —
+   `rust-msrv-n-minus-3/index.md` (superseded 2026-08-29 by `rust-msrv-n-minus-2/index.md`) sets the MSRV at **N−3** —
    three Rust releases behind stable, an eighteen-week window. A number is
    consistent with itself no matter what it says; a formula is re-derived from
    the outside world and is either right or loudly wrong.

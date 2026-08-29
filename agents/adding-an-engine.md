@@ -45,9 +45,9 @@ which will drift. As of this writing that is `0.3.0`, published 2026-08-04
 (`agents/publishing.md`); a new crate's own version starts wherever the others
 are, not at `0.1.x`.
 
-The same applies to `rust-version`, which is **N−3** and changes on Rust's
+The same applies to `rust-version`, which is **N−2** and changes on Rust's
 release schedule rather than on anything that happens here
-([`spec/rust-msrv-n-minus-3/index.md`](../spec/rust-msrv-n-minus-3/index.md)). Read it from
+([`spec/rust-msrv-n-minus-2/index.md`](../spec/rust-msrv-n-minus-2/index.md)). Read it from
 a sibling too; the `msrv` job checks that every manifest agrees.
 
 ```toml
@@ -57,7 +57,7 @@ a sibling too; the `msrv` job checks that every manifest agrees.
 name = "openehr-<engine>"
 version = "0.3.0"
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.96"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
 description = "openEHR persistence for <Engine>: schema dialect and DDL"
 keywords = ["openehr", "ehr", "<engine>", "healthcare", "sql"]

@@ -9,7 +9,7 @@ below was checked on that date, and each carries its source at the foot of the
 document. Other people's conferences, editors, and forum categories change
 without telling us, so **re-check before acting** — a promotion plan is the one
 kind of document here whose facts rot on someone else's schedule, which is the
-same property [`rust-msrv-n-minus-3/index.md`](../../spec/rust-msrv-n-minus-3/index.md)
+same property [`rust-msrv-n-minus-2/index.md`](../../spec/rust-msrv-n-minus-2/index.md)
 writes down about the MSRV.
 
 ## 1. The one rule that governs every word of the copy

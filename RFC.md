@@ -99,8 +99,9 @@ object model; 28 requirements have no code (`lib:A-40`).
 Not features — assurances. Signed commits and releases (there are none), an
 SBOM (there is none), a
 second maintainer, a licence answer for your legal team, an MSRV that is not
-N−3. (GitHub private vulnerability reporting, listed here as disabled when
-this file was written, was enabled 2026-08-26.) [`SECURITY.md`](SECURITY.md) now states the disclosure window and lists
+N−2. (GitHub private vulnerability reporting, listed here as disabled when
+this file was written, was enabled 2026-08-26; the MSRV moved from N−3 to N−2
+on 2026-08-29.) [`SECURITY.md`](SECURITY.md) now states the disclosure window and lists
 this project's own gaps.
 **Which of those is the blocker, and which is a nice-to-have?** The answers
 determine what gets built next as much as any feature request.

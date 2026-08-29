@@ -195,10 +195,11 @@ warnings — keep it there.**
   `openehr` and `openehr-store`; CI runs them with `--test`, one iteration, and
   asserts nothing about wall-clock. Do not add a timing threshold — on a shared
   runner it fails for unrelated reasons and gets silenced.
-- **The MSRV is a formula, not a number** (`RV1`): N−3, currently 1.95. The
-  `msrv` job re-derives it from the stable toolchain, so it goes red within six
-  weeks of every Rust release. That is deliberate; fix the number, do not pin
-  the toolchain ([`spec/rust-msrv-n-minus-3/index.md`](spec/rust-msrv-n-minus-3/index.md)).
+- **The MSRV is a formula, not a number** (`RV1`): N−2, currently 1.96 (raised
+  from N−3 on 2026-08-29). The `msrv` job re-derives it from the stable
+  toolchain, so it goes red within six weeks of every Rust release. That is
+  deliberate; fix the number, do not pin the toolchain
+  ([`spec/rust-msrv-n-minus-2/index.md`](spec/rust-msrv-n-minus-2/index.md)).
 - **No `DV_ORDERED` implements `PartialOrd`, and neither does `DataValue`**
   (`lib:D3.18b`). `a < b` and `a.partial_cmp(&b)` do not compile on `DvQuantity`,
   `DvDateTime`, `DvCount`, … — call `DvOrdered::semantic_cmp`, which needs the

@@ -27,7 +27,7 @@ openehr = "0.7"
 openehr = "0.7"
 ```
 
-Requires Rust 1.95+ (edition 2024).
+Requires Rust 1.96+ (edition 2024).
 
 ## What it does
 
@@ -224,10 +224,10 @@ cargo clippy --all-targets      # pedantic, with missing_docs/errors/panics deni
 cargo fmt --all -- --check
 ```
 
-MSRV is **N−3** — three Rust releases behind stable, currently **1.95** — and is
+MSRV is **N−2** — two Rust releases behind stable, currently **1.96** — and is
 `rust-version` in every `Cargo.toml`. Rust edition 2024. The policy, and the CI
 job that re-derives the number rather than trusting it, are in
-[`spec/rust-msrv-n-minus-3/index.md`](../spec/rust-msrv-n-minus-3/index.md).
+[`spec/rust-msrv-n-minus-2/index.md`](../spec/rust-msrv-n-minus-2/index.md).
 
 ## Benchmarks
 

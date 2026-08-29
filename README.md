@@ -80,7 +80,7 @@ openehr-store = "0.7"
 openehr-sqlite = "0.7"
 ```
 
-Requires Rust 1.95+ (edition 2024). There are no Cargo features to choose, and
+Requires Rust 1.96+ (edition 2024). There are no Cargo features to choose, and
 the eight published crates are versioned in lockstep — take the same minor
 version of each. Fuller instructions, including building from source and
 verifying a dialect against a real engine: [`INSTALL.md`](INSTALL.md).
@@ -565,7 +565,7 @@ Recorded rather than implied — see [`spec/audit.md`](spec/audit.md):
 - **AQL cannot parse a negative number** (`lib:A-27`). `WHERE … > -2.5` is
   refused at the lexer, because `-` also separates the parts of an archetype id.
   Declared as `lib:Q12.9b` and open.
-- **Only N−3 and current stable are compiled** (`RV3`). A break appearing only
+- **Only N−2 and current stable are compiled** (`RV3`). A break appearing only
   on an intermediate Rust release reaches a user before it reaches CI.
 
 ## Repository layout
@@ -637,10 +637,10 @@ The tree is at zero clippy warnings under `pedantic`, with `missing_docs`,
 `missing_errors_doc`, and `missing_panics_doc` at `deny` and `unsafe_code` at
 `forbid`. Please keep it there.
 
-The MSRV is **N−3** — three Rust releases behind stable, currently 1.95 — and CI
+The MSRV is **N−2** — two Rust releases behind stable, currently 1.96 — and CI
 re-derives that number from the toolchain rather than trusting a constant, so it
 will fail on a stale one within six weeks of every Rust release. That is
-deliberate; see [`spec/rust-msrv-n-minus-3/index.md`](spec/rust-msrv-n-minus-3/index.md).
+deliberate; see [`spec/rust-msrv-n-minus-2/index.md`](spec/rust-msrv-n-minus-2/index.md).
 
 ## Licence
 

@@ -16,7 +16,7 @@ openehr-store = "0.7"
 openehr = "0.7"
 ```
 
-Requires Rust 1.95+ (edition 2024). SQLite itself is compiled in — no system
+Requires Rust 1.96+ (edition 2024). SQLite itself is compiled in — no system
 library is needed, and none is used.
 
 ## Conformance level: Verified
