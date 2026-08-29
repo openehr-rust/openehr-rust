@@ -11,6 +11,7 @@
   },
   "type": "module",
   "private": "true",
+  "packageManager": "pnpm@11.0.8",
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.70.2",
@@ -21,5 +22,10 @@
   "dependencies": {
     "github-slugger": "^2.0.0",
     "marked": "^18.0.10"
+  },
+  "pnpm": {
+    "overrides": {
+      "cookie": ">=0.7.0"
+    }
   }
 }

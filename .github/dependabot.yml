@@ -14,13 +14,32 @@
 # hour, many of them major bumps, each triggering full CI — and this
 # repository upgrades deliberately, with verification, under an MSRV floor
 # (spec/rust-msrv-n-minus-2). With the limit at 0 dependabot still watches
-# every lockfile, raises alerts, and opens PRs for SECURITY advisories
-# (automated security fixes are enabled repository-side). Raising a limit is
+# every lockfile and raises alerts. It does NOT stop a security-update PR --
+# that mechanism is separate from `open-pull-requests-limit`, which governs
+# only routine version-update PRs, and it is what actually went red on
+# 2026-08-29: an automated cookie fix that could not be applied without
+# downgrading `@sveltejs/adapter-static` by three major versions. The real
+# fix there was resolving the advisory directly (`pnpm.overrides` in
+# `openehr-rust.github.io/pnpm-workspace.yaml`), not this file -- there is no
+# setting here that silences a security PR Dependabot cannot resolve; the
+# vulnerability has to actually be gone. Raising the routine-update limit is
 # one line here when the posture changes.
+#
+# The npm entry below was previously absent -- Dependabot found and scanned
+# `openehr-rust.github.io` anyway, because security updates apply regardless
+# of whether an ecosystem is registered here. Registering it makes the
+# routine-update posture explicit and consistent with every cargo entry,
+# rather than left to Dependabot's own default (unlimited).
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
+    schedule:
+      interval: weekly
+      day: monday
+  - package-ecosystem: npm
+    directory: /openehr-rust.github.io
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
       day: monday
