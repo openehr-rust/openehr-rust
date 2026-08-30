@@ -7,7 +7,8 @@ Read [`AGENTS.md`](AGENTS.md) for the full operational guide and
 plus the things that specifically trip up automated work here.
 [`openehr-rust-maintainer-skill/SKILL.md`](openehr-rust-maintainer-skill/SKILL.md)
 is the same guidance, condensed into a Claude Code Skill, for a session that
-has not loaded this file.
+has not loaded this file. [`openehr-skill/SKILL.md`](openehr-skill/SKILL.md)
+is a different skill: openEHR concepts, not this repository's conventions.
 
 **Not normative.** The specifications decide what must be true (`W0.2`):
 [`spec/index.md`](spec/index.md), [`spec/databases/`](spec/databases/index.md),

@@ -128,3 +128,6 @@ returns a plausible default.
 - [`openehr/spec/index.md`](../openehr/spec/index.md) — what this implementation
   decided, where openEHR left it open.
 - `openehr/examples/` — five runnable tutorials.
+- [`../openehr-skill/SKILL.md`](../openehr-skill/SKILL.md) — the same
+  vocabulary as a Claude Code Skill, for a reader without a FHIR background
+  to map from.

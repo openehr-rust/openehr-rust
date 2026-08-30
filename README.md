@@ -572,6 +572,7 @@ spec/                      repository specification + audit register
   databases/               persistence specification (db:)
 AGENTS.md, agents/         contributor and agent guides
 CLAUDE.md                  guidance for Claude Code
+openehr-skill/             openEHR concepts and terminology, as a Claude Code Skill
 openehr-rust-maintainer-skill/  AGENTS.md/CLAUDE.md, condensed into a Claude Code Skill
 openehr/                   the Reference Model library
   spec/                    library specification, audit, conformance matrix
@@ -625,6 +626,9 @@ is the same operating guide condensed to a [Claude Code
 Skill](https://docs.claude.com/en/docs/claude-code/skills) — the layout, the
 five rules, and the traps that have already bitten someone here — for a
 session or tool that has not loaded `CLAUDE.md`/`AGENTS.md`.
+[`openehr-skill/SKILL.md`](openehr-skill/SKILL.md) is a different skill for a
+different audience: openEHR concepts and vocabulary for someone *using* this
+library, not building it.
 
 ```sh
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \

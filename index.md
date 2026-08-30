@@ -19,6 +19,7 @@ specification and says which one governs which code.
 | --- | --- |
 | [openehr-rust.github.io](https://openehr-rust.github.io) | the project's landing page |
 | [README](README.md) | what this is, in five minutes |
+| [openehr-skill/SKILL.md](openehr-skill/SKILL.md) | openEHR concepts and vocabulary, as a Claude Code Skill |
 | [Conformance matrix — library](openehr/spec/conformance-matrix.md) | what the Reference Model crate actually satisfies today |
 | [Conformance matrix — databases](spec/databases/conformance-matrix.md) | per-engine status; the only document that distinguishes the six |
 | [PHI.md](PHI.md) | what the software does with patient data, in plain language, for a privacy or security review |

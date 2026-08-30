@@ -15,6 +15,8 @@ Detailed topic guides live in [`agents/`](agents/index.md). The same
 orientation, condensed, ships as a Claude Code Skill at
 [`openehr-rust-maintainer-skill/SKILL.md`](openehr-rust-maintainer-skill/SKILL.md),
 for a session or tool that has not loaded this file.
+[`openehr-skill/SKILL.md`](openehr-skill/SKILL.md) is a different skill, for
+openEHR concepts rather than this repository's own conventions.
 
 ## What this repository is
 

@@ -75,7 +75,9 @@ python3 scripts/check-docs.py          # counts, versions, levels, shared blocks
 machine contributors alike; [`agents/`](agents/index.md) holds the topic guides —
 adding an engine, conformance, publishing, openEHR concepts, auditing.
 [`openehr-rust-maintainer-skill/SKILL.md`](openehr-rust-maintainer-skill/SKILL.md)
-packages the same guide as a Claude Code Skill.
+packages the same guide as a Claude Code Skill; the separate
+[`openehr-skill/SKILL.md`](openehr-skill/SKILL.md) covers openEHR concepts
+rather than this repository's conventions.
 
 **Cite requirement ids** in code comments, commit messages, and test names, and
 qualify them `lib:` or `db:` where the domain is not obvious (`W0.5`) — the two
