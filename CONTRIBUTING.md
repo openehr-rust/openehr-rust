@@ -69,6 +69,7 @@ for d in openehr openehr-store openehr-sqlite openehr-postgresql \
 done
 python3 scripts/check-docs.py          # counts, versions, levels, shared blocks
 (cd openehr-assets && cargo run -- check)   # the committed DDL and coverage assets
+python3 scripts/generate-llms-files.py # llms.txt / llms.json, current with the tree
 ```
 
 [`AGENTS.md`](AGENTS.md) is the full operational guide and applies to human and

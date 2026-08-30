@@ -1,0 +1,235 @@
+{
+  "name": "openehr-rust",
+  "repository": "https://github.com/openehr-rust/openehr-rust/",
+  "homepage": "https://openehr-rust.github.io",
+  "summary": "openEHR® in Rust: the Reference Model, and persistence for six SQL engines, specification-driven and with an audited claims register.",
+  "trademark_notice": "openEHR® is the registered trademark of the openEHR Foundation and is used with the permission of openEHR International. Use of the trademark does not constitute endorsement of this product by openEHR International or openEHR Foundation.",
+  "independence": "This project is not affiliated with, endorsed by, or certified by openEHR International or the openEHR Foundation.",
+  "sections": [
+    {
+      "title": "Docs",
+      "links": [
+        {
+          "title": "README",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/README.md",
+          "description": "what this is, the crates, install, and six runnable tutorials"
+        },
+        {
+          "title": "Documentation index",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/index.md",
+          "description": "every entry point in the repository, routed by what you are doing"
+        },
+        {
+          "title": "PHI.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/PHI.md",
+          "description": "what the software does with patient data, in plain language, for a privacy or clinical-safety reader"
+        },
+        {
+          "title": "INSTALL.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/INSTALL.md",
+          "description": "installing and building from source"
+        },
+        {
+          "title": "COMPARISONS.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/COMPARISONS.md",
+          "description": "how this differs from EHRbase, FerroEHR, Archie, and the commercial platforms"
+        },
+        {
+          "title": "SECURITY.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/SECURITY.md",
+          "description": "reporting a vulnerability, and this project's own posture gaps"
+        }
+      ]
+    },
+    {
+      "title": "Specification",
+      "links": [
+        {
+          "title": "Specification root",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/spec/index.md",
+          "description": "crate map, identifier namespaces, the conformance ladder"
+        },
+        {
+          "title": "Library specification",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr/spec/index.md",
+          "description": "the Reference Model, `lib:` requirement ids, sections 0-15"
+        },
+        {
+          "title": "Database specification",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/spec/databases/index.md",
+          "description": "persistence, `db:` requirement ids, sections 0-16"
+        },
+        {
+          "title": "Conformance matrix - library",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr/spec/conformance-matrix.md",
+          "description": "what the Reference Model crate actually satisfies today"
+        },
+        {
+          "title": "Conformance matrix - databases",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/spec/databases/conformance-matrix.md",
+          "description": "per-engine status; the single owner of every crate's conformance level"
+        },
+        {
+          "title": "Library audit register",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr/spec/audit.md",
+          "description": "what has been found wrong in the Reference Model crate, with evidence"
+        },
+        {
+          "title": "Database audit register",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/spec/databases/audit.md",
+          "description": "what has been found wrong in persistence, with evidence"
+        }
+      ]
+    },
+    {
+      "title": "Crates",
+      "links": [
+        {
+          "title": "openehr",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr",
+          "description": "openEHR® Reference Model types, validation, paths, AQL parsing, and change-control security primitives"
+        },
+        {
+          "title": "openehr-mariadb",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr-mariadb",
+          "description": "openEHR® persistence for MariaDB: schema dialect and DDL"
+        },
+        {
+          "title": "openehr-mssql",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr-mssql",
+          "description": "openEHR® persistence for Microsoft SQL Server: schema dialect and DDL"
+        },
+        {
+          "title": "openehr-mysql",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr-mysql",
+          "description": "openEHR® persistence for MySQL: schema dialect and DDL"
+        },
+        {
+          "title": "openehr-oracle",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr-oracle",
+          "description": "openEHR® persistence for Oracle Database: schema dialect and DDL"
+        },
+        {
+          "title": "openehr-postgresql",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr-postgresql",
+          "description": "openEHR® persistence for PostgreSQL: schema dialect and DDL"
+        },
+        {
+          "title": "openehr-sqlite",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr-sqlite",
+          "description": "openEHR® persistence for SQLite: schema dialect and a complete embedded store"
+        },
+        {
+          "title": "openehr-store",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr-store",
+          "description": "openEHR® store persistence in agnostic way: storage model, SQL dialect trait, commit semantics, and a conformance suite"
+        }
+      ]
+    },
+    {
+      "title": "Examples",
+      "links": [
+        {
+          "title": "Reference Model tutorials",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr/examples/",
+          "description": "five runnable examples: build, validate, paths and AQL, versioning, redaction"
+        },
+        {
+          "title": "Persistence tutorial",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr-sqlite/examples/01_store_a_record.rs",
+          "description": "store and read a record end to end - in `openehr-sqlite`, the only crate with a working `Store`"
+        }
+      ]
+    },
+    {
+      "title": "Contributing",
+      "links": [
+        {
+          "title": "AGENTS.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/AGENTS.md",
+          "description": "how to work here - the operational guide"
+        },
+        {
+          "title": "Topic guides",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/agents/index.md",
+          "description": "engines, auditing, conformance, publishing, openEHR concepts"
+        },
+        {
+          "title": "openehr-skill",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr-skill/SKILL.md",
+          "description": "openEHR concepts and vocabulary, as a Claude Code Skill"
+        },
+        {
+          "title": "openehr-rust-maintainer-skill",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr-rust-maintainer-skill/SKILL.md",
+          "description": "this repository's own engineering conventions, as a Claude Code Skill"
+        },
+        {
+          "title": "CONTRIBUTING.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/CONTRIBUTING.md",
+          "description": "ways to help, and the claims rule"
+        },
+        {
+          "title": "CODE_OF_CONDUCT.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/CODE_OF_CONDUCT.md",
+          "description": "conduct, including the claim-accuracy clause"
+        }
+      ]
+    },
+    {
+      "title": "Optional",
+      "links": [
+        {
+          "title": "GOVERNANCE.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/GOVERNANCE.md",
+          "description": "who decides, on what basis"
+        },
+        {
+          "title": "MAINTAINERS.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/MAINTAINERS.md",
+          "description": "one maintainer, stated plainly"
+        },
+        {
+          "title": "CHANGELOG.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/CHANGELOG.md",
+          "description": "what changed in each release, and why it was that version number"
+        },
+        {
+          "title": "NEWS.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/NEWS.md",
+          "description": "the short form of the changelog, and what is coming"
+        },
+        {
+          "title": "TRADEMARKS.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/TRADEMARKS.md",
+          "description": "the openEHR mark, what is and is not claimed"
+        },
+        {
+          "title": "LICENSE.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/LICENSE.md",
+          "description": "five licences, your choice of any one"
+        },
+        {
+          "title": "BENCHMARKS.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/BENCHMARKS.md",
+          "description": "what is measured, and why nothing here is gated on timing"
+        },
+        {
+          "title": "AI_STATEMENT.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/AI_STATEMENT.md",
+          "description": "how this code was written, and what that does and does not prove"
+        },
+        {
+          "title": "RFC.md",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/RFC.md",
+          "description": "what this project does not know, and the feedback that would change it"
+        },
+        {
+          "title": "openehr-rust.github.io",
+          "url": "https://openehr-rust.github.io",
+          "description": "the project's landing page"
+        }
+      ]
+    }
+  ]
+}

@@ -109,6 +109,13 @@ listing remains optional.) This paragraph is the registration.
   scope — they use the mark in nearly every file, a notice per specification
   section would drown the text it annotates, and the root documents those
   trees are reached from carry it.
+  **Scope extended 2026-08-30:** `llms.txt` (`spec/llms-json-and-llms-txt/`) is
+  root-level like the other `*.md` files this rule covers, but its `.txt`
+  extension does not match the checker's glob, and it is written *for* AI
+  tools to read directly — exactly the audience the notice exists to reach.
+  Added to the scan explicitly rather than left as a silent gap. `llms.json`'s
+  `trademark_notice` field is checked separately, the same way `Cargo.toml`'s
+  `description` is, since it is structured data rather than prose.
 - **Rule 6: met.** `PHI.md` at the root (commit `ba8b199`), citing the
   security specification and both compliance mappings, claiming no
   compliance or certification.

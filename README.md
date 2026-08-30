@@ -570,6 +570,7 @@ Recorded rather than implied — see [`spec/audit.md`](spec/audit.md):
 ```
 spec/                      repository specification + audit register
   databases/               persistence specification (db:)
+llms.txt, llms.json        curated map of this repository, for AI tools; generated
 AGENTS.md, agents/         contributor and agent guides
 CLAUDE.md                  guidance for Claude Code
 openehr-skill/             openEHR concepts and terminology, as a Claude Code Skill
@@ -613,6 +614,7 @@ eight fuzz harnesses — are not.
 | [`CITATION.cff`](CITATION.cff) | how to cite this work |
 | [`LICENSE.md`](LICENSE.md) | five licences, your choice of any one |
 | [`help/outreach/index.md`](help/outreach/index.md) | where this project is being taken to its professional audience |
+| [`llms.txt`](llms.txt) / [`llms.json`](llms.json) | a curated map of this repository's most important content, for an AI tool to read instead of crawling everything ([llmstxt.org](https://llmstxt.org/)) |
 
 ## Contributing
 

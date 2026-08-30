@@ -27,6 +27,7 @@ specification and says which one governs which code.
 | [BENCHMARKS.md](BENCHMARKS.md) | what is measured, and what a number here does not claim |
 | [INSTALL.md](INSTALL.md) | installing and first use |
 | [The audit registers](spec/audit.md) | what has been found wrong, with evidence — also [library](openehr/spec/audit.md) and [databases](spec/databases/audit.md) |
+| [llms.txt](llms.txt) / [llms.json](llms.json) | a curated map of this repository for an AI tool, generated so the two cannot drift apart |
 
 ### Building something
 

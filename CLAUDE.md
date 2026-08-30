@@ -79,6 +79,9 @@ done
 # the documentation's counts, versions, levels, and shared blocks
 python3 scripts/check-docs.py               # or: --fix
 
+# llms.txt / llms.json, regenerated from one curated list so the two cannot drift
+python3 scripts/generate-llms-files.py      # or: --write
+
 # benchmarks (criterion). `--test` is the one-iteration form CI runs.
 (cd openehr && cargo bench)
 (cd openehr-store && cargo bench -- --test)

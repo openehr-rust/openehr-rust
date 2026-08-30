@@ -1,0 +1,64 @@
+# openehr-rust
+
+> openEHR® in Rust: the Reference Model, and persistence for six SQL engines, specification-driven and with an audited claims register.
+
+openEHR® is the registered trademark of the openEHR Foundation and is used with the permission of openEHR International. Use of the trademark does not constitute endorsement of this product by openEHR International or openEHR Foundation.
+
+This project is not affiliated with, endorsed by, or certified by openEHR International or the openEHR Foundation.
+
+## Docs
+
+- [README](https://github.com/openehr-rust/openehr-rust/blob/main/README.md): what this is, the crates, install, and six runnable tutorials
+- [Documentation index](https://github.com/openehr-rust/openehr-rust/blob/main/index.md): every entry point in the repository, routed by what you are doing
+- [PHI.md](https://github.com/openehr-rust/openehr-rust/blob/main/PHI.md): what the software does with patient data, in plain language, for a privacy or clinical-safety reader
+- [INSTALL.md](https://github.com/openehr-rust/openehr-rust/blob/main/INSTALL.md): installing and building from source
+- [COMPARISONS.md](https://github.com/openehr-rust/openehr-rust/blob/main/COMPARISONS.md): how this differs from EHRbase, FerroEHR, Archie, and the commercial platforms
+- [SECURITY.md](https://github.com/openehr-rust/openehr-rust/blob/main/SECURITY.md): reporting a vulnerability, and this project's own posture gaps
+
+## Specification
+
+- [Specification root](https://github.com/openehr-rust/openehr-rust/blob/main/spec/index.md): crate map, identifier namespaces, the conformance ladder
+- [Library specification](https://github.com/openehr-rust/openehr-rust/blob/main/openehr/spec/index.md): the Reference Model, `lib:` requirement ids, sections 0-15
+- [Database specification](https://github.com/openehr-rust/openehr-rust/blob/main/spec/databases/index.md): persistence, `db:` requirement ids, sections 0-16
+- [Conformance matrix - library](https://github.com/openehr-rust/openehr-rust/blob/main/openehr/spec/conformance-matrix.md): what the Reference Model crate actually satisfies today
+- [Conformance matrix - databases](https://github.com/openehr-rust/openehr-rust/blob/main/spec/databases/conformance-matrix.md): per-engine status; the single owner of every crate's conformance level
+- [Library audit register](https://github.com/openehr-rust/openehr-rust/blob/main/openehr/spec/audit.md): what has been found wrong in the Reference Model crate, with evidence
+- [Database audit register](https://github.com/openehr-rust/openehr-rust/blob/main/spec/databases/audit.md): what has been found wrong in persistence, with evidence
+
+## Crates
+
+- [openehr](https://github.com/openehr-rust/openehr-rust/blob/main/openehr): openEHR® Reference Model types, validation, paths, AQL parsing, and change-control security primitives
+- [openehr-mariadb](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-mariadb): openEHR® persistence for MariaDB: schema dialect and DDL
+- [openehr-mssql](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-mssql): openEHR® persistence for Microsoft SQL Server: schema dialect and DDL
+- [openehr-mysql](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-mysql): openEHR® persistence for MySQL: schema dialect and DDL
+- [openehr-oracle](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-oracle): openEHR® persistence for Oracle Database: schema dialect and DDL
+- [openehr-postgresql](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-postgresql): openEHR® persistence for PostgreSQL: schema dialect and DDL
+- [openehr-sqlite](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-sqlite): openEHR® persistence for SQLite: schema dialect and a complete embedded store
+- [openehr-store](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-store): openEHR® store persistence in agnostic way: storage model, SQL dialect trait, commit semantics, and a conformance suite
+
+## Examples
+
+- [Reference Model tutorials](https://github.com/openehr-rust/openehr-rust/blob/main/openehr/examples/): five runnable examples: build, validate, paths and AQL, versioning, redaction
+- [Persistence tutorial](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-sqlite/examples/01_store_a_record.rs): store and read a record end to end - in `openehr-sqlite`, the only crate with a working `Store`
+
+## Contributing
+
+- [AGENTS.md](https://github.com/openehr-rust/openehr-rust/blob/main/AGENTS.md): how to work here - the operational guide
+- [Topic guides](https://github.com/openehr-rust/openehr-rust/blob/main/agents/index.md): engines, auditing, conformance, publishing, openEHR concepts
+- [openehr-skill](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-skill/SKILL.md): openEHR concepts and vocabulary, as a Claude Code Skill
+- [openehr-rust-maintainer-skill](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-rust-maintainer-skill/SKILL.md): this repository's own engineering conventions, as a Claude Code Skill
+- [CONTRIBUTING.md](https://github.com/openehr-rust/openehr-rust/blob/main/CONTRIBUTING.md): ways to help, and the claims rule
+- [CODE_OF_CONDUCT.md](https://github.com/openehr-rust/openehr-rust/blob/main/CODE_OF_CONDUCT.md): conduct, including the claim-accuracy clause
+
+## Optional
+
+- [GOVERNANCE.md](https://github.com/openehr-rust/openehr-rust/blob/main/GOVERNANCE.md): who decides, on what basis
+- [MAINTAINERS.md](https://github.com/openehr-rust/openehr-rust/blob/main/MAINTAINERS.md): one maintainer, stated plainly
+- [CHANGELOG.md](https://github.com/openehr-rust/openehr-rust/blob/main/CHANGELOG.md): what changed in each release, and why it was that version number
+- [NEWS.md](https://github.com/openehr-rust/openehr-rust/blob/main/NEWS.md): the short form of the changelog, and what is coming
+- [TRADEMARKS.md](https://github.com/openehr-rust/openehr-rust/blob/main/TRADEMARKS.md): the openEHR mark, what is and is not claimed
+- [LICENSE.md](https://github.com/openehr-rust/openehr-rust/blob/main/LICENSE.md): five licences, your choice of any one
+- [BENCHMARKS.md](https://github.com/openehr-rust/openehr-rust/blob/main/BENCHMARKS.md): what is measured, and why nothing here is gated on timing
+- [AI_STATEMENT.md](https://github.com/openehr-rust/openehr-rust/blob/main/AI_STATEMENT.md): how this code was written, and what that does and does not prove
+- [RFC.md](https://github.com/openehr-rust/openehr-rust/blob/main/RFC.md): what this project does not know, and the feedback that would change it
+- [openehr-rust.github.io](https://openehr-rust.github.io): the project's landing page

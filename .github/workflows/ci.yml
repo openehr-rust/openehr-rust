@@ -729,6 +729,16 @@ jobs:
       - name: The documentation's counts and versions match the tree
         run: python3 scripts/check-docs.py
 
+      # `spec/llms-json-and-llms-txt/index.md`: `llms.txt` and `llms.json` are
+      # a curated map for AI tools, generated from one list in
+      # `scripts/generate-llms-files.py` so the two files cannot state the map
+      # differently from each other or from the tree (published crate names
+      # and descriptions are read from the manifests, not copied by hand).
+      # Default mode checks rather than writes, the same convention
+      # `check-docs.py` and `openehr-assets` use.
+      - name: llms.txt and llms.json are current and under the 40 kB budget
+        run: python3 scripts/generate-llms-files.py
+
       # `db:D-09`: the matrix marked two requirements satisfied and listed the
       # same two as absent, in one file, for a day. The file that says "where
       # this disagrees with a crate's documentation, trust this" was disagreeing
