@@ -11,7 +11,10 @@ specification governs and this file has a defect (`W0.2`). The specifications ar
 - [`spec/databases/`](spec/databases/index.md) — storing openEHR in SQL.
 - [`openehr/spec/`](openehr/spec/index.md) — the Reference Model library.
 
-Detailed topic guides live in [`agents/`](agents/index.md).
+Detailed topic guides live in [`agents/`](agents/index.md). The same
+orientation, condensed, ships as a Claude Code Skill at
+[`openehr-skill/SKILL.md`](openehr-skill/SKILL.md), for a session or tool
+that has not loaded this file.
 
 ## What this repository is
 

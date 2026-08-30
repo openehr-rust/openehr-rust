@@ -48,6 +48,7 @@ specification and says which one governs which code.
 | [MAINTAINERS.md](MAINTAINERS.md) | one maintainer, stated plainly |
 | [AGENTS.md](AGENTS.md) | how to work here — the operational guide |
 | [Topic guides](agents/index.md) | engines, auditing, conformance, publishing, openEHR concepts |
+| [openehr-skill/SKILL.md](openehr-skill/SKILL.md) | the operational guide, condensed to a Claude Code Skill |
 | [AI_STATEMENT.md](AI_STATEMENT.md) | how this was written, machine assistance included |
 
 ### Implementing or auditing

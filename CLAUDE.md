@@ -5,6 +5,9 @@ Guidance for Claude Code working in this repository.
 Read [`AGENTS.md`](AGENTS.md) for the full operational guide and
 [`agents/`](agents/index.md) for topic guides. This file is the short version
 plus the things that specifically trip up automated work here.
+[`openehr-skill/SKILL.md`](openehr-skill/SKILL.md) is the same guidance,
+condensed into a Claude Code Skill, for a session that has not loaded this
+file.
 
 **Not normative.** The specifications decide what must be true (`W0.2`):
 [`spec/index.md`](spec/index.md), [`spec/databases/`](spec/databases/index.md),
