@@ -5,6 +5,29 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
+## Unreleased
+
+**New: `openehr::am::validate` — validate a Reference Model instance against
+an archetype (`K15.18`–`K15.23`).** Existence, cardinality, occurrences, RM
+class and node identity, and primitive value constraints (`C_BOOLEAN`,
+`C_STRING` list, `C_INTEGER`, `C_REAL`, `C_TERMINOLOGY_CODE` against the
+archetype's own internal codes) are checked by walking the instance and the
+archetype's `definition` in parallel. The verdict is a new type,
+`ArchetypeReport`, kept separate from Reference-Model validation's own verdict
+(`K15.19`) rather than folded into it.
+
+**Scope, stated rather than implied.** This validates against an `Archetype`
+already held in memory, not against a flattened operational template: this
+crate still does not parse ADL (`K15.5`) or flatten a specialised archetype's
+inherited constraints (`K15.11`–`K15.13`, `K15.14`–`K15.17`). A construct it
+cannot check — an `ARCHETYPE_SLOT` or `C_ARCHETYPE_ROOT` filler (retrieval,
+`K15.24`, is still not implemented), an unmodelled primitive constraint, a
+`C_STRING` pattern (carried but not compiled or applied) — is reported
+**unchecked**, and `ArchetypeReport::is_conformant` is `false` whenever
+anything is unchecked, never a silent pass (`K15.20`). See
+`openehr::am::validate`'s own module documentation, and `A-40` in
+[`spec/audit.md`](spec/audit.md) for what in §15 is still open.
+
 ## 0.8.0 — 2026-08-29
 
 **BREAKING: the MSRV floor moved from N−3 to N−2 — 1.95 to 1.96.** `RV1`

@@ -23,20 +23,29 @@
 //! # What it reports, and what it cannot
 //!
 //! Validation here is **RM-level**: the invariants stated in the openEHR class
-//! definitions. It is not archetype validation. Checking that
+//! definitions. It is not archetype validation — checking that
 //! `openEHR-EHR-OBSERVATION.blood_pressure.v2` permits exactly these elements
-//! at these node ids requires the archetype, and this crate cannot do it.
+//! at these node ids needs the archetype, and that check lives in
+//! [`crate::am::validate_against_archetype`], as a separate verdict (`K15.19`),
+//! not here.
 //!
-//! That used to be a decision — `S1.4`, the crate MUST NOT implement the
-//! Archetype Model — and since 2026-08-26 it is an unbuilt requirement: `S1.21`
-//! and §15 require archetype validation, [`crate::am`] holds the AOM2 object
-//! model it will need, and `K15.18` is not implemented. `L10.2` splits the two
-//! verdicts and requires this sentence to stay until the conformance matrix
-//! says archetype validation exists (`K15.30`).
+//! That split used to rest on a decision this crate no longer holds — `S1.4`,
+//! the crate MUST NOT implement the Archetype Model, withdrawn 2026-08-26 — and
+//! `K15.18`–`K15.23` are now implemented, **against an archetype already held
+//! in memory**: this crate does not yet parse ADL (`K15.5`) or flatten a
+//! specialised archetype (`K15.11`), so
+//! [`crate::am::validate_against_archetype`] validates the definition as given,
+//! and a construct it cannot check is reported unchecked rather than passed
+//! (`K15.20`). `L10.2` splits the two verdicts, and this sentence stays until
+//! the conformance matrix says every requirement in §15 is satisfied, not
+//! merely the ones that are.
 //!
 //! **So a composition that passes here can still violate its archetype**, and
-//! the documentation says so rather than letting "valid" be read as more than
-//! it is.
+//! passing [`crate::am::validate_against_archetype`] too still does
+//! not mean it conforms to what the *published* archetype requires unless the
+//! `Archetype` in hand already carries everything an ADL parser and a
+//! flattening step would otherwise have merged in. The documentation says so
+//! rather than letting "valid" be read as more than it is.
 //!
 //! ```
 //! use openehr::validation::Validate;

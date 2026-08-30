@@ -20,14 +20,24 @@ and never a pass. A partial constraint engine is still prohibited. What changed
 is that the refusal now lives inside an implementation instead of standing in
 for one.
 
-**Four of these requirements are implemented; twenty-eight are not.**
+**Ten of these requirements are implemented; twenty-two are not.**
 `K15.1`–`K15.4` — the AOM2 object model — landed as `openehr::am` on
-2026-08-26, with tests named in the [conformance matrix](conformance-matrix.md).
-Everything else is in force and unsatisfied: no ADL parser, no flattening, no
-template expansion, no operational template, no retrieval, and **no way to check
-that a `COMPOSITION` conforms to its archetype**. [`audit.md`](audit.md)
-**A-40** keeps that gap visible until the code closes it (`C0.9`), and `K15.30`
-is what stops the documentation from moving before the code does.
+2026-08-26, and `K15.18`–`K15.23` — validating a Reference Model instance
+against an archetype, as a separate verdict from Reference-Model validation,
+never a partial pass — landed as `openehr::am::validate` on 2026-08-30, both
+with tests named in the [conformance matrix](conformance-matrix.md). What
+remains is still real: no ADL parser, no flattening, no template expansion, no
+operational template, no retrieval. `openehr::am::validate` validates an
+`Archetype` **already held in memory**, as given — because flattening
+(`K15.11`) and template expansion (`K15.14`) do not exist to merge a
+specialisation's inherited constraints in first, and because there is still no
+parser to read one from ADL text. So the crate can now tell you whether a
+`COMPOSITION` conforms to an archetype you built or already have, and still
+cannot tell you whether it conforms to the *published* archetype unless
+whatever produced that in-memory `Archetype` already did the merging by hand.
+[`audit.md`](audit.md) **A-40** keeps the remaining gap visible until the code
+closes it (`C0.9`), and `K15.30` is what stops the documentation from moving
+before the code does.
 
 ## Vocabulary
 
