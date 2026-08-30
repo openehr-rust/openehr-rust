@@ -232,9 +232,12 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       profile, not a `COLLECTIVE`; `opencollective.com/openehr-rust` 404s;
       creating a real one needs the owner to choose a fiscal host through
       Open Collective's own application flow.*
-- [ ] Execute `help/outreach/index.md`'s sequence only after the trademark
-      notice, conduct file, and repository security settings above are done
-      — its own checklist already blocks on them.
+- [ ] Execute `help/outreach/index.md`'s sequence. Its stated preconditions —
+      the trademark notice (2026-08-27), the conduct file (2026-08-26), and
+      the repository security settings (2026-08-26/29) — are now all met;
+      the readiness checklist's one remaining open row is repository topics
+      on GitHub (`gh api repos/.../topics` returns `[]`, checked 2026-08-30).
+      Not started: an outward-facing action, for the maintainer to schedule.
 
 ### Audit and harmonization
 

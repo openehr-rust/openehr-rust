@@ -4,7 +4,7 @@ Goal: a production-grade, spec-driven Rust monorepo for openEHR — the
 `openehr/` model crate (Reference Model, paths, AQL parsing, RM validation,
 audit-chain security), six `openehr-<engine>/` database ports,
 `openehr-store/`, `openehr-loco/`, and the fuzz crates; eight crates
-published at 0.6.0 (`openehr-loco` and the fuzz crates stay unpublished) —
+published at 0.8.0 (`openehr-loco` and the fuzz crates stay unpublished) —
 professionalized for its real audience: healthcare
 professionals and the engineers who serve them, worldwide, in settings where
 a wrong claim has clinical cost.
@@ -23,18 +23,25 @@ Engineering status is read from `openehr/spec/conformance-matrix.md` and
 items live in [`tasks.md`](tasks.md), where a `[x]` means verified, not
 intended.
 
-## Where the repository stands (verified 2026-08-26)
+## Where the repository stands (verified 2026-08-30)
 
-Eight crates at 0.6.0 on crates.io; a ~700-line CI workflow with test/msrv/
-examples/bench/schema/fuzz/assets/layering/claims jobs; the library matrix
-machine-derived (344 ids, 258 verified); SECURITY.md the most complete in the
-five-repo family, including a "Known gaps in this project's own security
-posture" section checked against the live repository settings on 2026-08-26.
-The root document set is nearly complete — and, like the pass in the sibling
-repositories, **largely uncommitted**: SECURITY.md, GOVERNANCE.md,
-CONTRIBUTING.md, MAINTAINERS.md, CITATION.cff, `.github/CODEOWNERS`,
-`help/outreach/index.md` and more are untracked, so none of it is visible on
-GitHub yet.
+Eight crates at 0.8.0 on crates.io — up from 0.6.0 on 2026-08-26, through
+0.7.0–0.7.4 (Archetype Model in scope, trademark notices) and 0.8.0 (MSRV
+N−3 to N−2, 1.95 to 1.96). A ~700-line CI workflow with test/msrv/examples/
+bench/schema/fuzz/assets/layering/claims jobs, green on the tip commit
+before every release; the library matrix machine-derived (344 ids, 258
+verified). The root document set — SECURITY.md, GOVERNANCE.md,
+CONTRIBUTING.md, MAINTAINERS.md, CITATION.cff, `CODEOWNERS`,
+`help/outreach/index.md` and more — is committed and visible on GitHub;
+"largely uncommitted" was true on 2026-08-26 and stopped being true the same
+week. Commits and tags are SSH-signed and verified (`git log --show-
+signature`, and both GitHub's and GitLab's API confirm the commit as
+`verified`); Trusted Publishing to crates.io is specified
+(`spec/trusted-publishing/index.md`) but not adopted — the stated condition
+is production-readiness across every forge this repository actually pushes
+to (GitHub, GitLab, Codeberg) and every destination it publishes to
+(crates.io), not met yet, so publishing stays a maintainer-run
+`cargo publish` (`agents/publishing.md`).
 
 The headline capability gap is honest and registered: the Archetype Model
 entered scope on 2026-08-26 with 28 of 32 requirements having no code
@@ -52,12 +59,12 @@ posture. Open items for each are in `tasks.md`.
    self-declared hole: no `CODE_OF_CONDUCT.md` — named as a known gap in
    CONTRIBUTING.md:140 and in the outreach readiness checklist itself.
 
-2. **Compliance — licensing and trademarks.** The weakest of the five
-   repositories here, and the highest-exposure gap: the org, repository, and
-   crate name all use the openEHR mark with **no `TRADEMARKS.md`, no ™/®
-   anywhere, and no disclaimer in README.md, LICENSE.md, CITATION.cff, or
-   crate metadata** — the only non-affiliation statements are buried in
-   GOVERNANCE.md §Independence and `openehr/README.md`. The `LICENSES/`
+2. **Compliance — licensing and trademarks.** Closed 2026-08-27, see
+   §Risks & watch items below: openEHR granted permission to use their
+   marks, `TRADEMARKS.md` records it, and the Foundation's own prescribed
+   notice — verbatim, stating the permission — is on every crate
+   description, every crate README, and every root document that uses the
+   mark, checked in CI by `scripts/check-trademarks.py`. The `LICENSES/`
    directory for the five-license SPDX expression was added 2026-08-26.
 
 3. **Security and supply chain.** The in-crate security work is real
@@ -66,8 +73,11 @@ posture. Open items for each are in `tasks.md`.
    posture closed 2026-08-26: private vulnerability reporting, Dependabot
    alerts, automated security fixes, and secret scanning are enabled, each
    verified with a `GET`, and `.github/dependabot.yml` registers every
-   workspace with routine version-update PRs capped off. Still open:
-   commits and tags unsigned, no SBOM, no release attestation.
+   workspace — including the GitHub Pages site's own `npm` ecosystem,
+   added after its lockfile drift broke the "Dependabot Updates" workflow —
+   with routine version-update PRs capped off. Commits and tags are
+   SSH-signed and verified on both GitHub and GitLab, closed 2026-08-28.
+   Still open: no SBOM, no release attestation.
 
 4. **Privacy and patient data.** PHI rules are specified
    (`openehr/spec/11-security.md`, the compliance mappings, `redact.rs`) but
@@ -78,18 +88,19 @@ posture. Open items for each are in `tasks.md`.
 
 5. **Outreach.** `help/outreach/index.md` (~440 lines) is a full campaign
    plan with the right governing rule (never say safe/compliant/certified/
-   clinically) and a readiness checklist that correctly blocks on the
-   conduct file. A root `index.md` routes evaluators to the project
-   documents as of 2026-08-26; there is still no public site (`plan.md`
-   §Open decisions).
+   clinically). A root `index.md` routes evaluators to the project
+   documents as of 2026-08-26, and `openehr-rust.github.io` has been live
+   since 2026-08-28. No repository topics on GitHub remains the one open
+   readiness gap the checklist tracks; the outreach sequence itself
+   (`help/outreach/index.md` §11) has not been executed.
 
 6. **Audit and harmonization.** Three registers, counts machine-checked, and
    `scripts/check-docs.py` as the doc gate — the strongest audit machinery
-   in the family alongside `fhir-rust`. Harmonization items: re-sync
-   `spec/special-files-for-public-repos/index.md` with the canonical
-   `fhir-rust` version (the local copy lists neither the conduct file, nor
-   PHI, nor LICENSES/, nor FUNDING). CODEOWNERS moved to the repository
-   root 2026-08-26, matching all four siblings.
+   in the family alongside `fhir-rust`. `spec/special-files-for-public-repos/
+   index.md` was re-synced with the canonical `fhir-rust` version on
+   2026-08-26; every file on that list now exists here, `.github/
+   FUNDING.yml` included since 2026-08-28. CODEOWNERS moved to the
+   repository root 2026-08-26, matching all four siblings.
 
 ## Open decisions (awaiting a call, not code)
 

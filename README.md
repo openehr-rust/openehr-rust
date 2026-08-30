@@ -562,9 +562,6 @@ Recorded rather than implied — see [`spec/audit.md`](spec/audit.md):
   `WHERE o/value/magnitude > -2.5` is refused at the lexer, because `-` also
   separates the parts of an archetype id. Declared as `lib:Q12.9b` and open —
   refused rather than misread, which is the safe direction.
-- **AQL cannot parse a negative number** (`lib:A-27`). `WHERE … > -2.5` is
-  refused at the lexer, because `-` also separates the parts of an archetype id.
-  Declared as `lib:Q12.9b` and open.
 - **Only N−2 and current stable are compiled** (`RV3`). A break appearing only
   on an intermediate Rust release reaches a user before it reaches CI.
 

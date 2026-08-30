@@ -56,12 +56,12 @@ repository on 2026-08-25.
 
 | Gap | Fix | Why it matters before, not after |
 | --- | --- | --- |
-| [`README.md`](../../README.md) line 70 says `openehr = "0.2"`; crates.io is at 0.6.0 | Update the install block | It is the first thing a reader copies, and it is wrong. Nothing catches it: `check-docs.py` checks fixed-form *sentences* about the published version, not a TOML snippet |
-| ~~No `SECURITY.md`~~ — added 2026-08-26; ~~no `CODE_OF_CONDUCT.md`~~ — added 2026-08-26 | Done | A clinical-data library with no disclosure address fails the first question a hospital's security reviewer asks, and both files are what OpenSSF-style checklists look for. `SECURITY.md` also states the project's own posture gaps — unsigned commits, no SBOM; private reporting was disabled until 2026-08-26 and is now enabled — which a reviewer will find anyway |
+| ~~[`README.md`](../../README.md) line 70 says `openehr = "0.2"`; crates.io is at 0.6.0~~ | Done, 2026-08-30 | It was the first thing a reader copied, and it was wrong — recurred at `"0.7"` after 0.8.0 shipped, in all eight READMEs plus `README.md` and `INSTALL.md`, still uncaught by `check-docs.py`'s prose-sentence patterns (`spec/audit.md` **W-19**). Fixed, and `check_dependency_snippets` now checks the TOML snippet itself against the local version's `major.minor` |
+| ~~No `SECURITY.md`~~ — added 2026-08-26; ~~no `CODE_OF_CONDUCT.md`~~ — added 2026-08-26 | Done | A clinical-data library with no disclosure address fails the first question a hospital's security reviewer asks, and both files are what OpenSSF-style checklists look for. `SECURITY.md` also stated the project's own posture gaps; ~~unsigned commits~~ closed 2026-08-28, no SBOM still open; private reporting was disabled until 2026-08-26 and is now enabled — which a reviewer will find anyway |
 | No repository topics on GitHub | `openehr`, `ehr`, `healthcare`, `interoperability`, `rust`, `aql`, `sqlite` | `github.com/topics/openehr` is how this community browses. A repository with no topics is not in the room |
-| No project website; three stars, one contributor, public history beginning 2026-08-01 | Nothing to fix — know it | The bus-factor question is the first one a vendor asks. Answer it plainly rather than being surprised by it |
+| ~~No project website~~ — `openehr-rust.github.io` exists, live 2026-08-28; three stars, one contributor, public history beginning 2026-08-01 | Nothing to fix — know it | The bus-factor question is the first one a vendor asks. Answer it plainly rather than being surprised by it |
 | Five-way licence disjunction (MIT, Apache-2.0, BSD-3-Clause, GPL-2.0, GPL-3.0) | One sentence in the README: "take whichever you need; most take MIT or Apache-2.0" | Permissive in effect, unusual in form. An unexplained licence list becomes a legal review, and a legal review becomes a delay |
-| No statement of how the code was written | Add `AI_STATEMENT.md` | See below. This is not optional in this particular community, this particular month |
+| ~~No statement of how the code was written~~ — `AI_STATEMENT.md` added 2026-08-27 | Done | See below. This is not optional in this particular community, this particular month |
 
 **The trademark axis cleared 2026-08-27.** The exposure that `plan.md` §Risks
 said must be resolved before any outreach — the unqualified use of the openEHR
@@ -79,9 +79,9 @@ transparency with the AI_STATEMENT" published in its repository. This repository
 carries [`AGENTS.md`](../../AGENTS.md), [`CLAUDE.md`](../../CLAUDE.md), and an
 [`agents/`](../../agents/index.md) directory: agent involvement is obvious to
 anyone who clicks, and the only question is whether they learn it from us or
-notice it themselves. Write the statement before the first announcement, say
-what is machine-written and what is human-reviewed, and point at the audit
-register as the evidence of review. *This Week in Rust* separately requires
+notice it themselves. `AI_STATEMENT.md`, added 2026-08-27, says what is
+machine-written and what is human-reviewed and points at the audit register
+as the evidence of review. *This Week in Rust* separately requires
 disclosure of machine-generated articles, so the same file settles that channel
 too.
 

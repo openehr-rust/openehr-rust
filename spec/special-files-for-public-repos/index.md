@@ -29,12 +29,16 @@ had predated the family's and omitted CODE_OF_CONDUCT.md, PHI.md, RFC.md's
 current description, LICENSES/, and FUNDING.yml. Three notes, honest to this
 repository rather than inherited:
 
-- **Everything on the list exists here as of 2026-08-26 except
-  `.github/FUNDING.yml`**, whose absence is a decision rather than a gap:
-  CONTRIBUTING.md states plainly that no funding vehicle exists, so adding
-  the file means creating one — an open decision in `plan.md` §Open
-  decisions and `tasks.md` §Outreach, asked openly in RFC.md. When it is
-  decided, the files must agree, whichever way it goes.
+- **Everything on the list exists here.** `.github/FUNDING.yml` was the one
+  gap as of 2026-08-26, and its absence was a decision rather than an
+  oversight: CONTRIBUTING.md stated plainly that no funding vehicle existed,
+  so adding the file meant creating one first. That decision was made
+  2026-08-28, per `spec/free-open-source-funding/index.md` — GitHub
+  Sponsors, under the maintainer's personal account, verified live before
+  the file was added rather than assumed. `.github/FUNDING.yml` now exists
+  and CONTRIBUTING.md/NEWS.md agree with it. Open Collective was considered
+  and is not done (`plan.md` §Open decisions): it needs the owner's own
+  fiscal-host application, which this repository's tooling cannot complete.
 - **CODEOWNERS lives at the repository root**, matching all four siblings
   (moved 2026-08-26; the file's own comment carries the rationale).
 - **The openEHR® trademark rules are met by all of these files.**
