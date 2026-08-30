@@ -469,16 +469,26 @@ coverage it does not have is worse than a small one.
 | External terminology lookup | needs a terminology server; codes are carried opaquely |
 | HL7 `GTS`/`PIVL` timing evaluation | a partial timing engine is right most of the time |
 
-**Archetypes: the object model is built, and nothing above it is.** They were
+**Archetypes: the object model is built, and validation works against what you
+already have — parsing and flattening are what is not built yet.** They were
 excluded outright until 2026-08-26, when `lib:S1.4` was withdrawn and
 [`openehr/spec/15-archetypes.md`](openehr/spec/15-archetypes.md) took its place.
-`openehr::am` now holds AOM2 as Rust types — archetypes, the constraint tree,
+`openehr::am` holds AOM2 as Rust types — archetypes, the constraint tree,
 multiplicities, terminology, with the artefact-level validity conditions checked
-at construction. **Twenty-eight of the thirty-two requirements have no code**:
-no ADL parser, no flattening, no template expansion, no operational template, no
-retrieval, and **no way to check that a composition conforms to the archetype it
-names**. The conformance matrix marks each `spec`, and `lib:A-40` keeps the gap
-countable.
+at construction — and, since 2026-08-30, `openehr::am::validate` checks a
+Reference Model instance against an archetype already held in memory, resolving
+a `C_ARCHETYPE_ROOT` filler through a repository the caller supplies
+(`openehr::am::repository`; this crate performs no I/O itself). **Eighteen of
+the thirty-two requirements have no code**: no ADL parser, no flattening, no
+template expansion, no operational template, and no way to resolve a bare
+`ARCHETYPE_SLOT` — which archetype fills one is recorded on the instance itself,
+an attribute this crate's path machinery does not yet expose. So this crate
+can tell you whether a composition conforms to an archetype you built, already
+have, or can retrieve, and still cannot tell you whether it conforms to the
+*published* archetype it names unless whatever produced or retrieved that
+archetype already merged in what a parser and flattening would have. The
+conformance matrix marks each unimplemented requirement `spec`, and `lib:A-40`
+keeps the gap countable.
 
 This table is the **library's** scope. `openehr-loco` (above) is a separate,
 optional, unpublished crate that puts a narrow REST API in front of the store —

@@ -82,9 +82,15 @@ for what is actually verified:
   validation — is implemented.
 - **Validating an instance against a specific, already-built archetype** —
   does this `COMPOSITION` conform to *this* archetype's constraints — is
-  implemented (`openehr::am::validate`), but only against an archetype
-  already held in memory in this crate's own object-model form, not one
-  parsed from the ADL text a clinical modeller actually publishes.
+  implemented (`openehr::am::validate`), against an archetype already held
+  in memory in this crate's own object-model form, not one parsed from the
+  ADL text a clinical modeller actually publishes. A `C_ARCHETYPE_ROOT`
+  filler (a slot a template already filled, naming the archetype) can be
+  *resolved* too, through a repository you supply
+  (`openehr::am::repository`; this crate performs no network or filesystem
+  I/O itself) — a bare, unfilled `ARCHETYPE_SLOT` cannot, because which
+  archetype fills it is recorded on the instance itself, and this crate's
+  path machinery does not yet expose that attribute.
 - **Parsing ADL itself, and applying a specialised archetype's inherited
   constraints,** is not implemented yet. **AQL parses and is statically
   checked but does not execute** — running a query needs a repository of

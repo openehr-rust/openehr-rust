@@ -39,7 +39,7 @@ substitution.
 | FHIR | openEHR | Note |
 | --- | --- | --- |
 | Resource | `COMPOSITION`, `EHR_STATUS`, `FOLDER`, … | openEHR has ~90 RM classes, not resource types |
-| Profile / StructureDefinition | **Archetype** (ADL), **Template** | not implemented here (`lib:S1.4`) |
+| Profile / StructureDefinition | **Archetype** (ADL), **Template** | partly implemented: the object model, and validating an instance against one already in memory, are (`openehr::am`); no ADL parser, flattening, or template expansion (`lib:A-40`) |
 | FHIRPath | **openEHR path**, and **AQL** for query | paths are implemented; AQL parses but does not execute (`lib:S1.5`) |
 | Search parameter | — | the composition index, filtered as an AQL `FROM` would |
 | `meta.versionId` | `OBJECT_VERSION_ID` — `object::system::tree` | carries the *creating system*, which is what keeps two offline systems' "version 2" distinct |
@@ -102,7 +102,6 @@ trace, and a paging alert at once.
 
 | Not here | Why |
 | --- | --- |
-| Archetypes, templates (ADL, AOM2) | a parser and a constraint engine, each larger than the crate. A partial one would let "valid" mean "the parts I understood were satisfied" |
 | AQL **execution** | needs archetype path resolution; AQL parses and statically checks, and returns no rows |
 | UCUM unit conversion | a wrong conversion is a thousand-fold dosing error |
 | External terminology lookup | needs a terminology server; codes are carried opaquely |
@@ -112,6 +111,15 @@ This is the **library's** scope. `openehr-loco` is a separate, optional,
 unpublished crate putting a narrow REST API in front of the store — it adds no
 archetype validation, AQL execution, or anything else in this table; see its
 own README.
+
+**Archetypes and templates are a different case: not a permanent exclusion,
+an open one.** `S1.4` — the decision to exclude the Archetype Model
+outright — was withdrawn 2026-08-26, and `openehr::am` now implements the
+object model and validating an instance against an archetype already in
+memory or resolved through a repository you supply. No ADL parser, no
+flattening, no template expansion — that gap is real and tracked as `A-40`
+in [`../openehr/spec/audit.md`](../openehr/spec/audit.md), not asserted as a
+permanent decision the way the four rows above are.
 
 Where an operation is defined and not implemented, the code returns an
 `Unsupported` error naming the spec section that records the exclusion. It never
