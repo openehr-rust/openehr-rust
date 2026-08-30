@@ -53,6 +53,19 @@ directory, i.e. the monorepo root — and is overridable:
 OPENEHR_RUST=/path/to/openehr-rust npm run sync
 ```
 
+`llms.txt`/`llms.json` (the monorepo root's own, per
+`spec/llms-json-and-llms-txt/`) get the same treatment, one script further:
+`bin/sync-llms.mjs` reads them, rewrites each entry that this site actually
+publishes a page for into a site URL via `src/lib/paths.js`'s `routeFor` —
+the same translation the vendored Markdown's own links already go through —
+and leaves everything else (most of the repository: root documents,
+`agents/`, the skill folders, anything under `spec/` this site does not
+render) pointing at GitHub, same as `paths.js` does for those.
+
+```sh
+npm run sync:llms   # re-vendor llms.txt/llms.json into static/, rewritten for this domain
+```
+
 Links inside the vendored Markdown are written for the crate directory
 layouts, which this site flattens. `src/lib/paths.js` translates them: a link
 to a page the site publishes becomes a site route, and a link to anything else
