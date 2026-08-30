@@ -1,6 +1,5 @@
 <script>
-	import Card from '$lib/lily/components/Card.svelte';
-	import Badge from '$lib/lily/components/Badge.svelte';
+	import { Card, Badge } from 'lily-design-system-svelte-headless';
 	import { REPOSITORIES, SITE_NAME, SITE_URL } from '$lib/site.js';
 
 	let { data } = $props();

@@ -75,13 +75,33 @@ where it would mean nothing.
 
 ## Design system
 
-`bin/sync-lily.mjs` vendors the Lily components, helpers, and themes the site
-uses, and records the source commit in `src/lib/lily/VENDOR.md`. Those files
-are copies: change them upstream in Lily, then re-run the sync.
+The site, header, and article chrome (`Header`, `Footer`, `ArticleLayout`,
+`Card`, `Badge`, the breadcrumb/contents/pagination nav families, `SkipLink`)
+come from
+[`lily-design-system-svelte-headless`](https://www.npmjs.com/package/lily-design-system-svelte-headless)
+on npm — headless, unstyled Svelte 5 components. The theme and text-size
+pickers are their own packages,
+[`lily-design-system-svelte-theme-picker`](https://www.npmjs.com/package/lily-design-system-svelte-theme-picker)
+and
+[`lily-design-system-svelte-text-size-picker`](https://www.npmjs.com/package/lily-design-system-svelte-text-size-picker).
+Bump them the ordinary way:
 
 ```sh
-npm run sync:lily                        # from ~/git/lilydesignsystem/lily-design-system
-LILY=/path/to/lily-design-system npm run sync:lily
+pnpm update lily-design-system-svelte-headless \
+  lily-design-system-svelte-theme-picker lily-design-system-svelte-text-size-picker
+```
+
+Theme CSS is the one piece that stays vendored rather than a dependency:
+each file in `static/themes/` inlines the component CSS for all of Lily's
+components into one standalone stylesheet, which is a separate Lily build
+target with no npm package of its own — by design, since the headless
+components ship no CSS at all. `bin/sync-themes.mjs` copies the six bundles
+this site uses from a local Lily checkout and records the source commit in
+`static/themes/VENDOR.md`.
+
+```sh
+npm run sync:themes                        # from ~/git/lilydesignsystem/lily-design-system
+LILY=/path/to/lily-design-system npm run sync:themes
 ```
 
 Six themes ship in `static/themes/`: light, dark, Nord, Dracula, Emerald, and
@@ -113,8 +133,10 @@ Two details make GitHub Pages work, and both are load-bearing:
 
 ## Licence
 
-The site code is MIT OR Apache-2.0, matching the crates. The vendored Lily
-files are MIT, from the Lily Design System.
+The site code is MIT OR Apache-2.0, matching the crates. The Lily Design
+System packages are `MIT OR Apache-2.0 OR GPL-2.0-only OR GPL-3.0-only OR
+BSD-3-Clause`; the vendored theme stylesheets in `static/themes/` (see
+"Design system" above) are MIT, from the Lily Design System.
 
 openEHR specifications are published by the
 [openEHR Foundation](https://openehr.org/) under CC-BY-SA. These crates are an

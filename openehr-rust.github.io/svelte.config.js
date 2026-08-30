@@ -16,7 +16,7 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
  * @type {import('@sveltejs/kit').Config}
  */
 export default {
-	// The vendored Lily components are written in TypeScript.
+	// Lily's Svelte components (imported from npm) are written in TypeScript.
 	preprocess: vitePreprocess(),
 	kit: {
 		// GitHub Pages serves plain files: prerender everything.

@@ -23,7 +23,7 @@ export const REPOSITORIES = {
 /** The organization page is what a footer or a header link should point at. */
 export const REPOSITORY = ORGANIZATION;
 
-/** Themes vendored into static/themes/ by bin/sync-lily.mjs. */
+/** Themes vendored into static/themes/ by bin/sync-themes.mjs. */
 export const THEMES = ['light', 'dark', 'nord', 'dracula', 'emerald', 'night'];
 
 export const THEME_LABELS = {
