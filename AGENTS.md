@@ -13,8 +13,8 @@ specification governs and this file has a defect (`W0.2`). The specifications ar
 
 Detailed topic guides live in [`agents/`](agents/index.md). The same
 orientation, condensed, ships as a Claude Code Skill at
-[`openehr-skill/SKILL.md`](openehr-skill/SKILL.md), for a session or tool
-that has not loaded this file.
+[`openehr-rust-maintainer-skill/SKILL.md`](openehr-rust-maintainer-skill/SKILL.md),
+for a session or tool that has not loaded this file.
 
 ## What this repository is
 

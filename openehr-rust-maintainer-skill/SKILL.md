@@ -1,9 +1,9 @@
 ---
-name: openehr-skill
-description: Operating guide for working in the openehr-rust monorepo — layout, build commands, the five rules, and the traps that have already bitten someone. Use when working on any of the eighteen crates, their specs, or their documentation in this repository, or when asked how this repository works, how to build/test/publish a crate here, or what to check before claiming something works.
+name: openehr-rust-maintainer-skill
+description: Technical implementation guide for maintainers working on this repository — layout, build commands, the five rules, and the traps that have already bitten someone. Use when working on any of the eighteen crates, their specs, or their documentation in this repository, or when asked how this repository works, how to build/test/publish a crate here, or what to check before claiming something works. For openEHR concepts and terminology rather than this repository's own engineering conventions, use openehr-skill instead.
 ---
 
-# openehr-skill — how to work in this repository
+# openehr-rust-maintainer-skill — how to work in this repository
 
 This is the condensed, portable form of this repository's own operating
 guide. Inside the repository, [`CLAUDE.md`](../CLAUDE.md) and

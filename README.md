@@ -572,7 +572,7 @@ spec/                      repository specification + audit register
   databases/               persistence specification (db:)
 AGENTS.md, agents/         contributor and agent guides
 CLAUDE.md                  guidance for Claude Code
-openehr-skill/             AGENTS.md/CLAUDE.md, condensed into a Claude Code Skill
+openehr-rust-maintainer-skill/  AGENTS.md/CLAUDE.md, condensed into a Claude Code Skill
 openehr/                   the Reference Model library
   spec/                    library specification, audit, conformance matrix
   examples/                five runnable tutorials (the RM)
@@ -620,8 +620,8 @@ Read [`AGENTS.md`](AGENTS.md), and [`agents/`](agents/index.md) for topic guides
 [conformance](agents/conformance.md), [publishing](agents/publishing.md),
 [openEHR concepts](agents/openehr-concepts.md), and
 [auditing](agents/auditing.md).
-[`openehr-skill/SKILL.md`](openehr-skill/SKILL.md) is the same operating
-guide condensed to a [Claude Code
+[`openehr-rust-maintainer-skill/SKILL.md`](openehr-rust-maintainer-skill/SKILL.md)
+is the same operating guide condensed to a [Claude Code
 Skill](https://docs.claude.com/en/docs/claude-code/skills) — the layout, the
 five rules, and the traps that have already bitten someone here — for a
 session or tool that has not loaded `CLAUDE.md`/`AGENTS.md`.
