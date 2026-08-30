@@ -50,7 +50,12 @@
 		<div class="card-grid card-grid-single">
 			<Card class="crate-card" heading={core.title} headingLevel={3} href={core.route}>
 				<p>{core.summary}</p>
-				<p class="crate-install"><code>openehr = "0.1"</code></p>
+				<!-- Hand-maintained, not derived from data.crates -- docs.js parses no
+				     version field. This is the same shape of bug as W-19
+				     (spec/audit.md): a dependency snippet nothing checks. Keep it in
+				     sync with agents/publishing.md's local version by hand until this
+				     is data-driven. -->
+				<p class="crate-install"><code>openehr = "0.8"</code></p>
 			</Card>
 		</div>
 	{/if}

@@ -878,6 +878,19 @@ which is the opposite of what a version-pin snippet is for.
 was re-run so the vendored copies match. Second, `check_dependency_snippets`
 was added to `scripts/check-docs.py`: it scans every `*.md` file for a line
 matching `openehr[a-z-]* = "X.Y"` and compares `X.Y` against the current
+
+**Residual, found minutes later by the same method.**
+`openehr-rust.github.io/src/routes/+page.svelte` carries its own hand-written
+`openehr = "0.1"` on the homepage — not vendored from a README, and not a
+`.md` file, so it is outside `documents()`'s glob and `check_dependency_snippets`
+does not see it either. `scripts/check-docs.py`'s own docstring names this
+shape: *a guard is only as wide as its input list.* Fixed to `"0.8"`, with a
+comment at the call site pointing back at this finding so the next reader
+knows the check does not cover it. Left open rather than closed by widening
+the checker: teaching `documents()` to also read `.svelte` files risks
+matching unrelated Svelte-template syntax that happens to look like a
+dependency line, which is a false-positive class this session had no time to
+characterize.
 local version's `major.minor`, catching a patch release correctly (`0.8` and
 `0.8.1` are the same caret range) while still failing on a stale minor.
 
