@@ -16,10 +16,10 @@ generated DDL of all six dialects compared byte for byte; the three engines that
 can be provisioned locally actually provisioned and the DDL run against them;
 crates.io queried for what is already published.
 
-Eighteen findings: three High (**W-01**, **W-02**, **W-04**), ten Medium
+Nineteen findings: three High (**W-01**, **W-02**, **W-04**), ten Medium
 (**W-03**, **W-05**, **W-06**, **W-09**, **W-11**, **W-12**, **W-13**,
-**W-14**, **W-16**, **W-18**), five Low (**W-07**, **W-08**, **W-10**,
-**W-15**, **W-17**). **Seventeen are fixed**; **W-03** is fixed going forward only, because the
+**W-14**, **W-16**, **W-18**), six Low (**W-07**, **W-08**, **W-10**,
+**W-15**, **W-17**, **W-19**). **Eighteen are fixed**; **W-03** is fixed going forward only, because the
 published `openehr` 0.1.0 is immutable and keeps its wrong `repository` field.
 
 **W-09 through W-18 were added on 2026-08-20 and -21**, outside the original audit date
@@ -844,6 +844,47 @@ being written — in the very entry that records the tags as missing. It was
 caught by re-reading the register after the work, not by any check. There is
 still no mechanism for this direction beyond the one `W-17` added, which only
 covers requirements marked satisfied in a conformance matrix.
+
+---
+
+## W-19 — every published crate's README told a reader to depend on the previous release — **Low, fixed**
+
+**Found 2026-08-30**, by reading the rendered crate pages during the
+"update, upgrade, harmonize, annotate, audit, fix" sweep, not by anything
+failing — `check_versions` had been green throughout.
+
+0.8.0 shipped 2026-08-29. Every published crate's README, plus the root
+`README.md` and `INSTALL.md`, carried a fenced `Cargo.toml` snippet reading
+`openehr = "0.7"` (or `openehr-sqlite`, `openehr-store`, and so on) — the
+dependency line a reader copies, still pinning the release before the one
+that had just gone out. `openehr-rust.github.io`'s `content/crates/*.md`,
+vendored verbatim from those same READMEs, carried the same string.
+
+**What made it invisible.** `check_versions` in `scripts/check-docs.py`
+matches prose restatements — `live on crates.io at **X.Y.Z**` and its
+variants — because that is the shape `W-10` was about. A fenced snippet
+reading `openehr = "0.7"` matches none of those patterns: it is not prose,
+it names no crate the regex looks for, and it is exactly the kind of claim a
+reader trusts most, because it is the one they paste into their own project
+without reading a sentence around it.
+
+**Consequence.** Small: `^0.7` and `^0.8` overlap in no way that breaks a
+build, so nobody's `cargo build` failed. But a reader who followed the
+README got a crate two releases old with no indication a newer one existed,
+which is the opposite of what a version-pin snippet is for.
+
+**Fixed** in two parts. First, the eight READMEs, `README.md`, and
+`INSTALL.md` now read `"0.8"`; `openehr-rust.github.io/bin/sync-content.mjs`
+was re-run so the vendored copies match. Second, `check_dependency_snippets`
+was added to `scripts/check-docs.py`: it scans every `*.md` file for a line
+matching `openehr[a-z-]* = "X.Y"` and compares `X.Y` against the current
+local version's `major.minor`, catching a patch release correctly (`0.8` and
+`0.8.1` are the same caret range) while still failing on a stale minor.
+
+**Why it is not Medium.** Nothing that depends on this repository broke, and
+no behaviour changed. It is here because the *shape* is `W-10`'s and `W-17`'s
+again — a value copied into documents nothing was watching — recurring in a
+place none of those checks happened to look.
 
 ---
 

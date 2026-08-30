@@ -56,11 +56,18 @@
 		opening all six pages.
 	</p>
 	<ul>
-		<li><strong>Store</strong> — a working store, verified against a real database.</li>
-		<li><strong>Schema</strong> — the DDL has been executed by a real server of that kind.</li>
 		<li>
-			<strong>Dialect</strong> — the crate emits DDL, and no server of that kind has ever run it.
-			There is no store, no driver dependency, and no connection handling.
+			<strong>Dialect</strong> — the crate emits DDL for the shared schema. No server of that
+			kind has run it: no store, no driver dependency, no connection handling.
+		</li>
+		<li><strong>Schema</strong> — the engine itself has executed that DDL, twice, and the
+			append-only tables were observed refusing <code>UPDATE</code> and <code>DELETE</code>
+			with a row present.</li>
+		<li><strong>Store</strong> — implements the full <code>Store</code> trait against a real
+			database, with the shared conformance suite passing.</li>
+		<li>
+			<strong>Verified</strong> — Store level, re-checked in CI against the engine's own server
+			on every commit. <code>openehr-sqlite</code> is the only crate here at this level.
 		</li>
 	</ul>
 	<p>

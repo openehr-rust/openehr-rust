@@ -25,11 +25,11 @@ or, in `Cargo.toml`:
 
 ```toml
 [dependencies]
-openehr = "0.7"
+openehr = "0.8"
 
 # and, if you want persistence:
-openehr-store = "0.7"
-openehr-sqlite = "0.7"
+openehr-store = "0.8"
+openehr-sqlite = "0.8"
 ```
 
 The eight published crates are versioned in lockstep and released together, so

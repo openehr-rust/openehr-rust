@@ -232,6 +232,44 @@ def check_versions() -> int:
     return bad
 
 
+def check_dependency_snippets() -> int:
+    """A `Cargo.toml` snippet in a doc names the version a reader would actually get.
+
+    `check_versions` above catches prose restatements ("live on crates.io at
+    **X.Y.Z**") but not a fenced code block reading `openehr = "0.7"` --
+    0.8.0 shipped 2026-08-29 and every published crate's README kept telling a
+    reader to pin the release before it. Nothing failed: the string `"0.7"`
+    is not one of `check_versions`' prose patterns, so eight READMEs plus
+    README.md and INSTALL.md restated a dependency version nobody was
+    checking. Caught by inspection, not by this script -- this check exists
+    so the next one is caught by the script instead.
+    """
+    _, local = versions()
+    # Cargo-idiomatic snippets pin the caret-shorthand `major.minor`, not the
+    # full `major.minor.patch` -- "0.8" means `^0.8.0` and a patch release
+    # (0.8.1) is not a reason to touch every README, so compare against the
+    # same truncation the snippets actually use.
+    local_minor = ".".join(local.split(".")[:2])
+    published = {
+        p.parent.name
+        for p in ROOT.glob("*/Cargo.toml")
+        if tomllib.loads(p.read_text()).get("package", {}).get("publish") is not False
+    }
+    bad = 0
+    for rel, text in documents():
+        for m in re.finditer(r'^(openehr[a-z-]*) = "([0-9.]+)"', text, re.MULTILINE):
+            name, pinned = m.groups()
+            if name not in published or pinned in (local, local_minor):
+                continue
+            line = text[: m.start()].count("\n") + 1
+            print(
+                f"::error file={rel},line={line}::dependency snippet pins "
+                f"{name} to {pinned}, but local (agents/publishing.md) is {local}"
+            )
+            bad = 1
+    return bad
+
+
 def check_ci_jobs() -> int:
     """The documented job list is the job list.
 
@@ -711,6 +749,7 @@ def main() -> int:
         check_shared_blocks(fix)
         | check_levels()
         | check_versions()
+        | check_dependency_snippets()
         | check_ci_jobs()
         | check_audit_summary()
         | check_agent_file_sizes()
