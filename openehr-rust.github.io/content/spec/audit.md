@@ -126,7 +126,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-15 | High | Append-only was enforced in the schema on two engines of five | **fixed**, verified on PostgreSQL 18 and MySQL 8.4 |
 | A-16 | High | `Time`/`DateTime` panicked on a multi-byte character in the offset | **fixed**, regression pinned |
 | A-17 | Medium | The first property tests passed vacuously | **fixed**, mutation-verified |
-| A-40 | Medium | The Archetype Model is specified and mostly not implemented: §15 and `S1.21` are in force, 28 of 32 requirements with no code | open — object model built 2026-08-26; no parser, flattening, template expansion, retrieval, or archetype validation |
+| A-40 | Medium | The Archetype Model is specified and mostly not implemented: §15 and `S1.21` are in force, 18 of 32 requirements with no code | open — object model, in-memory-archetype validation, and repository resolution of a filled slot built 2026-08-26/30; no parser, flattening, or template expansion |
 | A-41 | Low | The conformance matrix's own totals went stale a second time — 291 claimed, 300 in one sentence, 311 in the rows | **fixed** — re-derived mechanically to 344 on 2026-08-26 |
 
 ---
@@ -2197,8 +2197,9 @@ depth. A finding is not deleted when it is fixed; it is marked.
 
 ## A-40 — an entire section in force, and nothing behind it
 
-**Severity: Medium. Status: open — object model built 2026-08-26; no parser,
-flattening, template expansion, retrieval, or archetype validation.**
+**Severity: Medium. Status: open — object model built 2026-08-26; validation
+against an in-memory archetype, and repository resolution of a filled slot,
+built 2026-08-30; no parser, flattening, or template expansion.**
 
 **What happened.** `S1.4` — *the crate MUST NOT implement the Archetype Model* —
 was withdrawn on 2026-08-26 and replaced by `S1.21` and
@@ -2214,39 +2215,62 @@ multiplicities, and archetype terminology — with construction-time checking of
 the AOM2 validity conditions decidable from one artefact (`VARDT`, `VATDF`,
 `VACDF`, `VATCD`, `VOKU`), a lossless JSON round trip, and an `Unsupported`
 primitive-constraint variant so an unmodellable constraint is carried rather
-than dropped.
+than dropped. `K15.18`–`K15.23` are implemented and tested since 2026-08-30:
+`openehr::am::validate` walks a Reference Model instance against an
+`Archetype`'s definition — existence, cardinality, occurrences, RM class and
+node identity, and primitive value constraints — reports a construct it cannot
+check (a slot filler, an unmodelled primitive kind, a `C_STRING` pattern) as
+*unchecked* rather than passing it, and keeps the verdict a distinct type from
+[`crate::validation`]'s, per `K15.19`. `K15.24`–`K15.27` are implemented and
+tested since 2026-08-30 as well: `openehr::am::repository` defines the
+retrieval abstraction (`openehr` itself performs no I/O, `K15.25`), and
+`validate_with_repository` resolves a `C_ARCHETYPE_ROOT` filler through it —
+verifying the repository answered the identifier asked for, requiring the
+caller to opt in before validating against a result with no established
+provenance (`K15.26`), and never treating a retrieval failure as a pass
+(`K15.27`).
 
-**Twenty-eight requirements have no code.** No ADL 2 parser (`K15.5`–`K15.7`),
-no ADL 1.4 ingestion (`K15.8`–`K15.10`), no flattening (`K15.11`–`K15.13`), no
-template expansion or operational template (`K15.14`–`K15.17`), **no validation
-of data against an archetype** (`K15.18`–`K15.23`), and no retrieval
-(`K15.24`–`K15.27`). For a caller, the practically important sentence is the
-middle one: this crate still cannot tell you whether a `COMPOSITION` conforms to
-the archetype it names.
+**Eighteen requirements have no code.** No ADL 2 parser (`K15.5`–`K15.7`), no
+ADL 1.4 ingestion (`K15.8`–`K15.10`), no flattening (`K15.11`–`K15.13`), and no
+template expansion or operational template (`K15.14`–`K15.17`). For a caller,
+the practically important sentence is now narrower still: this crate can tell
+you whether a `COMPOSITION` conforms to an archetype it already holds in
+memory or can retrieve through a repository it is given, and still cannot tell
+you whether it conforms to the *published* archetype named on the instance,
+because nothing here reads ADL or merges a specialisation's inherited
+constraints in first. A bare `ARCHETYPE_SLOT` stays unchecked regardless of a
+repository: which archetype fills it lives on the instance's own
+`ARCHETYPED.archetype_id`, which `crate::path::Node` does not expose — a
+residual named in its own right below, not folded into this count because it
+is a gap in `crate::path`, not in §15.
 
 **Why this is a finding rather than a plan.** `C0.9` — a gap that is not written
 down reads as a pass. A specification section with no code is the most flattering
 possible document about a crate, and this repository has already been caught
 believing its own documentation twice (**W-09**, **A-26**). The register is where
 the distance between the specification and the code is kept visible, and 32
-requirements is the largest such distance this crate has carried.
+requirements was the largest such distance this crate has carried.
 
 **Evidence a reader can check.** `grep -rln "K15\." openehr/src` returns the
-`am` module and `lib.rs`, and nothing else — no parser module, no archetype
-validator. Twenty-eight §15 rows in
+`am` module and `lib.rs`, and nothing else — no parser module, no flattening, no
+retrieval. Twenty-two §15 rows in
 [`conformance-matrix.md`](conformance-matrix.md) read `spec`, a status that did
-not exist before this reversal and means exactly this; four read `•` and name
-the tests that earn them.
+not exist before this reversal and means exactly this; fourteen read `•` and
+name the tests that earn them.
 
 **What holds in the meantime.** `K15.30`: every entry point that would implement
-§15 refuses explicitly, and no documentation may state or imply that this crate
-validates against archetypes. `openehr::am`'s own module header carries the
-table of what is and is not built, and `validation`'s header keeps the sentence
-that a passing composition may still violate its archetype. `K15.31`: a partial implementation is not
-described as archetype support — parsing without validation is a parser, and
-must be called one. `L10.2`, amended, keeps the sentence that a passing
-composition may still violate its archetype in place until the matrix says
-otherwise.
+an unbuilt part of §15 refuses explicitly, and no documentation may state or
+imply that this crate validates against a *published* archetype — only against
+one already held in memory, and `openehr::am::validate`'s own module
+documentation says so before it says anything else. `openehr::am`'s own module
+header carries the table of what is and is not built, and `validation`'s header
+keeps the sentence that passing Reference-Model validation does not mean an
+instance conforms to its archetype. `K15.31`: a partial implementation is not
+described as more archetype support than it is — validation without a parser or
+flattening is validation of what is handed to it, and must be called that.
+`L10.2`, amended, keeps the sentence that a passing composition may still
+violate its archetype in place until the matrix says every requirement in §15 is
+satisfied.
 
 **Residual, and it is real.** The scope reversal leaves citations elsewhere in
 the repository that point at a withdrawn requirement while stating a reason that
@@ -2259,6 +2283,18 @@ not rewritten here on purpose: `W0.6` says a citation's whole value is that it
 does not change, and a mass rewrite during a specification change is how a
 citation stops meaning anything. They are re-pointed when the code they describe
 changes, and this paragraph is the record that they are known.
+
+**Residual, added 2026-08-30.** `validate_with_repository` resolves a
+`C_ARCHETYPE_ROOT`, but a bare `ARCHETYPE_SLOT` stays unchecked with or
+without a repository, and this is a gap in a different module than the one
+this finding is about: which archetype fills a slot is recorded on the
+instance's `ARCHETYPED.archetype_id`, and `crate::path::Node` — built for AQL
+and path resolution, before archetype support existed — exposes only
+`archetype_node_id`, the short code, never that attribute. Closing it means
+adding a variant or a method to `crate::path::Node`, which is `path.rs`'s
+surface, not `am`'s; `openehr::am::validate`'s own module documentation states
+the gap rather than working around it with something that looks like a
+resolution and is not one.
 
 ## A-41 — the matrix's totals went stale, again
 

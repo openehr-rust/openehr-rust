@@ -20,14 +20,33 @@ and never a pass. A partial constraint engine is still prohibited. What changed
 is that the refusal now lives inside an implementation instead of standing in
 for one.
 
-**Four of these requirements are implemented; twenty-eight are not.**
+**Fourteen of these requirements are implemented; eighteen are not.**
 `K15.1`–`K15.4` — the AOM2 object model — landed as `openehr::am` on
-2026-08-26, with tests named in the [conformance matrix](conformance-matrix.md).
-Everything else is in force and unsatisfied: no ADL parser, no flattening, no
-template expansion, no operational template, no retrieval, and **no way to check
-that a `COMPOSITION` conforms to its archetype**. [`audit.md`](audit.md)
-**A-40** keeps that gap visible until the code closes it (`C0.9`), and `K15.30`
-is what stops the documentation from moving before the code does.
+2026-08-26; `K15.18`–`K15.23` — validating a Reference Model instance against
+an archetype, as a separate verdict from Reference-Model validation, never a
+partial pass — landed as `openehr::am::validate` on 2026-08-30; and
+`K15.24`–`K15.27` — a repository abstraction, and resolving a
+`C_ARCHETYPE_ROOT` filler through one, `openehr` itself performing no I/O
+(`K15.25`) — landed as `openehr::am::repository` and
+`validate_with_repository` the same day. All three with tests named in the
+[conformance matrix](conformance-matrix.md). What remains is still real: no
+ADL parser, no flattening, no template expansion, no operational template.
+`validate_with_repository` validates each resolved `Archetype` **as given**,
+not as a flattened OPT2 would be — flattening (`K15.11`) and template
+expansion (`K15.14`) do not exist to merge a specialisation's inherited
+constraints in first, and there is still no parser to read one from ADL text.
+A bare `ARCHETYPE_SLOT` stays unchecked even with a repository supplied: which
+archetype filled it is recorded on the instance's `ARCHETYPED.archetype_id`,
+an attribute `crate::path::Node` does not expose, so nothing here can name
+what to resolve — a gap in `crate::path`, stated rather than worked around.
+So the crate can now tell you whether a `COMPOSITION` conforms to an
+archetype you built, already have, or can retrieve through a repository you
+supply, and still cannot tell you whether it conforms to the *published*
+archetype unless whatever produced or retrieved that `Archetype` already did
+the flattening by hand. [`audit.md`](audit.md) **A-40** keeps the remaining
+gap visible until the code closes it (`C0.9`), and `K15.30` is what stops the
+documentation from moving
+before the code does.
 
 ## Vocabulary
 
