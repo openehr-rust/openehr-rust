@@ -19,16 +19,33 @@
 //! discover: this function validates against an archetype, not against an
 //! operational template (`K15.15`), because this crate does not produce one.
 //!
+//! # `ARCHETYPE_SLOT` and `C_ARCHETYPE_ROOT`: resolved only with a repository
+//!
+//! [`validate_against_archetype`] never resolves either — there is nowhere
+//! for it to resolve them *from* (`K15.24`). [`validate_with_repository`]
+//! takes an [`crate::am::ArchetypeRepository`] and, for a `C_ARCHETYPE_ROOT`
+//! (a slot a template has already filled, naming the filler archetype by
+//! id), resolves it and validates the same subtree against the filler's own
+//! `definition` and terminology.
+//!
+//! A bare `ARCHETYPE_SLOT` is different in kind and stays unchecked even with
+//! a repository supplied: **which** archetype filled it is recorded on the
+//! *instance*'s `ARCHETYPED.archetype_id`, an attribute [`crate::path::Node`]
+//! does not expose (only `archetype_node_id`, the short code), so nothing in
+//! this crate can name what to resolve. That is a gap in `crate::path`, not
+//! in this module, and it is stated here rather than worked around.
+//!
 //! # `K15.20`: no partial pass
 //!
-//! A construct this module cannot check — an `ARCHETYPE_SLOT` or
-//! `C_ARCHETYPE_ROOT` filler, which needs retrieval (`K15.24`, not
-//! implemented); a `C_UNSUPPORTED` primitive constraint; a `C_STRING` pattern,
-//! which is carried but not compiled or applied (see [`crate::am::CPrimitive`])
-//! — is recorded as [`Unchecked`], never silently treated as satisfied.
-//! [`ArchetypeReport::is_conformant`] is `false` whenever anything is
-//! unchecked, exactly as it is when something is violated: an unchecked node
-//! is not a passing node.
+//! A construct this module cannot check — a bare `ARCHETYPE_SLOT`; a
+//! `C_ARCHETYPE_ROOT` when no repository is supplied, or when retrieval
+//! fails (`K15.27`), or when the caller has not opted into an
+//! unestablished-provenance result (`K15.26`); a `C_UNSUPPORTED` primitive
+//! constraint; a `C_STRING` pattern, carried but not compiled or applied
+//! (see [`crate::am::CPrimitive`]) — is recorded as [`Unchecked`], never
+//! silently treated as satisfied. [`ArchetypeReport::is_conformant`] is
+//! `false` whenever anything is unchecked, exactly as it is when something is
+//! violated: an unchecked node is not a passing node.
 //!
 //! # `K15.19`: a separate verdict from Reference-Model validation
 //!
@@ -59,6 +76,7 @@
 
 use crate::am::archetype::Archetype;
 use crate::am::constraint::{CAttribute, CComplexObject, CObject, CPrimitive};
+use crate::am::repository::ArchetypeRepository;
 use crate::am::terminology::ArchetypeTerminology;
 use crate::base::{ArchetypeId, Real};
 use crate::path::{Node, Scalar};
@@ -123,6 +141,10 @@ impl fmt::Display for ArchetypeViolation {
 pub struct Unchecked {
     archetype_path: String,
     reason: &'static str,
+    /// Design-time vocabulary safe to echo (`X11.7`) — an archetype id, a
+    /// [`crate::am::RepositoryError`]'s own text — never node content.
+    /// `None` when `reason` alone says everything there is to say.
+    detail: Option<String>,
 }
 
 impl Unchecked {
@@ -137,6 +159,14 @@ impl Unchecked {
     pub const fn reason(&self) -> &'static str {
         self.reason
     }
+
+    /// Further detail, where `reason` alone does not say everything — an
+    /// archetype identifier, a retrieval failure's own message. Design-time
+    /// vocabulary only, never node content (`X11.7`).
+    #[must_use]
+    pub fn detail(&self) -> Option<&str> {
+        self.detail.as_deref()
+    }
 }
 
 /// The outcome of validating one instance against one archetype.
@@ -144,6 +174,7 @@ impl Unchecked {
 pub struct ArchetypeReport {
     violations: Vec<ArchetypeViolation>,
     unchecked: Vec<Unchecked>,
+    unverified_provenance: Vec<String>,
 }
 
 impl ArchetypeReport {
@@ -159,6 +190,15 @@ impl ArchetypeReport {
         &self.unchecked
     }
 
+    /// Archetype paths validated using a filler archetype whose provenance
+    /// could not be established, because the caller opted in
+    /// (`RepositoryOptions::allow_unestablished_provenance`, `K15.26`).
+    /// Recorded, not hidden, even though the caller allowed it.
+    #[must_use]
+    pub fn unverified_provenance(&self) -> &[String] {
+        &self.unverified_provenance
+    }
+
     /// Whether the instance conforms.
     ///
     /// `K15.20`: **no partial pass.** `false` if anything violated a
@@ -170,19 +210,47 @@ impl ArchetypeReport {
     }
 }
 
+/// Whether to use a resolved archetype whose provenance could not be
+/// established (`K15.26`). Off by default: retrieval that cannot verify what
+/// it retrieved does not get to validate against it silently.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RepositoryOptions {
+    allow_unestablished_provenance: bool,
+}
+
+impl RepositoryOptions {
+    /// Allows validation to proceed using a [`crate::am::Resolved`] archetype
+    /// with no [`crate::am::Provenance`]. Every path where this happens is
+    /// recorded in [`ArchetypeReport::unverified_provenance`] regardless.
+    #[must_use]
+    pub const fn allow_unestablished_provenance(mut self) -> Self {
+        self.allow_unestablished_provenance = true;
+        self
+    }
+}
+
 /// Accumulates violations and unchecked nodes while walking the two trees.
+///
+/// `archetype_id` and `terminology` are **not** stored here — they are
+/// per-node-tree, and change when the walk crosses into a `C_ARCHETYPE_ROOT`
+/// filler resolved from a repository, which is an [`Archetype`] this
+/// `Ctx`'s own lifetime cannot be tied to (it is retrieved, and owned,
+/// partway through the walk). Passed as explicit arguments to every `walk_*`
+/// function instead, so each recursion carries whichever archetype it is
+/// actually inside.
 struct Ctx<'a> {
-    archetype_id: &'a ArchetypeId,
-    terminology: &'a ArchetypeTerminology,
+    repository: Option<&'a dyn ArchetypeRepository>,
+    options: RepositoryOptions,
     violations: Vec<ArchetypeViolation>,
     unchecked: Vec<Unchecked>,
+    unverified_provenance: Vec<String>,
 }
 
 impl Ctx<'_> {
-    fn violation(&mut self, path: &str, constraint: &'static str) {
+    fn violation(&mut self, archetype_id: &ArchetypeId, path: &str, constraint: &'static str) {
         self.violations.push(ArchetypeViolation {
             archetype_path: path.to_owned(),
-            archetype_id: self.archetype_id.clone(),
+            archetype_id: archetype_id.clone(),
             constraint,
         });
     }
@@ -191,6 +259,15 @@ impl Ctx<'_> {
         self.unchecked.push(Unchecked {
             archetype_path: path.to_owned(),
             reason,
+            detail: None,
+        });
+    }
+
+    fn unchecked_detail(&mut self, path: &str, reason: &'static str, detail: impl Into<String>) {
+        self.unchecked.push(Unchecked {
+            archetype_path: path.to_owned(),
+            reason,
+            detail: Some(detail.into()),
         });
     }
 
@@ -198,6 +275,7 @@ impl Ctx<'_> {
         ArchetypeReport {
             violations: self.violations,
             unchecked: self.unchecked,
+            unverified_provenance: self.unverified_provenance,
         }
     }
 }
@@ -223,39 +301,87 @@ impl Ctx<'_> {
 #[must_use]
 pub fn validate_against_archetype(archetype: &Archetype, root: Node<'_>) -> ArchetypeReport {
     let mut ctx = Ctx {
-        archetype_id: archetype.archetype_id(),
-        terminology: archetype.terminology(),
+        repository: None,
+        options: RepositoryOptions::default(),
         violations: Vec::new(),
         unchecked: Vec::new(),
+        unverified_provenance: Vec::new(),
     };
+    run(archetype, root, &mut ctx);
+    ctx.finish()
+}
 
+/// Validates `root` against `archetype`'s definition, resolving any
+/// `C_ARCHETYPE_ROOT` filler through `repository` (`K15.18`, `K15.24`).
+///
+/// See the module documentation for exactly what is and is not resolved: a
+/// filled slot (`C_ARCHETYPE_ROOT`) is; a bare `ARCHETYPE_SLOT` is not, even
+/// here, because nothing in this crate can name which archetype fills it.
+#[must_use]
+pub fn validate_with_repository(
+    archetype: &Archetype,
+    root: Node<'_>,
+    repository: &dyn ArchetypeRepository,
+    options: RepositoryOptions,
+) -> ArchetypeReport {
+    let mut ctx = Ctx {
+        repository: Some(repository),
+        options,
+        violations: Vec::new(),
+        unchecked: Vec::new(),
+        unverified_provenance: Vec::new(),
+    };
+    run(archetype, root, &mut ctx);
+    ctx.finish()
+}
+
+fn run(archetype: &Archetype, root: Node<'_>, ctx: &mut Ctx<'_>) {
     if root.type_name() != archetype.rm_type_name() {
         // A root of the wrong RM class invalidates everything beneath it too
         // — walking further would only produce a cascade of "attribute not
         // found" noise from a class the archetype never described.
-        ctx.violation("", "Rm_type_name_matches");
-        return ctx.finish();
+        ctx.violation(archetype.archetype_id(), "", "Rm_type_name_matches");
+        return;
     }
-
-    walk_complex(archetype.definition(), root, "", &mut ctx);
-    ctx.finish()
+    walk_complex(
+        archetype.archetype_id(),
+        archetype.terminology(),
+        archetype.definition(),
+        root,
+        "",
+        ctx,
+    );
 }
 
 /// Checks every attribute constraint against the data reachable through it.
-fn walk_complex(constraint: &CComplexObject, node: Node<'_>, path: &str, ctx: &mut Ctx<'_>) {
+fn walk_complex(
+    archetype_id: &ArchetypeId,
+    terminology: &ArchetypeTerminology,
+    constraint: &CComplexObject,
+    node: Node<'_>,
+    path: &str,
+    ctx: &mut Ctx<'_>,
+) {
     for attribute in constraint.attributes() {
-        walk_attribute(attribute, node, path, ctx);
+        walk_attribute(archetype_id, terminology, attribute, node, path, ctx);
     }
 }
 
 /// One `C_ATTRIBUTE`: existence, cardinality, and each alternative beneath it.
-fn walk_attribute(attribute: &CAttribute, node: Node<'_>, path: &str, ctx: &mut Ctx<'_>) {
+fn walk_attribute(
+    archetype_id: &ArchetypeId,
+    terminology: &ArchetypeTerminology,
+    attribute: &CAttribute,
+    node: Node<'_>,
+    path: &str,
+    ctx: &mut Ctx<'_>,
+) {
     let children = node.children(attribute.rm_attribute_name());
     let attr_path = format!("{path}/{}", attribute.rm_attribute_name());
 
     if children.is_empty() {
         if attribute.existence().lower() > 0 {
-            ctx.violation(&attr_path, "Existence");
+            ctx.violation(archetype_id, &attr_path, "Existence");
         }
         return;
     }
@@ -264,7 +390,7 @@ fn walk_attribute(attribute: &CAttribute, node: Node<'_>, path: &str, ctx: &mut 
     match attribute.cardinality() {
         Some(cardinality) => {
             if !cardinality.interval().contains(count) {
-                ctx.violation(&attr_path, "Cardinality");
+                ctx.violation(archetype_id, &attr_path, "Cardinality");
             }
         }
         // No cardinality means the attribute is single-valued, and
@@ -272,7 +398,7 @@ fn walk_attribute(attribute: &CAttribute, node: Node<'_>, path: &str, ctx: &mut 
         // for a genuine container attribute — but an archetype whose author
         // forgot to declare one is a defect the instance should not appear
         // to survive silently.
-        None if count > 1 => ctx.violation(&attr_path, "Cardinality"),
+        None if count > 1 => ctx.violation(archetype_id, &attr_path, "Cardinality"),
         None => {}
     }
 
@@ -288,9 +414,16 @@ fn walk_attribute(attribute: &CAttribute, node: Node<'_>, path: &str, ctx: &mut 
         match match_alternative(alternatives, child) {
             Match::Alternative(index) => {
                 matched_counts[index] += 1;
-                walk_object(&alternatives[index], child, &attr_path, ctx);
+                walk_object(
+                    archetype_id,
+                    terminology,
+                    &alternatives[index],
+                    child,
+                    &attr_path,
+                    ctx,
+                );
             }
-            Match::Unrecognised => ctx.violation(&attr_path, "Unrecognised_node_id"),
+            Match::Unrecognised => ctx.violation(archetype_id, &attr_path, "Unrecognised_node_id"),
             Match::Ambiguous => ctx.unchecked(
                 &attr_path,
                 "more than one constraint alternative here, and the node carries no \
@@ -305,7 +438,7 @@ fn walk_attribute(attribute: &CAttribute, node: Node<'_>, path: &str, ctx: &mut 
                 Some(id) => format!("{attr_path}[{id}]"),
                 None => attr_path.clone(),
             };
-            ctx.violation(&node_path, "Occurrences");
+            ctx.violation(archetype_id, &node_path, "Occurrences");
         }
     }
 }
@@ -335,7 +468,14 @@ fn match_alternative(alternatives: &[CObject], data: Node<'_>) -> Match {
 }
 
 /// One matched `C_OBJECT`: RM class, then its own kind of constraint.
-fn walk_object(constraint: &CObject, node: Node<'_>, path: &str, ctx: &mut Ctx<'_>) {
+fn walk_object(
+    archetype_id: &ArchetypeId,
+    terminology: &ArchetypeTerminology,
+    constraint: &CObject,
+    node: Node<'_>,
+    path: &str,
+    ctx: &mut Ctx<'_>,
+) {
     let path = match constraint.node_id() {
         Some(id) => format!("{path}[{id}]"),
         None => path.to_owned(),
@@ -351,33 +491,117 @@ fn walk_object(constraint: &CObject, node: Node<'_>, path: &str, ctx: &mut Ctx<'
         // constraint. `walk_primitive` checks the actual `Scalar` variant
         // against the constraint kind instead, which is the check that can
         // fail honestly.
-        walk_primitive(p.constraint(), node, &path, ctx);
+        walk_primitive(archetype_id, terminology, p.constraint(), node, &path, ctx);
         return;
     }
 
     if node.type_name() != constraint.rm_type_name() {
-        ctx.violation(&path, "Rm_type_name_matches");
+        ctx.violation(archetype_id, &path, "Rm_type_name_matches");
         return;
     }
 
     match constraint {
-        CObject::Complex(c) => walk_complex(c, node, &path, ctx),
+        CObject::Complex(c) => walk_complex(archetype_id, terminology, c, node, &path, ctx),
         CObject::Slot(_) => ctx.unchecked(
             &path,
-            "ARCHETYPE_SLOT: the filler archetype is not resolved (retrieval, K15.24, is not \
-             implemented)",
+            "ARCHETYPE_SLOT: which archetype fills this is recorded on the instance's \
+             ARCHETYPED.archetype_id, which crate::path::Node does not expose",
         ),
-        CObject::ArchetypeRoot(_) => ctx.unchecked(
-            &path,
-            "C_ARCHETYPE_ROOT: the filler archetype is not resolved (retrieval, K15.24, is not \
-             implemented)",
-        ),
+        CObject::ArchetypeRoot(filled) => walk_archetype_root(filled, node, &path, ctx),
         CObject::Primitive(_) => unreachable!("handled above"),
     }
 }
 
+/// A `C_ARCHETYPE_ROOT`: a slot a template already filled, naming the filler
+/// by archetype id. Resolved through the repository if one was supplied
+/// (`K15.24`); otherwise unchecked, the same as a bare `ARCHETYPE_SLOT`.
+fn walk_archetype_root(
+    filled: &crate::am::CArchetypeRoot,
+    node: Node<'_>,
+    path: &str,
+    ctx: &mut Ctx<'_>,
+) {
+    let Some(repository) = ctx.repository else {
+        ctx.unchecked(
+            path,
+            "C_ARCHETYPE_ROOT: no repository was supplied (validate_with_repository); \
+             the filler archetype is not resolved",
+        );
+        return;
+    };
+
+    let Ok(filler_id) = filled.archetype_ref().parse::<ArchetypeId>() else {
+        ctx.unchecked_detail(
+            path,
+            "C_ARCHETYPE_ROOT names an archetype reference that is not a well-formed \
+             archetype id",
+            filled.archetype_ref(),
+        );
+        return;
+    };
+
+    let resolved = match repository.resolve(&filler_id) {
+        Ok(resolved) => resolved,
+        Err(error) => {
+            // `K15.27`: a retrieval failure is a refusal, never a pass —
+            // `Unchecked` (not `is_conformant`), never silently skipped.
+            ctx.unchecked_detail(
+                path,
+                "C_ARCHETYPE_ROOT's filler archetype could not be retrieved",
+                error.to_string(),
+            );
+            return;
+        }
+    };
+
+    if resolved.archetype().archetype_id() != &filler_id {
+        // The repository is required to answer the identifier asked for
+        // (`K15.26`); returning a different one is a repository defect this
+        // crate refuses to build on rather than validate against silently.
+        ctx.unchecked_detail(
+            path,
+            "the repository returned a different archetype than the one requested",
+            resolved.archetype().archetype_id().to_string(),
+        );
+        return;
+    }
+
+    if resolved.provenance().is_none() {
+        if ctx.options.allow_unestablished_provenance {
+            ctx.unverified_provenance.push(path.to_owned());
+        } else {
+            ctx.unchecked(
+                path,
+                "the filler archetype's provenance is not established, and the caller did \
+                 not opt in (RepositoryOptions::allow_unestablished_provenance)",
+            );
+            return;
+        }
+    }
+
+    if node.type_name() != resolved.archetype().rm_type_name() {
+        ctx.violation(resolved.archetype().archetype_id(), path, "Rm_type_name_matches");
+        return;
+    }
+    walk_complex(
+        resolved.archetype().archetype_id(),
+        resolved.archetype().terminology(),
+        resolved.archetype().definition(),
+        node,
+        path,
+        ctx,
+    );
+}
+
 /// A leaf primitive constraint against the scalar the path walk reached.
-fn walk_primitive(constraint: &CPrimitive, node: Node<'_>, path: &str, ctx: &mut Ctx<'_>) {
+fn walk_primitive(
+    archetype_id: &ArchetypeId,
+    terminology: &ArchetypeTerminology,
+    constraint: &CPrimitive,
+    node: Node<'_>,
+    path: &str,
+    ctx: &mut Ctx<'_>,
+) {
     let Node::Scalar(scalar) = node else {
         // A `C_PRIMITIVE_OBJECT` governs a scalar attribute; the RM shape
         // does not match what the archetype expects if the walk reached
@@ -385,7 +609,7 @@ fn walk_primitive(constraint: &CPrimitive, node: Node<'_>, path: &str, ctx: &mut
         // because a hand-built archetype (`K15.4`) is not obliged to be
         // well formed, and this module does not trust its input any more
         // than `crate::validation` trusts a deserialized RM instance.
-        ctx.violation(path, "Primitive_kind_mismatch");
+        ctx.violation(archetype_id, path, "Primitive_kind_mismatch");
         return;
     };
 
@@ -399,12 +623,12 @@ fn walk_primitive(constraint: &CPrimitive, node: Node<'_>, path: &str, ctx: &mut
         ) => {
             let permitted = if value { *allow_true } else { *allow_false };
             if !permitted {
-                ctx.violation(path, "C_BOOLEAN");
+                ctx.violation(archetype_id, path, "C_BOOLEAN");
             }
         }
         (CPrimitive::String { list, pattern }, Scalar::Str(value)) => {
             if !list.is_empty() && !list.iter().any(|item| item == value) {
-                ctx.violation(path, "C_STRING");
+                ctx.violation(archetype_id, path, "C_STRING");
             } else if pattern.is_some() {
                 // Carried but never compiled or applied — see
                 // `crate::am::CPrimitive::String`'s own documentation for why.
@@ -415,7 +639,7 @@ fn walk_primitive(constraint: &CPrimitive, node: Node<'_>, path: &str, ctx: &mut
             let in_list = list.is_empty() || list.contains(&value);
             let in_range = range.as_ref().is_none_or(|r| r.contains(&value));
             if !in_list || !in_range {
-                ctx.violation(path, "C_INTEGER");
+                ctx.violation(archetype_id, path, "C_INTEGER");
             }
         }
         (CPrimitive::Real { list, range }, Scalar::Number(value)) => {
@@ -434,7 +658,7 @@ fn walk_primitive(constraint: &CPrimitive, node: Node<'_>, path: &str, ctx: &mut
                     .any(|item| item.semantic_cmp(&candidate) == Some(Ordering::Equal));
             let in_range = range.as_ref().is_none_or(|r| r.contains(&candidate));
             if !in_list || !in_range {
-                ctx.violation(path, "C_REAL");
+                ctx.violation(archetype_id, path, "C_REAL");
             }
         }
         (
@@ -455,10 +679,10 @@ fn walk_primitive(constraint: &CPrimitive, node: Node<'_>, path: &str, ctx: &mut
                 let inline_ok = code_list.iter().any(|code| code == value);
                 let value_set_ok = ac_code
                     .as_deref()
-                    .and_then(|ac| ctx.terminology.value_set(ac))
+                    .and_then(|ac| terminology.value_set(ac))
                     .is_some_and(|set| set.contains(value));
                 if !inline_ok && !value_set_ok {
-                    ctx.violation(path, "C_TERMINOLOGY_CODE");
+                    ctx.violation(archetype_id, path, "C_TERMINOLOGY_CODE");
                 }
             }
         }
@@ -473,7 +697,7 @@ fn walk_primitive(constraint: &CPrimitive, node: Node<'_>, path: &str, ctx: &mut
             // The scalar kind the path walk reached does not match what this
             // primitive constraint governs — a `C_INTEGER` reached through a
             // string-valued attribute, for instance.
-            ctx.violation(path, "Primitive_kind_mismatch");
+            ctx.violation(archetype_id, path, "Primitive_kind_mismatch");
         }
     }
 }
@@ -482,8 +706,9 @@ fn walk_primitive(constraint: &CPrimitive, node: Node<'_>, path: &str, ctx: &mut
 mod tests {
     use super::*;
     use crate::am::{
-        ArchetypeSlot, ArchetypeTerminology, CAttribute, CComplexObject, CObject, CPrimitiveObject,
-        Cardinality, MultiplicityInterval, TermDefinition,
+        ArchetypeRepository, ArchetypeSlot, ArchetypeTerminology, CArchetypeRoot, CAttribute,
+        CComplexObject, CObject, CPrimitiveObject, Cardinality, MultiplicityInterval, Provenance,
+        RepositoryError, Resolved, TermDefinition,
     };
     use crate::base::Interval;
     use crate::path::Pathable as _;
@@ -825,5 +1050,196 @@ mod tests {
         let report = validate_against_archetype(&archetype, admin.as_node());
         assert_eq!(report.violations().len(), 1);
         assert_eq!(report.violations()[0].constraint(), "Rm_type_name_matches");
+    }
+
+    // -- `C_ARCHETYPE_ROOT` resolution through a repository (`K15.24`-`K15.27`) --
+
+    /// A repository that always answers the same fixed result, whatever
+    /// identifier is asked for -- enough to test the caller's side of the
+    /// trait without a real retrieval implementation, which `openehr` never
+    /// has (`K15.25`).
+    struct FixedRepository(Result<Resolved, RepositoryError>);
+
+    impl ArchetypeRepository for FixedRepository {
+        fn resolve(&self, _id: &ArchetypeId) -> Result<Resolved, RepositoryError> {
+            self.0.clone()
+        }
+    }
+
+    /// `ELEMENT[id1]` whose `value` must be a `DV_BOOLEAN` of `true` —
+    /// nested the way a real primitive constraint is: `value` holds the
+    /// `DV_BOOLEAN` complex object, whose own `value` attribute is the
+    /// actual `C_BOOLEAN` (see `element_with_value_constraint` above).
+    fn filler_archetype(id: &str) -> Archetype {
+        let mut terms = BTreeMap::new();
+        terms.insert("id1".to_owned(), TermDefinition::new("Filler", None).unwrap());
+        let definition = CComplexObject::new(
+            "ELEMENT",
+            Some("id1".to_owned()),
+            MultiplicityInterval::MANDATORY,
+            vec![
+                CAttribute::single(
+                    "value",
+                    MultiplicityInterval::MANDATORY,
+                    vec![CObject::Complex(
+                        CComplexObject::new(
+                            "DV_BOOLEAN",
+                            None,
+                            MultiplicityInterval::MANDATORY,
+                            vec![
+                                CAttribute::single(
+                                    "value",
+                                    MultiplicityInterval::MANDATORY,
+                                    vec![CObject::Primitive(CPrimitiveObject::new(
+                                        "Boolean",
+                                        MultiplicityInterval::MANDATORY,
+                                        CPrimitive::Boolean {
+                                            allow_true: true,
+                                            allow_false: false,
+                                        },
+                                    ))],
+                                )
+                                .unwrap(),
+                            ],
+                        )
+                        .unwrap(),
+                    )],
+                )
+                .unwrap(),
+            ],
+        )
+        .unwrap();
+        Archetype::new(id.parse().unwrap(), definition, ArchetypeTerminology::new("en", terms).unwrap())
+            .unwrap()
+    }
+
+    /// An `EVALUATION[id1]/data[id2 ITEM_LIST]/items` archetype whose sole
+    /// alternative is a `C_ARCHETYPE_ROOT[at0004]` naming `filler_id`.
+    fn evaluation_archetype_with_filled_slot(filler_id: &str) -> Archetype {
+        let root = CArchetypeRoot::new("ELEMENT", filler_id, MultiplicityInterval::MANDATORY)
+            .unwrap()
+            .with_node_id("at0004")
+            .unwrap();
+        evaluation_archetype(CObject::ArchetypeRoot(root))
+    }
+
+    fn provenance() -> Provenance {
+        Provenance::new("ckm.openehr.org", "1.0.0", "2026-08-30T00:00:00Z", "digest")
+    }
+
+    #[test]
+    fn without_a_repository_a_filled_slot_is_unchecked() {
+        let archetype = evaluation_archetype_with_filled_slot("openEHR-EHR-ELEMENT.filler.v1");
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Filled", "at0004"),
+            DataValue::Boolean(DvBoolean::new(true)),
+        )]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(!report.is_conformant());
+        assert!(report.violations().is_empty());
+        assert_eq!(report.unchecked().len(), 1);
+        assert!(report.unchecked()[0].reason().contains("no repository was supplied"));
+    }
+
+    #[test]
+    fn a_repository_resolved_filler_validates_the_same_subtree() {
+        let filler_id = "openEHR-EHR-ELEMENT.filler.v1";
+        let archetype = evaluation_archetype_with_filled_slot(filler_id);
+        let repo = FixedRepository(Ok(Resolved::new(filler_archetype(filler_id), provenance())));
+
+        let conforming = build_evaluation(vec![Element::new(
+            attrs("Filled", "at0004"),
+            DataValue::Boolean(DvBoolean::new(true)),
+        )]);
+        let report =
+            validate_with_repository(&archetype, conforming.as_node(), &repo, RepositoryOptions::default());
+        assert!(report.is_conformant(), "{report:?}");
+
+        // The filler's own constraint (value must be `true`) is what fires,
+        // attributed to the *filler's* archetype id, not the outer one.
+        let violating = build_evaluation(vec![Element::new(
+            attrs("Filled", "at0004"),
+            DataValue::Boolean(DvBoolean::new(false)),
+        )]);
+        let report =
+            validate_with_repository(&archetype, violating.as_node(), &repo, RepositoryOptions::default());
+        assert_eq!(report.violations()[0].constraint(), "C_BOOLEAN");
+        assert_eq!(
+            report.violations()[0].archetype_id().to_string(),
+            filler_id
+        );
+    }
+
+    #[test]
+    fn a_retrieval_failure_is_unchecked_and_names_what_happened() {
+        let filler_id = "openEHR-EHR-ELEMENT.filler.v1";
+        let archetype = evaluation_archetype_with_filled_slot(filler_id);
+        let repo = FixedRepository(Err(RepositoryError::NotFound {
+            id: filler_id.parse().unwrap(),
+        }));
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Filled", "at0004"),
+            DataValue::Boolean(DvBoolean::new(true)),
+        )]);
+        let report =
+            validate_with_repository(&archetype, entry.as_node(), &repo, RepositoryOptions::default());
+        assert!(!report.is_conformant());
+        assert!(report.violations().is_empty());
+        let unchecked = &report.unchecked()[0];
+        assert!(unchecked.reason().contains("could not be retrieved"));
+        assert!(unchecked.detail().unwrap().contains("no archetype found"));
+    }
+
+    #[test]
+    fn a_repository_returning_a_different_archetype_is_unchecked_not_used() {
+        let filler_id = "openEHR-EHR-ELEMENT.filler.v1";
+        let archetype = evaluation_archetype_with_filled_slot(filler_id);
+        // Answers every request with an archetype under a *different* id.
+        let repo = FixedRepository(Ok(Resolved::new(
+            filler_archetype("openEHR-EHR-ELEMENT.wrong.v1"),
+            provenance(),
+        )));
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Filled", "at0004"),
+            DataValue::Boolean(DvBoolean::new(true)),
+        )]);
+        let report =
+            validate_with_repository(&archetype, entry.as_node(), &repo, RepositoryOptions::default());
+        assert!(!report.is_conformant());
+        assert!(report.violations().is_empty());
+        assert!(
+            report.unchecked()[0]
+                .reason()
+                .contains("a different archetype than the one requested")
+        );
+    }
+
+    #[test]
+    fn unestablished_provenance_is_unchecked_unless_the_caller_opts_in() {
+        let filler_id = "openEHR-EHR-ELEMENT.filler.v1";
+        let archetype = evaluation_archetype_with_filled_slot(filler_id);
+        let repo = FixedRepository(Ok(Resolved::without_provenance(filler_archetype(filler_id))));
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Filled", "at0004"),
+            DataValue::Boolean(DvBoolean::new(true)),
+        )]);
+
+        let refused =
+            validate_with_repository(&archetype, entry.as_node(), &repo, RepositoryOptions::default());
+        assert!(!refused.is_conformant());
+        assert!(
+            refused.unchecked()[0]
+                .reason()
+                .contains("provenance is not established")
+        );
+
+        let opted_in = validate_with_repository(
+            &archetype,
+            entry.as_node(),
+            &repo,
+            RepositoryOptions::default().allow_unestablished_provenance(),
+        );
+        assert!(opted_in.is_conformant(), "{opted_in:?}");
+        assert_eq!(opted_in.unverified_provenance(), ["/data[id2]/items[at0004]"]);
     }
 }

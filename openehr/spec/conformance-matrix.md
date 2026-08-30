@@ -54,13 +54,16 @@ cell and counting statuses, and re-running that is how they should be checked
 again.
 
 **Re-derived again 2026-08-30**, the same way, after `K15.18`–`K15.23` moved
-from **spec** to **•**: six ids, `openehr::am::validate`.
+from **spec** to **•**: six ids, `openehr::am::validate`. **Re-derived a
+third time the same day**, after `K15.24`–`K15.27` made the same move: four
+ids, `openehr::am::repository` and `openehr::am::validate`'s
+`validate_with_repository`.
 
 | Status | 2026-08-30 | 2026-08-26 | 2026-07-31 |
 | --- | --- | --- | --- |
-| • verified | 264 | 258 | 175 |
+| • verified | 268 | 258 | 175 |
 | doc | 33 | 33 | 30 |
-| **spec** — in force, unimplemented | 22 | 28 | — |
+| **spec** — in force, unimplemented | 18 | 28 | — |
 | type | 13 | 13 | — |
 | — out of scope | 8 | 8 | 6 |
 | ? implemented, untested | 3 | 3 | 54 |
@@ -73,10 +76,12 @@ withdrawn and the Archetype Model brought into scope. There were 32 of them that
 day; `K15.1`–`K15.4` — the AOM2 object model — were implemented and tested the
 same day, leaving 28. `K15.18`–`K15.23` — validating a Reference Model instance
 against an archetype already held in memory, as a verdict kept separate from
-`L10.x` and with no partial pass — followed on 2026-08-30, leaving **22**. They
-remain a large block of unsatisfied requirements this crate has carried since
-2026-08-26, and they are counted here rather than described elsewhere so that
-the size of the gap is a number a reader can see.
+`L10.x` and with no partial pass — followed on 2026-08-30, leaving 22.
+`K15.24`–`K15.27` — the repository abstraction, and resolving a
+`C_ARCHETYPE_ROOT` filler through one — followed the same day, leaving **18**.
+They remain a large block of unsatisfied requirements this crate has carried
+since 2026-08-26, and they are counted here rather than described elsewhere so
+that the size of the gap is a number a reader can see.
 
 Three things moved these numbers, and they are not the same thing.
 
@@ -432,16 +437,21 @@ Process requirements; they govern this specification rather than the code.
 
 ## §15 Archetypes and templates — `K15`
 
-The section was added on 2026-08-26 when `S1.4` was withdrawn. **Ten rows are
-satisfied and twenty-two are not**: `openehr::am` is the AOM2 object model, and
+The section was added on 2026-08-26 when `S1.4` was withdrawn. **Fourteen rows
+are satisfied and eighteen are not**: `openehr::am` is the AOM2 object model,
 `openehr::am::validate` (2026-08-30) checks a Reference Model instance against
-an `Archetype` already held in memory. No code in this crate parses ADL,
-flattens a specialised archetype, expands a template, or reads an operational
-template — so what `openehr::am::validate` checks is the definition as given,
-not as a flattened OPT2 would be, and that scope limit is stated in its own
-module documentation rather than left for the row below to imply more. No code
-retrieves an artefact either: a slot or an archetype-root filler is reported
-*unchecked*, per `K15.20`, not silently passed. **A-40** tracks the rest.
+an `Archetype` already held in memory, and `openehr::am::repository` plus
+`validate_with_repository` (2026-08-30, same day) resolve a `C_ARCHETYPE_ROOT`
+filler through a caller-supplied repository — `openehr` performs no I/O
+itself (`K15.25`). No code in this crate parses ADL, flattens a specialised
+archetype, or expands a template — so what `validate_with_repository` checks
+is the definition each resolved archetype gives as its own, not as a
+flattened OPT2 would be, and that scope limit is stated in its own module
+documentation rather than left for the row below to imply more. A bare
+`ARCHETYPE_SLOT` stays unchecked even with a repository, because which
+archetype filled it lives on the instance's `ARCHETYPED.archetype_id`, an
+attribute `crate::path::Node` does not expose — a gap in `crate::path`, not in
+this section. **A-40** tracks the rest.
 
 This table exists so that the gap is counted rather than described. A row moves
 off **spec** when the code implements it *and* a named test exercises it
@@ -459,6 +469,6 @@ off **spec** when the code implements it *and* a named test exercises it
 | K15.11–K15.13 | spec | specialisation, flattening, and the narrowing check |
 | K15.14–K15.17 | spec | template expansion and operational templates, both directions |
 | K15.18–K15.23 | • | `am::validate::tests::a_matching_instance_is_conformant`, `…a_missing_mandatory_element_is_a_violation`, `…an_unrecognised_node_id_is_a_violation`, `…an_alternative_below_its_own_mandatory_occurrences_is_a_violation`, `…a_slot_is_reported_unchecked_never_as_passing`, `…a_c_integer_range_rejects_a_value_outside_it`, `…a_c_string_pattern_is_unchecked_even_when_the_list_passes`, `…a_c_terminology_code_checks_against_the_archetypes_own_value_set`, `…the_wrong_root_rm_class_is_a_single_violation_not_a_cascade`. **Scope:** against an `Archetype` already in memory, not a flattened OPT2 (`K15.11`, `K15.15` are not implemented) — see `openehr::am::validate`'s own module documentation |
-| K15.24–K15.27 | spec | the repository abstraction, provenance, and the refusal on retrieval failure |
+| K15.24–K15.27 | • | `am::repository::tests::a_resolved_archetype_without_provenance_says_so`, `…a_resolved_archetype_with_provenance_carries_it`, `…each_failure_kind_names_what_happened`, `…a_fixed_repository_can_stand_in_for_a_real_one_in_a_test`; `am::validate::tests::a_repository_resolved_filler_validates_the_same_subtree`, `…a_retrieval_failure_is_unchecked_and_names_what_happened`, `…a_repository_returning_a_different_archetype_is_unchecked_not_used`, `…unestablished_provenance_is_unchecked_unless_the_caller_opts_in`. **Scope:** resolves `C_ARCHETYPE_ROOT` fillers only — a bare `ARCHETYPE_SLOT` stays unchecked even with a repository supplied, because which archetype filled it is recorded on the instance's `ARCHETYPED.archetype_id`, which `crate::path::Node` does not expose (a gap in `crate::path`, not here) |
 | K15.28–K15.29 | spec | the boundaries this section does **not** move: authoring, publishing, AQL execution |
 | K15.30–K15.31 | spec | the honesty gate while the rest is unbuilt — refuse, and do not describe a parser as archetype support |

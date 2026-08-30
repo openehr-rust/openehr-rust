@@ -20,13 +20,29 @@ archetype's `definition` in parallel. The verdict is a new type,
 already held in memory, not against a flattened operational template: this
 crate still does not parse ADL (`K15.5`) or flatten a specialised archetype's
 inherited constraints (`K15.11`–`K15.13`, `K15.14`–`K15.17`). A construct it
-cannot check — an `ARCHETYPE_SLOT` or `C_ARCHETYPE_ROOT` filler (retrieval,
-`K15.24`, is still not implemented), an unmodelled primitive constraint, a
+cannot check — a bare `ARCHETYPE_SLOT`, an unmodelled primitive constraint, a
 `C_STRING` pattern (carried but not compiled or applied) — is reported
 **unchecked**, and `ArchetypeReport::is_conformant` is `false` whenever
 anything is unchecked, never a silent pass (`K15.20`). See
 `openehr::am::validate`'s own module documentation, and `A-40` in
 [`spec/audit.md`](spec/audit.md) for what in §15 is still open.
+
+**New: `openehr::am::repository` — resolve a `C_ARCHETYPE_ROOT` filler through
+a repository you supply (`K15.24`–`K15.27`).** `ArchetypeRepository` is one
+method, `resolve`; `openehr` itself performs no network or filesystem I/O
+(`K15.25`), so no implementation of the trait lives in this crate. New
+`validate_with_repository` resolves a `C_ARCHETYPE_ROOT` filler through one and
+validates the same subtree against the filler's own definition and
+terminology, attributing any violation to the *filler's* archetype id, not
+the outer one. Verifies the repository answered the identifier actually
+requested, requires `RepositoryOptions::allow_unestablished_provenance` before
+validating against a `Resolved` with no `Provenance` (recording every such use
+in `ArchetypeReport::unverified_provenance` regardless, `K15.26`), and reports
+a retrieval failure as unchecked, never as a pass (`K15.27`). A bare
+`ARCHETYPE_SLOT` is unaffected: which archetype fills it lives on the
+instance's `ARCHETYPED.archetype_id`, which `crate::path::Node` does not
+expose, so nothing here can name what to resolve — a stated gap, not a silent
+one.
 
 ## 0.8.0 — 2026-08-29
 

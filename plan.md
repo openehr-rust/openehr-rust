@@ -45,12 +45,16 @@ to (GitHub, GitLab, Codeberg) and every destination it publishes to
 
 The headline capability gap is honest and registered: the Archetype Model
 entered scope on 2026-08-26 with 28 of 32 requirements having no code
-(**A-40**, open). `openehr::am::validate` closed six more the same week
-(2026-08-30) — a Reference Model instance can now be checked against an
-`Archetype` already held in memory, as a verdict kept separate from
-Reference-Model validation and with no partial pass — leaving 22: still no ADL
-parser, no flattening, no template expansion, no retrieval. That remainder is
-engineering work tracked by the matrix, not by this file.
+(**A-40**, open). Ten more closed the same week (2026-08-30): six from
+`openehr::am::validate` — a Reference Model instance can now be checked
+against an `Archetype` already held in memory, as a verdict kept separate from
+Reference-Model validation and with no partial pass — and four from
+`openehr::am::repository`, which resolves a `C_ARCHETYPE_ROOT` filler through
+a repository the caller supplies (`openehr` itself performs no I/O). That
+leaves 18: still no ADL parser, no flattening, no template expansion, and a
+bare `ARCHETYPE_SLOT` still unresolvable regardless of a repository, because
+`crate::path::Node` does not expose which archetype filled it. That remainder
+is engineering work tracked by the matrix, not by this file.
 
 ## Workstreams — professionalization (2026-08 onward)
 

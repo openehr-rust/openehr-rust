@@ -511,7 +511,9 @@ pub struct CArchetypeRoot {
     rm_type_name: String,
     node_id: Option<String>,
     /// The archetype used here, as an identifier. Resolving it to an artefact
-    /// is retrieval (`K15.24`), which this crate does not do.
+    /// is retrieval (`K15.24`) — `crate::am::validate::validate_with_repository`
+    /// does it, given an `ArchetypeRepository`; this type only carries the
+    /// reference, since building one does not require reaching a repository.
     archetype_ref: String,
     occurrences: MultiplicityInterval,
     attributes: Vec<CAttribute>,
@@ -547,10 +549,41 @@ impl CArchetypeRoot {
         })
     }
 
+    /// Records this node's identifier.
+    ///
+    /// Optional at construction because a `C_ARCHETYPE_ROOT` standing alone as
+    /// an archetype's whole definition needs none, but one filling a slot
+    /// among siblings does: matching an instance node against the right
+    /// alternative under its attribute is by `archetype_node_id` (`K15.18`),
+    /// and a filled slot with no id of its own can never be matched.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseError`] if the identifier is not an id-, at- or
+    /// ac-code.
+    pub fn with_node_id(mut self, node_id: impl Into<String>) -> Result<Self, ParseError> {
+        let node_id = node_id.into();
+        if NodeIdSyntax::of(&node_id).is_none() {
+            return Err(ParseError::new(
+                "C_ARCHETYPE_ROOT",
+                "node_id is not an id-, at- or ac-code",
+                &node_id,
+            ));
+        }
+        self.node_id = Some(node_id);
+        Ok(self)
+    }
+
     /// The archetype used at this point.
     #[must_use]
     pub fn archetype_ref(&self) -> &str {
         &self.archetype_ref
+    }
+
+    /// This node's identifier, if it has one.
+    #[must_use]
+    pub fn node_id(&self) -> Option<&str> {
+        self.node_id.as_deref()
     }
 }
 
@@ -617,6 +650,22 @@ mod tests {
         // `SECTION.banana` would enter the invariant-coverage report as one.
         let malformed = "banana";
         assert!(ArchetypeSlot::new("SECTION", malformed, MultiplicityInterval::OPTIONAL).is_err());
+        let root = CArchetypeRoot::new("SECTION", "openEHR-EHR-SECTION.x.v1", MultiplicityInterval::MANDATORY)
+            .unwrap();
+        assert!(root.with_node_id(malformed).is_err());
+    }
+
+    #[test]
+    fn a_filled_slot_can_carry_a_node_id_for_matching_against_its_siblings() {
+        let root = CArchetypeRoot::new(
+            "SECTION",
+            "openEHR-EHR-SECTION.medications.v1",
+            MultiplicityInterval::MANDATORY,
+        )
+        .unwrap();
+        assert!(root.node_id().is_none());
+        let identified = root.with_node_id("id2").unwrap();
+        assert_eq!(identified.node_id(), Some("id2"));
     }
 
     #[test]

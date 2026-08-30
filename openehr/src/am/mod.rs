@@ -9,7 +9,8 @@
 //! archetypes for a local purpose, and an **operational template** is the
 //! flattened result a runtime validates against.
 //!
-//! This module is the *object model* for those artefacts, and only that:
+//! This module started as the *object model* for those artefacts and has
+//! grown the machinery around it that does not need a parser to exist:
 //!
 //! | Capability | Requirement | State |
 //! | --- | --- | --- |
@@ -19,21 +20,24 @@
 //! | Specialisation and flattening | `K15.11`–`K15.13` | not implemented |
 //! | Template expansion, operational templates | `K15.14`–`K15.17` | not implemented |
 //! | Validating data against an archetype | `K15.18`–`K15.23` | **here** (`validate`) |
-//! | Retrieval, CKM included | `K15.24`–`K15.27` | not implemented |
+//! | Retrieval, CKM included | `K15.24`–`K15.27` | **here** (`repository`, `validate`) |
 //!
 //! **So this crate can tell you whether a `COMPOSITION` conforms to an
-//! archetype you already have in memory — not yet whether it conforms to one
-//! read from ADL, and not to one specialised from a parent it has not merged
-//! in.** [`validate::validate_against_archetype`] validates the definition as
-//! given, without flattening (`K15.11`, not implemented) or template expansion
-//! (`K15.14`, not implemented) first; a construct it cannot check — a slot
-//! filler, an unmodelled primitive kind — is reported *unchecked*, never as a
-//! silent pass (`K15.20`). [`crate::validation`] remains Reference-Model-level
-//! and separate (`K15.19`); `K15.30` requires that said wherever validation is
-//! offered rather than left for a reader to infer from what is missing. The
-//! remaining gap is registered as `A-40` in `spec/audit.md`, and every
-//! requirement still unimplemented above appears in the conformance matrix as
-//! `spec` — in force, unimplemented — rather than as a plan.
+//! archetype you already have in memory, or to a `C_ARCHETYPE_ROOT` filler
+//! resolved through a repository you supply — not yet whether it conforms to
+//! one read from ADL, and not to one specialised from a parent it has not
+//! merged in.** [`validate::validate_against_archetype`] and
+//! [`validate::validate_with_repository`] validate the definition as given,
+//! without flattening (`K15.11`, not implemented) or template expansion
+//! (`K15.14`, not implemented) first; a construct they cannot check — a bare
+//! slot, an unresolved filler, an unmodelled primitive kind — is reported
+//! *unchecked*, never as a silent pass (`K15.20`). [`crate::validation`]
+//! remains Reference-Model-level and separate (`K15.19`); `K15.30` requires
+//! that said wherever validation is offered rather than left for a reader to
+//! infer from what is missing. The remaining gap is registered as `A-40` in
+//! `spec/audit.md`, and every requirement still unimplemented above appears
+//! in the conformance matrix as `spec` — in force, unimplemented — rather
+//! than as a plan.
 //!
 //! # Why an object model first
 //!
@@ -91,6 +95,7 @@
 mod archetype;
 mod constraint;
 mod multiplicity;
+mod repository;
 mod terminology;
 mod validate;
 
@@ -100,8 +105,12 @@ pub use constraint::{
     CPrimitiveObject, NodeIdSyntax,
 };
 pub use multiplicity::{Cardinality, MultiplicityInterval};
+pub use repository::{ArchetypeRepository, Provenance, RepositoryError, Resolved};
 pub use terminology::{ArchetypeTerminology, TermDefinition};
-pub use validate::{ArchetypeReport, ArchetypeViolation, Unchecked, validate_against_archetype};
+pub use validate::{
+    ArchetypeReport, ArchetypeViolation, RepositoryOptions, Unchecked, validate_against_archetype,
+    validate_with_repository,
+};
 
 /// The openEHR Archetype Model release these types are modelled against
 /// (`K15.2`).
