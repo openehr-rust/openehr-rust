@@ -11,7 +11,7 @@
 		PaginationList,
 		PaginationListItem
 	} from 'lily-design-system-svelte-headless';
-	import { REPOSITORIES, SITE_NAME, SITE_URL } from '$lib/site.js';
+	import { REPOSITORIES, SITE_URL } from '$lib/site.js';
 
 	let { data } = $props();
 
@@ -34,7 +34,7 @@
 </script>
 
 <svelte:head>
-	<title>{doc.title} — {SITE_NAME}</title>
+	<title>{data.title}</title>
 	<meta name="description" content={doc.summary} />
 	<link rel="canonical" href={url} />
 	<meta property="og:title" content={doc.title} />

@@ -96,6 +96,14 @@ pnpm update lily-design-system-svelte-headless lily-design-system-svelte-theme-p
   lily-design-system-svelte-text-size-picker lily-design-system-svelte-share-picker
 ```
 
+**The `page.data.title` convention:** every route's `load` returns a `title`
+string — the exact text that route's `<svelte:head><title>` renders — so
+`+layout.svelte` can read `page.data.title` once, for `SharePicker`, instead
+of re-deriving each route's title. Adding a page means adding this field to
+its `load`, the same way every existing route does; `+error.svelte` is the
+one exception, since an error boundary has no `load` of its own — the
+layout falls back to `SITE_NAME` there.
+
 Theme CSS is the one piece that stays vendored rather than a dependency:
 each file in `static/themes/` inlines the component CSS for all of Lily's
 components into one standalone stylesheet, which is a separate Lily build

@@ -21,6 +21,13 @@
 		if (href === '/') return path === '/' ? 'page' : undefined;
 		return path === href || path.startsWith(href) ? 'page' : undefined;
 	};
+
+	// The page.data.title convention: every route's load returns the exact
+	// string it puts in <svelte:head><title> as `title` (see +page.server.js
+	// at the site root). +error.svelte has no load and so no page.data.title
+	// -- SITE_NAME is an honest fallback there, not a stand-in for the error
+	// heading, since nobody sharing a broken link needs it worded precisely.
+	const shareTitle = $derived(page.data.title ?? SITE_NAME);
 </script>
 
 <SkipLink href="#main" label="Skip to main content" />
@@ -42,11 +49,11 @@
 			     (which network to offer is an editorial call this site doesn't need
 			     to make), and an empty list is valid once `copyLabel` is set. `url`
 			     defaults to the current page, read at share time, so this needs no
-			     per-route wiring. `title` is left at its empty default -- there is
-			     no current-page-title store this layout can read; the shared URL's
-			     own Open Graph tags (`og:title` on every content page) cover it. -->
+			     per-route wiring. `title` comes from the page.data.title convention
+			     (see shareTitle above). -->
 			<SharePicker
 				label="Share this page"
+				title={shareTitle}
 				copyLabel="Copy link"
 				copiedLabel="Link copied"
 				copyFailedLabel="Could not copy — copy it from the address bar"

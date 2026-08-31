@@ -13,7 +13,7 @@
 </script>
 
 <svelte:head>
-	<title>Crates — {SITE_NAME}</title>
+	<title>{data.title}</title>
 	<meta name="description" content={description} />
 	<link rel="canonical" href={`${SITE_URL}/crates/`} />
 	<meta property="og:title" content={`Crates — ${SITE_NAME}`} />

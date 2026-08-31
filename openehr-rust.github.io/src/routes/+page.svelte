@@ -18,7 +18,7 @@
 </script>
 
 <svelte:head>
-	<title>{SITE_NAME} — openEHR Reference Model crates for Rust</title>
+	<title>{data.title}</title>
 	<meta name="description" content={description} />
 	<link rel="canonical" href={`${SITE_URL}/`} />
 	<meta property="og:title" content={SITE_NAME} />
