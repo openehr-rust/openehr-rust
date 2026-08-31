@@ -99,11 +99,32 @@ npm run preview    # serve build/ as GitHub Pages will
 
 ## Deploy
 
-`.github/workflows/deploy.yml` builds on every push to `main` and publishes
-`build/` to GitHub Pages. In the repository settings, **Pages → Build and
+**This directory is not what GitHub Pages serves.** It's a subdirectory of the
+`openehr-rust/openehr-rust` monorepo, and GitHub Actions only discovers
+`.github/workflows/` at a repository's own root — a workflow nested under a
+monorepo subdirectory never runs, whatever it says. An organization site also
+has to be served from a repository literally named `<org>.github.io`, which
+this monorepo isn't.
+
+The actual publish target is the separate sibling repository
+[`openehr-rust/openehr-rust.github.io`](https://github.com/openehr-rust/openehr-rust.github.io),
+holding a rewritten export of just this subdirectory's history — see
+[`spec/monorepo-github-pages/`](../spec/monorepo-github-pages/index.md).
+**Edit here, as always; never commit directly to that sibling repo**, or the
+next export silently discards it. To publish:
+
+```sh
+# from the monorepo root
+scripts/publish-pages-subtree.py            # split + build-verify, no push
+scripts/publish-pages-subtree.py --push     # split + build-verify + force-push
+```
+
+This `.github/workflows/deploy.yml` is what the *exported* copy runs, at its
+new root, on every push to the sibling's `main`: it builds and publishes
+`build/` to GitHub Pages. In that repository's settings, **Pages → Build and
 deployment → Source** must be set to **GitHub Actions**.
 
-Two details make GitHub Pages work, and both are load-bearing:
+Two details make GitHub Pages work there, and both are load-bearing:
 
 - `static/.nojekyll` stops GitHub running Jekyll over the output, which would
   otherwise drop the `_app/` directory.
