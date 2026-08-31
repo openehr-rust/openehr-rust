@@ -13,6 +13,9 @@
   "type": "module",
   "private": "true",
   "packageManager": "pnpm@11.0.8",
+  "engines": {
+    "node": "=26"
+  },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.70.2",
