@@ -140,6 +140,12 @@ CSS for every Lily component that theme covers.
 
 ## Develop
 
+Requires Node 26 (`package.json`'s `engines.node`, `.tool-versions`, and
+`deploy.yml`'s `node-version` all agree — see
+[`spec/node-current-version/`](../spec/node-current-version/index.md)). That's
+advisory rather than enforced today: pnpm only warns on an `engines` mismatch
+until an `.npmrc` sets `engine-strict=true`, which this site doesn't have.
+
 ```sh
 npm install
 npm run dev        # http://localhost:5173
