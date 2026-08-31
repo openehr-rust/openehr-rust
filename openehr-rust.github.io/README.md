@@ -79,16 +79,21 @@ The site, header, and article chrome (`Header`, `Footer`, `ArticleLayout`,
 `Card`, `Badge`, the breadcrumb/contents/pagination nav families, `SkipLink`)
 come from
 [`lily-design-system-svelte-headless`](https://www.npmjs.com/package/lily-design-system-svelte-headless)
-on npm — headless, unstyled Svelte 5 components. The theme and text-size
-pickers are their own packages,
-[`lily-design-system-svelte-theme-picker`](https://www.npmjs.com/package/lily-design-system-svelte-theme-picker)
+on npm — headless, unstyled Svelte 5 components. The header's three tools —
+theme, text size, and share — are each their own package:
+[`lily-design-system-svelte-theme-picker`](https://www.npmjs.com/package/lily-design-system-svelte-theme-picker),
+[`lily-design-system-svelte-text-size-picker`](https://www.npmjs.com/package/lily-design-system-svelte-text-size-picker),
 and
-[`lily-design-system-svelte-text-size-picker`](https://www.npmjs.com/package/lily-design-system-svelte-text-size-picker).
-Bump them the ordinary way:
+[`lily-design-system-svelte-share-picker`](https://www.npmjs.com/package/lily-design-system-svelte-share-picker).
+The share picker is wired with no `targets` — which networks to offer is an
+editorial call this site doesn't make; an empty list plus `copyLabel` is a
+supported configuration — so it opens the native share sheet where the
+platform has one and otherwise offers copy-link only. Bump them the ordinary
+way:
 
 ```sh
-pnpm update lily-design-system-svelte-headless \
-  lily-design-system-svelte-theme-picker lily-design-system-svelte-text-size-picker
+pnpm update lily-design-system-svelte-headless lily-design-system-svelte-theme-picker \
+  lily-design-system-svelte-text-size-picker lily-design-system-svelte-share-picker
 ```
 
 Theme CSS is the one piece that stays vendored rather than a dependency:

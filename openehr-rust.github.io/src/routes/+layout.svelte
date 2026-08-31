@@ -1,6 +1,7 @@
 <script>
 	import { page } from '$app/state';
 	import { SkipLink, Header, Footer } from 'lily-design-system-svelte-headless';
+	import { SharePicker } from 'lily-design-system-svelte-share-picker';
 	import { ThemePicker } from 'lily-design-system-svelte-theme-picker';
 	import { TextSizePicker } from 'lily-design-system-svelte-text-size-picker';
 	import { ORGANIZATION, REPOSITORIES, SITE_NAME, THEMES, THEME_LABELS } from '$lib/site.js';
@@ -37,6 +38,19 @@
 			<a href={ORGANIZATION}>GitHub</a>
 		</nav>
 		<div class="site-tools">
+			<!-- No `targets`: the package ships no third-party endpoints by design
+			     (which network to offer is an editorial call this site doesn't need
+			     to make), and an empty list is valid once `copyLabel` is set. `url`
+			     defaults to the current page, read at share time, so this needs no
+			     per-route wiring. `title` is left at its empty default -- there is
+			     no current-page-title store this layout can read; the shared URL's
+			     own Open Graph tags (`og:title` on every content page) cover it. -->
+			<SharePicker
+				label="Share this page"
+				copyLabel="Copy link"
+				copiedLabel="Link copied"
+				copyFailedLabel="Could not copy — copy it from the address bar"
+			/>
 			<TextSizePicker
 				label="Text size"
 				sizes={['small', 'medium', 'large', 'x-large']}

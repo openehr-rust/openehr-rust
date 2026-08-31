@@ -17,6 +17,9 @@ importers:
       lily-design-system-svelte-headless:
         specifier: ^0.3.1
         version: 0.3.1(svelte@5.56.10)
+      lily-design-system-svelte-share-picker:
+        specifier: ^0.1.1
+        version: 0.1.1(svelte@5.56.10)
       lily-design-system-svelte-text-size-picker:
         specifier: ^0.1.1
         version: 0.1.1(svelte@5.56.10)
@@ -357,6 +360,11 @@ packages:
     peerDependencies:
       svelte: ^5.0.0
 
+  lily-design-system-svelte-share-picker@0.1.1:
+    resolution: {integrity: sha512-UAzR6kFMVZA/00nRmFd67tTwI1bS92QdjZ9FdJvcPKgDNkfOE441TUdYJa2KtSeRz5NaLbJ0UGKwnzG/bgYtZw==}
+    peerDependencies:
+      svelte: ^5.0.0
+
   lily-design-system-svelte-text-size-picker@0.1.1:
     resolution: {integrity: sha512-wTrJgzWVkU6Ch5awo+e7VfgGMRiJehX04T/qlfnCjp3oD/d6fc8McG2aBgDTv9bgqT3tytnLjkfcO2N0zmLN+w==}
     peerDependencies:
@@ -691,6 +699,10 @@ snapshots:
   lily-design-system-svelte-headless@0.3.1(svelte@5.56.10):
     dependencies:
       aria-query: 5.3.1
+      svelte: 5.56.10
+
+  lily-design-system-svelte-share-picker@0.1.1(svelte@5.56.10):
+    dependencies:
       svelte: 5.56.10
 
   lily-design-system-svelte-text-size-picker@0.1.1(svelte@5.56.10):
