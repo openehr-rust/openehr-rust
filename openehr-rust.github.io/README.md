@@ -85,11 +85,15 @@ theme, text size, and share — are each their own package:
 [`lily-design-system-svelte-text-size-picker`](https://www.npmjs.com/package/lily-design-system-svelte-text-size-picker),
 and
 [`lily-design-system-svelte-share-picker`](https://www.npmjs.com/package/lily-design-system-svelte-share-picker).
-The share picker is wired with no `targets` — which networks to offer is an
-editorial call this site doesn't make; an empty list plus `copyLabel` is a
-supported configuration — so it opens the native share sheet where the
-platform has one and otherwise offers copy-link only. Bump them the ordinary
-way:
+The share picker is wired with four `targets` — LinkedIn, Mastodon, Bluesky,
+Reddit — each an `href` builder in `+layout.svelte`'s `shareTargets`, per the
+package's own stance that which networks to offer is an editorial call it
+won't make for you; it ships no endpoints. Mastodon has no single share
+endpoint (it's federated), so, per the package's own quick-start example,
+that builder targets `mastodon.social` specifically — a reader elsewhere
+gets a working compose dialog there and re-pastes it into their own instance.
+Where the platform has a native share sheet, `strategy="auto"` (the default)
+opens that instead of this list. Bump them the ordinary way:
 
 ```sh
 pnpm update lily-design-system-svelte-headless lily-design-system-svelte-theme-picker \
@@ -120,6 +124,19 @@ LILY=/path/to/lily-design-system npm run sync:themes
 Six themes ship in `static/themes/`: light, dark, Nord, Dracula, Emerald, and
 Night. The theme and text-size pickers persist to `localStorage` and the theme
 follows the system preference until a reader chooses one.
+
+**Theme switching is attribute-based, not link-swapped:** `+layout.svelte`
+preloads all six stylesheets (per ThemePicker's own "Preloading for
+zero-flicker switching" doc), so every theme's CSS — each scoped to
+`:root[data-theme="<slug>"]` — is already present and a switch is just the
+`data-theme` attribute changing on `<html>`, with no fetch and no flash of
+unstyled content while the new theme loads. `src/app.html` still carries the
+one managed `<link data-lily-theme-picker="theme">` ThemePicker itself
+swaps; with the matching preload already loaded, that swap is a same-URL
+cache hit rather than a real fetch. The cost is real and stated rather than
+left for someone to find in a network tab: six stylesheets load upfront
+(~145 kB gzipped total) instead of one (~24 kB), because each inlines the
+CSS for every Lily component that theme covers.
 
 ## Develop
 

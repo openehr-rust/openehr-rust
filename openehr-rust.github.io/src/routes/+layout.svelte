@@ -15,6 +15,40 @@
 		{ href: '/spec/', label: 'Specification' }
 	];
 
+	// SharePicker's own docs are explicit that which networks to offer is an
+	// editorial call the package won't make for you -- it ships no endpoints.
+	// This is that call: four communities a Rust/openEHR crate's readers
+	// plausibly use, not an attempt at a complete list. `href` receives
+	// (url, title, text); LinkedIn's URL is the package's own quick-start
+	// example verbatim. Mastodon has no single share endpoint -- it's
+	// federated -- so, also per the package's example, this targets
+	// mastodon.social specifically; a reader on another instance gets a
+	// working share dialog there and then has to re-paste it into their own.
+	const shareTargets = [
+		{
+			id: 'linkedin',
+			label: 'LinkedIn',
+			href: (url) => `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`
+		},
+		{
+			id: 'mastodon',
+			label: 'Mastodon',
+			href: (url, title) =>
+				`https://mastodon.social/share?text=${encodeURIComponent(title)}%20${encodeURIComponent(url)}`
+		},
+		{
+			id: 'bluesky',
+			label: 'Bluesky',
+			href: (url, title) => `https://bsky.app/intent/compose?text=${encodeURIComponent(`${title} ${url}`)}`
+		},
+		{
+			id: 'reddit',
+			label: 'Reddit',
+			href: (url, title) =>
+				`https://www.reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`
+		}
+	];
+
 	// A section link stays current for every page beneath it.
 	const current = (href) => {
 		const path = page.url.pathname;
@@ -29,6 +63,24 @@
 	// heading, since nobody sharing a broken link needs it worded precisely.
 	const shareTitle = $derived(page.data.title ?? SITE_NAME);
 </script>
+
+<svelte:head>
+	<!-- Every theme preloaded as its own stylesheet, per ThemePicker's own
+	     "Preloading for zero-flicker switching" doc. Each file scopes its
+	     rules to :root[data-theme="<slug>"], so with all six already present
+	     a switch is the attribute change on <html> below -- no fetch, no
+	     flash of unstyled content while the new theme's CSS loads. The
+	     tradeoff is real and stated plainly rather than left for someone to
+	     notice in a network tab: six ~24 kB-gzipped stylesheets (~145 kB
+	     total) load upfront instead of one, because each inlines the CSS for
+	     every Lily component the theme covers. src/app.html's own managed
+	     link (data-lily-theme-picker="theme") is what ThemePicker actually
+	     swaps; that fetch becomes a same-URL cache hit once the matching
+	     preload below has already landed. -->
+	{#each THEMES as theme (theme)}
+		<link rel="stylesheet" href={`/themes/${theme}.css`} />
+	{/each}
+</svelte:head>
 
 <SkipLink href="#main" label="Skip to main content" />
 
@@ -45,15 +97,15 @@
 			<a href={ORGANIZATION}>GitHub</a>
 		</nav>
 		<div class="site-tools">
-			<!-- No `targets`: the package ships no third-party endpoints by design
-			     (which network to offer is an editorial call this site doesn't need
-			     to make), and an empty list is valid once `copyLabel` is set. `url`
-			     defaults to the current page, read at share time, so this needs no
-			     per-route wiring. `title` comes from the page.data.title convention
-			     (see shareTitle above). -->
+			<!-- `targets` are shareTargets above. `url` defaults to the current
+			     page, read at share time, so this needs no per-route wiring.
+			     `title` comes from the page.data.title convention (see shareTitle
+			     above). Where the platform has a native share sheet, `strategy`
+			     defaulting to "auto" opens that instead of this list. -->
 			<SharePicker
 				label="Share this page"
 				title={shareTitle}
+				targets={shareTargets}
 				copyLabel="Copy link"
 				copiedLabel="Link copied"
 				copyFailedLabel="Could not copy — copy it from the address bar"
