@@ -5,20 +5,10 @@
 # openehr-rust.github.io, and GitHub Actions never discovers a
 # .github/workflows/ nested under a monorepo subdirectory. So the site is
 # published by rewriting that subdirectory's history onto a separate
-# sibling repository via `git subtree`.
-#
-# One-time setup, per checkout (a remote is local git config, not something
-# this repository can commit):
-#   git remote add github-pages git@github.com:openehr-rust/openehr-rust.github.io.git
-#
-# `git subtree push` (unlike `git subtree split -b ... && git push --force`,
-# what scripts/publish-pages-subtree.py does) pushes incrementally: it only
-# works because that sibling's main is already a subtree-split descendant of
-# this monorepo's history, which it became on 2026-08-31, when
-# scripts/publish-pages-subtree.py --push first bootstrapped it. Pushed from a
-# checkout that has never done that bootstrap, this command fails asking for
-# a merge instead of silently rewriting history -- which is the tradeoff
-# against the script: safer on every push after the first, unusable for it.
+# sibling repository via `git subtree`. The actual command, and the reasoning
+# behind it (in particular why it is `git subtree push` and not the
+# split-and-force-push scripts/publish-pages-subtree.py does), lives in
+# bin/make-github-pages -- read that before changing this target.
 .PHONY: github-pages
 github-pages:
-	git subtree push --prefix=openehr-rust.github.io github-pages main
+	bin/make-github-pages

@@ -1,0 +1,32 @@
+#!/bin/sh
+# Publishes the GitHub Pages site by rewriting openehr-rust.github.io/'s
+# history onto the separate sibling repository GitHub Pages actually serves.
+# Full rationale: spec/monorepo-github-pages/index.md and
+# openehr-rust.github.io/README.md ("Deploy"). Invoked as `make github-pages`.
+#
+# `git subtree push` pushes incrementally, which only works because the
+# sibling's main is already a subtree-split descendant of this monorepo's
+# history -- true since 2026-08-31, when
+# scripts/publish-pages-subtree.py --push first bootstrapped it. Run from a
+# checkout that has never done that bootstrap, this fails asking for a merge
+# instead of silently rewriting history.
+#
+# One-time setup, per checkout (a remote is local git config, not something
+# this repository can commit):
+#   git remote add github-pages git@github.com:openehr-rust/openehr-rust.github.io.git
+#
+# The subtree is split from HEAD, not literally from a branch named `main` --
+# `main` below is the *destination* branch on $REMOTE. Run this from whatever
+# commit you actually want published; checking out this repository's own
+# main first is usually what you want.
+
+set -eu
+
+NAME=openehr-rust
+REMOTE=github-pages
+BRANCH=main
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$ROOT"
+
+exec git subtree push --prefix="$NAME.github.io" "$REMOTE" "$BRANCH"
