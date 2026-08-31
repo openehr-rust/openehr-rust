@@ -233,11 +233,16 @@ Grouped by `plan.md` workstream. Order within a group is priority order.
       creating a real one needs the owner to choose a fiscal host through
       Open Collective's own application flow.*
 - [ ] Execute `help/outreach/index.md`'s sequence. Its stated preconditions —
-      the trademark notice (2026-08-27), the conduct file (2026-08-26), and
-      the repository security settings (2026-08-26/29) — are now all met;
-      the readiness checklist's one remaining open row is repository topics
-      on GitHub (`gh api repos/.../topics` returns `[]`, checked 2026-08-30).
-      Not started: an outward-facing action, for the maintainer to schedule.
+      the trademark notice (2026-08-27), the conduct file (2026-08-26), the
+      repository security settings (2026-08-26/29), and repository topics
+      (set 2026-08-31: `openehr`, `ehr`, `healthcare`, `interoperability`,
+      `rust`, `aql`, `sqlite` — verified live via
+      `gh api repos/openehr-rust/openehr-rust/topics`) — are now all met; the
+      readiness checklist has no open row left. Not started: everything past
+      that is a Discourse post, an email to a named person, a LinkedIn post
+      under the maintainer's own identity, or a conference submission —
+      outward-facing actions for the maintainer to schedule and write, not
+      for an agent to execute unprompted.
 
 ### Audit and harmonization
 
