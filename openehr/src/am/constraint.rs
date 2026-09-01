@@ -99,12 +99,15 @@ pub struct CAttribute {
 }
 
 impl CAttribute {
-    /// Builds a single-valued attribute constraint.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ParseError`] if the attribute name is empty.
-    pub fn single(
+    /// The shared part of [`single`](Self::single) and
+    /// [`container`](Self::container): the name check and the struct, with no
+    /// cardinality and neither's own occurrences rule applied yet. Kept
+    /// private and separate from `single` specifically so that `container`
+    /// does not go through `single`'s `VACSO` check — a check that belongs
+    /// only to single-valued attributes, and would wrongly refuse a
+    /// container's own children (which legitimately may occur more than
+    /// once) if `container` built on `single` directly.
+    fn new_raw(
         rm_attribute_name: impl Into<String>,
         existence: MultiplicityInterval,
         children: Vec<CObject>,
@@ -121,34 +124,76 @@ impl CAttribute {
         })
     }
 
+    /// Builds a single-valued attribute constraint.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseError`] if the attribute name is empty, or if a child's
+    /// occurrences has a finite upper bound greater than `1` (`VACSO`): a
+    /// single-valued attribute holds at most one object, so a child declaring
+    /// it may occur more than once is a constraint this attribute shape
+    /// cannot satisfy.
+    pub fn single(
+        rm_attribute_name: impl Into<String>,
+        existence: MultiplicityInterval,
+        children: Vec<CObject>,
+    ) -> Result<Self, ParseError> {
+        let attribute = Self::new_raw(rm_attribute_name, existence, children)?;
+        if attribute
+            .children
+            .iter()
+            .any(|child| child.occurrences().upper().is_some_and(|upper| upper > 1))
+        {
+            return Err(ParseError::invariant(
+                "C_ATTRIBUTE",
+                "a single-valued attribute's child occurrences upper bound exceeds 1",
+            ));
+        }
+        Ok(attribute)
+    }
+
     /// Builds a container attribute constraint.
     ///
     /// # Errors
     ///
-    /// Returns [`ParseError`] if the attribute name is empty, or if the
+    /// Returns [`ParseError`] if the attribute name is empty, if the
     /// cardinality cannot hold the occurrences its children require — a
     /// cardinality of `0..1` under which two children are each `1..1` is a
     /// constraint nothing satisfies, and AOM2 states that agreement as a
-    /// validity condition rather than leaving it to a runtime to discover.
+    /// validity condition rather than leaving it to a runtime to discover —
+    /// or if a child's occurrences has a finite upper bound greater than the
+    /// cardinality's own finite upper bound (`VACMCU`): a cardinality of
+    /// `0..2` cannot hold a single child declared `0..10`, independent of
+    /// how many children there are or what their lower bounds sum to.
     pub fn container(
         rm_attribute_name: impl Into<String>,
         existence: MultiplicityInterval,
         cardinality: Cardinality,
         children: Vec<CObject>,
     ) -> Result<Self, ParseError> {
-        let mut attribute = Self::single(rm_attribute_name, existence, children)?;
+        let mut attribute = Self::new_raw(rm_attribute_name, existence, children)?;
         let required: u32 = attribute
             .children
             .iter()
             .map(|child| child.occurrences().lower())
             .sum();
-        if let Some(upper) = cardinality.interval().upper()
-            && required > upper
-        {
-            return Err(ParseError::invariant(
-                "C_ATTRIBUTE",
-                "children require more occurrences than the cardinality permits",
-            ));
+        if let Some(upper) = cardinality.interval().upper() {
+            if required > upper {
+                return Err(ParseError::invariant(
+                    "C_ATTRIBUTE",
+                    "children require more occurrences than the cardinality permits",
+                ));
+            }
+            if attribute
+                .children
+                .iter()
+                .any(|child| child.occurrences().upper().is_some_and(|u| u > upper))
+            {
+                return Err(ParseError::invariant(
+                    "C_ATTRIBUTE",
+                    "a child's occurrences upper bound exceeds the cardinality upper bound",
+                ));
+            }
         }
         attribute.cardinality = Some(cardinality);
         Ok(attribute)
@@ -629,6 +674,112 @@ mod tests {
         assert_eq!(
             err.reason,
             "children require more occurrences than the cardinality permits"
+        );
+    }
+
+    fn element_with_occurrences(node_id: &str, occurrences: MultiplicityInterval) -> CObject {
+        CObject::Complex(
+            CComplexObject::new("ELEMENT", Some(node_id.to_owned()), occurrences, Vec::new())
+                .unwrap(),
+        )
+    }
+
+    /// `VACMCU`: a cardinality's finite upper bound must hold every child's
+    /// own finite occurrences upper bound, independent of how the lower
+    /// bounds sum — `a_cardinality_that_cannot_hold_its_children_is_refused`
+    /// above covers the lower-bound sum; this is the other half.
+    #[test]
+    fn a_childs_occurrences_upper_bound_beyond_the_cardinality_is_refused() {
+        let err = CAttribute::container(
+            "items",
+            MultiplicityInterval::MANDATORY,
+            Cardinality::new(MultiplicityInterval::new(0, Some(2)).unwrap()),
+            vec![element_with_occurrences(
+                "at0001",
+                MultiplicityInterval::new(0, Some(10)).unwrap(),
+            )],
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.reason,
+            "a child's occurrences upper bound exceeds the cardinality upper bound"
+        );
+
+        // The same child under a cardinality wide enough to hold it is fine.
+        assert!(
+            CAttribute::container(
+                "items",
+                MultiplicityInterval::MANDATORY,
+                Cardinality::new(MultiplicityInterval::new(0, Some(10)).unwrap()),
+                vec![element_with_occurrences(
+                    "at0001",
+                    MultiplicityInterval::new(0, Some(10)).unwrap(),
+                )],
+            )
+            .is_ok()
+        );
+
+        // An unbounded cardinality holds any finite child upper bound.
+        assert!(
+            CAttribute::container(
+                "items",
+                MultiplicityInterval::MANDATORY,
+                Cardinality::new(MultiplicityInterval::new(0, None).unwrap()),
+                vec![element_with_occurrences(
+                    "at0001",
+                    MultiplicityInterval::new(0, Some(10)).unwrap(),
+                )],
+            )
+            .is_ok()
+        );
+    }
+
+    /// `VACSO`: a single-valued attribute holds at most one object, so a
+    /// child declaring it may occur more than once is a constraint this
+    /// attribute shape cannot satisfy — checked in `single`, not `container`,
+    /// which legitimately holds children occurring more than once.
+    #[test]
+    fn a_single_valued_attributes_child_may_not_occur_more_than_once() {
+        let err = CAttribute::single(
+            "value",
+            MultiplicityInterval::MANDATORY,
+            vec![element_with_occurrences(
+                "at0001",
+                MultiplicityInterval::new(0, Some(2)).unwrap(),
+            )],
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.reason,
+            "a single-valued attribute's child occurrences upper bound exceeds 1"
+        );
+
+        // Exactly 1 is fine, and so is unbounded-below-but-capped-at-1.
+        assert!(
+            CAttribute::single(
+                "value",
+                MultiplicityInterval::MANDATORY,
+                vec![element_with_occurrences(
+                    "at0001",
+                    MultiplicityInterval::new(0, Some(1)).unwrap(),
+                )],
+            )
+            .is_ok()
+        );
+
+        // A container attribute is not affected by VACSO at all: the same
+        // child that VACSO refuses under `single` is fine under `container`.
+        assert!(
+            CAttribute::container(
+                "items",
+                MultiplicityInterval::MANDATORY,
+                Cardinality::new(MultiplicityInterval::new(0, None).unwrap()),
+                vec![element_with_occurrences(
+                    "at0001",
+                    MultiplicityInterval::new(0, Some(2)).unwrap(),
+                )],
+            )
+            .is_ok()
         );
     }
 

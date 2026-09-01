@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**43 findings, 43 in the table below: 6 High, 26 Medium, 11 Low. 37 fixed or
+**44 findings, 44 in the table below: 6 High, 26 Medium, 12 Low. 38 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -130,6 +130,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-41 | Low | The conformance matrix's own totals went stale a second time — 291 claimed, 300 in one sentence, 311 in the rows | **fixed** — re-derived mechanically to 344 on 2026-08-26 |
 | A-42 | Medium | Three invariants checked at construction and nowhere else: `AUDIT_DETAILS.System_id_valid`/`Change_type_valid` on a `VERSION`'s own `commit_audit`, `ISM_TRANSITION.Transition_valid`, `INTERVAL_EVENT.Math_function_validity` — `A-23`'s exact shape, recurring | **fixed** — a shared `check_audit_details` helper, and one group-membership check each beside the sibling check already there |
 | A-43 | Low | `base::Interval<T>` had only the BASE foundation type's element-membership function (`has`, named `contains` here); `intersects` and interval-vs-interval `contains` did not exist | **fixed** — `contains_interval` and `intersects`, both checked exactly at shared open/closed boundaries rather than approximated |
+| A-44 | Low | `C_ATTRIBUTE.container` checked children's occurrences lower-bound sum against the cardinality but not any child's own occurrences upper bound (`VACMCU`); `C_ATTRIBUTE.single` checked nothing about its children's occurrences at all (`VACSO`) | **fixed** — both added; `single`'s check required splitting out a shared `new_raw` constructor so `container`, built on `single`, would not inherit a rule that belongs only to single-valued attributes |
 
 ---
 
@@ -2425,3 +2426,55 @@ methods — it operates on a different type (`am::multiplicity`'s own interval,
 not `base::Interval`), so there is no direct duplication to remove, only a
 parallel implementation that could in principle be expressed the same way if
 the two types were ever unified. Not attempted here.
+
+## A-44 — two cardinality/occurrences agreement rules `C_ATTRIBUTE` did not check
+
+**Severity: Low. Status: fixed.**
+
+Found by diffing `openehr::am`'s implemented surface against AOM2's own
+class definitions (`openEHR/specifications-AM`,
+`docs/AOM2/master04.5-constraint_model-class_definitions.adoc`), not against
+anything the crate's own documentation had flagged — `am/mod.rs` and
+`spec/15-archetypes.md` already disclose the large gaps (no parser, no
+flattening, `VASID`/`VACSD` unchecked) accurately; these two were not among
+them.
+
+**Found.**
+
+1. `VACMCU`. Where a container attribute's cardinality states a finite upper
+   bound, every child's own occurrences, where finite, must have an upper
+   bound no greater than it. `CAttribute::container` already summed the
+   children's *lower* bounds against the cardinality's upper bound
+   (`a_cardinality_that_cannot_hold_its_children_is_refused`), but never
+   compared an individual child's *upper* bound against it — so a cardinality
+   of `0..2` accepted a single child declared `0..10` without complaint,
+   which no runtime resolving that constraint against real data could
+   satisfy.
+2. `VACSO`. A single-valued attribute's child occurrences must not have a
+   finite upper bound greater than `1`. `CAttribute::single` validated only
+   that the attribute name was non-empty; a child declared `0..3` under a
+   single-valued attribute — which by definition holds at most one object —
+   was accepted.
+
+**Fixed.** `CAttribute::container` gains the `VACMCU` check alongside its
+existing lower-bound-sum one. `CAttribute::single` gains the `VACSO` check —
+which required extracting a private `new_raw` constructor shared by both
+`single` and `container`, since `container` had been built *on* `single`:
+adding `VACSO` inside `single` directly would have made every container
+attribute's children subject to a rule that exists specifically because a
+single-valued attribute cannot hold more than one object, wrongly refusing
+container children that legitimately occur more than once. Caught before it
+shipped, by reasoning through what `container`'s existing delegation to
+`single` implied for the new check, not by a failing test.
+
+Four new tests, including one confirming a child `VACSO` refuses under
+`single` is accepted unchanged under `container` — the case that would have
+silently broken had the two checks not been separated.
+
+**Residual.** The AM object model's other agreement rules between
+`C_ATTRIBUTE`'s cardinality and its children's constraints — `VACMLB` (the
+existing lower-bound-sum check) already accounted for — were the two checked
+here. This pass did not re-derive the full AOM2 validity-rule list
+exhaustively against every `C_ATTRIBUTE`/`C_OBJECT` construction path;
+`A-40`'s residual (specialisation, `VASID`/`VACSD`, flattening) remains the
+larger, already-declared gap this finding does not touch.
