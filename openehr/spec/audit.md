@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**41 findings, 41 in the table below: 6 High, 25 Medium, 10 Low. 35 fixed or
+**42 findings, 42 in the table below: 6 High, 26 Medium, 10 Low. 36 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -128,6 +128,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-17 | Medium | The first property tests passed vacuously | **fixed**, mutation-verified |
 | A-40 | Medium | The Archetype Model is specified and mostly not implemented: §15 and `S1.21` are in force, 18 of 32 requirements with no code | open — object model, in-memory-archetype validation, and repository resolution of a filled slot built 2026-08-26/30; no parser, flattening, or template expansion |
 | A-41 | Low | The conformance matrix's own totals went stale a second time — 291 claimed, 300 in one sentence, 311 in the rows | **fixed** — re-derived mechanically to 344 on 2026-08-26 |
+| A-42 | Medium | Three invariants checked at construction and nowhere else: `AUDIT_DETAILS.System_id_valid`/`Change_type_valid` on a `VERSION`'s own `commit_audit`, `ISM_TRANSITION.Transition_valid`, `INTERVAL_EVENT.Math_function_validity` — `A-23`'s exact shape, recurring | **fixed** — a shared `check_audit_details` helper, and one group-membership check each beside the sibling check already there |
 
 ---
 
@@ -2321,3 +2322,61 @@ the `spec` and `withdrawn` statuses this reversal introduced.
 statement is in the matrix itself — it names the method, so the next reader can
 re-run it — and mechanising the tally the way coverage is mechanised is the
 better fix, not yet done.
+
+## A-42 — three more invariants checked at construction and nowhere else
+
+**Severity: Medium. Status: fixed.**
+
+Found by re-reading the canonical RM's own invariant list against what
+`Validate` actually walks, the same method `A-23` used — not by a fuzzer or a
+bug report, and not restating `A-23` itself: this is three fresh instances of
+its exact shape, in three different classes.
+
+**Found.**
+
+1. `AUDIT_DETAILS.System_id_valid` and `Change_type_valid`. `AuditDetails::new`
+   checks both, but `impl Validate for Version<T>` (the fix `A-23` added)
+   never visited `self.commit_audit()` — it covered the version's own
+   envelope invariants and stopped short of the audit record every commit
+   carries. `check_attestation` was no better: it checked an attestation's
+   committer (`Committer_valid`) but not the same `AUDIT_DETAILS`'s
+   `system_id`/`change_type`. Measured: a `VERSION` deserialized from JSON with
+   `"system_id":""` and a `change_type` code outside `audit_change_type`
+   reported no violation for either.
+2. `ISM_TRANSITION.Transition_valid`. `IsmTransition::with_transition` checks
+   that `transition` is from the `instruction_transitions` group; the `Action`
+   arm of `impl Validate for Entry` checked `current_state` and never
+   `transition`, immediately beside it in the same struct.
+3. `INTERVAL_EVENT.Math_function_validity`. `IntervalEvent::new` checks that
+   `math_function` is from the `event_math_function` group; the `Interval` arm
+   of `impl Validate for Event` called `check_coded_text` on it (the
+   `DV_CODED_TEXT`-level rubric check) but never the group-membership check
+   that is `Math_function_validity` itself.
+
+All three are `A-23`'s shape exactly: a rule a constructor enforces, on a type
+that also derives `Deserialize`, which writes the field straight in and calls
+no constructor (`db:V9.8`, `lib` side).
+
+**Fixed.** A shared `check_audit_details` helper (checking all three
+`AUDIT_DETAILS` invariants, including `Committer_valid`) is called from both
+`impl Validate for Version<T>` and `check_attestation`, replacing the
+narrower, duplicated `check_party` call the latter used alone. `Transition_valid`
+and `Math_function_validity` are each a direct group-membership check beside
+the sibling check already there, matching that sibling's own style rather
+than introducing a new one.
+
+`openehr/tests/canonical_json.rs`'s `kitchen_sink()` fixture already builds a
+real `ISM_TRANSITION` and `INTERVAL_EVENT` through their checked constructors;
+a new test corrupts each in a serialized copy and confirms `validate()`
+reports it, then confirms the unmodified fixture stays clean — a check strict
+enough to fail only on the corrupted copy, not the original. A second new
+test extends the existing `a_version_envelope_is_checked_on_data_that_arrived_as_json`
+JSON-literal test (the one `A-23` added) with a bad `system_id` and a bad
+`change_type`, the same way that test already covers `Lifecycle_state_valid`
+and `Data_valid`.
+
+**Residual.** None found in this pass. The method — re-reading invariants
+against `Validate`'s actual walk rather than trusting a prior fix's scope —
+is the same one that found `A-23`'s two other invariants inside itself; it was
+not re-run over the rest of the RM exhaustively, so more instances of this
+shape may remain uncounted.

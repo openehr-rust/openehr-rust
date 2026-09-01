@@ -582,3 +582,83 @@ fn reading_a_composition_stays_within_a_small_stack() {
         .expect("spawn");
     assert!(handle.join().expect("no overflow within 1 MiB"));
 }
+
+/// Finds the first object in a JSON tree with the given `_type`, and returns
+/// a mutable reference to it.
+fn find_by_type<'a>(value: &'a mut serde_json::Value, type_tag: &str) -> &'a mut serde_json::Value {
+    fn search<'a>(
+        value: &'a mut serde_json::Value,
+        type_tag: &str,
+    ) -> Option<&'a mut serde_json::Value> {
+        if value.get("_type").and_then(serde_json::Value::as_str) == Some(type_tag) {
+            return Some(value);
+        }
+        match value {
+            serde_json::Value::Object(map) => {
+                for v in map.values_mut() {
+                    if let Some(found) = search(v, type_tag) {
+                        return Some(found);
+                    }
+                }
+                None
+            }
+            serde_json::Value::Array(items) => {
+                for v in items {
+                    if let Some(found) = search(v, type_tag) {
+                        return Some(found);
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+    search(value, type_tag).unwrap_or_else(|| panic!("no {type_tag} node found"))
+}
+
+/// `ISM_TRANSITION.Transition_valid` and `INTERVAL_EVENT.Math_function_validity`
+/// on data that arrived as JSON, never through [`IsmTransition::with_transition`]
+/// or [`IntervalEvent::new`] — the same shape as `A-23`, found by re-reading the
+/// canonical spec's invariants against what [`Validate`] actually walks, in two
+/// more classes.
+///
+/// `kitchen_sink()` already carries a real `ISM_TRANSITION` (inside its
+/// `ACTION`) and a real `INTERVAL_EVENT`, both built through the checked
+/// constructors — this corrupts each in place, in an otherwise-valid
+/// composition, and confirms `validate()` reports it.
+#[test]
+fn a_transition_code_and_a_math_function_are_checked_on_data_that_arrived_as_json() {
+    let mut value = serde_json::to_value(kitchen_sink()).expect("serialize");
+
+    find_by_type(&mut value, "ISM_TRANSITION")["transition"]["defining_code"]["code_string"] =
+        serde_json::Value::String("9999".to_owned());
+    let bad_transition: Composition = serde_json::from_value(value).expect("deserialize");
+    assert!(
+        bad_transition
+            .validate()
+            .violations()
+            .iter()
+            .any(|v| v.invariant == "Transition_valid"),
+        "{}",
+        bad_transition.validate()
+    );
+
+    let mut value = serde_json::to_value(kitchen_sink()).expect("serialize");
+    find_by_type(&mut value, "INTERVAL_EVENT")["math_function"]["defining_code"]["code_string"] =
+        serde_json::Value::String("9999".to_owned());
+    let bad_math_function: Composition = serde_json::from_value(value).expect("deserialize");
+    assert!(
+        bad_math_function
+            .validate()
+            .violations()
+            .iter()
+            .any(|v| v.invariant == "Math_function_validity"),
+        "{}",
+        bad_math_function.validate()
+    );
+
+    // And the unmodified fixture must still be clean — a check strict enough
+    // to fail on the corrupted copy but also on the original would be worse
+    // than no check at all.
+    assert!(kitchen_sink().validate().is_empty());
+}

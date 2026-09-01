@@ -67,7 +67,7 @@
 //! ```
 
 use crate::error::{ValidationReport, Violation};
-use crate::rm::common::{Attestation, Locatable as _, Participation, PartyProxy};
+use crate::rm::common::{Attestation, AuditDetails, Locatable as _, Participation, PartyProxy};
 use crate::rm::data_structures::{Cluster, Element, Event, History, Item, ItemStructure};
 use crate::rm::data_types::{
     DataValue, DvCodedText, DvEhrUri, DvOrdered, DvQuantity, DvUri, OrderedAttrs, Text,
@@ -409,6 +409,32 @@ fn check_participation(participation: &Participation, ctx: &mut Context) {
     );
 }
 
+/// Checks an `AUDIT_DETAILS`'s own invariants: `System_id_valid`,
+/// `Change_type_valid`, and (via [`check_party`]) `Committer_valid`.
+///
+/// [`AuditDetails::new`] checks the first two at construction, but a value
+/// arriving through `Deserialize` never passed that constructor (`db:V9.8`) —
+/// this is the re-check, shared by both places an `AUDIT_DETAILS` can arrive
+/// as JSON: a `VERSION`'s `commit_audit` ([`Validate for Version<T>`] below)
+/// and an `ATTESTATION`'s `audit` ([`check_attestation`]). Neither call site
+/// had checked `System_id_valid`/`Change_type_valid` before this existed —
+/// only `Committer_valid`, via a direct [`check_party`] call each repeated on
+/// its own.
+fn check_audit_details(audit: &AuditDetails, ctx: &mut Context) {
+    if audit.system_id().is_empty() {
+        ctx.violation("AUDIT_DETAILS", "System_id_valid", "system_id is empty");
+    }
+    check_coded_text(audit.change_type(), ctx);
+    if !crate::terminology::audit_change_type::GROUP.contains(audit.change_type_code()) {
+        ctx.violation(
+            "AUDIT_DETAILS",
+            "Change_type_valid",
+            "change_type is not from the audit_change_type group",
+        );
+    }
+    check_party(audit.committer(), "AUDIT_DETAILS", "Committer_valid", ctx);
+}
+
 /// Checks one `ATTESTATION`.
 ///
 /// Not reachable from a `COMPOSITION`: attestations hang off a `VERSION`, which
@@ -421,12 +447,7 @@ pub fn check_attestation(attestation: &Attestation, ctx: &mut Context) {
         "Reason_valid",
         ctx,
     );
-    check_party(
-        attestation.audit().committer(),
-        "AUDIT_DETAILS",
-        "Committer_valid",
-        ctx,
-    );
+    check_audit_details(attestation.audit(), ctx);
 }
 
 impl Validate for DataValue {
@@ -638,6 +659,20 @@ impl Validate for Event {
                     );
                 }
                 check_coded_text(e.math_function(), ctx);
+                // `Math_function_validity`: `math_function` must be from the
+                // `event_math_function` group. `IntervalEvent::new` checks this at
+                // construction, but a deserialized value never passed that
+                // constructor (`db:V9.8`) — re-checked here the same way
+                // `Current_state_valid` is, for the same reason.
+                if !crate::terminology::event_math_function::GROUP
+                    .contains(e.math_function().defining_code().code_string())
+                {
+                    ctx.violation(
+                        "INTERVAL_EVENT",
+                        "Math_function_validity",
+                        "math_function is not from the event_math_function group",
+                    );
+                }
                 ctx.nested("/data".to_owned(), |c| e.data().visit(c));
                 if let Some(state) = e.state() {
                     ctx.nested("/state".to_owned(), |c| state.visit(c));
@@ -826,6 +861,23 @@ impl Validate for Entry {
                         "Current_state_valid",
                         "current_state is not an Instruction State Machine state",
                     );
+                }
+                // `Transition_valid`: `ISM_TRANSITION.transition`, where present, must
+                // come from the `instruction_transitions` group. `IsmTransition::
+                // with_transition` checks this at construction, but a deserialized
+                // value never passed that constructor (`db:V9.8`), so it is
+                // re-checked here the same way `current_state` is, immediately above.
+                if let Some(transition) = a.ism_transition().transition() {
+                    check_coded_text(transition, ctx);
+                    if !crate::terminology::instruction_transition::GROUP
+                        .contains(transition.defining_code().code_string())
+                    {
+                        ctx.violation(
+                            "ISM_TRANSITION",
+                            "Transition_valid",
+                            "transition is not from the instruction_transitions group",
+                        );
+                    }
                 }
                 ctx.nested("/description".to_owned(), |c| a.description().visit(c));
             }
@@ -1111,6 +1163,13 @@ impl<T: Validate> Validate for crate::rm::common::Version<T> {
         // `Vec`, and an empty `Vec` *is* the absent case. Named so that a
         // reader looking for them finds why they are not checked rather than
         // concluding they were missed.
+        //
+        // `commit_audit`'s own invariants (`System_id_valid`,
+        // `Change_type_valid`, `Committer_valid`) were not checked here at
+        // all before this call existed — `check_attestation` covers an
+        // *attestation's* `AUDIT_DETAILS`, and nothing covered the version's
+        // own, which is the one every commit actually carries.
+        check_audit_details(self.commit_audit(), ctx);
         if let Some(data) = self.data() {
             ctx.nested("/data".to_owned(), |c| data.visit(c));
         }
@@ -1883,17 +1942,17 @@ mod tests {
     fn a_version_envelope_is_checked_on_data_that_arrived_as_json() {
         // Deserialization never calls a constructor, which is the whole of
         // `A-23`. Each of these is well-formed JSON and an impossible version.
-        let base = |lifecycle: &str, extra: &str| {
+        let base_with_audit = |lifecycle: &str, extra: &str, system_id: &str, change_type: &str| {
             format!(
                 r#"{{
                   "_type": "ORIGINAL_VERSION",
                   "uid": {{"_type":"OBJECT_VERSION_ID","value":"87284370-2D4B-4E3D-A3F3-F303D2F4F34B::s::1"}},
                   "lifecycle_state": {{"_type":"DV_CODED_TEXT","value":"x",
                     "defining_code":{{"_type":"CODE_PHRASE","terminology_id":{{"value":"openehr"}},"code_string":"{lifecycle}"}}}},
-                  "commit_audit": {{"_type":"AUDIT_DETAILS","system_id":"s",
+                  "commit_audit": {{"_type":"AUDIT_DETAILS","system_id":"{system_id}",
                     "time_committed":{{"_type":"DV_DATE_TIME","value":"2026-08-01T09:00:00Z"}},
                     "change_type":{{"_type":"DV_CODED_TEXT","value":"creation",
-                      "defining_code":{{"_type":"CODE_PHRASE","terminology_id":{{"value":"openehr"}},"code_string":"249"}}}},
+                      "defining_code":{{"_type":"CODE_PHRASE","terminology_id":{{"value":"openehr"}},"code_string":"{change_type}"}}}},
                     "committer":{{"_type":"PARTY_IDENTIFIED","name":"N"}}}},
                   "contribution": {{"_type":"OBJECT_REF","namespace":"local","type":"EHR",
                     "id":{{"_type":"HIER_OBJECT_ID","value":"87284370-2D4B-4E3D-A3F3-F303D2F4F34B"}}}}
@@ -1901,6 +1960,7 @@ mod tests {
                 }}"#
             )
         };
+        let base = |lifecycle: &str, extra: &str| base_with_audit(lifecycle, extra, "s", "249");
         let parse = |json: &str| {
             serde_json::from_str::<crate::rm::common::Version<crate::rm::ehr::Composition>>(json)
                 .expect("deserialization is lenient by design (J9.9)")
@@ -1950,6 +2010,28 @@ mod tests {
                 .iter()
                 .any(|v| v.invariant == "Data_valid"),
             "a deleted version may carry no data"
+        );
+
+        // `commit_audit`'s own invariants, added alongside `ISM_TRANSITION.
+        // Transition_valid` and `INTERVAL_EVENT.Math_function_validity` — three
+        // more instances of `A-23`'s shape found by re-reading the canonical
+        // spec's invariants against what `Validate` actually walks, not by a
+        // fuzzer or a bug report. `AuditDetails::new` checks both at
+        // construction; nothing had re-checked either on data that arrived as
+        // JSON before `check_audit_details` existed.
+        assert!(
+            reports(&base_with_audit("523", "", "", "249"))
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "System_id_valid"),
+            "an empty commit_audit.system_id must be reported"
+        );
+        assert!(
+            reports(&base_with_audit("523", "", "s", "9999"))
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Change_type_valid"),
+            "a change_type outside audit_change_type must be reported"
         );
     }
 
