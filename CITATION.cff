@@ -17,6 +17,12 @@ identifiers:
   - type: url
     value: 'https://crates.io/crates/openehr'
     description: The openehr crate on crates.io
+  - type: url
+    value: 'https://crates.io/crates/openehr-loco'
+    description: >-
+      The openehr-loco crate on crates.io — an optional HTTP service,
+      versioned and released independently of the crates this citation's
+      own `version` and `date-released` track
 repository-code: 'https://github.com/openehr-rust/openehr-rust/'
 url: 'https://github.com/openehr-rust/openehr-rust/'
 abstract: >-

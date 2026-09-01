@@ -1001,8 +1001,7 @@ async fn a_contribution_can_be_declared_and_is_required_before_a_commit() {
     // testing (`lib:A-09`).
     let served = Served::new();
     let declared = "5B8C3A21-9E4D-4F70-B2C1-7A6E5D4C3B2A";
-    let body = serde_json::to_vec(&conformance::sample_contribution(declared, &[1]))
-        .expect("json");
+    let body = serde_json::to_vec(&conformance::sample_contribution(declared, &[1])).expect("json");
 
     let (status, text, _) = served
         .send(
@@ -1049,7 +1048,11 @@ async fn a_version_view_carries_a_full_chain_digest() {
         .to_owned();
     assert_eq!(digest.len(), 64, "not a SHA-256: {digest}");
     assert!(digest.chars().all(|c| c.is_ascii_hexdigit()), "{digest}");
-    assert_ne!(digest, "0".repeat(64), "the genesis digest is not an entry's");
+    assert_ne!(
+        digest,
+        "0".repeat(64),
+        "the genesis digest is not an entry's"
+    );
 }
 
 #[test]
@@ -1063,11 +1066,17 @@ fn every_store_error_maps_to_a_distinct_status() {
 
     let cases = [
         (
-            StoreError::NotFound { kind: "version", id: "x".to_owned() },
+            StoreError::NotFound {
+                kind: "version",
+                id: "x".to_owned(),
+            },
             StatusCode::NOT_FOUND,
         ),
         (
-            StoreError::Conflict { kind: "ehr", id: "x".to_owned() },
+            StoreError::Conflict {
+                kind: "ehr",
+                id: "x".to_owned(),
+            },
             StatusCode::CONFLICT,
         ),
         (
@@ -1079,11 +1088,17 @@ fn every_store_error_maps_to_a_distinct_status() {
             StatusCode::NOT_IMPLEMENTED,
         ),
         (
-            StoreError::SchemaVersionMismatch { found: 3, expected: 4 },
+            StoreError::SchemaVersionMismatch {
+                found: 3,
+                expected: 4,
+            },
             StatusCode::SERVICE_UNAVAILABLE,
         ),
         (
-            StoreError::Engine { engine: "e", message: "m".to_owned() },
+            StoreError::Engine {
+                engine: "e",
+                message: "m".to_owned(),
+            },
             StatusCode::INTERNAL_SERVER_ERROR,
         ),
     ];
@@ -1093,4 +1108,3 @@ fn every_store_error_maps_to_a_distinct_status() {
         assert!(!message.is_empty(), "a caller needs to be told why");
     }
 }
-

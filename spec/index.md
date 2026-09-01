@@ -124,10 +124,10 @@ than either alone.
 
 ## What is in this repository
 
-**Eighteen crates**, each its own Cargo workspace: eight that are published,
-`openehr-loco` publishable since 2026-09-01 (`db:W16.1`, amended) but not yet
-released, and nine that declare `publish = false` — `openehr-assets` and
-eight fuzz harnesses.
+**Eighteen crates**, each its own Cargo workspace: eight that are published
+together at one version, `openehr-loco` published separately since
+2026-09-01 at its own (`db:W16.1`, amended), and nine that declare
+`publish = false` — `openehr-assets` and eight fuzz harnesses.
 
 ### The published crates
 
@@ -156,10 +156,12 @@ others that also state the version. See [`audit.md`](audit.md) **W-10**.
 ### The service and tooling crates
 
 Neither is on the conformance ladder — see `W0.32` above. `openehr-assets` is
-not published (`publish = false`); `openehr-loco` became publishable on
-2026-09-01 (`db:W16.1`, amended) but has had no release yet — running
-`cargo publish` for it is the maintainer's own manual step
-(`agents/publishing.md`), not something this specification performs.
+not published (`publish = false`). `openehr-loco` is published, but
+separately from the eight above and at its own version: `0.8.1` since
+2026-09-01 (`db:W16.1`, amended). `0.8.0` also shipped that day and is
+immutable, but carries two RUSTSEC advisories permanently
+(`agents/publishing.md`, `spec/audit.md` **W-20**) — not the version anything
+should depend on.
 
 | Crate | Role |
 | --- | --- |
@@ -290,7 +292,11 @@ Twenty-one targets in total.
 - **W0.21** A crate MUST NOT be published while any finding against its
   conformance claims is open. `openehr` 0.1.0 was published carrying a
   `repository` field pointing at an unrelated project; that field is now immutable
-  for that version. See [`audit.md`](audit.md) **W-03**.
+  for that version. See [`audit.md`](audit.md) **W-03**. This requirement binds
+  regardless of who runs `cargo publish` — as of 2026-09-01 that may be an
+  agent for `openehr-loco` specifically, under the conditions
+  [`agents/publishing.md`](../agents/publishing.md) states; W0.21 does not
+  relax for that case.
 
 ## Licensing
 

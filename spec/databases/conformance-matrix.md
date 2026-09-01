@@ -107,8 +107,11 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 `openehr-loco` only. It sits **outside the conformance ladder** — every rung
 there is defined by DDL, a `Store`, or a database server (`W0.32`) — so it
 states evidence and takes no level. Publish status is a separate question
-from ladder membership: `openehr-loco` is publishable since 2026-09-01
-(`W16.1`, amended) but has had no crates.io release yet.
+from ladder membership: `openehr-loco` has been on crates.io since
+2026-09-01 (`W16.1`, amended), currently at `0.8.1` — `0.8.0` also shipped
+that day but carries two RUSTSEC advisories permanently
+(`agents/publishing.md`, `spec/audit.md` **W-20**), so it is not the version
+to depend on.
 
 | Requirement | Status | Note |
 | --- | :-: | --- |

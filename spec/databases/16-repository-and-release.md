@@ -25,11 +25,13 @@ Requirement prefix: `W16`.
 
   The **eight** published crates are `openehr`, `openehr-store`, and the six
   dialects. `openehr-loco` MUST NOT declare `publish = false` as of
-  2026-09-01 — it is a published crate by this requirement, whether or not it
-  has yet had a first release; `agents/publishing.md` tracks whether one has
-  actually happened, and this specification does not run `cargo publish` on
-  its own authority. The other nine MUST declare `publish = false`
-  (`W0.25`): `openehr-assets` and the eight fuzz harnesses.
+  2026-09-01, and is now a ninth published crate — `agents/publishing.md`
+  records its first two releases, `0.8.0` and `0.8.1`, verified against the
+  registry API, and is the file to trust on what has actually shipped when
+  this specification and the registry could in principle disagree.
+
+  The other nine MUST declare `publish = false` (`W0.25`): `openehr-assets`
+  and the eight fuzz harnesses.
 
   This requirement said **fourteen** until 2026-08-20, having been amended once
   already when the layout changed and then not again when `openehr-loco`,

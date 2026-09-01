@@ -23,8 +23,10 @@ workspace, so `cargo` runs from inside a crate directory, never from the repo
 root. Eight are published to crates.io at 0.8.0 (`openehr`, `openehr-store`,
 and the six dialect crates: `openehr-sqlite`, `openehr-postgresql`,
 `openehr-mysql`, `openehr-mariadb`, `openehr-mssql`, `openehr-oracle`);
-`openehr-loco` became publishable on 2026-09-01 but has had no release yet;
-the other nine (`openehr-assets` and eight fuzz harnesses) are
+`openehr-loco` is a ninth, published separately since 2026-09-01 at its own
+version (0.8.1 — see `agents/publishing.md`, since the day's first release,
+0.8.0, carries two RUSTSEC advisories permanently and is not the one to
+depend on); the other nine (`openehr-assets` and eight fuzz harnesses) are
 `publish = false`. `openehr` is the Reference Model, paths, AQL, and RM
 validation. `openehr-store` is everything about persistence that is not a SQL
 spelling. `openehr-sqlite` is the only crate at **Verified** conformance

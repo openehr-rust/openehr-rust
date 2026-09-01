@@ -16,11 +16,13 @@ generated DDL of all six dialects compared byte for byte; the three engines that
 can be provisioned locally actually provisioned and the DDL run against them;
 crates.io queried for what is already published.
 
-Nineteen findings: three High (**W-01**, **W-02**, **W-04**), ten Medium
+20 findings: three High (**W-01**, **W-02**, **W-04**), eleven Medium
 (**W-03**, **W-05**, **W-06**, **W-09**, **W-11**, **W-12**, **W-13**,
-**W-14**, **W-16**, **W-18**), six Low (**W-07**, **W-08**, **W-10**,
-**W-15**, **W-17**, **W-19**). **Eighteen are fixed**; **W-03** is fixed going forward only, because the
-published `openehr` 0.1.0 is immutable and keeps its wrong `repository` field.
+**W-14**, **W-16**, **W-18**, **W-20**), six Low (**W-07**, **W-08**, **W-10**,
+**W-15**, **W-17**, **W-19**). **Eighteen are fixed**; **W-03** and **W-20**
+are fixed going forward only, because the published `openehr` 0.1.0 and
+`openehr-loco` 0.8.0 are immutable and keep their defects — a wrong
+`repository` field for one, two RUSTSEC advisories for the other.
 
 **W-09 through W-18 were added on 2026-08-20 and -21**, outside the original audit date
 below, and are marked as such. They were found the same way as the rest — by
@@ -898,6 +900,63 @@ local version's `major.minor`, catching a patch release correctly (`0.8` and
 no behaviour changed. It is here because the *shape* is `W-10`'s and `W-17`'s
 again — a value copied into documents nothing was watching — recurring in a
 place none of those checks happened to look.
+
+---
+
+## W-20 — `openehr-loco` 0.8.0 shipped two RUSTSEC advisories, permanently — **Medium, partially fixed**
+
+**Found 2026-09-01**, the same day `openehr-loco` was published for the first
+time, by running `cargo audit` against it — the first time anyone had. It had
+never been run before: `openehr-loco` is a service crate with a much larger
+dependency graph than `openehr` or `openehr-store` (`loco-rs` alone pulls in
+`opendal`, `tokio-cron-scheduler`, and `rust_decimal`), and nothing in this
+repository's CI runs `cargo audit` on any crate as a gate.
+
+**What shipped.** `openehr-loco 0.8.0`'s `loco-rs = "1.0.1"` requirement
+resolved `quick-xml 0.39.4` — RUSTSEC-2026-0195 (unbounded
+namespace-declaration allocation, memory-exhaustion DoS) and RUSTSEC-2026-0194
+(quadratic duplicate-attribute checking), both High, 7.5 — and `chacha20
+0.10.1`, yanked with no advisory. All three are permanent: the published
+`0.8.0` lockfile cannot be edited, and yanking `0.8.0` would remove it from
+resolution without removing the claim from anyone who already has it
+(`agents/publishing.md`, "Read this first").
+
+**Fixed going forward, not retroactively — same shape as `W-03`.** `0.8.1`,
+published three minutes after `0.8.0`, moves `loco-rs` to `1.1.0` — inside the
+`"1.0.1"` requirement's own caret range, so no manifest edit beyond the
+version bump — which resolves `quick-xml 0.41.0` and `chacha20 0.10.2`,
+clearing both advisories and the yank. A dependent that pins `openehr-loco =
+"0.8"` and does not exclude `0.8.0` explicitly can still resolve to the
+defective release; `agents/publishing.md` now says so in the version table
+itself, not only in prose.
+
+**One advisory remains in `0.8.1`, checked rather than assumed to matter.**
+`rust_decimal 1.42.1 → byte-unit 5.2.5 → rkyv 0.7.46` carries
+RUSTSEC-2026-0235 (insufficient archive validation). `rust_decimal`'s `rkyv`
+feature is off in the feature set `loco-rs` selects: a clean `cargo build`
+after clearing `target/debug` produces no `rkyv` artifact at all — no
+`.rlib`, no `.rmeta`, no fingerprint entry — while `rust_decimal`,
+`byte-unit`, `quick-xml`, and `chacha20` all do. The package resolves in
+`Cargo.lock` because some feature combination could need it; this build does
+not. `cargo update -p rust_decimal`, `-p byte-unit`, and `-p rkyv` each
+report nothing newer available, so this needs `byte-unit` or `loco-rs` to
+move past it upstream — not tracked as a separate finding, since it is one
+line of the same underlying gap (`cargo audit` was never run before, and
+still is not run in CI).
+
+**Why it is Medium, not High.** Nothing that depends on `openehr-loco`
+existed before 2026-09-01, so no consumer was exposed to `0.8.0` before the
+remedy shipped three minutes later — a narrower window than `W-01`'s or
+`W-03`'s. It is not Low because the two `quick-xml` advisories are High
+severity individually, and "permanently" is doing real work in this
+sentence: a dependent that resolves `0.8.0` today gets them regardless of how
+old the defect is.
+
+**Residual.** `cargo audit` still runs nowhere in CI, for `openehr-loco` or
+any other crate — this finding was produced by a manual run during a
+publish, not a gate. A second dependency drifting into an advisory between
+audits would be found the same way this one was: by someone running the
+command, not by anything here noticing on its own.
 
 ---
 

@@ -23,17 +23,42 @@ publish a crate with an open finding against its claims (`W0.21`).
 on crates.io, in the order below, and local matches published. Verified
 against the registry API rather than read off `cargo publish`'s output.
 
-**`openehr-loco` became publishable on 2026-09-01.**
-`spec/databases/16-repository-and-release.md`'s `W16.1` was amended to
-require it, `publish = false` was removed from its manifest, and
-`cargo publish --dry-run` was run for real — it packages, downloads its three
-already-published path dependencies (`openehr`, `openehr-store`,
-`openehr-sqlite`) at their real crates.io versions, builds against them, and
-would upload. **It has not actually been published.** That is deliberate:
-publishing is the manual step below, from the maintainer's own machine, and
-a specification change is not that step. Its version is already `0.8.0`,
-matching the other eight for consistency, so its first release will not be
-`0.1.0` — there is no earlier `0.x` history for it to follow.
+**`openehr-loco` was published for the first time on 2026-09-01, at 0.8.0 and
+then 0.8.1, three minutes apart.** `spec/databases/16-repository-and-release.md`'s
+`W16.1` was amended the same day to require it (`publish = false` removed from
+its manifest), and `cargo publish --dry-run` was run for real before any of
+that shipped — it packaged, downloaded its three already-published path
+dependencies (`openehr`, `openehr-store`, `openehr-sqlite`) at their real
+crates.io versions, built against them, and reached the upload step. Both
+`openehr-loco` releases are verified against the registry API, the same way as
+the eight above: `0.8.0` at `2026-09-01T07:59:00Z`, `0.8.1` at
+`2026-09-01T08:01:42Z`, neither yanked.
+
+**`openehr-loco` 0.8.0 shipped with two RUSTSEC advisories and a yanked
+dependency, permanently.** Nobody had run `cargo audit` on this crate before
+that release — its `loco-rs = "1.0.1"` requirement resolved `quick-xml
+0.39.4` (RUSTSEC-2026-0195 and -0194, both High, 7.5: unbounded
+namespace-declaration allocation and quadratic duplicate-attribute checking)
+and `chacha20 0.10.1` (yanked, no advisory) into the published lockfile.
+0.8.1, three minutes later, is the remedy: `loco-rs` moved to `1.1.0` — still
+inside the `"1.0.1"` requirement's caret range, no manifest edit needed beyond
+the version bump itself — which resolves `quick-xml 0.41.0` and `chacha20
+0.10.2`, clearing all three. This is `openehr` 0.1.0's wrong `repository`
+again, in shape: the earlier version is immutable and still carries the
+defect; the fix is a new version, not an edit. **Depend on `openehr-loco
+"0.8.1"` or later**, never a bare `"0.8"` that could resolve to `0.8.0`.
+One `rust_decimal → byte-unit → rkyv 0.7.46` advisory remains in `0.8.1`'s own
+lockfile (`RUSTSEC-2026-0235`) — checked, not assumed, to be uncompiled: a
+clean `cargo build` produces no `rkyv` artifact, because the feature that
+needs it is off in the set `loco-rs` selects. Recorded as its own finding
+below rather than folded into this paragraph, because it is a live crate's
+subsisting exposure, not a superseded release.
+
+Its version does not move in lockstep with the other eight, and is not
+expected to: `openehr-loco` is a separate service with its own release
+cadence, one commit's worth of change at a time, not eight crates released
+together. Treat the "eight" language elsewhere in this file as still meaning
+those eight; `openehr-loco` is now a ninth, independent line.
 
 **0.7.2 went out ahead of this file's process** (2026-08-26): the versions
 were bumped and the eight crates published before the inter-crate pins, this
@@ -102,6 +127,7 @@ formality: the run before 0.4.0's was **red**, and reading it is what produced
 | `openehr-mariadb` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, 0.7.3, 0.7.4, **0.8.0** | 0.8.0 |
 | `openehr-mssql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, 0.7.3, 0.7.4, **0.8.0** | 0.8.0 |
 | `openehr-oracle` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, 0.7.3, 0.7.4, **0.8.0** | 0.8.0 |
+| `openehr-loco` | 0.8.0 (permanently carries `quick-xml` 0.39.4 and yanked `chacha20` 0.10.1 — do not depend on it), **0.8.1** | 0.8.1 |
 
 `openehr-assets` and the eight fuzz crates are `publish = false` and are not
 on crates.io. `openehr-loco` is no longer in that set as of 2026-09-01 (above)
@@ -163,6 +189,23 @@ git tag -a "v$V" "$(git log --format=%H -1 --grep="^Record that $V is published"
 git push --tags
 ```
 
+**`openehr-loco` revives the per-crate scheme, deliberately, on 2026-09-01** —
+it is not part of the lockstep eight, so `v0.8.1` would name the wrong thing:
+a reader fetching that tag expecting `openehr-loco` 0.8.1 would get whatever
+the eight last released at that version string, a different crate's tree
+entirely. Tagged `openehr-loco-v0.8.0` and `openehr-loco-v0.8.1`, on the
+commits that record each — not on the commit that ran `cargo publish`, same
+reasoning as above, and the recording commit here deliberately does **not**
+start its message with "Record that ... is published": that exact phrase is
+`scripts/check-docs.py`'s anchor for what changed since **the lockstep
+eight's** last release, and a commit recording an unrelated crate's release
+matching it would move that anchor to the wrong commit.
+
+```sh
+git tag -a "openehr-loco-v$V" "$COMMIT" -m "openehr-loco $V"
+git push --tags
+```
+
 ## Order
 
 Dependencies must exist on crates.io before the crates that depend on them. Path
@@ -191,8 +234,9 @@ cycle.
 dependency on the three ahead of it, no dev-dependency wrinkle of its own.
 It is not one of the eight this file otherwise calls "the published crates"
 in most places below — that phrase predates it and still means those eight —
-but it is no longer `publish = false` either; treat it as its own,
-not-yet-exercised, one-crate release.
+but it is no longer `publish = false` either, and its first two releases have
+now actually happened: see "State today" above for both, and the finding
+below for what made a second one necessary three minutes after the first.
 
 **This ordering is not advisory — cargo enforces it.** Publish out of order and
 a dependent fails with:
@@ -274,15 +318,77 @@ cargo publish
 ```
 
 Requires `cargo login` with a token from <https://crates.io/settings/tokens>.
-No CI publish workflow exists — publishing is this manual step, from the
-maintainer's own machine, on purpose (`spec/trusted-publishing/index.md`, and
-see the section below).
+No CI publish workflow exists — publishing the eight lockstep crates is this
+manual step, from the maintainer's own machine, on purpose
+(`spec/trusted-publishing/index.md`, and see the section below).
+`openehr-loco` is the one exception, as of 2026-09-01 — see the next section.
 
 After the first publish of a crate, add the other owners:
 
 ```sh
 cargo owner --add <user-or-team>
 ```
+
+### An agent MAY publish `openehr-loco`, under conditions
+
+**Scoped to this one crate, deliberately not to the other eight.** The
+maintainer published `openehr-loco` for the first time on 2026-09-01, from
+their own machine, and then asked for the specification to be revised so
+that an agent session — running on that same machine, with the same
+already-configured `cargo login` token, on that maintainer's explicit
+instruction — may run `cargo publish` for `openehr-loco` itself, in a later
+session. This is not the same relaxation for the other eight: their
+conformance claims are the Reference Model and the persistence layer this
+whole repository exists to get right, and `W0.21`'s "do not publish a crate
+with an open finding against its claims" carries more weight there than
+anywhere else in the tree. `openehr-loco` states evidence, not a ladder
+level (`W0.32`), and is a single, independently-versioned service crate one
+commit's release can update — the reasoning that keeps the other eight
+human-only does not scale down to it the same way.
+
+**Not Trusted Publishing, and should not be confused with it.** The section
+below is a registry-side OIDC mechanism: a CI workflow authenticates to
+crates.io per run, with no long-lived credential anywhere. This is a
+different thing entirely — a human-directed agent, on the human's own
+machine, using the human's own token, on the human's own explicit
+instruction in that session. Adopting one is not a step toward the other,
+and this section is not a reason to revisit `spec/trusted-publishing/index.md`.
+
+**An agent MUST NOT publish `openehr-loco` unprompted.** This authorizes
+executing `cargo publish` when the maintainer asks for it in that session —
+not deciding on its own that a change is publish-worthy. The trigger is
+still a human instruction, every time.
+
+**Before running `cargo publish` for `openehr-loco`, in the same session:**
+
+1. `cargo test --quiet` and `RUSTFLAGS="-D warnings" cargo clippy
+   --all-targets --quiet` pass, run in this session — not assumed from an
+   earlier one, since the tree may have moved.
+2. `cargo audit` has been run in this session. A clean result, or a result
+   already recorded in `spec/audit.md` as an existing, non-blocking finding,
+   is fine to publish over. A **new** finding discovered during this same
+   session MUST be written into `spec/audit.md` before the `cargo publish`
+   step, not after — `W-20` is what an agent skipping this looks like
+   afterward, not before.
+3. `cargo publish --dry-run` succeeds: packages, resolves its path
+   dependencies against their real published versions, builds, reaches the
+   upload step.
+4. The version bump is checked against the registry API's actual latest
+   version for `openehr-loco` — not against what the local `Cargo.toml` said
+   before this session's edits, in case the two have drifted — and follows
+   semver relative to that.
+5. `agents/publishing.md` (this file) is updated with the new version, in
+   the version table above, in the same commit that records the publish —
+   not a follow-up commit, and not left for a human to notice is missing.
+
+**After publishing:** tag it `openehr-loco-v<version>`, per the per-crate
+scheme above, and push both the branch and the tag. If a defect surfaces
+immediately after publishing — the way `0.8.0`'s did, three minutes before
+`0.8.1` — do not yank silently (`agents/publishing.md`'s own rule, restated
+here because it is the one most likely to matter the first time this
+authorization is used again): record it in `spec/audit.md`, fix it, publish
+the remedy, and say in the version table which version is not the one to
+depend on.
 
 ### Trusted Publishing — not yet, and the condition that changes it
 

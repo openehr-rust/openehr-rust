@@ -1,6 +1,6 @@
 # openehr-loco
 
-A RESTful openEHR® API server on **Axum** and **Loco 1.0.1**, over
+A RESTful openEHR® API server on **Axum** and **Loco 1.1.0**, over
 [`openehr-sqlite`](../openehr-sqlite).
 
 > openEHR® is the registered trademark of the openEHR Foundation and is used
@@ -8,12 +8,13 @@ A RESTful openEHR® API server on **Axum** and **Loco 1.0.1**, over
 > constitute endorsement of this product by openEHR International or openEHR
 > Foundation.
 
-Publishable since 2026-09-01 (`spec/databases/16-repository-and-release.md`
-**W16.1**, amended) but with no crates.io release yet — see
-[`agents/publishing.md`](../agents/publishing.md). It sits **outside the
-conformance ladder** either way — every rung there is defined by DDL, a
-`Store` implementation, or a database server, and this crate is none of
-those. So it states evidence instead of a level (`W0.32`).
+Published on crates.io since 2026-09-01, at **0.8.1**
+(`spec/databases/16-repository-and-release.md` **W16.1**, amended) — see
+[`agents/publishing.md`](../agents/publishing.md) for the version history,
+including why `0.8.0` is not the one to depend on. It sits **outside the
+conformance ladder** regardless of publish status — every rung there is
+defined by DDL, a `Store` implementation, or a database server, and this
+crate is none of those. So it states evidence instead of a level (`W0.32`).
 
 **Demonstrated.** 53 tests. `tests/http.rs` serves real requests through Loco's
 own router: `410` for a deleted composition against `404` for one that never

@@ -18,8 +18,10 @@ is a different skill: openEHR concepts, not this repository's conventions.
 
 Eighteen crates, **each its own Cargo workspace**. There is no root workspace —
 run cargo from inside a crate directory. Eight are published at 0.8.0;
-`openehr-loco` became publishable on 2026-09-01 but has not yet had a first
-release (`agents/publishing.md`); the other nine are `publish = false`.
+`openehr-loco` is a ninth, published separately at 0.8.1 since 2026-09-01
+(`agents/publishing.md` — 0.8.0 also shipped but carries two RUSTSEC
+advisories permanently, do not depend on it).
+The other nine are `publish = false`.
 
 **Local matches published: 0.8.0, out 2026-08-29.** 0.8.0 is the one to know
 about: the MSRV floor moved from N−3 to N−2 — 1.95 to 1.96 — which `RV6`

@@ -209,6 +209,14 @@ def check_versions() -> int:
         if pkg.get("publish") is False:
             continue
         rel = manifest.relative_to(ROOT)
+        # `openehr-loco` is publishable but deliberately not part of the
+        # lockstep release train `local` describes (`agents/publishing.md`,
+        # 2026-09-01): nothing in this workspace names it as a path
+        # dependency with a `version`, so the resolves-to-a-published-sibling
+        # risk this loop exists to catch does not apply to it -- it is a
+        # leaf, not a dependency anything else here pins.
+        if pkg.get("name") == "openehr-loco":
+            continue
         if pkg.get("version") != local:
             print(
                 f"::error file={rel}::version is {pkg.get('version')}, "
