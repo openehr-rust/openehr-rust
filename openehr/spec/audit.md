@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**46 findings, 46 in the table below: 6 High, 27 Medium, 13 Low. 40 fixed or
+**47 findings, 47 in the table below: 6 High, 27 Medium, 14 Low. 41 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -133,6 +133,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-44 | Low | `C_ATTRIBUTE.container` checked children's occurrences lower-bound sum against the cardinality but not any child's own occurrences upper bound (`VACMCU`); `C_ATTRIBUTE.single` checked nothing about its children's occurrences at all (`VACSO`) | **fixed** — both added; `single`'s check required splitting out a shared `new_raw` constructor so `container`, built on `single`, would not inherit a rule that belongs only to single-valued attributes |
 | A-45 | Medium | `C_DATE`/`C_TIME`/`C_DATE_TIME`/`C_DURATION` had no `CPrimitive` variant at all — every node they governed was `Unchecked`, which on most real archetypes (nearly all constrain at least one date or time field) meant `is_conformant()` was `false` far more often than the disclosure's wording suggested | **fixed** — `SemanticOrd` implemented for the four `base` temporal types (previously blocked on nothing implementing it, not a choice to skip it), then the four `CPrimitive` variants, each a list of ranges matching AOM2's own shape |
 | A-46 | Low | `C_PRIMITIVE_OBJECT` could not carry a `node_id` at all, though `CObject::node_id`'s dispatcher already read the field — it just stayed `None` forever, since nothing could set it | **fixed** — `with_node_id`/`node_id()` added, plus a `PRIMITIVE_NODE_ID` constant for AOM2's own inline-form sentinel, which is a literal string rather than coded syntax |
+| A-47 | Low | `Terminology_code`/`Terminology_term`, the BASE foundation types `AUTHORED_RESOURCE.original_language`, `RESOURCE_DESCRIPTION_ITEM.language`, and `TRANSLATION_DETAILS.language` are typed as, did not exist in this crate at all | **fixed** — both added to `openehr::base`; a standalone prerequisite, not a claim that any of the three classes that use them is now modelled |
 
 ---
 
@@ -2572,3 +2573,50 @@ test for `CArchetypeRoot`.
 offered to template authoring and archetype-editor UIs — remains unmodelled;
 it has no bearing on the conformance-checking path this crate implements and
 was ranked below this finding in the same research pass for that reason.
+
+## A-47 — `Terminology_code`/`Terminology_term` did not exist
+
+**Severity: Low. Status: fixed.**
+
+Found while researching BASE for classes this crate had never checked
+against its own source, rather than assuming coverage from the identifiers
+and foundation types it already has. `Terminology_code`
+(`org.openehr.base.foundation_types.terminology_code.adoc`) is not
+`CODE_PHRASE`: `CODE_PHRASE.terminology_id` is a structured
+`TerminologyId`, while `Terminology_code.terminology_id` is a bare
+namespace `String`, and `Terminology_code` additionally carries an optional
+`terminology_version` and an optional `uri`. Neither it nor
+`Terminology_term` — the term-text/concept-reference pairing built on it —
+existed in this crate under any name.
+
+**Why this one, on its own.** `Terminology_code` is the declared type of
+`AUTHORED_RESOURCE.original_language`, `RESOURCE_DESCRIPTION_ITEM.language`,
+and `TRANSLATION_DETAILS.language` (`org.openehr.base.resource.*.adoc`) —
+three classes this crate does not model, and `S1.1`'s own package list
+(`RM Data Types, Data Structures, Common, EHR, and Demographic`) does not
+name the `resource` package they belong to, so building the three of them is
+a separate scope decision this finding does not make. `Terminology_code`
+itself is independently well-formed and useful on its own terms — it is a
+correct, small addition regardless of whether the three classes above are
+ever built — which is why it is recorded here rather than held back until
+they are.
+
+**Fixed** — `openehr::base::TerminologyCode` and `TerminologyTerm` added.
+Neither class declares an invariant in its own BASE class definition (unlike
+`CODE_PHRASE`'s `Code_string_valid`), so both constructors are infallible —
+adding a non-empty-string check by analogy with `CODE_PHRASE` without a
+cited invariant to require it would be exactly the kind of unverified claim
+`W0.3` exists to catch. `uri` is carried as a plain, unvalidated `String`:
+this crate has no BASE-level `Uri` type distinct from the Reference Model's
+`DV_URI`, and building one was out of scope for this finding.
+
+Five new tests: construction with and without the optional fields, a
+`TerminologyTerm` pairing, and canonical-JSON round-tripping including that
+absent optional fields are omitted from the JSON rather than written `null`.
+
+**Not attempted.** `AUTHORED_RESOURCE`, `RESOURCE_DESCRIPTION`,
+`RESOURCE_DESCRIPTION_ITEM`, and `TRANSLATION_DETAILS` remain entirely
+unmodelled. Whether this crate should model them at all is an open scope
+question this finding does not resolve, since `S1.1` does not commit the
+crate to the `resource` package the way it does to Data Types, Data
+Structures, Common, EHR, and Demographic.

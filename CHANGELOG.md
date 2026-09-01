@@ -104,6 +104,16 @@ would reject: `PRIMITIVE_NODE_ID`, the literal string
 written inline in ADL with no node id of its own. See `openehr/spec/audit.md`
 **A-46**.
 
+**New: `openehr::base::TerminologyCode`/`TerminologyTerm`.** BASE Foundation
+Types, not `CODE_PHRASE`: `Terminology_code.terminology_id` is a bare
+namespace string rather than a structured `TerminologyId`, and it carries an
+optional `terminology_version` and `uri` besides. This is the declared type
+of `AUTHORED_RESOURCE.original_language`, `RESOURCE_DESCRIPTION_ITEM.language`,
+and `TRANSLATION_DETAILS.language` — none of which this crate models, and
+`S1.1` does not commit it to the `resource` package they belong to. Added on
+its own because it is independently well-formed, not because those three
+classes are now in progress. See `openehr/spec/audit.md` **A-47**.
+
 ## 0.8.0 — 2026-08-29
 
 **BREAKING: the MSRV floor moved from N−3 to N−2 — 1.95 to 1.96.** `RV1`

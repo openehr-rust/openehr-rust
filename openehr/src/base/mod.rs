@@ -14,6 +14,7 @@
 //! | [`object_ref`] | Base Types → Identification (`OBJECT_REF` and descendants) |
 //! | [`interval`] | Foundation Types → Interval |
 //! | [`iso8601`] | Foundation Types → Time |
+//! | [`terminology_code`] | Foundation Types → Terminology |
 
 pub mod interval;
 pub mod iso8601;
@@ -22,11 +23,13 @@ pub mod real;
 pub mod object_ref;
 #[doc(hidden)]
 pub mod serde_support;
+pub mod terminology_code;
 pub mod uid;
 
 pub use interval::{Interval, SemanticOrd};
 pub use real::Real;
 pub use iso8601::{Date, DatePrecision, DateTime, Duration, Offset, Time, TimePrecision};
+pub use terminology_code::{TerminologyCode, TerminologyTerm};
 pub use object_id::{
     ArchetypeId, GenericId, HierObjectId, ObjectId, ObjectVersionId, TemplateId, TerminologyId,
     UidBasedId, VersionTreeId,
