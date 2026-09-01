@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**42 findings, 42 in the table below: 6 High, 26 Medium, 10 Low. 36 fixed or
+**43 findings, 43 in the table below: 6 High, 26 Medium, 11 Low. 37 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -129,6 +129,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-40 | Medium | The Archetype Model is specified and mostly not implemented: §15 and `S1.21` are in force, 18 of 32 requirements with no code | open — object model, in-memory-archetype validation, and repository resolution of a filled slot built 2026-08-26/30; no parser, flattening, or template expansion |
 | A-41 | Low | The conformance matrix's own totals went stale a second time — 291 claimed, 300 in one sentence, 311 in the rows | **fixed** — re-derived mechanically to 344 on 2026-08-26 |
 | A-42 | Medium | Three invariants checked at construction and nowhere else: `AUDIT_DETAILS.System_id_valid`/`Change_type_valid` on a `VERSION`'s own `commit_audit`, `ISM_TRANSITION.Transition_valid`, `INTERVAL_EVENT.Math_function_validity` — `A-23`'s exact shape, recurring | **fixed** — a shared `check_audit_details` helper, and one group-membership check each beside the sibling check already there |
+| A-43 | Low | `base::Interval<T>` had only the BASE foundation type's element-membership function (`has`, named `contains` here); `intersects` and interval-vs-interval `contains` did not exist | **fixed** — `contains_interval` and `intersects`, both checked exactly at shared open/closed boundaries rather than approximated |
 
 ---
 
@@ -2380,3 +2381,47 @@ against `Validate`'s actual walk rather than trusting a prior fix's scope —
 is the same one that found `A-23`'s two other invariants inside itself; it was
 not re-run over the rest of the RM exhaustively, so more instances of this
 shape may remain uncounted.
+
+## A-43 — `INTERVAL<T>` had no interval-vs-interval operations
+
+**Severity: Low. Status: fixed.**
+
+Found while cross-checking `openehr::base` against the canonical BASE
+foundation types (`openEHR/specifications-BASE`,
+`org.openehr.base.foundation_types.interval.adoc`), which declares three
+abstract functions on `INTERVAL`: `has(e: T)` (element membership),
+`intersects(other: INTERVAL)`, and `contains(other: INTERVAL)`. This crate's
+`Interval<T>` had only the first, under the name `contains` — a name already
+public and not renamed to make room for the other two, since a rename is a
+breaking change for a method that already does what it says.
+
+**Why this is Low rather than Medium.** Nothing in this crate calls for
+either missing operation yet: `am::multiplicity::MultiplicityInterval::narrows`
+hand-rolls the same interval-vs-interval logic for a different type, because
+`base::Interval` offered it nowhere generically — a duplicated rule waiting to
+diverge, in the shape CLAUDE.md's Gregorian-leap-rule note warns about, but not
+yet a defect anyone has hit.
+
+**Fixed.** `contains_interval` (all points of `other` are points of `self`)
+and `intersects` (at least one limit of `other` falls strictly inside `self`).
+Both compare bounds directly through `SemanticOrd` rather than reusing
+`contains` on `other`'s raw bound values, which gets one case wrong: `self =
+(0, 10)`, `other = (0, 5)` share the excluded point `0`; neither interval
+contains it, so `self.contains(0)` alone answers `false` and a check built on
+it would wrongly conclude `other` is not contained, when every point `other`
+actually has (everything strictly between `0` and `5`) is a point of `self`.
+Worked through by hand before writing the implementation, not found by a
+failing test — the naive approach was never committed — and then confirmed
+by a test built for exactly this shape.
+
+Six new tests, including the shared-excluded-boundary case above, an
+open-vs-closed-at-the-same-point case, one-sided-unbounded intervals (both
+directions), and `intersects`'s "touching but not overlapping" case
+(`(0, 10)` and `(10, 20)`, open at the shared point on at least one side, so
+neither interval contains it and they do not intersect).
+
+**Residual.** `MultiplicityInterval::narrows` was not rewritten to use the new
+methods — it operates on a different type (`am::multiplicity`'s own interval,
+not `base::Interval`), so there is no direct duplication to remove, only a
+parallel implementation that could in principle be expressed the same way if
+the two types were ever unified. Not attempted here.

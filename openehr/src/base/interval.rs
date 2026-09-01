@@ -259,6 +259,76 @@ impl<T: SemanticOrd> Interval<T> {
         };
         above_lower && below_upper
     }
+
+    /// Whether every point of `other` is also a point of `self`.
+    ///
+    /// The BASE foundation type declares this as `INTERVAL.contains(other:
+    /// INTERVAL)`, distinct from `has(e: T)` — the element test this crate
+    /// calls [`Interval::contains`], for a name already public before this
+    /// method existed. `has`/`element_contains` was not renamed to make room;
+    /// this is `contains_interval` instead, named for what it takes rather
+    /// than to match a name this crate cannot also use for something else.
+    ///
+    /// Boundary alignment matters and is checked exactly, not approximated by
+    /// testing `other`'s raw bound values against `self.contains`: `self =
+    /// (0, 10)`, `other = (0, 5)` share the excluded point `0`, and neither
+    /// interval contains it — testing `self.contains(0)` alone would answer
+    /// `false` and wrongly conclude `other` is not contained, when every
+    /// actual point of `other` (everything strictly between `0` and `5`) is a
+    /// point of `self`.
+    #[must_use]
+    pub fn contains_interval(&self, other: &Self) -> bool {
+        let lower_ok = match (&self.lower, &other.lower) {
+            (None, _) => true,
+            (Some(_), None) => false,
+            (Some(sl), Some(ol)) => match sl.semantic_cmp(ol) {
+                Some(Ordering::Less) => true,
+                Some(Ordering::Equal) => {
+                    self.lower_included.unwrap_or(true) || !other.lower_included.unwrap_or(true)
+                }
+                Some(Ordering::Greater) | None => false,
+            },
+        };
+        let upper_ok = match (&self.upper, &other.upper) {
+            (None, _) => true,
+            (Some(_), None) => false,
+            (Some(su), Some(ou)) => match su.semantic_cmp(ou) {
+                Some(Ordering::Greater) => true,
+                Some(Ordering::Equal) => {
+                    self.upper_included.unwrap_or(true) || !other.upper_included.unwrap_or(true)
+                }
+                Some(Ordering::Less) | None => false,
+            },
+        };
+        lower_ok && upper_ok
+    }
+
+    /// Whether at least one limit of `other` falls **strictly** inside
+    /// `self` — the BASE foundation type's `INTERVAL.intersects(other:
+    /// INTERVAL)`.
+    ///
+    /// "Strictly inside" means beyond both of `self`'s own limits, regardless
+    /// of whether `self` includes them: two intervals that only touch at a
+    /// shared boundary point, open on at least one side so neither actually
+    /// contains that point (`self = (0, 10)`, `other = (10, 20)`), do not
+    /// intersect — there is no point either interval actually contains that
+    /// the other also contains.
+    #[must_use]
+    pub fn intersects(&self, other: &Self) -> bool {
+        let strictly_within = |value: &T| {
+            let above = match &self.lower {
+                None => true,
+                Some(lo) => matches!(value.semantic_cmp(lo), Some(Ordering::Greater)),
+            };
+            let below = match &self.upper {
+                None => true,
+                Some(hi) => matches!(value.semantic_cmp(hi), Some(Ordering::Less)),
+            };
+            above && below
+        };
+        other.lower.as_ref().is_some_and(strictly_within)
+            || other.upper.as_ref().is_some_and(strictly_within)
+    }
 }
 
 impl<T> Interval<T> {
@@ -419,6 +489,91 @@ mod tests {
         assert!(at_most.contains(&10));
         assert!(at_most.contains(&-1_000_000));
         assert!(!at_most.contains(&11));
+    }
+
+    /// `contains_interval` on the exact case a naive "test both raw bound
+    /// values against `self.contains`" approach gets wrong: `self = (0, 10)`
+    /// and `other = (0, 5)` share the excluded bound `0`. Neither interval
+    /// contains the point `0`, so `self.contains(0)` alone answers `false`
+    /// and a check built on it would wrongly conclude `other` is not
+    /// contained — when every point `other` actually has (everything
+    /// strictly between `0` and `5`) is also a point of `self`.
+    #[test]
+    fn contains_interval_agrees_at_a_shared_excluded_boundary() {
+        let outer = Interval::open(0_i32, 10).unwrap();
+        let inner = Interval::open(0_i32, 5).unwrap();
+        assert!(
+            outer.contains_interval(&inner),
+            "every point of (0, 5) is a point of (0, 10)"
+        );
+        // And the other direction is false: (0, 10) has points (0, 5) does not.
+        assert!(!inner.contains_interval(&outer));
+    }
+
+    /// `contains_interval` where the two intervals' bounds coincide but one
+    /// is open where the other is closed at that exact point.
+    #[test]
+    fn contains_interval_distinguishes_open_from_closed_at_a_shared_bound() {
+        let closed = Interval::closed(0_i32, 10).unwrap();
+        let open = Interval::open(0_i32, 10).unwrap();
+
+        // The closed interval's every point includes the open one's every
+        // point, plus the two endpoints the open interval excludes.
+        assert!(closed.contains_interval(&open));
+        // The open interval is missing 0 and 10, both of which the closed
+        // interval has, so the reverse does not hold.
+        assert!(!open.contains_interval(&closed));
+
+        // Equal intervals contain each other.
+        assert!(closed.contains_interval(&closed));
+        assert!(open.contains_interval(&open));
+    }
+
+    /// `contains_interval` where one side is unbounded. `INTERVAL` here
+    /// cannot have *both* bounds absent (`Interval::new` refuses it — a
+    /// meaningless interval, not a representable "everything"), so this
+    /// covers the one-sided-unbounded cases that are constructible.
+    #[test]
+    fn contains_interval_handles_unbounded_sides() {
+        let at_least_0 = Interval::at_least(0_i32).unwrap();
+        let at_least_5 = Interval::at_least(5_i32).unwrap();
+        assert!(
+            at_least_0.contains_interval(&at_least_5),
+            "[0, ∞) contains [5, ∞)"
+        );
+        assert!(
+            !at_least_5.contains_interval(&at_least_0),
+            "[5, ∞) does not contain [0, ∞)"
+        );
+    }
+
+    /// `intersects`: "at least one limit of `other` falls strictly inside
+    /// `self`". Two intervals that only touch at a shared boundary, open on
+    /// at least one side so neither contains that point, do not intersect —
+    /// there is no point either actually holds that the other also holds.
+    #[test]
+    fn intersects_requires_a_limit_strictly_inside_not_merely_touching() {
+        let left = Interval::open(0_i32, 10).unwrap();
+        let right = Interval::open(10_i32, 20).unwrap();
+        assert!(
+            !left.intersects(&right),
+            "touching at an excluded 10 is not an intersection"
+        );
+        assert!(!right.intersects(&left), "symmetric");
+
+        let overlapping = Interval::open(5_i32, 15).unwrap();
+        assert!(
+            left.intersects(&overlapping),
+            "5 is strictly inside (0, 10)"
+        );
+        assert!(
+            overlapping.intersects(&left),
+            "the check is symmetric in effect, even though each call tests \
+             the other side's limits against its own"
+        );
+
+        let disjoint = Interval::open(20_i32, 30).unwrap();
+        assert!(!left.intersects(&disjoint));
     }
 
     /// The `*_unbounded` and `*_included` accessors report what the interval
