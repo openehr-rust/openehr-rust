@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**50 findings, 50 in the table below: 6 High, 29 Medium, 15 Low. 44 fixed or
+**51 findings, 51 in the table below: 6 High, 30 Medium, 15 Low. 45 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -137,6 +137,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-48 | Low | `C_PRIMITIVE_OBJECT.assumed_value` had no field at all — a default value could not be attached to a primitive constraint under any representation | **fixed** — `PrimitiveValue` and `with_assumed_value`/`assumed_value()` added; `Inv_valid_assumed_value` (conformance to the attached `CPrimitive`) is carried unchecked, declared rather than silently passed |
 | A-49 | Medium | `parse_adl14_header`/`parse_adl2_header` used `ArchetypeId` for the header's own identifier — narrower than the grammar both cite in their own error messages, `ARCHETYPE_HRID`, which allows a namespace prefix and a prerelease version suffix neither reader accepted | **fixed**, residual documented — `ArchetypeHrid` added and both readers corrected to use it for the archetype's own identifier; the `specialize` line's identifier is unchanged and remains narrower than its own grammar allows |
 | A-50 | Medium | `C_COMPLEX_OBJECT` had no `attribute_tuples` field — `C_ATTRIBUTE_TUPLE`/`C_PRIMITIVE_TUPLE` did not exist under any name, so a `{units, magnitude}` or `{value, symbol}` co-varying constraint (AOM2's replacement for ADL 1.4's `C_DV_QUANTITY`/`C_DV_ORDINAL`) could not be represented at all, not even as `CPrimitive::Unsupported` | **fixed** — `CAttributeTuple`/`CPrimitiveTuple` added, wired onto `CComplexObject` via a builder; the tree walk reports a node governed by one as `Unchecked` rather than silently passing it |
+| A-51 | Medium | `CPrimitive::TerminologyCode` had no `constraint_status` field, so an `extensible`/`preferred`/`example` (non-`Required`) terminology constraint could not be distinguished from a required one — `am::validate` reported a violation for conformant data whenever the actual code did not match the list or value set, which AOM2 states plainly is not a violation for a soft constraint | **fixed**, residual documented — `ConstraintStatus` added and checked in `walk_primitive`; `code_list: Vec<String>`, this variant's existing shape, has no counterpart in AOM2's own single-valued `constraint: String` and is left open rather than corrected in the same pass, since fixing it is a breaking change to an already-published type |
 
 ---
 
@@ -2830,3 +2831,78 @@ validation — matching an instance's values to one row — is deferred for the
 same reason `Inv_valid_assumed_value` was in `A-48`: a larger piece of work,
 decoupled from `walk_complex`'s existing per-attribute shape, and not
 attempted here.
+
+## A-51 — a soft terminology constraint was checked as though it were required
+
+**Severity: Medium. Status: fixed, residual documented.**
+
+Found while reading `C_TERMINOLOGY_CODE`'s own primary source
+(`openEHR/specifications-AM`,
+`docs/UML/classes/org.openehr.am.aom2.c_terminology_code.adoc`) to compare
+this crate's `CPrimitive::TerminologyCode` variant against it — the same
+per-class comparison that found `A-50` — rather than assuming the variant
+already committed to this repository's history was complete because it had a
+name and a citation-free existence.
+
+**What was missing, and what it did in the meantime.** AOM2's
+`C_TERMINOLOGY_CODE` carries a `constraint_status` attribute
+(`CONSTRAINT_STATUS`: `required`, `extensible`, `preferred`, `example`) that
+this crate had no field for at all. `openEHR/specifications-AM`,
+`docs/ADL2/master04.5-cadl_primitive_types.adoc` states plainly what the
+three non-`required` values mean: "Formally, all three of these statuses are
+the same as a value constraint specifying only the RM type as being a
+terminology code... which is to say, at the archetype level, validity of the
+data instance is achieved by supplying *any terminology code*." An
+`extensible`, `preferred`, or `example` terminology constraint is satisfied
+by any coded value whatsoever — the whole reason ADL offers the three
+statuses is to let an archetype suggest a value set without binding the
+instance to it. With no field to carry `constraint_status`, `am::validate`'s
+`walk_primitive` had no way to know a constraint was soft, and checked every
+`C_TERMINOLOGY_CODE` as though it were `required`: a real archetype using
+`extensible [ac2]` — the openEHR specification's own recommended pattern for
+handling terminology gaps in a novel condition, named explicitly in
+`master04.5-cadl_primitive_types.adoc`'s own soft-constraint section — would
+have every conformant instance whose code is not already in the value set
+reported as a `C_TERMINOLOGY_CODE` violation. That is a false verdict on
+conformant clinical data, the same class of defect `A-01` found in three
+quantity rules, not merely an absent field.
+
+**Fixed.** `openehr::am::ConstraintStatus` added — `Required`, `Extensible`,
+`Preferred`, `Example` — with `is_required()` mirroring AOM2's own
+`constraint_required()` for the non-`Void` case (`Void`/`None` is read as
+`Required` at the call site, matching AOM2's own stated default "in a
+top-level archetype", the only kind this crate builds). `CPrimitive
+::TerminologyCode` gained a `constraint_status: Option<ConstraintStatus>`
+field, additive and `#[serde(default)]` so JSON written before this existed
+still deserializes. `walk_primitive`'s `C_TERMINOLOGY_CODE` arm now checks
+`constraint_status` first: anything but `Required` skips the `code_list`/
+`ac`-code check entirely rather than reporting a violation, matching AOM2's
+own stated semantics exactly rather than approximating them — and, per that
+same semantics, is not reported `Unchecked` either, since a soft constraint's
+outcome is fully determined (always satisfied by any code), not merely
+unevaluated.
+
+Four new tests: `ConstraintStatus::is_required` true only for `Required`;
+canonical-JSON round-tripping including the field's omission when absent;
+a fixture written as though from before `constraint_status` existed —
+literal JSON with no such key — still deserializing; and, in `am::validate`,
+an `extensible` constraint naming one code accepting an instance carrying a
+completely different one, with neither a violation nor an unchecked entry,
+confirming the fix is a real behavioural change to `walk_primitive` and not
+merely a field that round-trips.
+
+**Not attempted — the residual named in `CPrimitive::TerminologyCode`'s own
+module documentation.** AOM2's `constraint` attribute is a single `String` —
+one `at`-code, or one `ac`-code naming a value set — never a list; ADL's own
+way of offering several alternative codes is several sibling `C_OBJECT`s
+under one attribute, the same alternative-matching shape every other node
+kind already uses via `CAttribute::children`. This variant's own
+`code_list: Vec<String>` field has no counterpart in AOM2 at all, was not
+re-derived from the primary source when it was first written, and predates
+this pass. Correcting the shape — most likely removing `code_list` in favour
+of the sibling-alternative pattern — is a breaking change to a type that
+shipped in a published version (`openehr` 0.7.0 brought the Archetype Model
+into scope), and deciding how to land a breaking AM change is `agents
+/publishing.md`'s process, not a decision this finding makes unilaterally.
+Recorded here rather than fixed silently or left for a future reader to
+rediscover (`C0.9`).

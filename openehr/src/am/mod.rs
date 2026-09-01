@@ -109,7 +109,7 @@ pub use archetype::{Archetype, ROOT_OCCURRENCES};
 pub use archetype_hrid::{ArchetypeHrid, VersionStatus};
 pub use constraint::{
     ArchetypeSlot, CArchetypeRoot, CAttribute, CAttributeTuple, CComplexObject, CObject,
-    CPrimitive, CPrimitiveObject, CPrimitiveTuple, NodeIdSyntax, PrimitiveValue,
+    ConstraintStatus, CPrimitive, CPrimitiveObject, CPrimitiveTuple, NodeIdSyntax, PrimitiveValue,
 };
 pub use multiplicity::{Cardinality, MultiplicityInterval};
 pub use repository::{ArchetypeRepository, Provenance, RepositoryError, Resolved};

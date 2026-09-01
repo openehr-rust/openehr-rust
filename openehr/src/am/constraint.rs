@@ -663,6 +663,50 @@ impl CPrimitiveObject {
     }
 }
 
+/// Whether a terminology constraint is strictly binding, or a preference or
+/// example: `CONSTRAINT_STATUS`.
+///
+/// AOM2's own words for the three non-`Required` values (`openEHR/specifications-AM`,
+/// `docs/ADL2/master04.5-cadl_primitive_types.adoc`): *extensible* — the
+/// instance must conform to the value set only if the intended concept is
+/// available in it, otherwise any other code is conformant; *preferred* — the
+/// instance should conform, but any other code is equally conformant;
+/// *example* — the constraint is illustrative only. All three, formally, mean
+/// the same thing at archetype-conformance level: "validity of the data
+/// instance is achieved by supplying *any* terminology code" — narrower
+/// semantic checking is left to tooling this crate does not implement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConstraintStatus {
+    /// An instance must supply one of the codes the constraint names.
+    /// AOM2's default when `constraint_status` is `Void` at the top level of
+    /// an archetype.
+    Required,
+    /// A code from the constraint is used if it covers the intended meaning;
+    /// otherwise any other code, including from another terminology, is
+    /// conformant.
+    Extensible,
+    /// A code from the constraint is preferred, but any other code is
+    /// equally conformant.
+    Preferred,
+    /// The constraint is provided as an illustrative example only; any
+    /// terminology code is conformant.
+    Example,
+}
+
+impl ConstraintStatus {
+    /// Whether an instance must actually satisfy the coded constraint to
+    /// conform. AOM2's own `constraint_required()`: "True if
+    /// `constraint_status` is defined and equals `required`" — the `Void`
+    /// half of that function ("OR if Void") is not this method's concern,
+    /// since a caller already had to unwrap `Option<ConstraintStatus>` to
+    /// reach a value to call this on; see [`CPrimitive::TerminologyCode`]'s
+    /// own documentation for where `None` is read as `Required` instead.
+    #[must_use]
+    pub const fn is_required(self) -> bool {
+        matches!(self, Self::Required)
+    }
+}
+
 /// The primitive constraint kinds AOM2 defines.
 ///
 /// `#[non_exhaustive]`, and `Unsupported` is a variant rather than an absence:
@@ -710,12 +754,36 @@ pub enum CPrimitive {
     },
     /// `C_TERMINOLOGY_CODE`: an `ac`-code naming a value set, or a list of
     /// `at`-codes.
+    ///
+    /// **Residual, not fixed here.** AOM2's own `constraint` attribute
+    /// (`openEHR/specifications-AM`,
+    /// `docs/UML/classes/org.openehr.am.aom2.c_terminology_code.adoc`) is a
+    /// single `String` — one `at`-code, or one `ac`-code naming a value set —
+    /// never a list; ADL's own way of offering several alternative codes is
+    /// several sibling `C_OBJECT`s under one attribute, each with its own
+    /// single-code `C_TERMINOLOGY_CODE`, the same alternative-matching shape
+    /// [`CAttribute::children`] already gives every other node kind. This
+    /// variant's `code_list: Vec<String>` has no such counterpart in AOM2 and
+    /// was not re-derived from the primary source when it was written. Fixing
+    /// the shape — most likely dropping `code_list` in favour of the sibling
+    /// pattern — is a breaking change to an already-published type and is left
+    /// open (`A-51` in `spec/audit.md`) rather than made silently in the same
+    /// pass that added this variant's `constraint_status` field below.
     #[serde(rename = "C_TERMINOLOGY_CODE")]
     TerminologyCode {
         /// The `ac`-code whose value set constrains this node, if any.
         constraint: Option<String>,
         /// Permitted `at`-codes, if the constraint is inline.
         code_list: Vec<String>,
+        /// Whether the constraint is strictly binding, or a preference or
+        /// example (`org.openehr.am.aom2.c_terminology_code.adoc`'s
+        /// `constraint_status`). `None` reads as [`ConstraintStatus::Required`]
+        /// — AOM2's own default for a top-level archetype, which is the only
+        /// kind this crate builds (`K15.11` covers the specialised case,
+        /// where `Void` instead means "inherit the parent's value", not
+        /// modelled here).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        constraint_status: Option<ConstraintStatus>,
     },
     /// `C_DATE`. AOM2's own shape for the four temporal primitives below is
     /// a *list* of ranges rather than `C_INTEGER`/`C_REAL`'s discrete list
@@ -1428,5 +1496,57 @@ mod tests {
         });
         let back: CComplexObject = serde_json::from_value(json).unwrap();
         assert!(back.attribute_tuples().is_empty());
+    }
+
+    #[test]
+    fn only_required_reports_that_the_constraint_actually_binds() {
+        assert!(ConstraintStatus::Required.is_required());
+        assert!(!ConstraintStatus::Extensible.is_required());
+        assert!(!ConstraintStatus::Preferred.is_required());
+        assert!(!ConstraintStatus::Example.is_required());
+    }
+
+    #[test]
+    fn constraint_status_round_trips_through_canonical_json_and_omits_when_absent() {
+        let with_status = CPrimitive::TerminologyCode {
+            constraint: Some("ac0001".to_owned()),
+            code_list: Vec::new(),
+            constraint_status: Some(ConstraintStatus::Extensible),
+        };
+        let json = serde_json::to_value(&with_status).unwrap();
+        assert_eq!(json["constraint_status"], "Extensible");
+        let back: CPrimitive = serde_json::from_value(json).unwrap();
+        assert_eq!(back, with_status);
+
+        let without_status = CPrimitive::TerminologyCode {
+            constraint: Some("ac0001".to_owned()),
+            code_list: Vec::new(),
+            constraint_status: None,
+        };
+        let json = serde_json::to_value(&without_status).unwrap();
+        assert!(
+            !json.as_object().unwrap().contains_key("constraint_status"),
+            "an absent constraint_status was written as null instead of omitted"
+        );
+    }
+
+    #[test]
+    fn a_terminology_code_written_before_constraint_status_existed_still_deserialises() {
+        // `#[serde(default)]`: JSON emitted by an earlier version of this
+        // crate had no `constraint_status` key at all.
+        let json = serde_json::json!({
+            "_type": "C_TERMINOLOGY_CODE",
+            "constraint": "ac0001",
+            "code_list": [],
+        });
+        let back: CPrimitive = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            back,
+            CPrimitive::TerminologyCode {
+                constraint: Some("ac0001".to_owned()),
+                code_list: Vec::new(),
+                constraint_status: None,
+            }
+        );
     }
 }

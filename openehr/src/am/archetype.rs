@@ -369,6 +369,7 @@ mod tests {
             CPrimitive::TerminologyCode {
                 constraint: Some("ac0001".to_owned()),
                 code_list: Vec::new(),
+                constraint_status: None,
             },
         ));
         let terminology = ArchetypeTerminology::new("en", terms(&["id1"])).unwrap();

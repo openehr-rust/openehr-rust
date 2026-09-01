@@ -77,7 +77,7 @@
 //! is no I/O to make non-deterministic in the first place.
 
 use crate::am::archetype::Archetype;
-use crate::am::constraint::{CAttribute, CComplexObject, CObject, CPrimitive};
+use crate::am::constraint::{CAttribute, CComplexObject, CObject, ConstraintStatus, CPrimitive};
 use crate::am::repository::ArchetypeRepository;
 use crate::am::terminology::ArchetypeTerminology;
 use crate::base::{ArchetypeId, Interval, Real};
@@ -805,24 +805,37 @@ fn walk_primitive(
             CPrimitive::TerminologyCode {
                 constraint: ac_code,
                 code_list,
+                constraint_status,
             },
             Scalar::Str(value),
         ) => {
-            if ac_code.is_none() && code_list.is_empty() {
-                // Neither an `ac`-code nor an inline list: nothing here
-                // constrains the code, so nothing can be checked against it.
-                ctx.unchecked(
-                    path,
-                    "C_TERMINOLOGY_CODE names neither an ac-code nor an inline code list",
-                );
-            } else {
-                let inline_ok = code_list.iter().any(|code| code == value);
-                let value_set_ok = ac_code
-                    .as_deref()
-                    .and_then(|ac| terminology.value_set(ac))
-                    .is_some_and(|set| set.contains(value));
-                if !inline_ok && !value_set_ok {
-                    ctx.violation(archetype_id, path, "C_TERMINOLOGY_CODE");
+            // AOM2's own words for any status but `Required`: "validity of
+            // the data instance is achieved by supplying *any* terminology
+            // code" (`docs/ADL2/master04.5-cadl_primitive_types.adoc`) — a
+            // `Scalar::Str` reaching this arm at all already is one, so a
+            // soft constraint is satisfied, not merely unchecked. Checking
+            // the code against `code_list`/`ac_code` below for `extensible`,
+            // `preferred`, or `example` would report a violation AOM2
+            // explicitly says is not one — the bug this arm existed to avoid
+            // before `constraint_status` had anywhere to be attached at all.
+            let required = constraint_status.is_none_or(ConstraintStatus::is_required);
+            if required {
+                if ac_code.is_none() && code_list.is_empty() {
+                    // Neither an `ac`-code nor an inline list: nothing here
+                    // constrains the code, so nothing can be checked against it.
+                    ctx.unchecked(
+                        path,
+                        "C_TERMINOLOGY_CODE names neither an ac-code nor an inline code list",
+                    );
+                } else {
+                    let inline_ok = code_list.iter().any(|code| code == value);
+                    let value_set_ok = ac_code
+                        .as_deref()
+                        .and_then(|ac| terminology.value_set(ac))
+                        .is_some_and(|set| set.contains(value));
+                    if !inline_ok && !value_set_ok {
+                        ctx.violation(archetype_id, path, "C_TERMINOLOGY_CODE");
+                    }
                 }
             }
         }
@@ -854,7 +867,7 @@ mod tests {
     use super::*;
     use crate::am::{
         ArchetypeRepository, ArchetypeSlot, ArchetypeTerminology, CArchetypeRoot, CAttribute,
-        CAttributeTuple, CComplexObject, CObject, CPrimitiveObject, Cardinality,
+        CAttributeTuple, CComplexObject, CObject, ConstraintStatus, CPrimitiveObject, Cardinality,
         MultiplicityInterval, Provenance, RepositoryError, Resolved, TermDefinition,
     };
     use crate::base::Interval;
@@ -1329,6 +1342,7 @@ mod tests {
             CPrimitive::TerminologyCode {
                 constraint: Some("ac0001".to_owned()),
                 code_list: Vec::new(),
+                constraint_status: None,
             },
             "DV_CODED_TEXT",
         );
@@ -1395,6 +1409,45 @@ mod tests {
         let refused = build_evaluation(vec![Element::new(attrs("Sex", "at0004"), coded("at0099"))]);
         let report = validate_against_archetype(&archetype, refused.as_node());
         assert_eq!(report.violations()[0].constraint(), "C_TERMINOLOGY_CODE");
+    }
+
+    /// `constraint_status`: AOM2's own words for anything but `Required` are
+    /// "validity of the data instance is achieved by supplying *any*
+    /// terminology code" — a code absent from `code_list` must still be
+    /// conformant once the constraint is `extensible`, `preferred`, or
+    /// `example`. Before `constraint_status` existed anywhere in this crate,
+    /// this exact case reported a `C_TERMINOLOGY_CODE` violation for
+    /// conformant data, because nothing distinguished a soft constraint from
+    /// a required one (`A-51`).
+    #[test]
+    fn a_soft_terminology_constraint_accepts_a_code_absent_from_its_own_list() {
+        let constraint = element_with_value_constraint(
+            "at0004",
+            "defining_code",
+            CPrimitive::TerminologyCode {
+                constraint: None,
+                code_list: vec!["at0010".to_owned()],
+                constraint_status: Some(ConstraintStatus::Extensible),
+            },
+            "DV_CODED_TEXT",
+        );
+        let archetype = evaluation_archetype(constraint);
+        let coded = |code: &str| {
+            DataValue::CodedText(
+                DvCodedText::new("value", CodePhrase::new("local", code).unwrap()).unwrap(),
+            )
+        };
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Systolic", "at0004"),
+            coded("at9999"),
+        )]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(
+            report.violations().is_empty(),
+            "an extensible constraint refused a code it does not name, contradicting its \
+             own AOM2 semantics"
+        );
+        assert!(report.unchecked().is_empty());
     }
 
     #[test]
