@@ -108,7 +108,10 @@ PATTERNS: list[tuple[str, str, str]] = [
     ("crates", rf"\*\*all ({NUMBER})\*\* crates declare the same five licences", "the crate count"),
     ("unpublished", rf"the other ({NUMBER}) are `publish = false`", "the unpublished count"),
     ("unpublished", rf"The other ({NUMBER}) MUST declare `publish = false`", "the unpublished count"),
-    ("unpublished", rf"the other ({NUMBER}) — `openehr-loco`", "the unpublished count"),
+    # A third variant, `the other (N) -- `openehr-loco``, was removed
+    # 2026-09-01 when `openehr-loco` left the unpublished set for good
+    # (`agents/publishing.md`) -- not a rewording this check should keep
+    # waiting to see reappear, but a phrase whose subject no longer exists.
     ("fuzz_crates", rf"({NUMBER}) fuzz harnesses", "the fuzz-crate count"),
     ("fuzz_crates", rf"({NUMBER}) fuzz crates are `publish = false`", "the fuzz-crate count"),
     ("fuzz_crates", rf"({NUMBER}) fuzz crates are not built by the `msrv` job", "the fuzz-crate count"),

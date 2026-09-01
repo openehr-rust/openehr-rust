@@ -377,7 +377,8 @@ refuse `UPDATE` and `DELETE` with that row present and intact afterwards.
 ## An HTTP service, if you want one
 
 None of the above talks HTTP. [`openehr-loco`](openehr-loco) is a separate,
-optional, **not published** crate that puts a RESTful API in front of
+optional crate — publishable since 2026-09-01 but with no release yet
+(`agents/publishing.md`) — that puts a RESTful API in front of
 `openehr-sqlite`: PASETO `v4.public` bearer auth (verify-only — this service
 never signs), `410 Gone` for a deleted composition against `404` for one that
 never existed, `403`/`422` split for "not the committer" against "the committer
@@ -491,7 +492,8 @@ conformance matrix marks each unimplemented requirement `spec`, and `lib:A-40`
 keeps the gap countable.
 
 This table is the **library's** scope. `openehr-loco` (above) is a separate,
-optional, unpublished crate that puts a narrow REST API in front of the store —
+optional crate, publishable but not yet released, that puts a narrow REST API
+in front of the store —
 it does not change what the library itself implements, and does not add
 archetype validation, AQL execution, or any of the rest of this table.
 
@@ -592,7 +594,7 @@ openehr-store/             engine-agnostic persistence
   scripts/verify-schema.sh Dialect -> Schema verification
 openehr-<engine>/          one Dialect each; sqlite also has a Store
   spec/14-<engine>-dialect.md   that dialect's annex and departures
-openehr-loco/              HTTP API server, outside the conformance ladder; not published
+openehr-loco/              HTTP API server, outside the conformance ladder; publishable, no release yet
 openehr-assets/            regenerates committed DDL/schema files; not published
 openehr-fuzz/              fuzz harness for the RM parsers; not published
 openehr-store-fuzz/        fuzz harness for projection and integrity; not published
@@ -603,8 +605,9 @@ openehr-<engine>-fuzz/     fuzz harness per dialect; not published
 
 Eighteen crates, **each its own Cargo workspace** — run cargo from inside a
 crate directory. Eight are published (`openehr`, `openehr-store`, and the six
-dialect crates); the other ten — `openehr-loco`, `openehr-assets`, and the
-eight fuzz harnesses — are not.
+dialect crates); `openehr-loco` is publishable since 2026-09-01 but has had no
+release yet; the other nine — `openehr-assets` and the eight fuzz harnesses —
+are `publish = false`.
 
 ## Project documents
 

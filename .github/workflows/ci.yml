@@ -787,11 +787,12 @@ jobs:
           PY
           echo "no requirement is both satisfied and absent"
 
-      # W0.22-W0.23: one licence expression across the eight published crates
-      # plus `openehr-loco` (unpublished, but distributed as source and worth
-      # the same clarity), and LICENSE.md as the only licence file. Shipping
-      # the full text of some licences and not others privileges those and
-      # understates the grant.
+      # W0.22-W0.23: one licence expression across all nine publishable
+      # crates (`openehr-loco` joined them 2026-09-01) plus `openehr-assets`
+      # and the fuzz harnesses, which are `publish = false` but distributed
+      # as source in this repository regardless and worth the same clarity.
+      # Shipping the full text of some licences and not others privileges
+      # those and understates the grant.
       # `W0.22` says EVERY crate, and this loop checked nine of seventeen. The
       # eight it skipped -- `openehr-assets` and the seven fuzz harnesses -- had
       # no `license` field at all, and seven of the eight no `LICENSE.md`, for

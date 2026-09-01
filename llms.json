@@ -90,6 +90,11 @@
           "description": "openEHR® Reference Model types, validation, paths, AQL parsing, and change-control security primitives"
         },
         {
+          "title": "openehr-loco",
+          "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr-loco",
+          "description": "openEHR® HTTP service built on Loco, Axum, and Tokio"
+        },
+        {
           "title": "openehr-mariadb",
           "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr-mariadb",
           "description": "openEHR® persistence for MariaDB: schema dialect and DDL"

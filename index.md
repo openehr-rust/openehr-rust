@@ -7,7 +7,8 @@ Eighteen crates, each its own Cargo workspace: the [`openehr`](openehr/)
 Reference Model library, the engine-agnostic [`openehr-store`](openehr-store/),
 six `openehr-<engine>/` dialect crates, the [`openehr-loco`](openehr-loco/)
 HTTP service, the asset generator, and eight fuzz harnesses. Eight are
-published to crates.io; [`agents/publishing.md`](agents/publishing.md) tracks
+published to crates.io; `openehr-loco` became publishable on 2026-09-01 but
+has had no release yet. [`agents/publishing.md`](agents/publishing.md) tracks
 the version. [`spec/index.md`](spec/index.md) is the root of every
 specification and says which one governs which code.
 

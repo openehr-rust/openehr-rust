@@ -23,6 +23,18 @@ publish a crate with an open finding against its claims (`W0.21`).
 on crates.io, in the order below, and local matches published. Verified
 against the registry API rather than read off `cargo publish`'s output.
 
+**`openehr-loco` became publishable on 2026-09-01.**
+`spec/databases/16-repository-and-release.md`'s `W16.1` was amended to
+require it, `publish = false` was removed from its manifest, and
+`cargo publish --dry-run` was run for real — it packages, downloads its three
+already-published path dependencies (`openehr`, `openehr-store`,
+`openehr-sqlite`) at their real crates.io versions, builds against them, and
+would upload. **It has not actually been published.** That is deliberate:
+publishing is the manual step below, from the maintainer's own machine, and
+a specification change is not that step. Its version is already `0.8.0`,
+matching the other eight for consistency, so its first release will not be
+`0.1.0` — there is no earlier `0.x` history for it to follow.
+
 **0.7.2 went out ahead of this file's process** (2026-08-26): the versions
 were bumped and the eight crates published before the inter-crate pins, this
 file's staged state, `CITATION.cff`, or the changelog moved, and before the
@@ -91,10 +103,10 @@ formality: the run before 0.4.0's was **red**, and reading it is what produced
 | `openehr-mssql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, 0.7.3, 0.7.4, **0.8.0** | 0.8.0 |
 | `openehr-oracle` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, 0.7.3, 0.7.4, **0.8.0** | 0.8.0 |
 
-`openehr-loco`, `openehr-assets`, and the eight fuzz crates are `publish = false`
-and are not on crates.io. `openehr-loco`'s own version moves in lockstep with
-the published crates for consistency (0.8.0 locally) even though it is never
-itself published.
+`openehr-assets` and the eight fuzz crates are `publish = false` and are not
+on crates.io. `openehr-loco` is no longer in that set as of 2026-09-01 (above)
+— it is not on crates.io either, but for a different reason: its manifest now
+permits publishing, and nobody has run `cargo publish` for it yet.
 
 This table was wrong until 2026-08-02, and again briefly during the 0.3.0
 bump — it said seven of the eight were "not published" and that the next
@@ -165,14 +177,22 @@ dependencies here all carry a `version`, so cargo will look them up.
    openehr-mssql       │
    openehr-oracle      ┘
 4. openehr-sqlite         (dev-depends on all five above)
+5. openehr-loco           (depends on openehr + openehr-store + openehr-sqlite)
 ```
 
-`openehr-sqlite` is last because its **dev-dependencies** name the other five
+`openehr-sqlite` is fourth because its **dev-dependencies** name the other five
 engine crates with versions, for the cross-dialect comparison. Dev-dependencies
 are stripped from the published package's resolution, but `cargo publish`
 verifies the package builds — including its tests — so the five must be
 resolvable. Publish them first and the ordering problem disappears; there is no
 cycle.
+
+`openehr-loco` is fifth and last, added 2026-09-01: it is a normal path
+dependency on the three ahead of it, no dev-dependency wrinkle of its own.
+It is not one of the eight this file otherwise calls "the published crates"
+in most places below — that phrase predates it and still means those eight —
+but it is no longer `publish = false` either; treat it as its own,
+not-yet-exercised, one-crate release.
 
 **This ordering is not advisory — cargo enforces it.** Publish out of order and
 a dependent fails with:
@@ -234,8 +254,9 @@ and its five examples, so those citations resolve. `openehr-store` cites
   siblings depend on. A mismatch resolves to a published crate rather than the
   local path, which is how a workspace silently tests something other than what
   it ships.
-- **The licence expression is the full five** (`W0.22`), identical in all eight
-  manifests, and `LICENSE.md` is the crate's only licence file (`W0.23`):
+- **The licence expression is the full five** (`W0.22`), identical in all nine
+  publishable manifests now that `openehr-loco` is one of them, and
+  `LICENSE.md` is the crate's only licence file (`W0.23`):
 
   ```
   MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only

@@ -13,17 +13,23 @@ Requirement prefix: `W16`.
 
 ## Layout
 
-- **W16.1** *(amended 2026-08-20)* The repository holds **eighteen** crates:
-  `openehr` (the Reference Model), `openehr-store` (engine-agnostic
-  persistence), six `openehr-<engine>` dialect crates, `openehr-loco` (the HTTP
-  service), `openehr-assets` (the generator for the committed assets), and
-  **eight** fuzz harnesses — one per dialect, plus `openehr-fuzz` over the
-  Reference Model parsers and `openehr-store-fuzz` over projection and the
-  integrity check. Shared normative text lives at the root, in `spec/`; each
-  engine crate carries only its own dialect annex (`X15.6`).
+- **W16.1** *(amended 2026-08-20, publish status changed 2026-09-01)*
+  The repository holds **eighteen** crates: `openehr` (the Reference Model),
+  `openehr-store` (engine-agnostic persistence), six `openehr-<engine>`
+  dialect crates, `openehr-loco` (the HTTP service), `openehr-assets` (the
+  generator for the committed assets), and **eight** fuzz harnesses — one per
+  dialect, plus `openehr-fuzz` over the Reference Model parsers and
+  `openehr-store-fuzz` over projection and the integrity check. Shared
+  normative text lives at the root, in `spec/`; each engine crate carries only
+  its own dialect annex (`X15.6`).
 
   The **eight** published crates are `openehr`, `openehr-store`, and the six
-  dialects. The other ten MUST declare `publish = false` (`W0.25`).
+  dialects. `openehr-loco` MUST NOT declare `publish = false` as of
+  2026-09-01 — it is a published crate by this requirement, whether or not it
+  has yet had a first release; `agents/publishing.md` tracks whether one has
+  actually happened, and this specification does not run `cargo publish` on
+  its own authority. The other nine MUST declare `publish = false`
+  (`W0.25`): `openehr-assets` and the eight fuzz harnesses.
 
   This requirement said **fourteen** until 2026-08-20, having been amended once
   already when the layout changed and then not again when `openehr-loco`,

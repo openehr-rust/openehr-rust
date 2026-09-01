@@ -15,12 +15,15 @@ keywords = ["openehr", "ehr", "healthcare", "axum", "loco"]
 categories = ["web-programming::http-server"]
 repository = "https://github.com/openehr-rust/openehr-rust"
 readme = "README.md"
-# Not published. This crate sits outside the conformance ladder — every rung
-# there is defined by DDL, a `Store`, or a database server (`W0.32`) — so it
-# states evidence rather than a level, in README.md and in lib.rs. The status
-# codes it exists for are now served and asserted in `tests/http.rs`; nothing
-# has been run against a real deployment.
-publish = false
+# Publishable as of 2026-09-01 (`spec/databases/16-repository-and-release.md`
+# `W16.1`, amended). This crate still sits outside the conformance ladder --
+# every rung there is defined by DDL, a `Store`, or a database server
+# (`W0.32`) -- so it states evidence rather than a level, in README.md and in
+# lib.rs, regardless of publish status; the two are independent questions.
+# Removing this line makes the crate *eligible*, not published: its first
+# `cargo publish` has not run (`agents/publishing.md`), and that remains a
+# manual step from the maintainer's own machine, on purpose
+# (`spec/trusted-publishing/index.md`).
 
 [dependencies]
 # `default-features = false` is the load-bearing line.

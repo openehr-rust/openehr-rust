@@ -23,7 +23,11 @@ openEHR concepts rather than this repository's own conventions.
 Eighteen crates implementing openEHR in Rust: one Reference Model library, one
 engine-agnostic persistence library, six SQL engine crates, an HTTP service, an
 asset generator, and eight fuzz harnesses. The first eight are published to
-crates.io at 0.8.0; the other ten are `publish = false`.
+crates.io at 0.8.0; `openehr-loco` became publishable on 2026-09-01
+(`spec/databases/16-repository-and-release.md` **W16.1**, amended) but has not
+yet had a first release — that is a manual step from the maintainer's own
+machine, not run here (`agents/publishing.md`). The other nine are
+`publish = false`.
 
 | Crate | Role | Level |
 | --- | --- | --- |

@@ -125,8 +125,9 @@ than either alone.
 ## What is in this repository
 
 **Eighteen crates**, each its own Cargo workspace: eight that are published,
-and ten that are not — `openehr-loco`, `openehr-assets`, and eight fuzz
-harnesses.
+`openehr-loco` publishable since 2026-09-01 (`db:W16.1`, amended) but not yet
+released, and nine that declare `publish = false` — `openehr-assets` and
+eight fuzz harnesses.
 
 ### The published crates
 
@@ -154,7 +155,11 @@ others that also state the version. See [`audit.md`](audit.md) **W-10**.
 
 ### The service and tooling crates
 
-Not published, and not on the conformance ladder — see `W0.32` above.
+Neither is on the conformance ladder — see `W0.32` above. `openehr-assets` is
+not published (`publish = false`); `openehr-loco` became publishable on
+2026-09-01 (`db:W16.1`, amended) but has had no release yet — running
+`cargo publish` for it is the maintainer's own manual step
+(`agents/publishing.md`), not something this specification performs.
 
 | Crate | Role |
 | --- | --- |

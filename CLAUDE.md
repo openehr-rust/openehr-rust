@@ -17,8 +17,9 @@ is a different skill: openEHR concepts, not this repository's conventions.
 ## Layout
 
 Eighteen crates, **each its own Cargo workspace**. There is no root workspace —
-run cargo from inside a crate directory. Eight are published at 0.8.0; the other
-ten are `publish = false`.
+run cargo from inside a crate directory. Eight are published at 0.8.0;
+`openehr-loco` became publishable on 2026-09-01 but has not yet had a first
+release (`agents/publishing.md`); the other nine are `publish = false`.
 
 **Local matches published: 0.8.0, out 2026-08-29.** 0.8.0 is the one to know
 about: the MSRV floor moved from N−3 to N−2 — 1.95 to 1.96 — which `RV6`
@@ -46,7 +47,7 @@ without tracking it (`spec/audit.md` **W-10**).
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
 | `openehr-mssql` | SQL Server dialect | **Dialect** |
 | `openehr-oracle` | Oracle dialect | **Dialect** |
-| `openehr-loco` | HTTP service: Axum, Loco, PASETO verification | not published |
+| `openehr-loco` | HTTP service: Axum, Loco, PASETO verification | outside the ladder (`W0.32`) |
 | `openehr-assets` | regenerates `assets/`; fails on a stale one | not published |
 | `openehr-fuzz` | fuzz harness for the RM parsers | not published |
 | `openehr-<engine>-fuzz` × 6 | dialect fuzz harnesses | not published |

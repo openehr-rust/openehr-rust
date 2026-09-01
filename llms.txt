@@ -28,6 +28,7 @@ This project is not affiliated with, endorsed by, or certified by openEHR Intern
 ## Crates
 
 - [openehr](https://github.com/openehr-rust/openehr-rust/blob/main/openehr): openEHR® Reference Model types, validation, paths, AQL parsing, and change-control security primitives
+- [openehr-loco](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-loco): openEHR® HTTP service built on Loco, Axum, and Tokio
 - [openehr-mariadb](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-mariadb): openEHR® persistence for MariaDB: schema dialect and DDL
 - [openehr-mssql](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-mssql): openEHR® persistence for Microsoft SQL Server: schema dialect and DDL
 - [openehr-mysql](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-mysql): openEHR® persistence for MySQL: schema dialect and DDL
