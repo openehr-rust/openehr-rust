@@ -15,7 +15,7 @@
 //! | Capability | Requirement | State |
 //! | --- | --- | --- |
 //! | AOM2 as types, with construction-time checking | `K15.1`–`K15.4` | **here** |
-//! | ADL 2 parsing | `K15.5`–`K15.7` | not implemented |
+//! | ADL 2 parsing | `K15.5`–`K15.7` | not implemented — [`adl2::parse_header`](self::parse_adl2_header) reads the header only, and is not a step toward `K15.5`'s full parse (see its own module docs) |
 //! | ADL 1.4 ingestion and conversion | `K15.8`–`K15.10` | not implemented — [`adl14::parse_header`](self::parse_adl14_header) reads the header and concept line only, and is not a step toward `K15.8`'s conversion (see its own module docs) |
 //! | Specialisation and flattening | `K15.11`–`K15.13` | not implemented |
 //! | Template expansion, operational templates | `K15.14`–`K15.17` | not implemented |
@@ -93,6 +93,8 @@
 //! ```
 
 mod adl14;
+mod adl2;
+mod adl_lexer;
 mod archetype;
 mod constraint;
 mod multiplicity;
@@ -100,6 +102,7 @@ mod repository;
 mod terminology;
 mod validate;
 
+pub use adl2::{Adl2Error, Adl2Header, parse_header as parse_adl2_header};
 pub use adl14::{Adl14Error, Adl14Header, parse_header as parse_adl14_header};
 pub use archetype::{Archetype, ROOT_OCCURRENCES};
 pub use constraint::{

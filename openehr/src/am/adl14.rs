@@ -24,8 +24,8 @@
 //! archetype a `.adl` file is, and what it specialises — without a database
 //! and without `K15.8`'s much larger conversion behind it.
 
+use super::adl_lexer::{Lexer, Token};
 use crate::base::ArchetypeId;
-use core::fmt;
 
 /// A failure to read an ADL 1.4 header.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -59,135 +59,62 @@ pub struct Adl14Header {
     pub concept: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Token {
-    /// A bare word or an ADL identifier — letters, digits, `_`, `-`, `.` —
-    /// covers keywords (`archetype`, `specialize`, `concept`), an
-    /// `ARCHETYPE_HRID`/`ARCHETYPE_REF`, and an `AT_CODE`. Which of those it
-    /// is depends on context, exactly as the real grammar's lexer resolves
-    /// `ALPHANUM_ID` against keyword tokens before falling back to it.
-    Word(String),
-    /// `(`, `)`, `[`, `]`, `;`, `=`.
-    Symbol(char),
+fn expect_word(lexer: &mut Lexer<'_>, want: &str) -> Result<(), Adl14Error> {
+    let offset = lexer.offset();
+    match lexer.next() {
+        Some(Token::Word(w)) if w.eq_ignore_ascii_case(want) => Ok(()),
+        Some(other) => Err(Adl14Error::at(
+            offset,
+            format!("expected `{want}`, found {other}"),
+        )),
+        None => Err(Adl14Error::at(
+            offset,
+            format!("expected `{want}`, found end of input"),
+        )),
+    }
 }
 
-struct Lexer<'a> {
-    source: &'a str,
-    rest: &'a str,
+fn expect_symbol(lexer: &mut Lexer<'_>, want: char) -> Result<(), Adl14Error> {
+    let offset = lexer.offset();
+    match lexer.next() {
+        Some(Token::Symbol(s)) if s == want => Ok(()),
+        Some(other) => Err(Adl14Error::at(
+            offset,
+            format!("expected `{want}`, found {other}"),
+        )),
+        None => Err(Adl14Error::at(
+            offset,
+            format!("expected `{want}`, found end of input"),
+        )),
+    }
 }
 
-impl<'a> Lexer<'a> {
-    fn new(source: &'a str) -> Self {
-        Self {
-            source,
-            rest: source,
-        }
+fn expect_id(lexer: &mut Lexer<'_>, what: &'static str) -> Result<String, Adl14Error> {
+    let offset = lexer.offset();
+    match lexer.next() {
+        Some(Token::Word(w)) => Ok(w),
+        Some(other) => Err(Adl14Error::at(
+            offset,
+            format!("expected {what}, found {other}"),
+        )),
+        None => Err(Adl14Error::at(
+            offset,
+            format!("expected {what}, found end of input"),
+        )),
     }
+}
 
-    fn offset(&self) -> usize {
-        self.source.len() - self.rest.len()
-    }
-
-    /// Skips whitespace and `-- ...` line comments, both of which are
-    /// insignificant everywhere between tokens in ADL, not only at line
-    /// boundaries.
-    fn skip_trivia(&mut self) {
-        loop {
-            let trimmed = self.rest.trim_start();
-            self.rest = trimmed;
-            if let Some(after) = self.rest.strip_prefix("--") {
-                let end = after.find('\n').unwrap_or(after.len());
-                self.rest = &after[end..];
-                continue;
-            }
-            break;
-        }
-    }
-
-    fn next(&mut self) -> Option<Token> {
-        self.skip_trivia();
-        let mut chars = self.rest.char_indices();
-        let (_, first) = chars.next()?;
-        if "()[];=".contains(first) {
-            self.rest = &self.rest[first.len_utf8()..];
-            return Some(Token::Symbol(first));
-        }
-        let end = chars
-            .find(|&(_, c)| c.is_whitespace() || "()[];=".contains(c))
-            .map_or(self.rest.len(), |(i, _)| i);
-        let word = &self.rest[..end];
-        self.rest = &self.rest[end..];
-        Some(Token::Word(word.to_owned()))
-    }
-
-    fn expect_word(&mut self, want: &str) -> Result<(), Adl14Error> {
-        let offset = self.offset();
-        match self.next() {
-            Some(Token::Word(w)) if w.eq_ignore_ascii_case(want) => Ok(()),
-            Some(other) => Err(Adl14Error::at(
-                offset,
-                format!("expected `{want}`, found {other}"),
-            )),
-            None => Err(Adl14Error::at(
-                offset,
-                format!("expected `{want}`, found end of input"),
-            )),
-        }
-    }
-
-    fn expect_symbol(&mut self, want: char) -> Result<(), Adl14Error> {
-        let offset = self.offset();
-        match self.next() {
-            Some(Token::Symbol(s)) if s == want => Ok(()),
-            Some(other) => Err(Adl14Error::at(
-                offset,
-                format!("expected `{want}`, found {other}"),
-            )),
-            None => Err(Adl14Error::at(
-                offset,
-                format!("expected `{want}`, found end of input"),
-            )),
-        }
-    }
-
-    fn expect_id(&mut self, what: &'static str) -> Result<String, Adl14Error> {
-        let offset = self.offset();
-        match self.next() {
-            Some(Token::Word(w)) => Ok(w),
-            Some(other) => Err(Adl14Error::at(
-                offset,
-                format!("expected {what}, found {other}"),
-            )),
-            None => Err(Adl14Error::at(
-                offset,
-                format!("expected {what}, found end of input"),
-            )),
-        }
-    }
-
-    /// Consumes a balanced `( ... )` block without interpreting its
-    /// contents — `meta_data`, ADL 1.4's `(adl_version=1.4; controlled)`
-    /// header metadata, which this reader does not carry anywhere (unlike
-    /// [`crate::am::Archetype`]'s own `adl_version` field, since nothing this
-    /// reader produces is an `Archetype`).
-    fn skip_parenthesised(&mut self) -> Result<(), Adl14Error> {
-        self.expect_symbol('(')?;
-        let mut depth = 1u32;
-        loop {
-            let offset = self.offset();
-            match self.next() {
-                Some(Token::Symbol('(')) => depth += 1,
-                Some(Token::Symbol(')')) => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Ok(());
-                    }
-                }
-                Some(_) => {}
-                None => return Err(Adl14Error::at(offset, "unterminated `(...)` metadata")),
-            }
-        }
-    }
+fn expect_archetype_id(
+    lexer: &mut Lexer<'_>,
+    what: &'static str,
+) -> Result<ArchetypeId, Adl14Error> {
+    let id_text = expect_id(lexer, what)?;
+    id_text.parse().map_err(|_| {
+        Adl14Error::at(
+            lexer.offset() - id_text.len(),
+            format!("`{id_text}` is not a valid ARCHETYPE_HRID"),
+        )
+    })
 }
 
 /// Reads an ADL 1.4 archetype's header and concept line.
@@ -207,58 +134,45 @@ impl<'a> Lexer<'a> {
 pub fn parse_header(source: &str) -> Result<Adl14Header, Adl14Error> {
     let mut lexer = Lexer::new(source);
 
-    lexer.expect_word("archetype")?;
+    expect_word(&mut lexer, "archetype")?;
 
     // `meta_data`: `(adl_version=1.4; controlled)`, optional.
-    lexer.skip_trivia();
-    if lexer.rest.starts_with('(') {
-        lexer.skip_parenthesised()?;
+    if lexer.peek_symbol_is('(') {
+        lexer
+            .skip_parenthesised()
+            .map_err(|offset| Adl14Error::at(offset, "unterminated `(...)` metadata"))?;
     }
 
-    let id_text = lexer.expect_id("an archetype identifier")?;
-    let archetype_id: ArchetypeId = id_text.parse().map_err(|_| {
-        Adl14Error::at(
-            lexer.offset() - id_text.len(),
-            format!("`{id_text}` is not a valid ARCHETYPE_HRID"),
-        )
-    })?;
+    let archetype_id = expect_archetype_id(&mut lexer, "an archetype identifier")?;
 
     // `specialization_section`: `specialize <parent-id>`, optional.
-    lexer.skip_trivia();
     let specializes = if lexer
-        .rest
-        .split(|c: char| c.is_whitespace() || "()[];=".contains(c))
-        .next()
+        .peek_word()
         .is_some_and(|w| w.eq_ignore_ascii_case("specialize"))
     {
-        lexer.expect_word("specialize")?;
-        let parent_text = lexer.expect_id("the specialised archetype's identifier")?;
-        let parent: ArchetypeId = parent_text.parse().map_err(|_| {
-            Adl14Error::at(
-                lexer.offset() - parent_text.len(),
-                format!("`{parent_text}` is not a valid ARCHETYPE_HRID"),
-            )
-        })?;
-        Some(parent)
+        expect_word(&mut lexer, "specialize")?;
+        Some(expect_archetype_id(
+            &mut lexer,
+            "the specialised archetype's identifier",
+        )?)
     } else {
         None
     };
 
-    lexer.expect_word("concept")?;
-    lexer.expect_symbol('[')?;
-    let concept = lexer.expect_id("an AT_CODE")?;
+    expect_word(&mut lexer, "concept")?;
+    expect_symbol(&mut lexer, '[')?;
+    let concept = expect_id(&mut lexer, "an AT_CODE")?;
     if !concept.starts_with("at") {
         return Err(Adl14Error::at(
             lexer.offset() - concept.len(),
             format!("`{concept}` is not an AT_CODE (expected `at` followed by digits)"),
         ));
     }
-    lexer.expect_symbol(']')?;
+    expect_symbol(&mut lexer, ']')?;
 
     // Everything past here is `language` onward, per `K15.6`/`K15.7`: named,
     // not silently stopped short of.
-    lexer.skip_trivia();
-    if !lexer.rest.is_empty() {
+    if !lexer.at_end() {
         return Err(Adl14Error::at(
             lexer.offset(),
             "the concept section is the last thing this reader parses; `language`, \
@@ -272,15 +186,6 @@ pub fn parse_header(source: &str) -> Result<Adl14Header, Adl14Error> {
         specializes,
         concept,
     })
-}
-
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Word(w) => write!(f, "`{w}`"),
-            Self::Symbol(s) => write!(f, "`{s}`"),
-        }
-    }
 }
 
 #[cfg(test)]

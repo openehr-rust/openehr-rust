@@ -7,6 +7,22 @@ together.
 
 ## Unreleased
 
+**New: `openehr::am::parse_adl2_header` — read an ADL 2 archetype's
+`archetype` and `specialize` lines.** Returns the archetype's own
+identifier and its parent's identifier if it specialises one — checked
+against the real ADL 2 grammar (`openEHR/adl-antlr`, `adl2.g4`). ADL 2
+drops the `concept` section ADL 1.4 has, so unlike
+`parse_adl14_header` this returns no concept code; confirmed by a test
+that a source shaped like an ADL 1.4 header (with a trailing `concept
+[at0000]`) is refused rather than silently accepted.
+
+**Scope, stated rather than implied.** This is not `K15.5`: it does not
+parse `language`, `description`, `definition`, `rules`, `terminology`, or
+`annotations`, cannot build an `Archetype`, and refuses by name the
+moment it reaches anything past the header, per `K15.6`/`K15.7`. See
+`openehr::am::adl2`'s own module documentation, and `K15.5` in
+[`openehr/spec/15-archetypes.md`](openehr/spec/15-archetypes.md).
+
 **New: `openehr::am::parse_adl14_header` — read an ADL 1.4 archetype's
 `archetype` and `concept` lines.** Returns the archetype's own identifier,
 its parent's identifier if the archetype specialises one, and the local

@@ -85,6 +85,14 @@ before the code does.
 - **K15.5** The crate MUST parse **ADL 2** into the AOM2 model: header,
   specialisation, language, description, definition, rules, terminology, and
   annotations.
+
+  Still not implemented, in this sense, as of the addition below.
+  `am::adl2::parse_header` reads an ADL 2 archetype's `archetype` and
+  `specialize` lines only — an identifier and an optional parent, nothing
+  that reaches `language`, `definition`, `terminology`, or any other
+  section — and does not build an `Archetype`. Recorded here for the same
+  reason `K15.8`'s entry below records `am::adl14::parse_header`: so the
+  addition cannot later be misread as partial progress on `K15.5` itself.
 - **K15.6** **A construct the parser does not implement MUST be a refusal that
   names it** (`S1.12`), attributed to its position in the source. It MUST NOT be
   skipped, defaulted, or carried as an opaque blob that later reads as "no

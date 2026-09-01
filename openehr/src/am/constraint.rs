@@ -322,7 +322,10 @@ impl CComplexObject {
     ) -> Result<Self, ParseError> {
         let rm_type_name = rm_type_name.into();
         if rm_type_name.is_empty() {
-            return Err(ParseError::invariant("C_COMPLEX_OBJECT", "empty rm_type_name"));
+            return Err(ParseError::invariant(
+                "C_COMPLEX_OBJECT",
+                "empty rm_type_name",
+            ));
         }
         if let Some(code) = node_id.as_deref()
             && NodeIdSyntax::of(code).is_none()
@@ -801,8 +804,12 @@ mod tests {
         // `SECTION.banana` would enter the invariant-coverage report as one.
         let malformed = "banana";
         assert!(ArchetypeSlot::new("SECTION", malformed, MultiplicityInterval::OPTIONAL).is_err());
-        let root = CArchetypeRoot::new("SECTION", "openEHR-EHR-SECTION.x.v1", MultiplicityInterval::MANDATORY)
-            .unwrap();
+        let root = CArchetypeRoot::new(
+            "SECTION",
+            "openEHR-EHR-SECTION.x.v1",
+            MultiplicityInterval::MANDATORY,
+        )
+        .unwrap();
         assert!(root.with_node_id(malformed).is_err());
     }
 
