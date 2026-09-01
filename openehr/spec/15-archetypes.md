@@ -99,6 +99,17 @@ before the code does.
   archetype MUST record its provenance — source syntax, source text digest, and
   the conversion the crate performed — so that a 1.4-derived constraint is
   distinguishable from an authored ADL 2 one at every later step.
+
+  Still not implemented, in this sense, as of the addition below.
+  `am::adl14::parse_header` reads an ADL 1.4 archetype's `archetype` and
+  `concept` lines only — an identifier and a term code, nothing that reaches
+  `definition`, `terminology`, or any other section — and does not build an
+  `Archetype`, which needs both. It is useful for identifying and cataloguing
+  `.adl` source, and it is not a step toward this requirement: satisfying
+  `K15.8` needs the full cADL and ODIN grammars this function does not parse,
+  which `spec/audit.md` **A-40**'s residual already scopes at several weeks
+  of work. Recorded here so the addition cannot later be misread as partial
+  progress on `K15.8` itself.
 - **K15.9** Where a 1.4 construct has no faithful AOM2 equivalent, conversion
   MUST fail naming the construct. An approximate conversion is prohibited: it
   produces an archetype that no author wrote and no reviewer approved.

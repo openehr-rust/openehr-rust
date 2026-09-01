@@ -16,7 +16,7 @@
 //! | --- | --- | --- |
 //! | AOM2 as types, with construction-time checking | `K15.1`–`K15.4` | **here** |
 //! | ADL 2 parsing | `K15.5`–`K15.7` | not implemented |
-//! | ADL 1.4 ingestion and conversion | `K15.8`–`K15.10` | not implemented |
+//! | ADL 1.4 ingestion and conversion | `K15.8`–`K15.10` | not implemented — [`adl14::parse_header`](self::parse_adl14_header) reads the header and concept line only, and is not a step toward `K15.8`'s conversion (see its own module docs) |
 //! | Specialisation and flattening | `K15.11`–`K15.13` | not implemented |
 //! | Template expansion, operational templates | `K15.14`–`K15.17` | not implemented |
 //! | Validating data against an archetype | `K15.18`–`K15.23` | **here** (`validate`) |
@@ -92,6 +92,7 @@
 //! assert_eq!(archetype.node_ids(), ["id1", "at0004"]);
 //! ```
 
+mod adl14;
 mod archetype;
 mod constraint;
 mod multiplicity;
@@ -99,6 +100,7 @@ mod repository;
 mod terminology;
 mod validate;
 
+pub use adl14::{Adl14Error, Adl14Header, parse_header as parse_adl14_header};
 pub use archetype::{Archetype, ROOT_OCCURRENCES};
 pub use constraint::{
     ArchetypeSlot, CArchetypeRoot, CAttribute, CComplexObject, CObject, CPrimitive,

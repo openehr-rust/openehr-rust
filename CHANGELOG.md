@@ -7,6 +7,25 @@ together.
 
 ## Unreleased
 
+**New: `openehr::am::parse_adl14_header` — read an ADL 1.4 archetype's
+`archetype` and `concept` lines.** Returns the archetype's own identifier,
+its parent's identifier if the archetype specialises one, and the local
+concept term code — checked against the real ADL 1.4 grammar
+(`openEHR/adl-antlr`) and tested against a real published archetype's actual
+header bytes (`openEHR-EHR-OBSERVATION.blood_pressure.v1`), not an invented
+fixture.
+
+**Scope, stated rather than implied.** This is not `K15.8`: it does not
+parse `language`, `description`, `definition`, `invariant`, or `ontology`,
+cannot build an `Archetype` (which needs a `definition` and a
+`terminology`, neither read here), and refuses by name — never silently —
+the moment it reaches anything past `concept [<code>]`, per `K15.6`/`K15.7`'s
+discipline. It is useful for identifying and cataloguing ADL 1.4 source, and
+is explicitly not a step toward `K15.8`'s full conversion, which
+`spec/audit.md` **A-40**'s residual already scopes at several weeks of work.
+See `openehr::am::adl14`'s own module documentation, and `K15.8` in
+[`openehr/spec/15-archetypes.md`](openehr/spec/15-archetypes.md).
+
 **New: `openehr::am::validate` — validate a Reference Model instance against
 an archetype (`K15.18`–`K15.23`).** Existence, cardinality, occurrences, RM
 class and node identity, and primitive value constraints (`C_BOOLEAN`,
