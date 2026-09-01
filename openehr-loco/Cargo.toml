@@ -6,7 +6,7 @@
 # out here, depends inward, and can be deleted without touching either.
 [package]
 name = "openehr-loco"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
@@ -42,7 +42,7 @@ readme = "README.md"
 # in a field the attacker supplies, which is the root of `alg: none` and of
 # RS256-verified-as-HS256. PASETO's version *is* the algorithm, so there is
 # nothing to negotiate. See `src/auth.rs`.
-loco-rs = { version = "1.0.1", default-features = false, features = ["cli"] }
+loco-rs = { version = "1.1.0", default-features = false, features = ["cli"] }
 # Verification only. Nothing in this crate signs, and no secret key is ever
 # loaded — a verified subject becomes an `AUDIT_DETAILS.committer` in an
 # append-only chained history, so an instance able to mint tokens would be an
@@ -80,5 +80,5 @@ result_large_err = "allow"
 [workspace]
 
 [dev-dependencies]
-loco-rs = { version = "1.0.1", default-features = false, features = ["cli", "testing"] }
+loco-rs = { version = "1.1.0", default-features = false, features = ["cli", "testing"] }
 tower = { version = "0.5.3", features = ["util"] }
