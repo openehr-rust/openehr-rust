@@ -100,6 +100,7 @@ mod archetype_hrid;
 mod constraint;
 mod multiplicity;
 mod repository;
+mod rm_overlay;
 mod terminology;
 mod validate;
 
@@ -113,6 +114,7 @@ pub use constraint::{
 };
 pub use multiplicity::{Cardinality, MultiplicityInterval};
 pub use repository::{ArchetypeRepository, Provenance, RepositoryError, Resolved};
+pub use rm_overlay::{RmAttributeVisibility, RmOverlay, VisibilityType};
 pub use terminology::{ArchetypeTerminology, TermDefinition};
 pub use validate::{
     ArchetypeReport, ArchetypeViolation, RepositoryOptions, Unchecked, validate_against_archetype,

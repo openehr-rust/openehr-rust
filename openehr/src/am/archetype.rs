@@ -18,7 +18,9 @@
 //! The two unchecked rules are stated rather than omitted, because an
 //! unenforced rule that nobody wrote down reads as an enforced one (`C0.9`).
 
-use crate::am::{ArchetypeTerminology, CComplexObject, CObject, MultiplicityInterval, NodeIdSyntax};
+use crate::am::{
+    ArchetypeTerminology, CComplexObject, CObject, MultiplicityInterval, NodeIdSyntax, RmOverlay,
+};
 use crate::base::ArchetypeId;
 use crate::error::ParseError;
 use serde::{Deserialize, Serialize};
@@ -73,6 +75,11 @@ pub struct Archetype {
     is_template: bool,
     definition: CComplexObject,
     terminology: ArchetypeTerminology,
+    /// Authoring-tool visibility/aliasing statements for RM attributes
+    /// outside the constrained structure. Not read by [`crate::am::validate`]
+    /// — see [`RmOverlay`]'s own module documentation for why.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    rm_overlay: Option<RmOverlay>,
 }
 
 impl Archetype {
@@ -102,6 +109,7 @@ impl Archetype {
             is_template: false,
             definition,
             terminology,
+            rm_overlay: None,
         };
         archetype.check()?;
         Ok(archetype)
@@ -135,6 +143,16 @@ impl Archetype {
     #[must_use]
     pub const fn as_template(mut self) -> Self {
         self.is_template = true;
+        self
+    }
+
+    /// Attaches authoring-tool visibility/aliasing statements
+    /// (`org.openehr.am.aom2.archetype.adoc`'s `rm_overlay`). See
+    /// [`RmOverlay`]'s own module documentation for what reads it — nothing
+    /// in this crate's own validation does.
+    #[must_use]
+    pub fn with_rm_overlay(mut self, rm_overlay: RmOverlay) -> Self {
+        self.rm_overlay = Some(rm_overlay);
         self
     }
 
@@ -172,6 +190,13 @@ impl Archetype {
     #[must_use]
     pub const fn is_template(&self) -> bool {
         self.is_template
+    }
+
+    /// The authoring-tool visibility overlay, if [`Self::with_rm_overlay`]
+    /// attached one.
+    #[must_use]
+    pub const fn rm_overlay(&self) -> Option<&RmOverlay> {
+        self.rm_overlay.as_ref()
     }
 
     /// How deep in a specialisation hierarchy this archetype sits, derived from
@@ -270,7 +295,10 @@ pub const ROOT_OCCURRENCES: MultiplicityInterval = MultiplicityInterval::MANDATO
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::am::{CAttribute, CPrimitive, CPrimitiveObject, TermDefinition};
+    use crate::am::{
+        CAttribute, CPrimitive, CPrimitiveObject, RmAttributeVisibility, RmOverlay, TermDefinition,
+        VisibilityType,
+    };
     use std::collections::{BTreeMap, BTreeSet};
 
     fn terms(codes: &[&str]) -> BTreeMap<String, TermDefinition> {
@@ -414,5 +442,42 @@ mod tests {
         let smuggled: Archetype = serde_json::from_value(json).unwrap();
 
         assert_eq!(smuggled.check().unwrap_err().reason, "VATDF");
+    }
+
+    #[test]
+    fn rm_overlay_is_absent_by_default_and_attached_with_the_builder() {
+        let bare = Archetype::new(
+            "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
+            observation(&[], Vec::new()),
+            ArchetypeTerminology::new("en", terms(&["id1"])).unwrap(),
+        )
+        .unwrap();
+        assert!(bare.rm_overlay().is_none());
+
+        let overlay = RmOverlay::default().with_visibility(
+            "protocol",
+            RmAttributeVisibility::new(Some(VisibilityType::Hide), None).unwrap(),
+        );
+        let with_overlay = bare.with_rm_overlay(overlay.clone());
+        assert_eq!(with_overlay.rm_overlay(), Some(&overlay));
+    }
+
+    #[test]
+    fn an_archetype_written_before_rm_overlay_existed_still_deserialises() {
+        // `#[serde(default)]` on `rm_overlay`: JSON emitted by an earlier
+        // version of this crate had no such key at all.
+        let archetype = Archetype::new(
+            "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
+            observation(&[], Vec::new()),
+            ArchetypeTerminology::new("en", terms(&["id1"])).unwrap(),
+        )
+        .unwrap();
+        let json = serde_json::to_value(&archetype).unwrap();
+        assert!(
+            !json.as_object().unwrap().contains_key("rm_overlay"),
+            "an absent rm_overlay was written instead of omitted"
+        );
+        let back: Archetype = serde_json::from_value(json).unwrap();
+        assert!(back.rm_overlay().is_none());
     }
 }

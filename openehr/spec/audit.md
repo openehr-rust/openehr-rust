@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**51 findings, 51 in the table below: 6 High, 30 Medium, 15 Low. 45 fixed or
+**52 findings, 52 in the table below: 6 High, 30 Medium, 16 Low. 46 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -138,6 +138,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-49 | Medium | `parse_adl14_header`/`parse_adl2_header` used `ArchetypeId` for the header's own identifier — narrower than the grammar both cite in their own error messages, `ARCHETYPE_HRID`, which allows a namespace prefix and a prerelease version suffix neither reader accepted | **fixed**, residual documented — `ArchetypeHrid` added and both readers corrected to use it for the archetype's own identifier; the `specialize` line's identifier is unchanged and remains narrower than its own grammar allows |
 | A-50 | Medium | `C_COMPLEX_OBJECT` had no `attribute_tuples` field — `C_ATTRIBUTE_TUPLE`/`C_PRIMITIVE_TUPLE` did not exist under any name, so a `{units, magnitude}` or `{value, symbol}` co-varying constraint (AOM2's replacement for ADL 1.4's `C_DV_QUANTITY`/`C_DV_ORDINAL`) could not be represented at all, not even as `CPrimitive::Unsupported` | **fixed** — `CAttributeTuple`/`CPrimitiveTuple` added, wired onto `CComplexObject` via a builder; the tree walk reports a node governed by one as `Unchecked` rather than silently passing it |
 | A-51 | Medium | `CPrimitive::TerminologyCode` had no `constraint_status` field, so an `extensible`/`preferred`/`example` (non-`Required`) terminology constraint could not be distinguished from a required one — `am::validate` reported a violation for conformant data whenever the actual code did not match the list or value set, which AOM2 states plainly is not a violation for a soft constraint | **fixed**, residual documented — `ConstraintStatus` added and checked in `walk_primitive`; `code_list: Vec<String>`, this variant's existing shape, has no counterpart in AOM2's own single-valued `constraint: String` and is left open rather than corrected in the same pass, since fixing it is a breaking change to an already-published type |
+| A-52 | Low | `ARCHETYPE.rm_overlay` had no counterpart at all — visibility and aliasing statements for RM attributes outside the constrained structure could not be attached to an `Archetype`, silently vanishing on JSON read the same way `A-50`/`A-46` found elsewhere | **fixed** — `RmOverlay`/`RmAttributeVisibility`/`VisibilityType` added in a new `am::rm_overlay` module, attached via `Archetype::with_rm_overlay`; `Inv_alias_validity` checked at construction |
 
 ---
 
@@ -2906,3 +2907,68 @@ into scope), and deciding how to land a breaking AM change is `agents
 /publishing.md`'s process, not a decision this finding makes unilaterally.
 Recorded here rather than fixed silently or left for a future reader to
 rediscover (`C0.9`).
+
+## A-52 — `ARCHETYPE.rm_overlay` did not exist
+
+**Severity: Low. Status: fixed.**
+
+Found immediately after `A-51`, reading `ARCHETYPE`'s own class definition
+(`openEHR/specifications-AM`,
+`docs/UML/classes/org.openehr.am.aom2.archetype.adoc`) while checking the
+`Archetype` struct against it attribute by attribute rather than assuming
+the four attributes this crate already modelled — `archetype_id`,
+`parent_archetype_id`, `definition`, `terminology` — were the whole class.
+`rm_overlay: RM_OVERLAY` (`0..1`) had no counterpart at all: `RM_OVERLAY`,
+`RM_ATTRIBUTE_VISIBILITY`, and `VISIBILITY_TYPE` did not exist in this crate
+under any name, so an archetype declaring visibility or an alias for an
+RM attribute outside its constrained structure would lose that information
+silently on JSON read, the same shape of loss `A-46` and `A-50` each found —
+`Archetype` had no field to deserialize it into.
+
+**What this is not.** `rm_overlay` carries no conformance meaning: hiding an
+attribute from an authoring tool, or aliasing it, does not change whether an
+instance conforms, and `org.openehr.am.aom2.rm_overlay.adoc` names no
+invariant connecting the two. This is authoring-tool metadata, and
+`am::validate::validate_against_archetype` does not read it — the new
+module's own documentation says so before it says anything else, the same
+discipline `am::validate`'s own module header already applies to what it
+does and does not check.
+
+**Fixed.** `openehr::am::RmOverlay`, `RmAttributeVisibility`, and
+`VisibilityType` added in a new `am::rm_overlay` module. `RmAttributeVisibility
+::new` checks AOM2's own `Inv_alias_validity` (`alias /= Void implies
+visibility /= Void`) — an alias with no stated visibility names an attribute
+without saying anything a tool can act on. `RmAttributeVisibility::alias` is
+typed `openehr::base::TerminologyCode`, matching AOM2's own attribute type
+exactly rather than approximating it with a bare `String` — the first
+consumer of the type `A-47` added for exactly this reason, since `A-47`
+itself noted the three classes it was building the type *for*
+(`AUTHORED_RESOURCE`, `RESOURCE_DESCRIPTION_ITEM`, `TRANSLATION_DETAILS`)
+remained unmodelled; `RM_ATTRIBUTE_VISIBILITY` reaches it first.
+`Archetype::with_rm_overlay` attaches one, `#[serde(default,
+skip_serializing_if = "Option::is_none")]` keeping JSON written before this
+existed both readable and unchanged in shape when the field is unused.
+
+Six new tests: `Inv_alias_validity` refused and then satisfied once a
+visibility accompanies the same alias; a visibility with no alias needing no
+alias check at all; one overlay carrying two independent path statements;
+canonical-JSON round-tripping; the builder's default (absent unless
+attached) on `Archetype` itself; and a fixture written as though from before
+`rm_overlay` existed — an `Archetype`'s own JSON with no such key — still
+deserializing.
+
+**Not attempted.** `rm_visibility`'s path keys are carried as written and not
+checked against `crate::path::Node` or resolved in any way — the class's own
+description says a path may be "at deeper non-constrained RM paths from an
+object or the root", which by definition are paths this crate's own
+constraint tree does not describe, so there is nothing in an `Archetype` to
+validate a path against even in principle.
+
+**A residual noticed in passing, not chased here.** `parent_archetype_id` is
+typed `Option<ArchetypeId>` in this crate, but AOM2's own attribute is a bare
+`String`, described as "may take the form of an archetype interface
+identifier, i.e. the identifier up to the major version only, or may be a
+full archetype identifier" — a shape that may or may not be everything
+`ArchetypeId::from_str` accepts. Whether that is a real mismatch, and if so
+how large, was not checked in this pass; noted here so it is not forgotten
+rather than investigated hastily alongside an unrelated finding.
