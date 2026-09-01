@@ -412,6 +412,53 @@ impl CPrimitiveObject {
     pub fn rm_type_name(&self) -> &str {
         &self.rm_type_name
     }
+
+    /// The AOM2 sentinel `_node_id_` value for a `C_PRIMITIVE_OBJECT`
+    /// written inline in ADL, with no node id of its own
+    /// (`openEHR/specifications-AM`,
+    /// `docs/UML/classes/org.openehr.am.aom2.c_primitive_object.adoc`:
+    /// "the `_node_id_` attribute will have the special value
+    /// `Primitive_node_id`; otherwise it will have the node id read during
+    /// parsing").
+    pub const PRIMITIVE_NODE_ID: &'static str = "Primitive_node_id";
+
+    /// Records this node's own identifier — either a real id-, at-, or
+    /// ac-code, when this primitive constraint was written with one in the
+    /// source, or [`Self::PRIMITIVE_NODE_ID`], AOM2's own sentinel for the
+    /// inline form that has none.
+    ///
+    /// Every `C_OBJECT` has a `node_id` (`org.openehr.am.aom2.c_object.adoc`:
+    /// `1..1`); this crate had no way to give a `C_PRIMITIVE_OBJECT` one at
+    /// all before this existed — [`CObject::node_id`] already read the
+    /// field, which stayed `None` because nothing could set it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseError`] if `node_id` is neither a valid id-, at-, or
+    /// ac-code nor the [`Self::PRIMITIVE_NODE_ID`] sentinel — a bare
+    /// [`NodeIdSyntax::of`] check would reject the sentinel, since it is not
+    /// coded-identifier syntax at all.
+    pub fn with_node_id(mut self, node_id: impl Into<String>) -> Result<Self, ParseError> {
+        let node_id = node_id.into();
+        if node_id != Self::PRIMITIVE_NODE_ID && NodeIdSyntax::of(&node_id).is_none() {
+            return Err(ParseError::new(
+                "C_PRIMITIVE_OBJECT",
+                "node_id is neither an id-, at-, or ac-code nor the Primitive_node_id sentinel",
+                &node_id,
+            ));
+        }
+        self.node_id = Some(node_id);
+        Ok(self)
+    }
+
+    /// This node's own identifier, if [`Self::with_node_id`] recorded one.
+    /// [`CObject::node_id`] is what most callers want: it reaches this
+    /// through every `C_OBJECT` variant uniformly, rather than requiring a
+    /// caller to already know it holds a `C_PRIMITIVE_OBJECT`.
+    #[must_use]
+    pub fn node_id(&self) -> Option<&str> {
+        self.node_id.as_deref()
+    }
 }
 
 /// The primitive constraint kinds AOM2 defines.
@@ -873,6 +920,62 @@ mod tests {
         assert!(root.node_id().is_none());
         let identified = root.with_node_id("id2").unwrap();
         assert_eq!(identified.node_id(), Some("id2"));
+    }
+
+    #[test]
+    fn a_primitive_object_can_carry_a_node_id_readable_through_either_accessor() {
+        let leaf = CPrimitiveObject::new(
+            "DV_BOOLEAN",
+            MultiplicityInterval::MANDATORY,
+            CPrimitive::Boolean {
+                allow_true: true,
+                allow_false: true,
+            },
+        );
+        assert!(leaf.node_id().is_none());
+        let identified = leaf.with_node_id("at0001").unwrap();
+        assert_eq!(identified.node_id(), Some("at0001"));
+        // `CObject::node_id` is what most callers use; it must see the same
+        // value through the enum, not just through `CPrimitiveObject` itself.
+        let wrapped = CObject::Primitive(identified);
+        assert_eq!(wrapped.node_id(), Some("at0001"));
+    }
+
+    #[test]
+    fn a_primitive_object_written_inline_carries_the_aom2_sentinel_node_id() {
+        let leaf = CPrimitiveObject::new(
+            "DV_BOOLEAN",
+            MultiplicityInterval::MANDATORY,
+            CPrimitive::Boolean {
+                allow_true: true,
+                allow_false: true,
+            },
+        )
+        .with_node_id(CPrimitiveObject::PRIMITIVE_NODE_ID)
+        .unwrap();
+        // `NodeIdSyntax::of` alone would reject this value — it is a literal
+        // sentinel, not id-, at-, or ac-coded syntax — so accepting it here
+        // is specifically what the `!=` short-circuit in `with_node_id` is
+        // for, not something a bare `NodeIdSyntax::of` check would allow.
+        assert!(NodeIdSyntax::of(CPrimitiveObject::PRIMITIVE_NODE_ID).is_none());
+        assert_eq!(leaf.node_id(), Some("Primitive_node_id"));
+    }
+
+    #[test]
+    fn a_primitive_object_refuses_a_node_id_that_is_neither_coded_nor_the_sentinel() {
+        let leaf = CPrimitiveObject::new(
+            "DV_BOOLEAN",
+            MultiplicityInterval::MANDATORY,
+            CPrimitive::Boolean {
+                allow_true: true,
+                allow_false: true,
+            },
+        );
+        // Bound rather than inlined for the same `lib:A-25` reason as the
+        // malformed-node-id test above: a literal `"DV_BOOLEAN", "banana"`
+        // pair would misread as a class/invariant citation.
+        let malformed = "banana";
+        assert!(leaf.with_node_id(malformed).is_err());
     }
 
     #[test]

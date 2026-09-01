@@ -93,6 +93,17 @@ instance's `ARCHETYPED.archetype_id`, which `crate::path::Node` does not
 expose, so nothing here can name what to resolve — a stated gap, not a silent
 one.
 
+**New: `CPrimitiveObject::with_node_id`/`node_id()`, and
+`CPrimitiveObject::PRIMITIVE_NODE_ID`.** Every `C_OBJECT` has a `node_id`
+(`org.openehr.am.aom2.c_object.adoc`: `1..1`), and `CObject::node_id`'s
+dispatcher already read `CPrimitiveObject`'s field, but nothing could ever
+set it — it stayed `None` unconditionally. `with_node_id` mirrors
+`CArchetypeRoot`'s own pair, and accepts one value `NodeIdSyntax::of` alone
+would reject: `PRIMITIVE_NODE_ID`, the literal string
+`"Primitive_node_id"`, AOM2's own sentinel for a `C_PRIMITIVE_OBJECT`
+written inline in ADL with no node id of its own. See `openehr/spec/audit.md`
+**A-46**.
+
 ## 0.8.0 — 2026-08-29
 
 **BREAKING: the MSRV floor moved from N−3 to N−2 — 1.95 to 1.96.** `RV1`

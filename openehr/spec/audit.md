@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**45 findings, 45 in the table below: 6 High, 27 Medium, 12 Low. 39 fixed or
+**46 findings, 46 in the table below: 6 High, 27 Medium, 13 Low. 40 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -132,6 +132,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-43 | Low | `base::Interval<T>` had only the BASE foundation type's element-membership function (`has`, named `contains` here); `intersects` and interval-vs-interval `contains` did not exist | **fixed** — `contains_interval` and `intersects`, both checked exactly at shared open/closed boundaries rather than approximated |
 | A-44 | Low | `C_ATTRIBUTE.container` checked children's occurrences lower-bound sum against the cardinality but not any child's own occurrences upper bound (`VACMCU`); `C_ATTRIBUTE.single` checked nothing about its children's occurrences at all (`VACSO`) | **fixed** — both added; `single`'s check required splitting out a shared `new_raw` constructor so `container`, built on `single`, would not inherit a rule that belongs only to single-valued attributes |
 | A-45 | Medium | `C_DATE`/`C_TIME`/`C_DATE_TIME`/`C_DURATION` had no `CPrimitive` variant at all — every node they governed was `Unchecked`, which on most real archetypes (nearly all constrain at least one date or time field) meant `is_conformant()` was `false` far more often than the disclosure's wording suggested | **fixed** — `SemanticOrd` implemented for the four `base` temporal types (previously blocked on nothing implementing it, not a choice to skip it), then the four `CPrimitive` variants, each a list of ranges matching AOM2's own shape |
+| A-46 | Low | `C_PRIMITIVE_OBJECT` could not carry a `node_id` at all, though `CObject::node_id`'s dispatcher already read the field — it just stayed `None` forever, since nothing could set it | **fixed** — `with_node_id`/`node_id()` added, plus a `PRIMITIVE_NODE_ID` constant for AOM2's own inline-form sentinel, which is a literal string rather than coded syntax |
 
 ---
 
@@ -2535,3 +2536,39 @@ in one pass, plus a dedicated pattern-is-unchecked test matching
 kinds that carry one (`C_STRING` and the four here) — `valid_iso8601_date_
 constraint_pattern`-style matching is its own, separately scoped piece of
 work, not attempted in this pass.
+
+## A-46 — `C_PRIMITIVE_OBJECT` had no way to carry a `node_id`
+
+**Severity: Low. Status: fixed.**
+
+Found while cross-checking `openehr::am::CObject`'s node-id story end to end.
+Every `C_OBJECT` has a `node_id` (`org.openehr.am.aom2.c_object.adoc`:
+`1..1`), and `CObject::node_id`'s own dispatcher already read
+`CPrimitiveObject`'s field — `Self::Primitive(o) => o.node_id.as_deref()` —
+but nothing existed to ever set that field to anything but `None`.
+`CPrimitiveObject::new` always left it `None`, and there was no
+`with_node_id` to call afterwards, unlike `CArchetypeRoot`, which already had
+one.
+
+**Fixed** — `CPrimitiveObject::with_node_id`/`node_id()` added, mirroring
+`CArchetypeRoot`'s own pair. Also added: `CPrimitiveObject::PRIMITIVE_NODE_ID`,
+the constant `"Primitive_node_id"` — AOM2's own sentinel
+(`org.openehr.am.aom2.c_primitive_object.adoc`: "the `_node_id_` attribute
+will have the special value `Primitive_node_id`" for a `C_PRIMITIVE_OBJECT`
+written inline in ADL with no node id of its own). The sentinel is a literal
+string, not coded id-/at-/ac- syntax, so a bare `NodeIdSyntax::of` check
+would reject it; `with_node_id` short-circuits on an exact match against the
+constant before falling back to `NodeIdSyntax::of` for every other value.
+
+Three new tests: a real `at`-code set and read back through both
+`CPrimitiveObject::node_id` and `CObject::node_id`; the sentinel itself
+accepted (confirming `NodeIdSyntax::of` alone would have rejected it, so the
+short-circuit is doing real work, not standing in for a case that already
+passed); and a malformed value — neither a valid code nor the sentinel —
+refused with `ParseError`, the same shape as the existing malformed-node-id
+test for `CArchetypeRoot`.
+
+**Not attempted.** `C_PRIMITIVE_OBJECT.assumed_value` — the default value
+offered to template authoring and archetype-editor UIs — remains unmodelled;
+it has no bearing on the conformance-checking path this crate implements and
+was ranked below this finding in the same research pass for that reason.
