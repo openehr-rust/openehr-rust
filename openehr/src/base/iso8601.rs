@@ -48,6 +48,7 @@
 //! year and a four-digit basic-format nothing. Recorded as a limitation in
 //! `spec/audit.md` rather than left to be discovered.
 
+use crate::base::interval::SemanticOrd;
 use crate::error::ParseError;
 use core::cmp::Ordering;
 use core::fmt;
@@ -951,9 +952,86 @@ crate::impl_string_serde!(Time, "ISO8601 time");
 crate::impl_string_serde!(DateTime, "ISO8601 date-time");
 crate::impl_string_serde!(Duration, "ISO8601 duration");
 
+// `SemanticOrd`, delegating to each type's own inherent `semantic_cmp`
+// above — not `impl_string_serde`-style macro reuse, and not
+// `semantic_ord_via_partial_ord!` in `base::interval` (these four
+// deliberately do not implement `PartialOrd`, for the reason
+// `Date::semantic_cmp`'s own doc comment gives, `lib:A-32`).
+//
+// No blanket impl exists for `SemanticOrd`, deliberately (`base::interval`'s
+// own doc comment): a type reaching `Interval<T>` needs an explicit impl,
+// so that adding one is a decision, not a side effect of `T` happening to
+// satisfy some other bound. This is that decision, made so `am::constraint`
+// can bound `C_DATE`/`C_TIME`/`C_DATE_TIME`/`C_DURATION`'s own `constraint`
+// field on `Interval<Date>` and friends the same way `C_INTEGER`/`C_REAL`
+// already bound theirs on `Interval<i64>`/`Interval<Real>`.
+impl SemanticOrd for Date {
+    fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
+        Self::semantic_cmp(self, other)
+    }
+}
+impl SemanticOrd for Time {
+    fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
+        Self::semantic_cmp(self, other)
+    }
+}
+impl SemanticOrd for DateTime {
+    fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
+        Self::semantic_cmp(self, other)
+    }
+}
+impl SemanticOrd for Duration {
+    fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
+        Self::semantic_cmp(self, other)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::base::Interval;
+
+    /// `Interval<Date>` etc. compile and behave correctly at all only because
+    /// `SemanticOrd` is now implemented for these four types — before it
+    /// existed, `Interval::closed::<Date>(...)` was a compile error, not a
+    /// runtime gap. One test per type is enough: `Interval`'s own behaviour
+    /// is already tested against `i32` in `base::interval`, and delegating to
+    /// each type's already-tested inherent `semantic_cmp` is the entire
+    /// implementation here.
+    #[test]
+    fn intervals_over_each_temporal_type_use_the_semantic_comparison() {
+        let dates = Interval::closed(
+            "2024-01-01".parse::<Date>().unwrap(),
+            "2024-12-31".parse::<Date>().unwrap(),
+        )
+        .unwrap();
+        assert!(dates.contains(&"2024-06-15".parse::<Date>().unwrap()));
+        assert!(!dates.contains(&"2025-01-01".parse::<Date>().unwrap()));
+
+        let times = Interval::closed(
+            "08:00:00".parse::<Time>().unwrap(),
+            "17:00:00".parse::<Time>().unwrap(),
+        )
+        .unwrap();
+        assert!(times.contains(&"12:00:00".parse::<Time>().unwrap()));
+        assert!(!times.contains(&"18:00:00".parse::<Time>().unwrap()));
+
+        let date_times = Interval::closed(
+            "2024-01-01T00:00:00Z".parse::<DateTime>().unwrap(),
+            "2024-01-02T00:00:00Z".parse::<DateTime>().unwrap(),
+        )
+        .unwrap();
+        assert!(date_times.contains(&"2024-01-01T12:00:00Z".parse::<DateTime>().unwrap()));
+        assert!(!date_times.contains(&"2024-01-03T00:00:00Z".parse::<DateTime>().unwrap()));
+
+        let durations = Interval::closed(
+            "PT0S".parse::<Duration>().unwrap(),
+            "PT1H".parse::<Duration>().unwrap(),
+        )
+        .unwrap();
+        assert!(durations.contains(&"PT30M".parse::<Duration>().unwrap()));
+        assert!(!durations.contains(&"PT2H".parse::<Duration>().unwrap()));
+    }
 
     #[test]
     fn partial_dates_keep_their_precision_and_text() {
@@ -1077,7 +1155,10 @@ mod tests {
         // the answer is still decidable.
         let one_month: Duration = "P1M".parse().unwrap();
         let thirty_days: Duration = "P30D".parse().unwrap();
-        assert_eq!(one_month.semantic_cmp(&thirty_days), Some(Ordering::Greater));
+        assert_eq!(
+            one_month.semantic_cmp(&thirty_days),
+            Some(Ordering::Greater)
+        );
     }
 
     /// A UTC offset renders with the sign it was parsed with.
@@ -1252,9 +1333,9 @@ mod tests {
             "12:00:00+15:00", // hours out of range
             "12:00:00+14:60", // minutes out of range
             "12:00:00+99:00",
-            "12:00:00+5:30",  // one digit
+            "12:00:00+5:30", // one digit
             "12:00:00+05:3",
-            "12:00:00+053",   // three digits: neither shape
+            "12:00:00+053", // three digits: neither shape
             "12:00:00+05300",
             "12:00:00+ab:cd",
             // The `lib:A-16` shape: four *bytes*, one character. A length
@@ -1290,8 +1371,15 @@ mod tests {
         }
 
         for bad in [
-            "1x:00", "9:00", "090", "09:0", "09:000", "09:30:1",
-            "09:30:15.", "09:30:15.x", "09:30:15:00",
+            "1x:00",
+            "9:00",
+            "090",
+            "09:0",
+            "09:000",
+            "09:30:1",
+            "09:30:15.",
+            "09:30:15.x",
+            "09:30:15:00",
         ] {
             assert!(bad.parse::<Time>().is_err(), "{bad} was accepted as a time");
         }
@@ -1310,29 +1398,60 @@ mod tests {
         let t = |s: &str| s.parse::<Time>().unwrap();
 
         // Each component in isolation, so no other term can carry the result.
-        assert_eq!(t("09:00:00").semantic_cmp(&t("10:00:00")), Some(Ordering::Less));
-        assert_eq!(t("09:00:00").semantic_cmp(&t("09:01:00")), Some(Ordering::Less));
-        assert_eq!(t("09:00:00").semantic_cmp(&t("09:00:01")), Some(Ordering::Less));
-        assert_eq!(t("09:00:00.100").semantic_cmp(&t("09:00:00.200")), Some(Ordering::Less));
+        assert_eq!(
+            t("09:00:00").semantic_cmp(&t("10:00:00")),
+            Some(Ordering::Less)
+        );
+        assert_eq!(
+            t("09:00:00").semantic_cmp(&t("09:01:00")),
+            Some(Ordering::Less)
+        );
+        assert_eq!(
+            t("09:00:00").semantic_cmp(&t("09:00:01")),
+            Some(Ordering::Less)
+        );
+        assert_eq!(
+            t("09:00:00.100").semantic_cmp(&t("09:00:00.200")),
+            Some(Ordering::Less)
+        );
 
         // Across components, which is the only way the *scale* of each term is
         // tested. Comparing `09:00:00` with `09:01:00` cannot tell `m * 60_000`
         // from `m + 60_000` — addition is monotonic too, so the ordering comes
         // out the same. These pairs cross a boundary, so a term with the wrong
         // magnitude reverses them.
-        assert_eq!(t("00:02:00").semantic_cmp(&t("00:00:59")), Some(Ordering::Greater), "a minute is not sixty seconds");
-        assert_eq!(t("00:00:02").semantic_cmp(&t("00:00:00.500")), Some(Ordering::Greater), "a second is not 1000ms");
-        assert_eq!(t("01:00:00").semantic_cmp(&t("00:59:59")), Some(Ordering::Greater), "an hour is not sixty minutes");
+        assert_eq!(
+            t("00:02:00").semantic_cmp(&t("00:00:59")),
+            Some(Ordering::Greater),
+            "a minute is not sixty seconds"
+        );
+        assert_eq!(
+            t("00:00:02").semantic_cmp(&t("00:00:00.500")),
+            Some(Ordering::Greater),
+            "a second is not 1000ms"
+        );
+        assert_eq!(
+            t("01:00:00").semantic_cmp(&t("00:59:59")),
+            Some(Ordering::Greater),
+            "an hour is not sixty minutes"
+        );
         // The same for the fraction's padding: `.5` is 500ms, not 5000ms, so
         // it is *less* than a whole second. A pad loop that ran once too often
         // makes it greater.
-        assert_eq!(t("09:00:00.5").semantic_cmp(&t("09:00:01")), Some(Ordering::Less), "`.5` was read as five seconds");
+        assert_eq!(
+            t("09:00:00.5").semantic_cmp(&t("09:00:01")),
+            Some(Ordering::Less),
+            "`.5` was read as five seconds"
+        );
 
         // A short fraction is padded to milliseconds, not treated as smaller.
         // Compared through `partial_cmp` rather than `==`: `Eq` here is
         // lexical identity, and the two are deliberately different values that
         // denote the same instant (`lib:A-32`).
-        assert_eq!(t("09:00:00.5").semantic_cmp(&t("09:00:00.499")), Some(Ordering::Greater));
+        assert_eq!(
+            t("09:00:00.5").semantic_cmp(&t("09:00:00.499")),
+            Some(Ordering::Greater)
+        );
         let same = Some(Ordering::Equal);
         assert_eq!(t("09:00:00.5").semantic_cmp(&t("09:00:00.500")), same);
         // And a longer one is truncated at millisecond resolution rather than
@@ -1343,7 +1462,10 @@ mod tests {
         // written two ways orders equal, and a later local time can be the
         // earlier instant.
         assert_eq!(t("12:00:00+01:00").semantic_cmp(&t("11:00:00Z")), same);
-        assert_eq!(t("12:00:00+01:00").semantic_cmp(&t("12:00:00Z")), Some(Ordering::Less));
+        assert_eq!(
+            t("12:00:00+01:00").semantic_cmp(&t("12:00:00Z")),
+            Some(Ordering::Less)
+        );
 
         // Equal on what both know, but different precision: unordered. A
         // 09:00 that might be 09:00:59 is not "the same as" 09:00:00.
@@ -1564,7 +1686,11 @@ mod tests {
         assert!(!d("P1D").is_negative());
         assert_eq!(minus_day.semantic_cmp(&d("PT0S")), Some(Ordering::Less));
         assert_eq!(minus_day.semantic_cmp(&d("P1D")), Some(Ordering::Less));
-        assert_eq!(d("-P2D").semantic_cmp(&d("-P1D")), Some(Ordering::Less), "more negative is less");
+        assert_eq!(
+            d("-P2D").semantic_cmp(&d("-P1D")),
+            Some(Ordering::Less),
+            "more negative is less"
+        );
     }
 
     /// Seconds are added to an instant, not subtracted from it.

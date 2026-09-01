@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**44 findings, 44 in the table below: 6 High, 26 Medium, 12 Low. 38 fixed or
+**45 findings, 45 in the table below: 6 High, 27 Medium, 12 Low. 39 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -131,6 +131,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-42 | Medium | Three invariants checked at construction and nowhere else: `AUDIT_DETAILS.System_id_valid`/`Change_type_valid` on a `VERSION`'s own `commit_audit`, `ISM_TRANSITION.Transition_valid`, `INTERVAL_EVENT.Math_function_validity` — `A-23`'s exact shape, recurring | **fixed** — a shared `check_audit_details` helper, and one group-membership check each beside the sibling check already there |
 | A-43 | Low | `base::Interval<T>` had only the BASE foundation type's element-membership function (`has`, named `contains` here); `intersects` and interval-vs-interval `contains` did not exist | **fixed** — `contains_interval` and `intersects`, both checked exactly at shared open/closed boundaries rather than approximated |
 | A-44 | Low | `C_ATTRIBUTE.container` checked children's occurrences lower-bound sum against the cardinality but not any child's own occurrences upper bound (`VACMCU`); `C_ATTRIBUTE.single` checked nothing about its children's occurrences at all (`VACSO`) | **fixed** — both added; `single`'s check required splitting out a shared `new_raw` constructor so `container`, built on `single`, would not inherit a rule that belongs only to single-valued attributes |
+| A-45 | Medium | `C_DATE`/`C_TIME`/`C_DATE_TIME`/`C_DURATION` had no `CPrimitive` variant at all — every node they governed was `Unchecked`, which on most real archetypes (nearly all constrain at least one date or time field) meant `is_conformant()` was `false` far more often than the disclosure's wording suggested | **fixed** — `SemanticOrd` implemented for the four `base` temporal types (previously blocked on nothing implementing it, not a choice to skip it), then the four `CPrimitive` variants, each a list of ranges matching AOM2's own shape |
 
 ---
 
@@ -2478,3 +2479,59 @@ here. This pass did not re-derive the full AOM2 validity-rule list
 exhaustively against every `C_ATTRIBUTE`/`C_OBJECT` construction path;
 `A-40`'s residual (specialisation, `VASID`/`VACSD`, flattening) remains the
 larger, already-declared gap this finding does not touch.
+
+## A-45 — the four temporal primitive constraint kinds were entirely unmodelled
+
+**Severity: Medium. Status: fixed.**
+
+Found while cross-checking `openehr::am::CPrimitive` against AOM2's own
+constraint-kind list: `C_DATE`, `C_TIME`, `C_DATE_TIME`, and `C_DURATION`
+had no variant at all. A node governed by any of the four fell into
+`CPrimitive::Unsupported` and was always reported `Unchecked` — disclosed
+accurately (`CPrimitive::Unsupported`'s own doc comment names this as
+deliberate, and `K15.20` requires exactly this rather than a silent pass),
+but with a practical cost the disclosure did not size: most realistic
+clinical archetypes constrain at least one date or time field (event time,
+onset, therapeutic frequency), so `validate_against_archetype` reported at
+least one `Unchecked` node — and therefore `is_conformant() == false` — on
+nearly every real archetype, not an edge case.
+
+**Why it had not been done already.** `base::Interval<T>` requires `T:
+SemanticOrd`, and none of `base::Date`/`Time`/`DateTime`/`Duration`
+implemented it — each has its own inherent `semantic_cmp` (used internally
+by the RM's `DvDate`/`DvTime`/etc. wrappers), but no `SemanticOrd` impl, so
+`Interval<Date>` was a compile error before this, not a missing check
+someone chose to skip.
+
+**Fixed**, in two parts:
+
+1. `SemanticOrd` implemented for all four `base` temporal types, each
+   delegating to the type's own already-tested inherent `semantic_cmp` —
+   `base::interval`'s own doc comment is explicit that this trait has **no**
+   blanket impl, deliberately, so a type reaching `Interval<T>` needs this
+   decision made for it, not inherited from satisfying some other bound.
+2. `CPrimitive::Date`/`Time`/`DateTime`/`Duration` added, each `{ range:
+   Vec<Interval<T>>, pattern: Option<String> }` — a *list* of ranges, matching
+   AOM2's own `C_DATE.constraint: List<Interval<Iso8601_date>>` shape, not an
+   approximation of `C_INTEGER`/`C_REAL`'s discrete-list-plus-one-range shape.
+   `pattern` is carried and never evaluated, the same choice already made for
+   `C_STRING`'s own pattern field, for the same reason (no pattern-matching
+   implementation exists) — reported `Unchecked` rather than silently
+   ignored, same as `C_STRING`'s.
+
+No change was needed in `crate::path`: it already exposed
+`DV_DATE`/`DV_TIME`/`DV_DATE_TIME`/`DV_DURATION`'s `value` attribute as
+`Scalar::Str` of the ISO 8601 lexical text, which is exactly what the new
+`check_temporal` parses and compares.
+
+Ten new tests: four in `base::iso8601` proving `Interval` over each of the
+four types uses the semantic comparison (not a lexical one — `PartialOrd` is
+deliberately not implemented for these types, `lib:A-32`); six in
+`am::validate` — a table-driven test covering all four kinds' range checks
+in one pass, plus a dedicated pattern-is-unchecked test matching
+`C_STRING`'s own equivalent test.
+
+**Residual.** `pattern` matching itself remains unimplemented for all five
+kinds that carry one (`C_STRING` and the four here) — `valid_iso8601_date_
+constraint_pattern`-style matching is its own, separately scoped piece of
+work, not attempted in this pass.

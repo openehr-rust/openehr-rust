@@ -19,7 +19,7 @@
 //! renumbering it would change the meaning of records already written
 //! (`K15.8`).
 
-use crate::base::{Interval, Real};
+use crate::base::{Date, DateTime, Duration, Interval, Real, Time};
 use crate::error::ParseError;
 use crate::{am::Cardinality, am::MultiplicityInterval};
 use serde::{Deserialize, Serialize};
@@ -467,6 +467,55 @@ pub enum CPrimitive {
         constraint: Option<String>,
         /// Permitted `at`-codes, if the constraint is inline.
         code_list: Vec<String>,
+    },
+    /// `C_DATE`. AOM2's own shape for the four temporal primitives below is
+    /// a *list* of ranges rather than `C_INTEGER`/`C_REAL`'s discrete list
+    /// plus one optional range — dates are not usually enumerated the way
+    /// integers are — so `range` alone, empty meaning unconstrained, is
+    /// `C_DATE`'s own `constraint` attribute
+    /// (`List<Interval<Iso8601_date>>`, `openEHR/specifications-AM`,
+    /// `docs/UML/classes/org.openehr.am.aom2.c_date.adoc`), not an
+    /// approximation of [`CPrimitive::Integer`]'s shape.
+    #[serde(rename = "C_DATE")]
+    Date {
+        /// Permitted ranges; a value in any one of them satisfies the
+        /// constraint. Empty means unconstrained by range (a `pattern` may
+        /// still apply).
+        range: Vec<Interval<Date>>,
+        /// An ISO 8601 constraint pattern (e.g. `"YYYY-??-??"`), carried as
+        /// written. **Not compiled and not applied** — the same choice
+        /// [`CPrimitive::String`]'s own `pattern` field already documents,
+        /// for the same reason: a node governed by one is unchecked
+        /// (`ctx.unchecked`), not silently passed, until a real
+        /// pattern-matching implementation exists.
+        pattern: Option<String>,
+    },
+    /// `C_TIME`. See [`CPrimitive::Date`] for why this is a list of ranges
+    /// rather than a discrete list plus one range.
+    #[serde(rename = "C_TIME")]
+    Time {
+        /// Permitted ranges.
+        range: Vec<Interval<Time>>,
+        /// Carried, not applied — see [`CPrimitive::Date::pattern`].
+        pattern: Option<String>,
+    },
+    /// `C_DATE_TIME`. See [`CPrimitive::Date`] for why this is a list of
+    /// ranges rather than a discrete list plus one range.
+    #[serde(rename = "C_DATE_TIME")]
+    DateTime {
+        /// Permitted ranges.
+        range: Vec<Interval<DateTime>>,
+        /// Carried, not applied — see [`CPrimitive::Date::pattern`].
+        pattern: Option<String>,
+    },
+    /// `C_DURATION`. See [`CPrimitive::Date`] for why this is a list of
+    /// ranges rather than a discrete list plus one range.
+    #[serde(rename = "C_DURATION")]
+    Duration {
+        /// Permitted ranges.
+        range: Vec<Interval<Duration>>,
+        /// Carried, not applied — see [`CPrimitive::Date::pattern`].
+        pattern: Option<String>,
     },
     /// A constraint kind this crate models by carrying it and nothing else.
     #[serde(rename = "C_UNSUPPORTED")]

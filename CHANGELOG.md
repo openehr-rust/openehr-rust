@@ -46,10 +46,24 @@ See `openehr::am::adl14`'s own module documentation, and `K15.8` in
 an archetype (`K15.18`–`K15.23`).** Existence, cardinality, occurrences, RM
 class and node identity, and primitive value constraints (`C_BOOLEAN`,
 `C_STRING` list, `C_INTEGER`, `C_REAL`, `C_TERMINOLOGY_CODE` against the
-archetype's own internal codes) are checked by walking the instance and the
-archetype's `definition` in parallel. The verdict is a new type,
-`ArchetypeReport`, kept separate from Reference-Model validation's own verdict
-(`K15.19`) rather than folded into it.
+archetype's own internal codes, and `C_DATE`/`C_TIME`/`C_DATE_TIME`/
+`C_DURATION` ranges) are checked by walking the instance and the archetype's
+`definition` in parallel. The verdict is a new type, `ArchetypeReport`, kept
+separate from Reference-Model validation's own verdict (`K15.19`) rather than
+folded into it.
+
+**The four temporal primitive kinds were added after the rest**, once
+`base::Interval<T>` could be bounded on `base::Date`/`Time`/`DateTime`/
+`Duration` — none of the four implemented `SemanticOrd` before this, so
+`Interval<Date>` was a compile error, not a missing check. Each is a list of
+ranges rather than `C_INTEGER`/`C_REAL`'s discrete-list-plus-one-range shape,
+matching AOM2's own `C_DATE` etc. (`List<Interval<Iso8601_date>>`); a
+`pattern` (e.g. `"YYYY-??-??"`) is carried and never evaluated, the same
+choice already made for `C_STRING`'s own pattern field. This closes a gap
+that mattered in practice: `path.rs` already exposed
+`DV_DATE`/`DV_TIME`/`DV_DATE_TIME`/`DV_DURATION` as their ISO 8601 text, so
+the missing piece was purely the constraint side, and most realistic
+archetypes constrain at least one date or time field.
 
 **Scope, stated rather than implied.** This validates against an `Archetype`
 already held in memory, not against a flattened operational template: this

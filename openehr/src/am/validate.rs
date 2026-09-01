@@ -78,7 +78,7 @@ use crate::am::archetype::Archetype;
 use crate::am::constraint::{CAttribute, CComplexObject, CObject, CPrimitive};
 use crate::am::repository::ArchetypeRepository;
 use crate::am::terminology::ArchetypeTerminology;
-use crate::base::{ArchetypeId, Real};
+use crate::base::{ArchetypeId, Interval, Real};
 use crate::path::{Node, Scalar};
 use core::cmp::Ordering;
 use core::fmt;
@@ -580,7 +580,11 @@ fn walk_archetype_root(
     }
 
     if node.type_name() != resolved.archetype().rm_type_name() {
-        ctx.violation(resolved.archetype().archetype_id(), path, "Rm_type_name_matches");
+        ctx.violation(
+            resolved.archetype().archetype_id(),
+            path,
+            "Rm_type_name_matches",
+        );
         return;
     }
     walk_complex(
@@ -591,6 +595,120 @@ fn walk_archetype_root(
         path,
         ctx,
     );
+}
+
+/// `C_DATE`/`C_TIME`/`C_DATE_TIME`/`C_DURATION` against the scalar's text
+/// form — shared across the four because AOM2 gives all of them the same
+/// shape (`range: List<Interval<...>>` plus a `pattern` carried, not
+/// applied), and only the underlying temporal type differs.
+///
+/// The scalar arrives as text (`Scalar::Str`) because that is what
+/// [`crate::path`]'s walk already exposes for `DV_DATE`/`DV_TIME`/
+/// `DV_DATE_TIME`/`DV_DURATION`'s `value` attribute — their ISO 8601 lexical
+/// form, the same one [`crate::base::Date`] and its siblings round-trip
+/// exactly (`D3.18d`'s reasoning, one type family over). No change to
+/// `crate::path` was needed for this.
+fn check_temporal<T>(
+    value: &str,
+    range: &[Interval<T>],
+    pattern: Option<&String>,
+    class: &'static str,
+    archetype_id: &ArchetypeId,
+    path: &str,
+    ctx: &mut Ctx<'_>,
+) where
+    T: core::str::FromStr + crate::base::SemanticOrd,
+{
+    match value.parse::<T>() {
+        Ok(parsed) => {
+            if !range.is_empty() && !range.iter().any(|r| r.contains(&parsed)) {
+                ctx.violation(archetype_id, path, class);
+            }
+        }
+        // The value did not even parse as the type its own constraint kind
+        // governs — a `C_DATE` node whose data is not a valid ISO 8601 date.
+        // This crate's own RM validation (`crate::validation`) is what
+        // normally catches this before archetype validation ever runs; this
+        // still reports rather than panics if it is reached anyway (`K15.20`
+        // never a silent pass, and never a silent crash either).
+        Err(_) => ctx.violation(archetype_id, path, class),
+    }
+    if pattern.is_some() {
+        ctx.unchecked_detail(
+            path,
+            "the constraint pattern is carried but not evaluated",
+            class,
+        );
+    }
+}
+
+/// Dispatches one of the four temporal `CPrimitive` variants to
+/// [`check_temporal`] with the right type parameter and class name.
+///
+/// Its own function, separate from [`walk_primitive`]'s match, purely to
+/// keep that match's line count down to something `clippy::too_many_lines`
+/// accepts — the four call sites are otherwise identical in shape and this
+/// changes no behaviour, only where the four are written.
+fn walk_temporal(
+    constraint: &CPrimitive,
+    value: &str,
+    archetype_id: &ArchetypeId,
+    path: &str,
+    ctx: &mut Ctx<'_>,
+) {
+    match constraint {
+        CPrimitive::Date { range, pattern } => {
+            check_temporal(
+                value,
+                range,
+                pattern.as_ref(),
+                "C_DATE",
+                archetype_id,
+                path,
+                ctx,
+            );
+        }
+        CPrimitive::Time { range, pattern } => {
+            check_temporal(
+                value,
+                range,
+                pattern.as_ref(),
+                "C_TIME",
+                archetype_id,
+                path,
+                ctx,
+            );
+        }
+        CPrimitive::DateTime { range, pattern } => {
+            check_temporal(
+                value,
+                range,
+                pattern.as_ref(),
+                "C_DATE_TIME",
+                archetype_id,
+                path,
+                ctx,
+            );
+        }
+        CPrimitive::Duration { range, pattern } => {
+            check_temporal(
+                value,
+                range,
+                pattern.as_ref(),
+                "C_DURATION",
+                archetype_id,
+                path,
+                ctx,
+            );
+        }
+        // `walk_primitive`'s own match only ever calls this function for one
+        // of the four variants above. This function stays total rather than
+        // trusting that guarantee with `unreachable!()` (`lib:A-36` is
+        // exactly the shape of defect a "the caller guarantees it" panic
+        // produces): a future call site this crate does not control yet
+        // gets a reported mismatch, never a crash.
+        _ => ctx.violation(archetype_id, path, "Primitive_kind_mismatch"),
+    }
 }
 
 /// A leaf primitive constraint against the scalar the path walk reached.
@@ -686,6 +804,13 @@ fn walk_primitive(
                 }
             }
         }
+        (
+            CPrimitive::Date { .. }
+            | CPrimitive::Time { .. }
+            | CPrimitive::DateTime { .. }
+            | CPrimitive::Duration { .. },
+            Scalar::Str(value),
+        ) => walk_temporal(constraint, value, archetype_id, path, ctx),
         (CPrimitive::Unsupported { .. }, _) => {
             ctx.unchecked(
                 path,
@@ -714,7 +839,10 @@ mod tests {
     use crate::path::Pathable as _;
     use crate::rm::common::LocatableAttrs;
     use crate::rm::data_structures::{Element, ItemList};
-    use crate::rm::data_types::{CodePhrase, DataValue, DvBoolean, DvCodedText, DvCount};
+    use crate::rm::data_types::{
+        CodePhrase, DataValue, DvBoolean, DvCodedText, DvCount, DvDate, DvDateTime, DvDuration,
+        DvTime,
+    };
     use crate::rm::ehr::{AdminEntry, Entry, EntryAttrs, Evaluation};
     use std::collections::{BTreeMap, BTreeSet};
 
@@ -732,7 +860,12 @@ mod tests {
     fn terms(codes: &[(&str, &str)]) -> BTreeMap<String, TermDefinition> {
         codes
             .iter()
-            .map(|(code, text)| ((*code).to_owned(), TermDefinition::new(*text, None).unwrap()))
+            .map(|(code, text)| {
+                (
+                    (*code).to_owned(),
+                    TermDefinition::new(*text, None).unwrap(),
+                )
+            })
             .collect()
     }
 
@@ -786,7 +919,8 @@ mod tests {
     /// value.
     fn element_alt(node_id: &str, occurrences: MultiplicityInterval) -> CObject {
         CObject::Complex(
-            CComplexObject::new("ELEMENT", Some(node_id.to_owned()), occurrences, Vec::new()).unwrap(),
+            CComplexObject::new("ELEMENT", Some(node_id.to_owned()), occurrences, Vec::new())
+                .unwrap(),
         )
     }
 
@@ -816,9 +950,13 @@ mod tests {
             ))],
         )
         .unwrap();
-        let value_object =
-            CComplexObject::new(value_rm_type, None, MultiplicityInterval::MANDATORY, vec![inner_attr])
-                .unwrap();
+        let value_object = CComplexObject::new(
+            value_rm_type,
+            None,
+            MultiplicityInterval::MANDATORY,
+            vec![inner_attr],
+        )
+        .unwrap();
         let value_attr = CAttribute::single(
             "value",
             MultiplicityInterval::MANDATORY,
@@ -849,7 +987,10 @@ mod tests {
     fn a_matching_instance_is_conformant() {
         let archetype =
             evaluation_archetype(element_alt("at0004", MultiplicityInterval::MANDATORY));
-        let entry = build_evaluation(vec![Element::new(attrs("Systolic", "at0004"), placeholder_value())]);
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Systolic", "at0004"),
+            placeholder_value(),
+        )]);
         let report = validate_against_archetype(&archetype, entry.as_node());
         assert!(report.is_conformant(), "{report:?}");
     }
@@ -884,10 +1025,16 @@ mod tests {
             "at0004",
             MultiplicityInterval::new(2, Some(2)).unwrap(),
         ));
-        let entry = build_evaluation(vec![Element::new(attrs("Systolic", "at0004"), placeholder_value())]);
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Systolic", "at0004"),
+            placeholder_value(),
+        )]);
         let report = validate_against_archetype(&archetype, entry.as_node());
         assert_eq!(report.violations()[0].constraint(), "Occurrences");
-        assert_eq!(report.violations()[0].archetype_path(), "/data[id2]/items[at0004]");
+        assert_eq!(
+            report.violations()[0].archetype_path(),
+            "/data[id2]/items[at0004]"
+        );
     }
 
     #[test]
@@ -903,12 +1050,18 @@ mod tests {
             ArchetypeSlot::new("ELEMENT", node_id, MultiplicityInterval::MANDATORY).unwrap(),
         );
         let archetype = evaluation_archetype(slot);
-        let entry = build_evaluation(vec![Element::new(attrs("Systolic", "at0004"), placeholder_value())]);
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Systolic", "at0004"),
+            placeholder_value(),
+        )]);
         let report = validate_against_archetype(&archetype, entry.as_node());
         assert!(!report.is_conformant());
         assert!(report.violations().is_empty());
         assert_eq!(report.unchecked().len(), 1);
-        assert_eq!(report.unchecked()[0].archetype_path(), "/data[id2]/items[at0004]");
+        assert_eq!(
+            report.unchecked()[0].archetype_path(),
+            "/data[id2]/items[at0004]"
+        );
     }
 
     #[test]
@@ -958,7 +1111,138 @@ mod tests {
         )]);
         let report = validate_against_archetype(&archetype, entry.as_node());
         assert!(report.violations().is_empty());
-        assert_eq!(report.unchecked()[0].reason(), "C_STRING pattern is not evaluated");
+        assert_eq!(
+            report.unchecked()[0].reason(),
+            "C_STRING pattern is not evaluated"
+        );
+    }
+
+    /// `C_DATE`/`C_TIME`/`C_DATE_TIME`/`C_DURATION`: a value in range is
+    /// conformant, one outside it is a violation naming the class, and a
+    /// `pattern` alongside a range is unchecked even when the range passes —
+    /// the same three shapes `a_c_integer_range_rejects_a_value_outside_it`
+    /// and `a_c_string_pattern_is_unchecked_even_when_the_list_passes` above
+    /// already prove for the two other primitive kinds a range or a pattern
+    /// applies to. One check per temporal type: `check_temporal` is the same
+    /// function for all four, so this is confirming it dispatches correctly
+    /// through the real `CPrimitive`/`Scalar` match, not re-testing the
+    /// function's own logic four times over.
+    #[test]
+    fn c_date_time_duration_ranges_are_checked_and_their_patterns_are_not() {
+        let cases: Vec<(&str, CPrimitive, DataValue, &str, DataValue)> = vec![
+            (
+                "DV_DATE",
+                CPrimitive::Date {
+                    range: vec![
+                        Interval::closed(
+                            "2024-01-01".parse().unwrap(),
+                            "2024-12-31".parse().unwrap(),
+                        )
+                        .unwrap(),
+                    ],
+                    pattern: None,
+                },
+                DataValue::Date(DvDate::new("2024-06-15").unwrap()),
+                "C_DATE",
+                DataValue::Date(DvDate::new("2025-01-01").unwrap()),
+            ),
+            (
+                "DV_TIME",
+                CPrimitive::Time {
+                    range: vec![
+                        Interval::closed("08:00:00".parse().unwrap(), "17:00:00".parse().unwrap())
+                            .unwrap(),
+                    ],
+                    pattern: None,
+                },
+                DataValue::Time(DvTime::new("12:00:00").unwrap()),
+                "C_TIME",
+                DataValue::Time(DvTime::new("18:00:00").unwrap()),
+            ),
+            (
+                "DV_DATE_TIME",
+                CPrimitive::DateTime {
+                    range: vec![
+                        Interval::closed(
+                            "2024-01-01T00:00:00Z".parse().unwrap(),
+                            "2024-01-02T00:00:00Z".parse().unwrap(),
+                        )
+                        .unwrap(),
+                    ],
+                    pattern: None,
+                },
+                DataValue::DateTime(DvDateTime::new("2024-01-01T12:00:00Z").unwrap()),
+                "C_DATE_TIME",
+                DataValue::DateTime(DvDateTime::new("2024-01-03T00:00:00Z").unwrap()),
+            ),
+            (
+                "DV_DURATION",
+                CPrimitive::Duration {
+                    range: vec![
+                        Interval::closed("PT0S".parse().unwrap(), "PT1H".parse().unwrap()).unwrap(),
+                    ],
+                    pattern: None,
+                },
+                DataValue::Duration(DvDuration::new("PT30M").unwrap()),
+                "C_DURATION",
+                DataValue::Duration(DvDuration::new("PT2H").unwrap()),
+            ),
+        ];
+
+        for (rm_type, primitive, in_range_value, class, out_of_range_value) in cases {
+            let constraint = element_with_value_constraint("at0004", "value", primitive, rm_type);
+            let archetype = evaluation_archetype(constraint);
+
+            let conformant =
+                build_evaluation(vec![Element::new(attrs("Field", "at0004"), in_range_value)]);
+            assert!(
+                validate_against_archetype(&archetype, conformant.as_node()).is_conformant(),
+                "{rm_type}: an in-range value should conform"
+            );
+
+            let out_of_range = build_evaluation(vec![Element::new(
+                attrs("Field", "at0004"),
+                out_of_range_value,
+            )]);
+            let report = validate_against_archetype(&archetype, out_of_range.as_node());
+            assert_eq!(
+                report
+                    .violations()
+                    .first()
+                    .map(ArchetypeViolation::constraint),
+                Some(class),
+                "{rm_type}: an out-of-range value should violate {class}"
+            );
+        }
+    }
+
+    /// A `pattern` is carried and never evaluated, matching `C_STRING`'s own
+    /// precedent exactly — checked separately from the range case above so a
+    /// range check that happened to also report the pattern would not hide
+    /// behind an assertion that only looked at `violations()`.
+    #[test]
+    fn a_c_date_pattern_is_unchecked_even_when_the_range_passes() {
+        let constraint = element_with_value_constraint(
+            "at0004",
+            "value",
+            CPrimitive::Date {
+                range: Vec::new(),
+                pattern: Some("YYYY-??-??".to_owned()),
+            },
+            "DV_DATE",
+        );
+        let archetype = evaluation_archetype(constraint);
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Field", "at0004"),
+            DataValue::Date(DvDate::new("2024-06-15").unwrap()),
+        )]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(report.violations().is_empty());
+        assert_eq!(
+            report.unchecked()[0].reason(),
+            "the constraint pattern is carried but not evaluated"
+        );
+        assert_eq!(report.unchecked()[0].detail(), Some("C_DATE"));
     }
 
     #[test]
@@ -1028,7 +1312,8 @@ mod tests {
             )
         };
 
-        let permitted = build_evaluation(vec![Element::new(attrs("Sex", "at0004"), coded("at0010"))]);
+        let permitted =
+            build_evaluation(vec![Element::new(attrs("Sex", "at0004"), coded("at0010"))]);
         assert!(validate_against_archetype(&archetype, permitted.as_node()).is_conformant());
 
         let refused = build_evaluation(vec![Element::new(attrs("Sex", "at0004"), coded("at0099"))]);
@@ -1072,7 +1357,10 @@ mod tests {
     /// actual `C_BOOLEAN` (see `element_with_value_constraint` above).
     fn filler_archetype(id: &str) -> Archetype {
         let mut terms = BTreeMap::new();
-        terms.insert("id1".to_owned(), TermDefinition::new("Filler", None).unwrap());
+        terms.insert(
+            "id1".to_owned(),
+            TermDefinition::new("Filler", None).unwrap(),
+        );
         let definition = CComplexObject::new(
             "ELEMENT",
             Some("id1".to_owned()),
@@ -1109,8 +1397,12 @@ mod tests {
             ],
         )
         .unwrap();
-        Archetype::new(id.parse().unwrap(), definition, ArchetypeTerminology::new("en", terms).unwrap())
-            .unwrap()
+        Archetype::new(
+            id.parse().unwrap(),
+            definition,
+            ArchetypeTerminology::new("en", terms).unwrap(),
+        )
+        .unwrap()
     }
 
     /// An `EVALUATION[id1]/data[id2 ITEM_LIST]/items` archetype whose sole
@@ -1138,7 +1430,11 @@ mod tests {
         assert!(!report.is_conformant());
         assert!(report.violations().is_empty());
         assert_eq!(report.unchecked().len(), 1);
-        assert!(report.unchecked()[0].reason().contains("no repository was supplied"));
+        assert!(
+            report.unchecked()[0]
+                .reason()
+                .contains("no repository was supplied")
+        );
     }
 
     #[test]
@@ -1151,8 +1447,12 @@ mod tests {
             attrs("Filled", "at0004"),
             DataValue::Boolean(DvBoolean::new(true)),
         )]);
-        let report =
-            validate_with_repository(&archetype, conforming.as_node(), &repo, RepositoryOptions::default());
+        let report = validate_with_repository(
+            &archetype,
+            conforming.as_node(),
+            &repo,
+            RepositoryOptions::default(),
+        );
         assert!(report.is_conformant(), "{report:?}");
 
         // The filler's own constraint (value must be `true`) is what fires,
@@ -1161,13 +1461,14 @@ mod tests {
             attrs("Filled", "at0004"),
             DataValue::Boolean(DvBoolean::new(false)),
         )]);
-        let report =
-            validate_with_repository(&archetype, violating.as_node(), &repo, RepositoryOptions::default());
-        assert_eq!(report.violations()[0].constraint(), "C_BOOLEAN");
-        assert_eq!(
-            report.violations()[0].archetype_id().to_string(),
-            filler_id
+        let report = validate_with_repository(
+            &archetype,
+            violating.as_node(),
+            &repo,
+            RepositoryOptions::default(),
         );
+        assert_eq!(report.violations()[0].constraint(), "C_BOOLEAN");
+        assert_eq!(report.violations()[0].archetype_id().to_string(), filler_id);
     }
 
     #[test]
@@ -1181,8 +1482,12 @@ mod tests {
             attrs("Filled", "at0004"),
             DataValue::Boolean(DvBoolean::new(true)),
         )]);
-        let report =
-            validate_with_repository(&archetype, entry.as_node(), &repo, RepositoryOptions::default());
+        let report = validate_with_repository(
+            &archetype,
+            entry.as_node(),
+            &repo,
+            RepositoryOptions::default(),
+        );
         assert!(!report.is_conformant());
         assert!(report.violations().is_empty());
         let unchecked = &report.unchecked()[0];
@@ -1203,8 +1508,12 @@ mod tests {
             attrs("Filled", "at0004"),
             DataValue::Boolean(DvBoolean::new(true)),
         )]);
-        let report =
-            validate_with_repository(&archetype, entry.as_node(), &repo, RepositoryOptions::default());
+        let report = validate_with_repository(
+            &archetype,
+            entry.as_node(),
+            &repo,
+            RepositoryOptions::default(),
+        );
         assert!(!report.is_conformant());
         assert!(report.violations().is_empty());
         assert!(
@@ -1218,14 +1527,20 @@ mod tests {
     fn unestablished_provenance_is_unchecked_unless_the_caller_opts_in() {
         let filler_id = "openEHR-EHR-ELEMENT.filler.v1";
         let archetype = evaluation_archetype_with_filled_slot(filler_id);
-        let repo = FixedRepository(Ok(Resolved::without_provenance(filler_archetype(filler_id))));
+        let repo = FixedRepository(Ok(Resolved::without_provenance(filler_archetype(
+            filler_id,
+        ))));
         let entry = build_evaluation(vec![Element::new(
             attrs("Filled", "at0004"),
             DataValue::Boolean(DvBoolean::new(true)),
         )]);
 
-        let refused =
-            validate_with_repository(&archetype, entry.as_node(), &repo, RepositoryOptions::default());
+        let refused = validate_with_repository(
+            &archetype,
+            entry.as_node(),
+            &repo,
+            RepositoryOptions::default(),
+        );
         assert!(!refused.is_conformant());
         assert!(
             refused.unchecked()[0]
@@ -1240,6 +1555,9 @@ mod tests {
             RepositoryOptions::default().allow_unestablished_provenance(),
         );
         assert!(opted_in.is_conformant(), "{opted_in:?}");
-        assert_eq!(opted_in.unverified_provenance(), ["/data[id2]/items[at0004]"]);
+        assert_eq!(
+            opted_in.unverified_provenance(),
+            ["/data[id2]/items[at0004]"]
+        );
     }
 }
