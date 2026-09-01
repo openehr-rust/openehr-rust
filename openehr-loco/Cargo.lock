@@ -2392,7 +2392,7 @@ dependencies = [
 
 [[package]]
 name = "openehr-loco"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "async-trait",
  "axum",
