@@ -42,10 +42,12 @@
 //! fails (`K15.27`), or when the caller has not opted into an
 //! unestablished-provenance result (`K15.26`); a `C_UNSUPPORTED` primitive
 //! constraint; a `C_STRING` pattern, carried but not compiled or applied
-//! (see [`crate::am::CPrimitive`]) — is recorded as [`Unchecked`], never
-//! silently treated as satisfied. [`ArchetypeReport::is_conformant`] is
-//! `false` whenever anything is unchecked, exactly as it is when something is
-//! violated: an unchecked node is not a passing node.
+//! (see [`crate::am::CPrimitive`]); a `C_ATTRIBUTE_TUPLE` co-varying
+//! constraint (see [`crate::am::CAttributeTuple`]) — is recorded as
+//! [`Unchecked`], never silently treated as satisfied.
+//! [`ArchetypeReport::is_conformant`] is `false` whenever anything is
+//! unchecked, exactly as it is when something is violated: an unchecked node
+//! is not a passing node.
 //!
 //! # `K15.19`: a separate verdict from Reference-Model validation
 //!
@@ -364,6 +366,26 @@ fn walk_complex(
 ) {
     for attribute in constraint.attributes() {
         walk_attribute(archetype_id, terminology, attribute, node, path, ctx);
+    }
+    for tuple in constraint.attribute_tuples() {
+        // Checking a co-varying constraint means picking the one
+        // `C_PRIMITIVE_TUPLE` row whose values match the instance's actual
+        // values across every attribute named here *at once* — a different
+        // shape of check than `walk_attribute`'s per-attribute walk, and not
+        // attempted here. Reported unchecked, never silently passed
+        // (`K15.20`), naming which attributes the unevaluated constraint
+        // covers.
+        let names = tuple
+            .members()
+            .iter()
+            .map(CAttribute::rm_attribute_name)
+            .collect::<Vec<_>>()
+            .join(", ");
+        ctx.unchecked_detail(
+            path,
+            "C_ATTRIBUTE_TUPLE co-varying constraint is not evaluated",
+            names,
+        );
     }
 }
 
@@ -832,8 +854,8 @@ mod tests {
     use super::*;
     use crate::am::{
         ArchetypeRepository, ArchetypeSlot, ArchetypeTerminology, CArchetypeRoot, CAttribute,
-        CComplexObject, CObject, CPrimitiveObject, Cardinality, MultiplicityInterval, Provenance,
-        RepositoryError, Resolved, TermDefinition,
+        CAttributeTuple, CComplexObject, CObject, CPrimitiveObject, Cardinality,
+        MultiplicityInterval, Provenance, RepositoryError, Resolved, TermDefinition,
     };
     use crate::base::Interval;
     use crate::path::Pathable as _;
@@ -1115,6 +1137,60 @@ mod tests {
             report.unchecked()[0].reason(),
             "C_STRING pattern is not evaluated"
         );
+    }
+
+    /// A `{units, magnitude}` tuple on `ELEMENT[at0004]/value` — the AOM2
+    /// example this crate's own `CAttributeTuple` documentation cites — is
+    /// reported unchecked, naming the two attributes it covers. The
+    /// instance's actual units and magnitude are never inspected: nothing in
+    /// `walk_complex` walks into a `C_ATTRIBUTE_TUPLE`'s own rows, which is
+    /// exactly what "carried, not evaluated" means here.
+    #[test]
+    fn an_attribute_tuple_is_unchecked_never_silently_passed() {
+        let tuple = CAttributeTuple::new(
+            vec![
+                CAttribute::single("units", MultiplicityInterval::MANDATORY, Vec::new()).unwrap(),
+                CAttribute::single("magnitude", MultiplicityInterval::MANDATORY, Vec::new())
+                    .unwrap(),
+            ],
+            Vec::new(),
+        )
+        .unwrap();
+        let value_object = CComplexObject::new(
+            "DV_QUANTITY",
+            None,
+            MultiplicityInterval::MANDATORY,
+            Vec::new(),
+        )
+        .unwrap()
+        .with_attribute_tuples(vec![tuple]);
+        let value_attr = CAttribute::single(
+            "value",
+            MultiplicityInterval::MANDATORY,
+            vec![CObject::Complex(value_object)],
+        )
+        .unwrap();
+        let element = CObject::Complex(
+            CComplexObject::new(
+                "ELEMENT",
+                Some("at0004".to_owned()),
+                MultiplicityInterval::MANDATORY,
+                vec![value_attr],
+            )
+            .unwrap(),
+        );
+        let archetype = evaluation_archetype(element);
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Systolic", "at0004"),
+            DataValue::Quantity(crate::rm::data_types::DvQuantity::new(140.0, "mm[Hg]").unwrap()),
+        )]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(report.violations().is_empty());
+        assert_eq!(
+            report.unchecked()[0].reason(),
+            "C_ATTRIBUTE_TUPLE co-varying constraint is not evaluated"
+        );
+        assert_eq!(report.unchecked()[0].detail(), Some("units, magnitude"));
     }
 
     /// `C_DATE`/`C_TIME`/`C_DATE_TIME`/`C_DURATION`: a value in range is

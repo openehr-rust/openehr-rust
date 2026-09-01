@@ -293,6 +293,22 @@ impl CObject {
             Self::Primitive(_) | Self::Slot(_) => &[],
         }
     }
+
+    /// The co-varying (tuple) constraints beneath this node, empty for every
+    /// kind but `Complex` — `C_ARCHETYPE_ROOT` inherits `attribute_tuples`
+    /// from `C_COMPLEX_OBJECT` in AOM2, but this crate's [`CArchetypeRoot`]
+    /// has no way to carry one, the same asymmetry it already has for
+    /// `attributes` (`CArchetypeRoot::new` leaves that empty and
+    /// unsettable too, matching "In all uses within source archetypes and
+    /// templates, the `_children_` attribute is `Void`",
+    /// `org.openehr.am.aom2.c_archetype_root.adoc`).
+    #[must_use]
+    pub fn attribute_tuples(&self) -> &[CAttributeTuple] {
+        match self {
+            Self::Complex(o) => &o.attribute_tuples,
+            Self::ArchetypeRoot(_) | Self::Primitive(_) | Self::Slot(_) => &[],
+        }
+    }
 }
 
 /// A constrained RM object: `C_COMPLEX_OBJECT`.
@@ -302,6 +318,10 @@ pub struct CComplexObject {
     node_id: Option<String>,
     occurrences: MultiplicityInterval,
     attributes: Vec<CAttribute>,
+    /// `0..1`, like `attributes` — absent is `Vec::new()`, not a distinct
+    /// state. See [`Self::with_attribute_tuples`].
+    #[serde(default)]
+    attribute_tuples: Vec<CAttributeTuple>,
 }
 
 impl CComplexObject {
@@ -348,6 +368,7 @@ impl CComplexObject {
             node_id,
             occurrences,
             attributes,
+            attribute_tuples: Vec::new(),
         })
     }
 
@@ -373,6 +394,132 @@ impl CComplexObject {
     #[must_use]
     pub fn attributes(&self) -> &[CAttribute] {
         &self.attributes
+    }
+
+    /// Attaches co-varying (tuple) constraints
+    /// (`org.openehr.am.aom2.c_complex_object.adoc`'s `attribute_tuples`).
+    ///
+    /// A builder, not a `new` parameter, for the same reason
+    /// [`CPrimitiveObject::with_assumed_value`] is one: most callers never use
+    /// this attribute, and `attribute_tuples` reached this crate later than
+    /// `attributes` did.
+    #[must_use]
+    pub fn with_attribute_tuples(mut self, attribute_tuples: Vec<CAttributeTuple>) -> Self {
+        self.attribute_tuples = attribute_tuples;
+        self
+    }
+
+    /// The co-varying constraints beneath this node, if any were attached
+    /// with [`Self::with_attribute_tuples`].
+    ///
+    /// **Carried, not evaluated.** `crate::am::validate::validate_against_archetype`
+    /// reports a node with any here as [`crate::am::Unchecked`] rather than
+    /// walking it — see that module's own documentation for why.
+    #[must_use]
+    pub fn attribute_tuples(&self) -> &[CAttributeTuple] {
+        &self.attribute_tuples
+    }
+}
+
+/// One co-varying value combination in a tuple constraint:
+/// `C_PRIMITIVE_TUPLE`.
+///
+/// One row of a [`CAttributeTuple`]'s [`tuples`](CAttributeTuple::tuples): a
+/// vector of primitive-object constraints, positionally aligned with the
+/// owning `C_ATTRIBUTE_TUPLE`'s own [`members`](CAttributeTuple::members).
+/// AOM2's own words for the correspondence: "Each such instance is a vector
+/// of object constraints, where each member (each `C_PRIMITIVE_OBJECT`)
+/// corresponds to one of the `C_ATTRIBUTEs` referred to by the owning
+/// `C_ATTRIBUTE_TUPLE`" (`openEHR/specifications-AM`,
+/// `docs/UML/classes/org.openehr.am.aom2.c_primitive_tuple.adoc`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CPrimitiveTuple {
+    members: Vec<CPrimitiveObject>,
+}
+
+impl CPrimitiveTuple {
+    /// Builds one tuple row.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseError`] if `members` is empty. `C_PRIMITIVE_TUPLE
+    /// .members` is `1..1` in AOM2 — mandatory — unlike `C_ATTRIBUTE_TUPLE
+    /// .members` and `.tuples`, both `0..1`; a Rust `Vec` has no `Void` to
+    /// distinguish "empty" from "absent" the way Eiffel does, so the
+    /// mandatory case is translated the same way `ArchetypeTerminology::new`
+    /// already translates one: an empty vector is refused rather than
+    /// silently standing in for "unset".
+    pub fn new(members: Vec<CPrimitiveObject>) -> Result<Self, ParseError> {
+        if members.is_empty() {
+            return Err(ParseError::invariant("C_PRIMITIVE_TUPLE", "empty members"));
+        }
+        Ok(Self { members })
+    }
+
+    /// The row's own values, one per co-varying attribute, positionally
+    /// aligned with the owning [`CAttributeTuple::members`].
+    #[must_use]
+    pub fn members(&self) -> &[CPrimitiveObject] {
+        &self.members
+    }
+}
+
+/// A co-varying constraint on more than one attribute at once:
+/// `C_ATTRIBUTE_TUPLE`.
+///
+/// AOM2's answer to a `DV_QUANTITY`'s `{units, magnitude}`, or a
+/// `DV_ORDINAL`'s `{value, symbol}`: constraining each attribute separately
+/// would allow any combination of the two lists — `"deg F"` paired with a
+/// range meant for Centigrade — and a tuple constraint pairs them instead, so
+/// only the combinations actually listed in [`Self::tuples`] are permitted
+/// (`openEHR/specifications-AM`,
+/// `docs/ADL2/master04.4-cadl_second_order.adoc`). It "replaces all
+/// domain-specific constraint types defined in ADL/AOM 1.4, including
+/// `C_DV_QUANTITY` and `C_DV_ORDINAL`"
+/// (`docs/AOM2/master04.3-constraint_model-second_order.adoc`) — without it,
+/// this crate could not represent either pattern at all, not even as
+/// [`CPrimitive::Unsupported`], because [`CComplexObject`] had nowhere to put
+/// one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CAttributeTuple {
+    members: Vec<CAttribute>,
+    tuples: Vec<CPrimitiveTuple>,
+}
+
+impl CAttributeTuple {
+    /// Builds a tuple constraint.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseError`] if any row in `tuples` has a different number of
+    /// values than `members` has attributes. See [`CPrimitiveTuple`]'s own
+    /// documentation for the AOM2 text this positional correspondence comes
+    /// from — a row naming three values for a two-attribute tuple has a value
+    /// with nothing to correspond to.
+    pub fn new(
+        members: Vec<CAttribute>,
+        tuples: Vec<CPrimitiveTuple>,
+    ) -> Result<Self, ParseError> {
+        if tuples.iter().any(|row| row.members().len() != members.len()) {
+            return Err(ParseError::invariant(
+                "C_ATTRIBUTE_TUPLE",
+                "a tuple row's arity does not match the number of co-varying attributes",
+            ));
+        }
+        Ok(Self { members, tuples })
+    }
+
+    /// The attributes this tuple co-constrains, in the order every row in
+    /// [`Self::tuples`] is aligned against.
+    #[must_use]
+    pub fn members(&self) -> &[CAttribute] {
+        &self.members
+    }
+
+    /// The permitted value combinations.
+    #[must_use]
+    pub fn tuples(&self) -> &[CPrimitiveTuple] {
+        &self.tuples
     }
 }
 
@@ -1116,5 +1263,170 @@ mod tests {
         assert_eq!(NodeIdSyntax::of("at0000"), Some(NodeIdSyntax::Adl14));
         assert_eq!(NodeIdSyntax::specialisation_depth("id1.1.2"), 2);
         assert_eq!(NodeIdSyntax::specialisation_depth("at0004"), 0);
+    }
+
+    fn quantity_units_magnitude_row(units: &str, low: f64, high: f64) -> CPrimitiveTuple {
+        CPrimitiveTuple::new(vec![
+            CPrimitiveObject::new(
+                "String",
+                MultiplicityInterval::MANDATORY,
+                CPrimitive::String {
+                    list: vec![units.to_owned()],
+                    pattern: None,
+                },
+            ),
+            CPrimitiveObject::new(
+                "Real",
+                MultiplicityInterval::MANDATORY,
+                CPrimitive::Real {
+                    list: Vec::new(),
+                    range: Some(
+                        Interval::closed(
+                            low.to_string().parse().unwrap(),
+                            high.to_string().parse().unwrap(),
+                        )
+                        .unwrap(),
+                    ),
+                },
+            ),
+        ])
+        .unwrap()
+    }
+
+    /// The `{units, magnitude}` example AOM2's own second-order-constraints
+    /// section uses: `"deg F"` only with `32.0..212.0`, `"deg C"` only with
+    /// `0.0..100.0`, never mixed — the reason a tuple exists at all rather
+    /// than two independent `C_PRIMITIVE_OBJECT` lists.
+    #[test]
+    fn a_units_magnitude_tuple_pairs_each_unit_with_its_own_range() {
+        let tuple = CAttributeTuple::new(
+            vec![
+                CAttribute::single("units", MultiplicityInterval::MANDATORY, Vec::new()).unwrap(),
+                CAttribute::single("magnitude", MultiplicityInterval::MANDATORY, Vec::new())
+                    .unwrap(),
+            ],
+            vec![
+                quantity_units_magnitude_row("deg F", 32.0, 212.0),
+                quantity_units_magnitude_row("deg C", 0.0, 100.0),
+            ],
+        )
+        .unwrap();
+        assert_eq!(tuple.members().len(), 2);
+        assert_eq!(tuple.tuples().len(), 2);
+    }
+
+    #[test]
+    fn a_tuple_row_with_the_wrong_arity_is_refused() {
+        let two_members = vec![
+            CAttribute::single("units", MultiplicityInterval::MANDATORY, Vec::new()).unwrap(),
+            CAttribute::single("magnitude", MultiplicityInterval::MANDATORY, Vec::new()).unwrap(),
+        ];
+        let one_value_row = CPrimitiveTuple::new(vec![CPrimitiveObject::new(
+            "String",
+            MultiplicityInterval::MANDATORY,
+            CPrimitive::String {
+                list: vec!["deg F".to_owned()],
+                pattern: None,
+            },
+        )])
+        .unwrap();
+        let err = CAttributeTuple::new(two_members, vec![one_value_row]).unwrap_err();
+        assert_eq!(
+            err.reason,
+            "a tuple row's arity does not match the number of co-varying attributes"
+        );
+    }
+
+    #[test]
+    fn a_primitive_tuple_with_no_members_is_refused() {
+        // `C_PRIMITIVE_TUPLE.members` is `1..1` in AOM2 — mandatory — unlike
+        // `C_ATTRIBUTE_TUPLE`'s own `members` and `tuples`, both `0..1`.
+        let err = CPrimitiveTuple::new(Vec::new()).unwrap_err();
+        assert_eq!(err.reason, "empty members");
+    }
+
+    #[test]
+    fn an_attribute_tuple_with_no_rows_is_accepted() {
+        // `tuples` is `0..1` — a tuple constraint naming its co-varying
+        // attributes but no permitted combinations yet is unusual, not
+        // invalid, and nothing in AOM2 requires at least one row.
+        let tuple = CAttributeTuple::new(
+            vec![CAttribute::single("units", MultiplicityInterval::MANDATORY, Vec::new()).unwrap()],
+            Vec::new(),
+        )
+        .unwrap();
+        assert!(tuple.tuples().is_empty());
+    }
+
+    #[test]
+    fn attribute_tuples_are_absent_by_default_and_attached_with_the_builder() {
+        let bare = CComplexObject::new(
+            "DV_QUANTITY",
+            Some("id14".to_owned()),
+            MultiplicityInterval::MANDATORY,
+            Vec::new(),
+        )
+        .unwrap();
+        assert!(bare.attribute_tuples().is_empty());
+        assert!(CObject::Complex(bare.clone()).attribute_tuples().is_empty());
+
+        let tuple = CAttributeTuple::new(
+            vec![
+                CAttribute::single("units", MultiplicityInterval::MANDATORY, Vec::new()).unwrap(),
+                CAttribute::single("magnitude", MultiplicityInterval::MANDATORY, Vec::new())
+                    .unwrap(),
+            ],
+            vec![quantity_units_magnitude_row("deg C", 0.0, 100.0)],
+        )
+        .unwrap();
+        let with_tuple = bare.with_attribute_tuples(vec![tuple.clone()]);
+        assert_eq!(with_tuple.attribute_tuples().len(), 1);
+        assert_eq!(with_tuple.attribute_tuples()[0], tuple);
+        // Reached the same way through `CObject`, which is what
+        // `am::validate::walk_complex` actually calls.
+        let wrapped = CObject::Complex(with_tuple.clone());
+        assert_eq!(wrapped.attribute_tuples().len(), 1);
+        assert_eq!(wrapped.attribute_tuples()[0], tuple);
+    }
+
+    #[test]
+    fn an_attribute_tuple_round_trips_through_canonical_json() {
+        let complex = CComplexObject::new(
+            "DV_QUANTITY",
+            Some("id14".to_owned()),
+            MultiplicityInterval::MANDATORY,
+            Vec::new(),
+        )
+        .unwrap()
+        .with_attribute_tuples(vec![
+            CAttributeTuple::new(
+                vec![
+                    CAttribute::single("units", MultiplicityInterval::MANDATORY, Vec::new())
+                        .unwrap(),
+                    CAttribute::single("magnitude", MultiplicityInterval::MANDATORY, Vec::new())
+                        .unwrap(),
+                ],
+                vec![quantity_units_magnitude_row("deg C", 0.0, 100.0)],
+            )
+            .unwrap(),
+        ]);
+        let json = serde_json::to_value(&complex).unwrap();
+        let back: CComplexObject = serde_json::from_value(json).unwrap();
+        assert_eq!(back, complex);
+    }
+
+    #[test]
+    fn a_complex_object_serialised_before_attribute_tuples_existed_still_deserialises() {
+        // `#[serde(default)]` on `attribute_tuples`: an archetype JSON written
+        // by an earlier version of this crate, or by anything else emitting
+        // AOM2 JSON without this field, must still read.
+        let json = serde_json::json!({
+            "rm_type_name": "OBSERVATION",
+            "node_id": "id1",
+            "occurrences": { "lower": 1, "upper": 1 },
+            "attributes": [],
+        });
+        let back: CComplexObject = serde_json::from_value(json).unwrap();
+        assert!(back.attribute_tuples().is_empty());
     }
 }

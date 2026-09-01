@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**49 findings, 49 in the table below: 6 High, 28 Medium, 15 Low. 43 fixed or
+**50 findings, 50 in the table below: 6 High, 29 Medium, 15 Low. 44 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -136,6 +136,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-47 | Low | `Terminology_code`/`Terminology_term`, the BASE foundation types `AUTHORED_RESOURCE.original_language`, `RESOURCE_DESCRIPTION_ITEM.language`, and `TRANSLATION_DETAILS.language` are typed as, did not exist in this crate at all | **fixed** — both added to `openehr::base`; a standalone prerequisite, not a claim that any of the three classes that use them is now modelled |
 | A-48 | Low | `C_PRIMITIVE_OBJECT.assumed_value` had no field at all — a default value could not be attached to a primitive constraint under any representation | **fixed** — `PrimitiveValue` and `with_assumed_value`/`assumed_value()` added; `Inv_valid_assumed_value` (conformance to the attached `CPrimitive`) is carried unchecked, declared rather than silently passed |
 | A-49 | Medium | `parse_adl14_header`/`parse_adl2_header` used `ArchetypeId` for the header's own identifier — narrower than the grammar both cite in their own error messages, `ARCHETYPE_HRID`, which allows a namespace prefix and a prerelease version suffix neither reader accepted | **fixed**, residual documented — `ArchetypeHrid` added and both readers corrected to use it for the archetype's own identifier; the `specialize` line's identifier is unchanged and remains narrower than its own grammar allows |
+| A-50 | Medium | `C_COMPLEX_OBJECT` had no `attribute_tuples` field — `C_ATTRIBUTE_TUPLE`/`C_PRIMITIVE_TUPLE` did not exist under any name, so a `{units, magnitude}` or `{value, symbol}` co-varying constraint (AOM2's replacement for ADL 1.4's `C_DV_QUANTITY`/`C_DV_ORDINAL`) could not be represented at all, not even as `CPrimitive::Unsupported` | **fixed** — `CAttributeTuple`/`CPrimitiveTuple` added, wired onto `CComplexObject` via a builder; the tree walk reports a node governed by one as `Unchecked` rather than silently passing it |
 
 ---
 
@@ -2721,3 +2722,111 @@ the header's own identifier, `ArchetypeId` is a `base` type used pervasively
 across Reference Model data (`ARCHETYPED.archetype_id`), so widening it
 is a larger, more consequential change than adding a new, narrowly-scoped
 type was, and was not undertaken in this pass.
+
+## A-50 — `C_COMPLEX_OBJECT` had nowhere to put a tuple constraint
+
+**Severity: Medium. Status: fixed.**
+
+Found while comparing this crate's `am::constraint` module against the full
+class list `openEHR/specifications-AM`'s `docs/UML/classes/` directory names,
+rather than against the subset of AOM2 this crate already claimed to model.
+Several `am.aom2.constraint_model` classes have no counterpart here —
+`SIBLING_ORDER`, `C_COMPLEX_OBJECT_PROXY`, `CONSTRAINT_STATUS`, and the
+`C_SECOND_ORDER` family among them — and this finding is about one member of
+that family specifically: `C_SECOND_ORDER`'s two concrete children,
+`C_ATTRIBUTE_TUPLE` and `C_PRIMITIVE_TUPLE`, ranked above the others because
+of what they attach to, not because they were the only gap found.
+
+**Why this one, and why it ranks above `SIBLING_ORDER` or `RM_OVERLAY`,
+the AOM2 research pass's other candidates.** `C_ATTRIBUTE_TUPLE` is not a rare
+corner of the model. AOM2's own second-order-constraints section states
+plainly that it "replaces all domain-specific constraint types defined in
+ADL/AOM 1.4, including `C_DV_QUANTITY` and `C_DV_ORDINAL`"
+(`openEHR/specifications-AM`,
+`docs/AOM2/master04.3-constraint_model-second_order.adoc`) — the mechanism
+every `DV_QUANTITY` archetype node uses to pair a unit with the magnitude
+range that unit implies (`"deg F"` with `32.0..212.0`, `"deg C"` with
+`0.0..100.0`, never the two crossed), and every `DV_ORDINAL` node uses to
+pair a numeric value with its coded symbol. `DV_QUANTITY` and `DV_ORDINAL`
+are two of the most common leaf types in the published archetype corpus.
+Without this field, an archetype using the tuple form for either one could
+not be represented in this crate's object model at all: not accepted and
+checked, not accepted and reported unchecked, not even round-tripped through
+JSON — `CComplexObject` had no field to deserialize the constraint into, so
+it silently vanished on read, the same silent-loss shape `A-46` and `A-48`
+each found in `C_PRIMITIVE_OBJECT`. `SIBLING_ORDER` by contrast only matters
+inside a specialised archetype (`K15.11`–`K15.13`, not implemented) — a real
+gap, but not reachable by anything this crate can build yet. `RM_OVERLAY` is
+reachable today (it is an attribute of `ARCHETYPE` itself, not gated on
+templates), but is a gap in a different class — `Archetype`, not
+`CComplexObject` — and closing it is not this finding's scope; see **Not
+attempted** below.
+
+**Fixed.** `openehr::am::CPrimitiveTuple` and `CAttributeTuple` added to
+`am::constraint`, and `CComplexObject::with_attribute_tuples` attaches them —
+a builder rather than a `new` parameter, the same choice `A-46` and `A-48`
+made for `C_PRIMITIVE_OBJECT`'s own late-added fields, since most callers
+never use this attribute and `#[serde(default)]` on the new field keeps
+JSON written before this existed readable. One structural invariant is
+checked at construction: every row in `CAttributeTuple`'s `tuples` must
+supply exactly as many values as `members` names attributes, cited directly
+from AOM2's own text — `C_PRIMITIVE_TUPLE.members`' description states "each
+member... corresponds to one of the `C_ATTRIBUTEs` referred to by the owning
+`C_ATTRIBUTE_TUPLE`" (`openEHR/specifications-AM`,
+`docs/UML/classes/org.openehr.am.aom2.c_primitive_tuple.adoc`) — a row naming
+three values for a two-attribute tuple has a value with nothing to
+correspond to. `CPrimitiveTuple::members` is refused empty for a
+narrower reason: AOM2 marks it `1..1` where `C_ATTRIBUTE_TUPLE.members` and
+`.tuples` are both `0..1`, and a Rust `Vec` has no `Void` to carry that
+distinction, so the mandatory case is translated the way
+`ArchetypeTerminology::new` already translates one elsewhere in this module —
+refusing empty rather than letting it silently stand in for absent.
+
+`am::validate::walk_complex` now visits `CComplexObject::attribute_tuples`
+and reports each one `Unchecked`, naming the attributes it covers, rather
+than the two other options: silently ignoring it (what happened before this
+finding, by omission) or silently treating it as satisfied (what `K15.20`
+forbids). Checking it for real would mean picking the one `C_PRIMITIVE_TUPLE`
+row whose values match the instance's actual values across every named
+attribute *at once* — a different shape of check than `walk_attribute`'s
+per-attribute walk, and a larger piece of work than this finding's own scope.
+
+Eight new tests: the units/magnitude example from AOM2's own
+second-order-constraints document built and read back; the arity-mismatch
+invariant refused, naming the reason; the `1..1` empty-members case refused;
+the `0..1` empty-tuples case accepted; the builder's default (absent unless
+attached) checked through both `CComplexObject` and `CObject`;
+canonical-JSON round-tripping; and a fixture written as though from before
+this field existed — literal JSON with no `attribute_tuples` key at all —
+still deserializing, confirming `#[serde(default)]` is doing real work and
+not merely present. `am::validate` gained one more: the units/magnitude
+example wired into a real `EVALUATION`/`ELEMENT`/`DV_QUANTITY` walk,
+confirming the report names
+`"C_ATTRIBUTE_TUPLE co-varying constraint is not evaluated"` with
+`"units, magnitude"` as the detail, and that no violation is raised for data
+the tuple was never consulted against.
+
+**Not attempted.** `C_ARCHETYPE_ROOT` does not gain the field, though AOM2
+declares it a `C_COMPLEX_OBJECT` subtype and so inherits `attribute_tuples`
+formally. This crate's own `CArchetypeRoot` already carries the matching
+asymmetry for `attributes` — always empty, with no builder to populate it,
+matching AOM2's own note that "In all uses within source archetypes and
+templates, the `_children_` attribute is `Void`" (`openEHR/specifications-AM`,
+`docs/UML/classes/org.openehr.am.aom2.c_archetype_root.adoc`) — so adding
+`attribute_tuples` there alone, with no way to populate `attributes` either,
+would model an inheritance relationship this crate does not otherwise
+represent. `SIBLING_ORDER` remains unmodelled and, unlike this finding, is
+genuinely gated on specialisation: its own class documentation states it
+applies only "on a `C_OBJECT` within a container attribute in a specialised
+archetype", which is `K15.11`–`K15.13`, not implemented. `RM_OVERLAY` is a
+different shape of gap and this finding does not close it either: it is an
+optional attribute of `ARCHETYPE` itself, the same level as `rules`
+(`EXPR_CONSTRAINT`, also unmodelled) — reachable today, not gated on
+specialisation or templates — and `Archetype` in `am::archetype` has no field
+for either one. That is a separate, `ARCHETYPE`-level gap, not a
+`C_COMPLEX_OBJECT`-level one, and is left for its own finding rather than
+folded into this one. Actually evaluating a tuple constraint during
+validation — matching an instance's values to one row — is deferred for the
+same reason `Inv_valid_assumed_value` was in `A-48`: a larger piece of work,
+decoupled from `walk_complex`'s existing per-attribute shape, and not
+attempted here.
