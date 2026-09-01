@@ -114,6 +114,18 @@ and `TRANSLATION_DETAILS.language` — none of which this crate models, and
 its own because it is independently well-formed, not because those three
 classes are now in progress. See `openehr/spec/audit.md` **A-47**.
 
+**New: `openehr::am::PrimitiveValue`, and `CPrimitiveObject::with_assumed_value`
+/`assumed_value()`.** `C_PRIMITIVE_OBJECT.assumed_value: Any` had no field at
+all. `PrimitiveValue` covers `Boolean`, `Integer`, `Real` (`base::Real`, not
+`f64`), and one `Text` variant standing in for `C_STRING`, `C_DATE`,
+`C_TIME`, `C_DATE_TIME`, `C_DURATION`, and `C_TERMINOLOGY_CODE` alike —
+the same collapsing `crate::path::Scalar::Str` already makes for the
+corresponding `DataValue`s. **`Inv_valid_assumed_value` — that the value
+conforms to the node's own `constraint` — is not checked**, the same choice
+already made for `C_STRING`'s `pattern`: a `Boolean` assumed value attached
+to a `C_INTEGER` constraint is accepted exactly as given. See
+`openehr/spec/audit.md` **A-48**.
+
 ## 0.8.0 — 2026-08-29
 
 **BREAKING: the MSRV floor moved from N−3 to N−2 — 1.95 to 1.96.** `RV1`

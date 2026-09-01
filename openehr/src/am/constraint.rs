@@ -376,6 +376,32 @@ impl CComplexObject {
     }
 }
 
+/// A concrete value of one of the kinds `CPrimitive` constrains, carried as
+/// [`CPrimitiveObject::assumed_value`] (AOM2's `C_PRIMITIVE_OBJECT
+/// .assumed_value: Any`).
+///
+/// One `Text` variant stands in for `C_STRING`, `C_DATE`, `C_TIME`,
+/// `C_DATE_TIME`, `C_DURATION`, and `C_TERMINOLOGY_CODE` alike, each as its
+/// own lexical text — the same collapsing `crate::path::Scalar::Str` already
+/// makes for the corresponding `DataValue`s. Which of the six a given `Text`
+/// means is decided by which `CPrimitive` variant it is attached to via
+/// [`CPrimitiveObject::with_assumed_value`], not by this type itself.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PrimitiveValue {
+    /// `C_BOOLEAN`'s assumed value.
+    Boolean(bool),
+    /// `C_STRING`, `C_DATE`, `C_TIME`, `C_DATE_TIME`, `C_DURATION`, or
+    /// `C_TERMINOLOGY_CODE`'s assumed value, as lexical text.
+    Text(String),
+    /// `C_INTEGER`'s assumed value.
+    Integer(i64),
+    /// `C_REAL`'s assumed value, tried only once `Integer` has failed to
+    /// parse the same JSON number — so `5` still reads as `Integer(5)`, not
+    /// `Real`.
+    Real(Real),
+}
+
 /// A constrained leaf value: `C_PRIMITIVE_OBJECT`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CPrimitiveObject {
@@ -383,6 +409,8 @@ pub struct CPrimitiveObject {
     node_id: Option<String>,
     occurrences: MultiplicityInterval,
     constraint: CPrimitive,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    assumed_value: Option<PrimitiveValue>,
 }
 
 impl CPrimitiveObject {
@@ -398,6 +426,7 @@ impl CPrimitiveObject {
             node_id: None,
             occurrences,
             constraint,
+            assumed_value: None,
         }
     }
 
@@ -458,6 +487,32 @@ impl CPrimitiveObject {
     #[must_use]
     pub fn node_id(&self) -> Option<&str> {
         self.node_id.as_deref()
+    }
+
+    /// Attaches the value to be assumed when data supplies none
+    /// (`org.openehr.am.aom2.c_primitive_object.adoc`'s `assumed_value`).
+    ///
+    /// **`Inv_valid_assumed_value` is not checked.** AOM2 requires
+    /// `valid_value(assumed_value)` — that the value conforms to
+    /// [`Self::constraint`] — and this crate does not evaluate it, the same
+    /// choice already made for `C_STRING`'s `pattern` and carried here for
+    /// the same reason: nothing calls this before a template author or a
+    /// form generator would, and neither exists in this crate. A value of
+    /// the wrong [`PrimitiveValue`] shape for the attached `CPrimitive` —
+    /// `Boolean` on a `C_INTEGER`, say — is accepted and carried exactly as
+    /// given.
+    #[must_use]
+    pub fn with_assumed_value(mut self, value: PrimitiveValue) -> Self {
+        self.assumed_value = Some(value);
+        self
+    }
+
+    /// The value to be assumed when data supplies none, if
+    /// [`Self::with_assumed_value`] recorded one. See its own documentation
+    /// for what is and is not checked about it.
+    #[must_use]
+    pub fn assumed_value(&self) -> Option<&PrimitiveValue> {
+        self.assumed_value.as_ref()
     }
 }
 
@@ -976,6 +1031,83 @@ mod tests {
         // pair would misread as a class/invariant citation.
         let malformed = "banana";
         assert!(leaf.with_node_id(malformed).is_err());
+    }
+
+    #[test]
+    fn a_primitive_object_carries_an_assumed_value_of_the_matching_kind() {
+        let leaf = CPrimitiveObject::new(
+            "DV_COUNT",
+            MultiplicityInterval::MANDATORY,
+            CPrimitive::Integer {
+                list: Vec::new(),
+                range: None,
+            },
+        );
+        assert!(leaf.assumed_value().is_none());
+        let defaulted = leaf.with_assumed_value(PrimitiveValue::Integer(0));
+        assert_eq!(defaulted.assumed_value(), Some(&PrimitiveValue::Integer(0)));
+    }
+
+    #[test]
+    fn an_assumed_value_of_the_wrong_kind_is_carried_rather_than_refused() {
+        // `Inv_valid_assumed_value` is deliberately not checked (see
+        // `with_assumed_value`'s own doc comment) — a `Boolean` assumed value
+        // attached to a `C_INTEGER` constraint is accepted exactly as given,
+        // the same way an unmatched `C_STRING` pattern is carried rather than
+        // rejected.
+        let leaf = CPrimitiveObject::new(
+            "DV_COUNT",
+            MultiplicityInterval::MANDATORY,
+            CPrimitive::Integer {
+                list: Vec::new(),
+                range: None,
+            },
+        )
+        .with_assumed_value(PrimitiveValue::Boolean(true));
+        assert_eq!(leaf.assumed_value(), Some(&PrimitiveValue::Boolean(true)));
+    }
+
+    #[test]
+    fn an_assumed_value_round_trips_through_canonical_json_and_omits_when_absent() {
+        let with_value = CPrimitiveObject::new(
+            "DV_TEXT",
+            MultiplicityInterval::MANDATORY,
+            CPrimitive::String {
+                list: Vec::new(),
+                pattern: None,
+            },
+        )
+        .with_assumed_value(PrimitiveValue::Text("unknown".to_owned()));
+        let json = serde_json::to_value(&with_value).unwrap();
+        assert_eq!(json["assumed_value"], "unknown");
+        let back: CPrimitiveObject = serde_json::from_value(json).unwrap();
+        assert_eq!(back, with_value);
+
+        let without_value = CPrimitiveObject::new(
+            "DV_TEXT",
+            MultiplicityInterval::MANDATORY,
+            CPrimitive::String {
+                list: Vec::new(),
+                pattern: None,
+            },
+        );
+        let json = serde_json::to_value(&without_value).unwrap();
+        assert!(
+            !json.as_object().unwrap().contains_key("assumed_value"),
+            "an absent assumed_value was written as null instead of omitted"
+        );
+    }
+
+    #[test]
+    fn an_untagged_assumed_value_distinguishes_integer_from_real_by_json_shape() {
+        // Order matters for `#[serde(untagged)]`: `Integer` is declared before
+        // `Real`, so a whole-number JSON literal like `5` reads as
+        // `PrimitiveValue::Integer`, and only a fractional one falls through
+        // to `PrimitiveValue::Real`.
+        let whole: PrimitiveValue = serde_json::from_str("5").unwrap();
+        assert_eq!(whole, PrimitiveValue::Integer(5));
+        let fractional: PrimitiveValue = serde_json::from_str("5.5").unwrap();
+        assert_eq!(fractional, PrimitiveValue::Real("5.5".parse().unwrap()));
     }
 
     #[test]

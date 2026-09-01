@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**47 findings, 47 in the table below: 6 High, 27 Medium, 14 Low. 41 fixed or
+**48 findings, 48 in the table below: 6 High, 27 Medium, 15 Low. 42 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -134,6 +134,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-45 | Medium | `C_DATE`/`C_TIME`/`C_DATE_TIME`/`C_DURATION` had no `CPrimitive` variant at all — every node they governed was `Unchecked`, which on most real archetypes (nearly all constrain at least one date or time field) meant `is_conformant()` was `false` far more often than the disclosure's wording suggested | **fixed** — `SemanticOrd` implemented for the four `base` temporal types (previously blocked on nothing implementing it, not a choice to skip it), then the four `CPrimitive` variants, each a list of ranges matching AOM2's own shape |
 | A-46 | Low | `C_PRIMITIVE_OBJECT` could not carry a `node_id` at all, though `CObject::node_id`'s dispatcher already read the field — it just stayed `None` forever, since nothing could set it | **fixed** — `with_node_id`/`node_id()` added, plus a `PRIMITIVE_NODE_ID` constant for AOM2's own inline-form sentinel, which is a literal string rather than coded syntax |
 | A-47 | Low | `Terminology_code`/`Terminology_term`, the BASE foundation types `AUTHORED_RESOURCE.original_language`, `RESOURCE_DESCRIPTION_ITEM.language`, and `TRANSLATION_DETAILS.language` are typed as, did not exist in this crate at all | **fixed** — both added to `openehr::base`; a standalone prerequisite, not a claim that any of the three classes that use them is now modelled |
+| A-48 | Low | `C_PRIMITIVE_OBJECT.assumed_value` had no field at all — a default value could not be attached to a primitive constraint under any representation | **fixed** — `PrimitiveValue` and `with_assumed_value`/`assumed_value()` added; `Inv_valid_assumed_value` (conformance to the attached `CPrimitive`) is carried unchecked, declared rather than silently passed |
 
 ---
 
@@ -2620,3 +2621,47 @@ unmodelled. Whether this crate should model them at all is an open scope
 question this finding does not resolve, since `S1.1` does not commit the
 crate to the `resource` package the way it does to Data Types, Data
 Structures, Common, EHR, and Demographic.
+
+## A-48 — `C_PRIMITIVE_OBJECT.assumed_value` had no field
+
+**Severity: Low. Status: fixed.**
+
+Found in the same AM research pass that produced `A-46`, and ranked below it
+there for the reason repeated in this crate's own module documentation:
+`assumed_value` — the default a template author or a form generator would
+offer when data supplies none — has no bearing on
+`validate_against_archetype`'s tree walk, which checks values *present* in a
+real instance and never looks at an archetype's own defaults. It remained
+unaddressed until now for that reason, not because it was forgotten.
+
+`assumed_value: Any` (`org.openehr.am.aom2.c_primitive_object.adoc`) also
+carries its own invariant, `Inv_valid_assumed_value: valid_value
+(assumed_value)` — the value must conform to the same node's `constraint`.
+
+**Fixed, with the invariant explicitly not enforced.** `PrimitiveValue`
+added — `Boolean`, `Integer`, `Real` (via `base::Real`, not `f64`, for the
+`D3.18d` reason), and one `Text` variant standing in for `C_STRING`,
+`C_DATE`, `C_TIME`, `C_DATE_TIME`, `C_DURATION`, and `C_TERMINOLOGY_CODE`
+alike, the same collapsing `crate::path::Scalar::Str` already makes for the
+corresponding `DataValue`s. `CPrimitiveObject::with_assumed_value`/
+`assumed_value()` attach and read it. `Inv_valid_assumed_value` is carried
+unchecked, the same choice already made for `C_STRING`'s `pattern`
+(`A-45`'s residual) — a `Boolean` assumed value attached to a `C_INTEGER`
+constraint is accepted exactly as given, not refused. Checking it for real
+would need the same per-kind conformance logic `am::validate`'s
+`walk_primitive`/`check_temporal` already have, decoupled from the
+`Ctx`/reporting machinery those are built around — a larger piece of work
+than this finding's own scope, and not attempted here.
+
+Five new tests: a matching-kind assumed value attached and read back; a
+mismatched-kind one accepted rather than refused, confirming the
+non-enforcement is real and not accidental; canonical-JSON round-tripping,
+including that an absent `assumed_value` is omitted rather than written
+`null`; and the untagged-enum ordering that lets a whole-number JSON literal
+read as `Integer` rather than falling through to `Real`.
+
+**Not attempted.** `Inv_valid_assumed_value` itself, as above. AOM2's other
+`C_PRIMITIVE_OBJECT` function, `has_assumed_value()`, is not added — a
+caller can already ask `assumed_value().is_some()`, and a second, redundant
+accessor would be exactly the kind of duplicated logic this repository's own
+history (`lib:A-33`) warns against maintaining in two places.

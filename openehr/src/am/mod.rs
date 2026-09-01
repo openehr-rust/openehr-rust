@@ -107,7 +107,7 @@ pub use adl14::{Adl14Error, Adl14Header, parse_header as parse_adl14_header};
 pub use archetype::{Archetype, ROOT_OCCURRENCES};
 pub use constraint::{
     ArchetypeSlot, CArchetypeRoot, CAttribute, CComplexObject, CObject, CPrimitive,
-    CPrimitiveObject, NodeIdSyntax,
+    CPrimitiveObject, NodeIdSyntax, PrimitiveValue,
 };
 pub use multiplicity::{Cardinality, MultiplicityInterval};
 pub use repository::{ArchetypeRepository, Provenance, RepositoryError, Resolved};
