@@ -96,6 +96,7 @@ mod adl14;
 mod adl2;
 mod adl_lexer;
 mod archetype;
+mod archetype_hrid;
 mod constraint;
 mod multiplicity;
 mod repository;
@@ -105,6 +106,7 @@ mod validate;
 pub use adl2::{Adl2Error, Adl2Header, parse_header as parse_adl2_header};
 pub use adl14::{Adl14Error, Adl14Header, parse_header as parse_adl14_header};
 pub use archetype::{Archetype, ROOT_OCCURRENCES};
+pub use archetype_hrid::{ArchetypeHrid, VersionStatus};
 pub use constraint::{
     ArchetypeSlot, CArchetypeRoot, CAttribute, CComplexObject, CObject, CPrimitive,
     CPrimitiveObject, NodeIdSyntax, PrimitiveValue,

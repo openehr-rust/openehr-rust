@@ -9,14 +9,25 @@
 //! a resync past it.
 //!
 //! [`parse_header`] reads only `archetype [meta_data] <id> [specialize
-//! <id>]` — this archetype's own [`ArchetypeId`] and, if present, its
-//! parent's — checked against the real ADL 2 grammar (`openEHR/adl-antlr`,
-//! `adl2.g4`: `authored_archetype: SYM_ARCHETYPE meta_data? archetypeHrid
-//! specialize_section? language_section description_section
-//! definition_section rules_section? terminology_section
+//! <id>]` — this archetype's own [`ArchetypeHrid`] and, if present, its
+//! parent's [`ArchetypeId`] — checked against the real ADL 2 grammar
+//! (`openEHR/adl-antlr`, `adl2.g4`: `authored_archetype: SYM_ARCHETYPE
+//! meta_data? archetypeHrid specialize_section? language_section
+//! description_section definition_section rules_section? terminology_section
 //! annotations_section?`), and refuses everything from `language` onward by
 //! name. It cannot build an [`crate::am::Archetype`], for the same reason
 //! [`super::adl14::parse_header`] cannot: no `definition`, no `terminology`.
+//!
+//! # Two different identifier grammars, on purpose
+//!
+//! The archetype's own line is the lexer's `ARCHETYPE_HRID` token — read as
+//! [`ArchetypeHrid`], which models it faithfully (namespace prefix,
+//! three-part version, prerelease suffix). The `specialize` line is
+//! `archetype_ref: ARCHETYPE_HRID | ARCHETYPE_REF` (`cadl2.g4`) — either
+//! form is legal there, but this reader accepts only the narrower
+//! [`ArchetypeId`] shape for it, which is neither of the two exactly. See
+//! [`super::ArchetypeHrid`]'s own module documentation and `spec/audit.md`
+//! **A-49**'s residual for exactly what that leaves open.
 //!
 //! # ADL 2 has no `concept` section
 //!
@@ -32,6 +43,7 @@
 //! alternative in AM 2.4.0's amendment record) — but the header this reader
 //! parses does not carry one, so that difference does not surface here.
 
+use super::ArchetypeHrid;
 use super::adl_lexer::{Lexer, Token};
 use crate::base::ArchetypeId;
 
@@ -57,10 +69,12 @@ impl Adl2Error {
 /// What a minimal ADL 2 header names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Adl2Header {
-    /// This archetype's own identifier.
-    pub archetype_id: ArchetypeId,
+    /// This archetype's own identifier — the header's `ARCHETYPE_HRID`
+    /// token, in full (namespace, prerelease suffix, and all).
+    pub archetype_id: ArchetypeHrid,
     /// The parent this archetype specialises, if the optional
-    /// `specialize_section` is present.
+    /// `specialize_section` is present. Narrower than the grammar allows
+    /// there — see the module documentation.
     pub specializes: Option<ArchetypeId>,
 }
 
@@ -94,6 +108,19 @@ fn expect_id(lexer: &mut Lexer<'_>, what: &'static str) -> Result<String, Adl2Er
     }
 }
 
+fn expect_archetype_hrid(
+    lexer: &mut Lexer<'_>,
+    what: &'static str,
+) -> Result<ArchetypeHrid, Adl2Error> {
+    let id_text = expect_id(lexer, what)?;
+    id_text.parse().map_err(|_| {
+        Adl2Error::at(
+            lexer.offset() - id_text.len(),
+            format!("`{id_text}` is not a valid ARCHETYPE_HRID"),
+        )
+    })
+}
+
 fn expect_archetype_id(
     lexer: &mut Lexer<'_>,
     what: &'static str,
@@ -102,7 +129,11 @@ fn expect_archetype_id(
     id_text.parse().map_err(|_| {
         Adl2Error::at(
             lexer.offset() - id_text.len(),
-            format!("`{id_text}` is not a valid ARCHETYPE_HRID"),
+            format!(
+                "`{id_text}` does not parse as this reader's ArchetypeId — narrower than the \
+                 `archetype_ref: ARCHETYPE_HRID | ARCHETYPE_REF` grammar allows here, see the \
+                 module documentation"
+            ),
         )
     })
 }
@@ -131,7 +162,7 @@ pub fn parse_header(source: &str) -> Result<Adl2Header, Adl2Error> {
             .map_err(|offset| Adl2Error::at(offset, "unterminated `(...)` metadata"))?;
     }
 
-    let archetype_id = expect_archetype_id(&mut lexer, "an archetype identifier")?;
+    let archetype_id = expect_archetype_hrid(&mut lexer, "an archetype identifier")?;
 
     // `specialize_section`: `specialize <parent-id>`, optional.
     let specializes = if lexer

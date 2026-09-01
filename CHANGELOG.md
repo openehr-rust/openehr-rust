@@ -126,6 +126,19 @@ already made for `C_STRING`'s `pattern`: a `Boolean` assumed value attached
 to a `C_INTEGER` constraint is accepted exactly as given. See
 `openehr/spec/audit.md` **A-48**.
 
+**Fixed: `parse_adl14_header`/`parse_adl2_header` used the wrong
+archetype-identifier grammar for the header's own line.** Both grammars name
+it `ARCHETYPE_HRID`, not `ArchetypeId` — a richer token allowing an optional
+`namespace::` prefix and a prerelease version suffix (`-rc.4`, `-alpha`,
+`-beta`), which `ArchetypeId` accepts neither of. **New:
+`openehr::am::ArchetypeHrid`/`VersionStatus`**, modelling `ARCHETYPE_HRID`
+faithfully and checked against `openEHR/adl-antlr`'s real lexer grammar;
+`Adl14Header.archetype_id` and `Adl2Header.archetype_id` now hold one. The
+`specialize` line's identifier is unchanged (`Option<ArchetypeId>`) and
+remains narrower than its own grammar (`ARCHETYPE_REF`, or for ADL 2 either
+`ARCHETYPE_HRID` or `ARCHETYPE_REF`) allows — declared, not fixed, in this
+pass; see `openehr/spec/audit.md` **A-49**.
+
 ## 0.8.0 — 2026-08-29
 
 **BREAKING: the MSRV floor moved from N−3 to N−2 — 1.95 to 1.96.** `RV1`

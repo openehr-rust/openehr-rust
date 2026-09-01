@@ -11,7 +11,7 @@
 //!
 //! [`parse_header`] does none of that. It recognises exactly the
 //! `archetype`/`specialize`/`concept` lines — this archetype's own
-//! [`ArchetypeId`], an optional parent [`ArchetypeId`], and one `AT_CODE`,
+//! [`ArchetypeHrid`], an optional parent [`ArchetypeId`], and one `AT_CODE`,
 //! checked against the real ADL 1.4 grammar (`openEHR/adl-antlr`,
 //! `adl14.g4`: `SYM_ARCHETYPE meta_data? ARCHETYPE_HRID
 //! specialization_section? concept_section ...`) — and refuses
@@ -20,10 +20,23 @@
 //! an [`crate::am::Archetype`]: that type requires a `definition` and a
 //! `terminology`, and this reads neither.
 //!
+//! # Two different identifier grammars, on purpose
+//!
+//! The archetype's own line is the lexer's `ARCHETYPE_HRID` token — read as
+//! [`ArchetypeHrid`], which models it faithfully (namespace prefix,
+//! three-part version, prerelease suffix). `specialization_section` is a
+//! plain `ARCHETYPE_REF` (`adl14.g4`: `SYM_SPECIALIZE ARCHETYPE_REF`) — a
+//! different, narrower token, read here as [`ArchetypeId`], which is close
+//! to it but not exact (`ARCHETYPE_REF` also allows a namespace prefix and
+//! an unbounded chain of version segments; `ArchetypeId` allows neither).
+//! See [`super::ArchetypeHrid`]'s own module documentation and
+//! `spec/audit.md` **A-49**'s residual for exactly what that leaves open.
+//!
 //! What it is for: identifying and cataloguing ADL 1.4 source — which
 //! archetype a `.adl` file is, and what it specialises — without a database
 //! and without `K15.8`'s much larger conversion behind it.
 
+use super::ArchetypeHrid;
 use super::adl_lexer::{Lexer, Token};
 use crate::base::ArchetypeId;
 
@@ -49,10 +62,12 @@ impl Adl14Error {
 /// What a minimal ADL 1.4 header names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Adl14Header {
-    /// This archetype's own identifier.
-    pub archetype_id: ArchetypeId,
+    /// This archetype's own identifier — the header's `ARCHETYPE_HRID`
+    /// token, in full (namespace, prerelease suffix, and all).
+    pub archetype_id: ArchetypeHrid,
     /// The parent this archetype specialises, if the optional `specialize`
-    /// section is present.
+    /// section is present. Narrower than the grammar allows there — see the
+    /// module documentation.
     pub specializes: Option<ArchetypeId>,
     /// The concept's local term code, e.g. `"at0000"` — `ontology`'s
     /// `term_definitions` names what it means, which this does not read.
@@ -104,6 +119,19 @@ fn expect_id(lexer: &mut Lexer<'_>, what: &'static str) -> Result<String, Adl14E
     }
 }
 
+fn expect_archetype_hrid(
+    lexer: &mut Lexer<'_>,
+    what: &'static str,
+) -> Result<ArchetypeHrid, Adl14Error> {
+    let id_text = expect_id(lexer, what)?;
+    id_text.parse().map_err(|_| {
+        Adl14Error::at(
+            lexer.offset() - id_text.len(),
+            format!("`{id_text}` is not a valid ARCHETYPE_HRID"),
+        )
+    })
+}
+
 fn expect_archetype_id(
     lexer: &mut Lexer<'_>,
     what: &'static str,
@@ -112,7 +140,10 @@ fn expect_archetype_id(
     id_text.parse().map_err(|_| {
         Adl14Error::at(
             lexer.offset() - id_text.len(),
-            format!("`{id_text}` is not a valid ARCHETYPE_HRID"),
+            format!(
+                "`{id_text}` does not parse as this reader's ArchetypeId — narrower than the \
+                 ARCHETYPE_REF grammar allows here, see the module documentation"
+            ),
         )
     })
 }
@@ -143,7 +174,7 @@ pub fn parse_header(source: &str) -> Result<Adl14Header, Adl14Error> {
             .map_err(|offset| Adl14Error::at(offset, "unterminated `(...)` metadata"))?;
     }
 
-    let archetype_id = expect_archetype_id(&mut lexer, "an archetype identifier")?;
+    let archetype_id = expect_archetype_hrid(&mut lexer, "an archetype identifier")?;
 
     // `specialization_section`: `specialize <parent-id>`, optional.
     let specializes = if lexer

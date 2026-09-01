@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**48 findings, 48 in the table below: 6 High, 27 Medium, 15 Low. 42 fixed or
+**49 findings, 49 in the table below: 6 High, 28 Medium, 15 Low. 43 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -135,6 +135,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-46 | Low | `C_PRIMITIVE_OBJECT` could not carry a `node_id` at all, though `CObject::node_id`'s dispatcher already read the field — it just stayed `None` forever, since nothing could set it | **fixed** — `with_node_id`/`node_id()` added, plus a `PRIMITIVE_NODE_ID` constant for AOM2's own inline-form sentinel, which is a literal string rather than coded syntax |
 | A-47 | Low | `Terminology_code`/`Terminology_term`, the BASE foundation types `AUTHORED_RESOURCE.original_language`, `RESOURCE_DESCRIPTION_ITEM.language`, and `TRANSLATION_DETAILS.language` are typed as, did not exist in this crate at all | **fixed** — both added to `openehr::base`; a standalone prerequisite, not a claim that any of the three classes that use them is now modelled |
 | A-48 | Low | `C_PRIMITIVE_OBJECT.assumed_value` had no field at all — a default value could not be attached to a primitive constraint under any representation | **fixed** — `PrimitiveValue` and `with_assumed_value`/`assumed_value()` added; `Inv_valid_assumed_value` (conformance to the attached `CPrimitive`) is carried unchecked, declared rather than silently passed |
+| A-49 | Medium | `parse_adl14_header`/`parse_adl2_header` used `ArchetypeId` for the header's own identifier — narrower than the grammar both cite in their own error messages, `ARCHETYPE_HRID`, which allows a namespace prefix and a prerelease version suffix neither reader accepted | **fixed**, residual documented — `ArchetypeHrid` added and both readers corrected to use it for the archetype's own identifier; the `specialize` line's identifier is unchanged and remains narrower than its own grammar allows |
 
 ---
 
@@ -2665,3 +2666,58 @@ read as `Integer` rather than falling through to `Real`.
 caller can already ask `assumed_value().is_some()`, and a second, redundant
 accessor would be exactly the kind of duplicated logic this repository's own
 history (`lib:A-33`) warns against maintaining in two places.
+
+## A-49 — the ADL header readers used the wrong archetype-identifier grammar
+
+**Severity: Medium. Status: fixed, residual documented.**
+
+Found while implementing `ARCHETYPE_HRID` as its own type (AOM2's
+`org.openehr.am.aom2.archetype_hrid.adoc`) and checking it against
+`openEHR/adl-antlr`'s real grammar files, rather than assuming the type this
+crate already had — `base::ArchetypeId` — was what the header actually
+names. It is not. Both `adl14.g4`'s `archetype` rule and `adl2.g4`'s
+`authored_archetype` rule name the header's own identifier `ARCHETYPE_HRID`,
+a lexer token distinct from and richer than `ArchetypeId`'s grammar:
+
+```text
+ARCHETYPE_HRID       : ARCHETYPE_HRID_ROOT '.v' ARCHETYPE_VERSION_ID ;
+ARCHETYPE_HRID_ROOT  : (NAMESPACE '::')? IDENTIFIER '-' IDENTIFIER '-' IDENTIFIER '.' LABEL ;
+ARCHETYPE_VERSION_ID : DIGIT+ ('.' DIGIT+ ('.' DIGIT+ (('-rc'|'-alpha'|'-beta') ('.' DIGIT+)?)?)?)? ;
+```
+
+`ArchetypeId::from_str` accepts neither the optional `namespace::` prefix
+nor a prerelease suffix (`-rc.4`, `-alpha`, `-beta`) on the version — both
+committed this session in `adl14.rs`/`adl2.rs` (`428dfb2`, `161a193`), both
+citing `ARCHETYPE_HRID` in their own error messages without checking the
+text actually parsed to that grammar. A real archetype header using either
+form would have been refused by a reader whose own module documentation
+already named the grammar it should have accepted.
+
+**Fixed** — `openehr::am::ArchetypeHrid` and `VersionStatus` added, parsed
+against the grammar above (including its own laxity relative to AOM2's
+class-level invariant, `Inv_release_version_validity`, which declares a
+strict three-part version the grammar itself does not require — the same
+`I2.15`-shaped departure this crate already made for `ArchetypeId`, made
+explicit in `ArchetypeHrid`'s own module documentation rather than repeated
+silently). `Adl14Header.archetype_id` and `Adl2Header.archetype_id` now hold
+an `ArchetypeHrid`; eleven new tests cover the namespace prefix, the three
+prerelease suffixes, the departure case, and four refusal shapes. All 13
+pre-existing `adl14`/`adl2` tests pass unchanged, since every fixture they
+use is plain classic-form text that both grammars accept identically.
+
+**Residual, documented rather than silently left.** `specializes` on both
+header types is unchanged — still `Option<ArchetypeId>`. ADL 1.4's
+`specialization_section` names its parent with a third, different token,
+`ARCHETYPE_REF` (namespace prefix allowed, no prerelease suffix, an
+unbounded chain of `.DIGIT+` version segments); ADL 2's own
+`specialize_section` allows *either* `ARCHETYPE_HRID` or `ARCHETYPE_REF`
+(`cadl2.g4`: `archetype_ref: ARCHETYPE_HRID | ARCHETYPE_REF`).
+`ArchetypeId` is closer to `ARCHETYPE_REF` than to `ARCHETYPE_HRID` but is
+not exactly either — it lacks the namespace prefix both allow, and caps the
+version at three parts where `ARCHETYPE_REF` does not. Reconciling
+`ArchetypeId` itself against `ARCHETYPE_REF`, or building a true union type
+for ADL 2's `archetype_ref` parser rule, is a separate piece of work: unlike
+the header's own identifier, `ArchetypeId` is a `base` type used pervasively
+across Reference Model data (`ARCHETYPED.archetype_id`), so widening it
+is a larger, more consequential change than adding a new, narrowly-scoped
+type was, and was not undertaken in this pass.
