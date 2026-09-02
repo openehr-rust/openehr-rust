@@ -125,7 +125,19 @@ impl<'a> Lexer<'a> {
     /// Returns `Err(offset)` at an unterminated `(...)` — the caller wraps
     /// it in its own error type.
     pub(super) fn skip_parenthesised(&mut self) -> Result<(), usize> {
-        debug_assert!(matches!(self.next(), Some(Token::Symbol('('))));
+        // The opening `(` is consumed into a binding, not inside
+        // `debug_assert!`'s own condition — `debug_assert!` does not
+        // evaluate its argument at all in a release build, and `self.next()`
+        // has a side effect (advancing the lexer) this function depends on
+        // unconditionally. The bug this avoids was real: in a release or
+        // bench-profile build, the elided call left the opening `(` in
+        // `self.rest`, so the loop below read it again as a nested paren and
+        // reported a well-formed `(...)` as unterminated — reproducible with
+        // `cargo bench --benches -- --test`, silent under plain `cargo test`
+        // because dev builds keep `debug_assert!` live. See `spec/audit.md`
+        // for the finding this became.
+        let opening = self.next();
+        debug_assert!(matches!(opening, Some(Token::Symbol('('))));
         let mut depth = 1u32;
         loop {
             let offset = self.offset();

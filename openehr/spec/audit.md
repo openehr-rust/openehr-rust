@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**56 findings, 56 in the table below: 6 High, 31 Medium, 19 Low. 50 fixed or
+**57 findings, 57 in the table below: 7 High, 31 Medium, 19 Low. 51 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -143,6 +143,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-54 | Low | **BREAKING.** `CComplexObjectProxy` could not represent AOM2's `use_target_occurrences()` — `A-53`'s own residual — because `CObject::occurrences()` returned `&MultiplicityInterval`, a shape every other `C_OBJECT` variant already committed to as published API | **fixed** — `occurrences()` widened to `Option<&MultiplicityInterval>`; the four other variants are unaffected (always `Some`), and `CAttribute::single`/`container`'s own construction-time checks treat a deferred child per AOM2's own stated default (lower bound `0`, upper bound unchecked) rather than guessing |
 | A-55 | Low | **BREAKING.** `CPrimitive::TerminologyCode::code_list: Vec<String>` — `A-51`'s own residual — had no counterpart in AOM2's actual single-valued `constraint: String` | **fixed** — `code_list` removed; multiple alternative codes are now expressed as sibling `C_OBJECT`s, matching every other node kind's own alternative-matching shape; `constraint`'s `at`-code/`ac`-code kind is now distinguished by AOM2's own `"ac"` leader convention rather than by which of two fields it was written into |
 | A-56 | Low | `C_PRIMITIVE_OBJECT.assumed_value` conforming to its own `constraint` (`Inv_valid_assumed_value`) — `A-48`'s own residual — was never checked; a kind-mismatched or out-of-range assumed value was accepted silently all the way to a caller who never suspected one | **fixed** — checked in `Archetype::check`, not at `CPrimitiveObject::with_assumed_value` (which builds a node in isolation, before the terminology a `C_TERMINOLOGY_CODE` `ac`-code needs is in scope); `C_UNSUPPORTED` is excluded rather than guessed at |
+| A-57 | High | `adl_lexer::Lexer::skip_parenthesised` put a side-effecting `self.next()` call inside `debug_assert!`, whose argument is not evaluated at all in a release build — every ADL 2/1.4 archetype header with a `meta_data` clause failed to parse in any release-profile build, silently, since the header readers were first added | **fixed** — the token consumed unconditionally into a binding, `debug_assert!` checking only the value; caught by `cargo bench --benches -- --test` (a release-profile run), invisible to `cargo test` (always debug profile) and to CI's own `test` job for the same reason |
 
 ---
 
@@ -3200,3 +3201,79 @@ overriding the other; a `Terminology_code` assumed value checked against a
 real value set, both directions; and a `C_UNSUPPORTED` constraint's assumed
 value building a conformant archetype regardless of what the value actually
 is, confirming the exclusion is real rather than an accidental pass.
+
+## A-57 — a side-effecting `debug_assert!` broke header parsing in release builds
+
+**Severity: High. Status: fixed.**
+
+**Found by the release process itself, not by a research pass.** Preparing
+0.9.0 for publication, `agents/publishing.md`'s own checklist — `cargo test`
+and `cargo clippy` clean, then CI on the actual commit — ran green on
+everything except one job: `benchmarks still run / openehr`
+(`cargo bench --benches -- --test`, `W0.35`'s smoke-test-only run). Two
+tests failed there and nowhere else: `am::adl2::tests
+::reads_meta_data_and_specialisation` and `am::adl14::tests
+::skips_archetype_header_metadata`, both refusing a well-formed `(adl_version
+=2.4.0; ...)` `meta_data` clause as `"unterminated (...) metadata"`.
+Reproduced locally with the identical command before touching any code, per
+`W0.3` — the failure was real, not a shared-runner artefact of the kind
+`agents/publishing.md` already warns benchmark jobs can produce.
+
+**The bug.** `adl_lexer::Lexer::skip_parenthesised` — used by both ADL 2 and
+ADL 1.4's header readers (`am::adl2::parse_header`, `am::adl14::parse_header`,
+`A-49`) to skip an optional `meta_data` block — opened with:
+
+```rust
+debug_assert!(matches!(self.next(), Some(Token::Symbol('('))));
+```
+
+`self.next()` advances the lexer — a side effect this function's own
+correctness depends on, consuming the opening `(` before the loop below
+starts counting nested parens. `debug_assert!`'s argument **is not evaluated
+at all** when `debug-assertions` is off, which `cargo bench`'s profile — like
+`cargo build --release`, and like any downstream consumer's own release
+build — sets by default. In that build, `self.next()` is never called, the
+opening `(` is never consumed, and the loop reads it again as a *nested*
+paren — one extra level of depth with no closing paren to match it, so a
+perfectly well-formed `meta_data` clause is refused as unterminated.
+
+**Why nothing had caught it.** `cargo test` — every invocation of it in this
+repository's own history, and CI's own `test` job — always builds in the
+`dev` profile, where `debug_assert!` is live and the bug is invisible: the
+side effect happens, the assertion passes, the function works. Only a
+release-profile build exercises the broken path, and the only CI job that
+builds one is `benchmarks still run`, which `W0.35`/`W0.36` deliberately do
+not gate merges on ("run, never gated on") — so this had been red, unnoticed,
+since the header readers were first added (`428dfb2`, `161a193`), through
+every commit and every green `test` run since.
+
+**Severity.** Both header readers are the only ADL entry points this crate
+has (`K15.5`/`K15.8`, both still otherwise unimplemented, `A-40`), and
+`meta_data` is not a rare clause — real published archetypes carry an
+`adl_version`/`uid` block routinely (`openEHR-EHR-CLUSTER.device.v1.0.0.adls`,
+cited in `am::cadl`'s own tests, opens with exactly this shape). A caller
+building this crate into a release binary — the normal way to ship Rust —
+would have every such header refused, silently, with no `test`-profile
+signal ever suggesting a problem. Rated `High`: a defeated control, not a
+gap in coverage — the function's own doctests and unit tests all pass, and
+still do, in the one profile that does not exercise the bug.
+
+**Fixed.** The opening token is consumed into a binding unconditionally;
+`debug_assert!` checks only the already-computed value, which has no side
+effect of its own to elide:
+
+```rust
+let opening = self.next();
+debug_assert!(matches!(opening, Some(Token::Symbol('('))));
+```
+
+Verified both ways: `cargo bench --benches -- --test` (release profile) and
+`cargo test` (dev profile) both pass, 389 of 389, where before the fix the
+former failed exactly the two tests above and the latter passed all along —
+confirming the fix closes the actual gap between the two rather than
+changing behaviour either build already had right.
+
+**No residual.** `grep -rl debug_assert --include="*.rs"` across all eighteen
+crates returns exactly one file: `adl_lexer.rs`, the one fixed here. This
+was not one instance of a pattern repeated elsewhere — it was the only
+`debug_assert!` in the entire tree.

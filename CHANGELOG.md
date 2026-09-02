@@ -5,7 +5,25 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
-## Unreleased
+## 0.9.0 — 2026-09-02
+
+**A minor bump, not a patch, over two breaking API changes.** Cargo treats
+`0.8.x` as compatible with `0.8.0`, and both changes below break a build
+that resolves against the local path today: `CObject::occurrences()`'s
+return type changes for every caller, and `CPrimitive::TerminologyCode`
+loses a field a `match` naming it exhaustively would no longer compile
+against. Both are decided rather than deferred again — see `A-54`/`A-55` in
+`openehr/spec/audit.md` for the residuals they close and why now rather than
+earlier — and both are additive in spirit: neither removes anything AOM2
+itself expresses, only the shape this crate used to say it in.
+
+Everything else below is additive: the whole `openehr::am` archetype-model
+surface this release adds — `C_ATTRIBUTE_TUPLE`/`C_PRIMITIVE_TUPLE`,
+`constraint_status`, `RM_OVERLAY`, `C_COMPLEX_OBJECT_PROXY`, a bounded cADL
+`definition` parser, `Inv_valid_assumed_value` checking — plus the four
+temporal primitive kinds, `C_PRIMITIVE_OBJECT`'s `node_id`, and
+`base::TerminologyCode`/`TerminologyTerm`, all landed in this release too
+and are documented below in the order they were built.
 
 **New: `openehr::am::parse_adl2_header` — read an ADL 2 archetype's
 `archetype` and `specialize` lines.** Returns the archetype's own
@@ -233,6 +251,18 @@ isolation, before the terminology a `Terminology_code` `ac`-code needs is in
 scope. `C_UNSUPPORTED` is excluded from the check rather than guessed at,
 the same reasoning `VASID`/`VACSD` already state for what this crate cannot
 establish at all. See `openehr/spec/audit.md` **A-56**.
+
+**Fixed: ADL 2 and ADL 1.4 header parsing (`am::adl2::parse_header`,
+`am::adl14::parse_header`) silently failed on a `meta_data` clause in any
+release-profile build.** `adl_lexer::Lexer::skip_parenthesised` put a
+side-effecting token read inside `debug_assert!`, whose argument is not
+evaluated at all when `debug-assertions` is off — the default for
+`cargo build --release` and for any downstream consumer's own release
+build. A well-formed `(adl_version=2.4.0; ...)` block was refused as
+`"unterminated (...) metadata"`. Invisible to `cargo test`, which always
+builds in the `dev` profile; caught by `cargo bench --benches -- --test`
+while preparing this release, and reproduced before being touched. See
+`openehr/spec/audit.md` **A-57**.
 
 ## 0.8.0 — 2026-08-29
 

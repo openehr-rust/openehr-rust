@@ -63,8 +63,8 @@ All of it is fixed, and the record is kept in [`spec/audit.md`](../spec/audit.md
 
 ```toml
 [dependencies]
-openehr-mariadb = "0.8"
-openehr-store = "0.8"
+openehr-mariadb = "0.9"
+openehr-store = "0.9"
 ```
 
 Requires Rust 1.96+ (edition 2024).

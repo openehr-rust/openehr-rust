@@ -20,8 +20,39 @@ publish a crate with an open finding against its claims (`W0.21`).
 ## State today
 
 **Published 2026-08-29.** All eight publishable crates are live at **0.8.0**
-on crates.io, in the order below, and local matches published. Verified
-against the registry API rather than read off `cargo publish`'s output.
+on crates.io, in the order below. Local is 0.9.0 and NOT yet published —
+staged, not shipped.
+
+**0.9.0 is staged over two breaking API changes, decided rather than
+deferred again.** `CObject::occurrences()` now returns
+`Option<&MultiplicityInterval>`, not `&MultiplicityInterval` — the four
+existing `C_OBJECT` variants are unaffected and always return `Some`, but the
+signature itself changes for every caller. `CPrimitive::TerminologyCode` no
+longer has a `code_list` field. Both are breaking source changes to API
+`openehr` 0.7.0/0.8.0 already shipped, so this is a minor bump, `0.8.0` to
+`0.9.0`, the same reasoning `0.6.0` and `0.4.0` already gave for their own
+breaking changes within `0.x`. See `CHANGELOG.md`'s `## 0.9.0` entry and
+`openehr/spec/audit.md` **A-54**/**A-55** for what changed and why each one
+was decided now rather than left open again.
+
+**One real defect found preparing this release, and fixed before the cut:**
+`adl_lexer::Lexer::skip_parenthesised` put a side-effecting token read
+inside `debug_assert!`, which does not evaluate its argument in a release
+build — every ADL header with a `meta_data` clause failed to parse in any
+release-profile build, silently, since the header readers were first added.
+Invisible to `cargo test` (always `dev` profile); caught by
+`cargo bench --benches -- --test` (release profile) while running this
+file's own "before publishing anything" checklist. See
+`openehr/spec/audit.md` **A-57**. The gate earned its keep again.
+
+The commit that carries this paragraph, the version bump, and that fix
+together is the one CI must run green on before anything is published —
+its hash belongs in the "Record that 0.9.0 is published" commit that
+follows, not here, since a commit cannot state its own hash. CI's own
+result on it is the gate, the same discipline every entry below already
+follows: this paragraph does not assert green until the run has actually
+completed and been read, and nothing publishes from this state until it
+has.
 
 **0.7.2 went out ahead of this file's process** (2026-08-26): the versions
 were bumped and the eight crates published before the inter-crate pins, this
