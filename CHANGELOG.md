@@ -201,6 +201,27 @@ alternative codes are now expressed as sibling `C_OBJECT`s, the same
 alternative-matching shape every other node kind already uses. See
 `openehr/spec/audit.md` **A-55**.
 
+**New: `openehr::am::parse_definition` — a bounded cADL parser for
+`definition`'s own grammar rule.** Reads `c_complex_object`
+(`openEHR/adl-antlr`, `cadl2.g4`) — the constraint tree itself — for a real
+subset of node kinds (`C_COMPLEX_OBJECT`, `C_PRIMITIVE_OBJECT`, both the
+wrapped and unwrapped primitive forms) and primitive constraint kinds
+(`Boolean`/`String`/`Integer`/`Real`/`Terminology_code` wrapped or
+unwrapped; the four temporal kinds wrapped only), refusing everything else
+by name: `C_ATTRIBUTE_TUPLE`, `ARCHETYPE_SLOT`, `C_ARCHETYPE_ROOT`,
+`C_COMPLEX_OBJECT_PROXY`, `SIBLING_ORDER`, `default_value`, string/date
+patterns, a terminology assumed-value, more than one disjoint range on one
+node, and the relop/`+/-` interval forms. Tested against a real archetype's
+own bytes (`openEHR/adl-archetypes`,
+`openEHR-EHR-CLUSTER.device.v1.0.0.adls`), confirming the honest outcome
+`K15.6`/`K15.7` require on real text this parser cannot fully consume: a
+named refusal, never a silent partial tree. **Not `K15.5`** — see
+`openehr/spec/15-archetypes.md`'s own `K15.5` entry and
+`am::cadl`'s module documentation for the exact boundary and why it is
+drawn where it is; this does not build an `Archetype`, and does not
+compose with `am::adl2::parse_header` into more of `K15.5` than either
+addition is alone.
+
 ## 0.8.0 — 2026-08-29
 
 **BREAKING: the MSRV floor moved from N−3 to N−2 — 1.95 to 1.96.** `RV1`

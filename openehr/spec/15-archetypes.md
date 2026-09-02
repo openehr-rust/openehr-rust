@@ -86,13 +86,25 @@ before the code does.
   specialisation, language, description, definition, rules, terminology, and
   annotations.
 
-  Still not implemented, in this sense, as of the addition below.
+  Still not implemented, in this sense, as of the additions below.
   `am::adl2::parse_header` reads an ADL 2 archetype's `archetype` and
   `specialize` lines only — an identifier and an optional parent, nothing
   that reaches `language`, `definition`, `terminology`, or any other
-  section — and does not build an `Archetype`. Recorded here for the same
-  reason `K15.8`'s entry below records `am::adl14::parse_header`: so the
-  addition cannot later be misread as partial progress on `K15.5` itself.
+  section — and does not build an `Archetype`. `am::cadl::parse_definition`
+  reads `definition`'s own grammar rule, `c_complex_object`
+  (`openEHR/adl-antlr`, `cadl2.g4`) — the constraint tree itself, for a real
+  but bounded subset of node kinds and primitive constraint forms, refusing
+  everything else by name (`K15.6`, `K15.7`): no `C_ATTRIBUTE_TUPLE`,
+  `ARCHETYPE_SLOT`, `C_ARCHETYPE_ROOT`, `C_COMPLEX_OBJECT_PROXY`,
+  `SIBLING_ORDER`, `default_value`, string/date patterns, terminology
+  assumed-values, or more than one disjoint numeric/temporal range (see the
+  module's own documentation for the exact boundary and why each one is
+  drawn where it is). It reads `definition` alone, still cannot build an
+  `Archetype` (no `language`, no `terminology`, so a node id it reads names
+  nothing), and does not read the header either — the two additions do not
+  compose into more of `K15.5` together than either is alone. Recorded here
+  for the same reason `K15.8`'s entry below records `am::adl14::parse_header`:
+  so neither addition is later misread as partial progress on `K15.5` itself.
 - **K15.6** **A construct the parser does not implement MUST be a refusal that
   names it** (`S1.12`), attributed to its position in the source. It MUST NOT be
   skipped, defaulted, or carried as an opaque blob that later reads as "no

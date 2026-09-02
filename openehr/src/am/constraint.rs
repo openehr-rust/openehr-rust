@@ -1063,8 +1063,8 @@ impl CArchetypeRoot {
 /// widened to `Option<&MultiplicityInterval>` to carry this honestly rather
 /// than requiring every proxy to state a value AOM2 says it need not.
 /// **Resolving `target_path` to find the target's real occurrences is not
-/// implemented** — see [`crate::am::validate`]'s treatment of
-/// [`CObject::Proxy`].
+/// implemented** — see [`crate::am::validate_against_archetype`]'s treatment
+/// of [`CObject::Proxy`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CComplexObjectProxy {
     rm_type_name: String,
@@ -1081,8 +1081,8 @@ impl CComplexObjectProxy {
     /// `use_target_occurrences()` — "the target occurrences should be used"
     /// (`org.openehr.am.aom2.c_complex_object_proxy.adoc`) instead of stating
     /// any locally. Resolving `target_path` to find that value is not
-    /// implemented; see [`crate::am::validate`]'s treatment of
-    /// [`CObject::Proxy`].
+    /// implemented; see [`crate::am::validate_against_archetype`]'s
+    /// treatment of [`CObject::Proxy`].
     ///
     /// # Errors
     ///
@@ -1160,8 +1160,9 @@ impl CComplexObjectProxy {
     /// The other node this one refers to, in archetype path notation
     /// (`org.openehr.am.aom2.c_complex_object_proxy.adoc`'s `target_path`).
     /// Carried as written; resolving it against the archetype's own
-    /// constraint tree is not implemented (see [`crate::am::validate`]'s
-    /// treatment of [`CObject::Proxy`]).
+    /// constraint tree is not implemented (see
+    /// [`crate::am::validate_against_archetype`]'s treatment of
+    /// [`CObject::Proxy`]).
     #[must_use]
     pub fn target_path(&self) -> &str {
         &self.target_path

@@ -1110,8 +1110,9 @@ fn check_multimedia(m: &crate::rm::data_types::DvMultimedia, ctx: &mut Context) 
 ///
 /// # Why this exists
 ///
-/// [`OriginalVersion::new`] checks `Lifecycle_state_valid`, `Data_valid`, and
-/// `Preceding_version_uid_validity`. **Deserialization checked none of them**,
+/// [`crate::rm::common::OriginalVersion::new`] checks `Lifecycle_state_valid`,
+/// `Data_valid`, and `Preceding_version_uid_validity`. **Deserialization
+/// checked none of them**,
 /// because the type carries a derived `Deserialize` that writes the fields
 /// straight in, and nothing else validated a version at all — the store
 /// validated the composition inside it and never the envelope around it.

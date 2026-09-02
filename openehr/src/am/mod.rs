@@ -15,7 +15,7 @@
 //! | Capability | Requirement | State |
 //! | --- | --- | --- |
 //! | AOM2 as types, with construction-time checking | `K15.1`–`K15.4` | **here** |
-//! | ADL 2 parsing | `K15.5`–`K15.7` | not implemented — [`adl2::parse_header`](self::parse_adl2_header) reads the header only, and is not a step toward `K15.5`'s full parse (see its own module docs) |
+//! | ADL 2 parsing | `K15.5`–`K15.7` | not implemented — [`adl2::parse_header`](self::parse_adl2_header) reads the header only, and [`cadl::parse_definition`](self::parse_definition) reads `definition`'s own `c_complex_object` grammar rule for a real but bounded subset of node kinds and primitive constraints (see its own module docs for the exact boundary); neither builds an [`Archetype`], and together they are still not a step toward `K15.5`'s full parse — no `language`, `description`, `rules`, `terminology`, or `annotations` |
 //! | ADL 1.4 ingestion and conversion | `K15.8`–`K15.10` | not implemented — [`adl14::parse_header`](self::parse_adl14_header) reads the header and concept line only, and is not a step toward `K15.8`'s conversion (see its own module docs) |
 //! | Specialisation and flattening | `K15.11`–`K15.13` | not implemented |
 //! | Template expansion, operational templates | `K15.14`–`K15.17` | not implemented |
@@ -97,6 +97,8 @@ mod adl2;
 mod adl_lexer;
 mod archetype;
 mod archetype_hrid;
+mod cadl;
+mod cadl_lexer;
 mod constraint;
 mod multiplicity;
 mod repository;
@@ -107,6 +109,7 @@ mod validate;
 pub use adl2::{Adl2Error, Adl2Header, parse_header as parse_adl2_header};
 pub use adl14::{Adl14Error, Adl14Header, parse_header as parse_adl14_header};
 pub use archetype::{Archetype, ROOT_OCCURRENCES};
+pub use cadl::{CadlError, parse_definition};
 pub use archetype_hrid::{ArchetypeHrid, VersionStatus};
 pub use constraint::{
     ArchetypeSlot, CArchetypeRoot, CAttribute, CAttributeTuple, CComplexObject,
