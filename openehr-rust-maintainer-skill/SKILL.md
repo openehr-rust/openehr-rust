@@ -20,7 +20,7 @@ have those loaded.
 
 Eighteen crates, **each its own Cargo workspace** — there is no root
 workspace, so `cargo` runs from inside a crate directory, never from the repo
-root. Eight are published to crates.io at 0.8.0 (`openehr`, `openehr-store`,
+root. Eight are published to crates.io at 0.9.0 (`openehr`, `openehr-store`,
 and the six dialect crates: `openehr-sqlite`, `openehr-postgresql`,
 `openehr-mysql`, `openehr-mariadb`, `openehr-mssql`, `openehr-oracle`); the
 other ten (`openehr-loco`, `openehr-assets`, and eight fuzz harnesses) are

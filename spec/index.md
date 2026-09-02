@@ -144,7 +144,7 @@ harnesses.
 The [conformance matrix](databases/conformance-matrix.md) is the detailed
 version of that last column and is the one to trust.
 
-All eight are on crates.io at **0.8.0**, published 2026-08-29, and local matches
+All eight are on crates.io at **0.9.0**, published 2026-09-02, and local matches
 published. [`agents/publishing.md`](../agents/publishing.md) holds the
 per-crate table and is the file to read before the next release.
 

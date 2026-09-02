@@ -38,7 +38,35 @@ engine would let "valid" mean "the parts I understood were satisfied". §15 is
 written to answer that — every unimplemented construct, incomplete lineage,
 unresolved artefact, and unreachable repository is a refusal, never a pass.
 
-## Latest release — 0.8.0, 2026-08-29
+## Latest release — 0.9.0, 2026-09-02
+
+**Two breaking Archetype Model changes, decided rather than left open, plus
+a real defect caught preparing the release.** `CObject::occurrences()` now
+returns `Option<&MultiplicityInterval>`, not `&MultiplicityInterval` —
+needed to represent AOM2's `C_COMPLEX_OBJECT_PROXY.use_target_occurrences()`
+at all — and `CPrimitive::TerminologyCode` lost its `code_list` field, which
+had no counterpart in AOM2's own single-valued `constraint` attribute.
+Minor bump, not a patch, for the reason `0.6.0` and `0.4.0` already gave
+their own breaking changes within `0.x`.
+
+The rest of `openehr::am`'s growth this release is additive: co-varying
+(tuple) constraints, soft terminology constraint statuses, `ARCHETYPE
+.rm_overlay`, a proxy-node type, a bounded cADL parser for `definition`'s own
+grammar rule (tested against a real published archetype's bytes, not an
+invented one), and checking that a primitive object's assumed value actually
+conforms to its own constraint. See `CHANGELOG.md`'s `## 0.9.0` entry for
+each one, and `openehr/spec/audit.md` **A-50** through **A-57**.
+
+**One real defect, found running the release checklist itself, not by a
+research pass.** `cargo bench --benches -- --test` — the release-profile
+smoke test `cargo test` never runs — failed two tests `cargo test` always
+passed: a side-effecting token read sat inside `debug_assert!`, whose
+argument a release build does not evaluate at all, so every ADL archetype
+header with a `meta_data` clause silently failed to parse in any
+release-profile build since the header readers were first added. Fixed
+before the cut; see **A-57**.
+
+## Previous release — 0.8.0, 2026-08-29
 
 **The MSRV floor moves from N−3 to N−2 — 1.95 to 1.96.** Shipped as a minor
 version, not a patch: `RV1` in
@@ -59,7 +87,7 @@ bundled SQLite, and `openehr-loco`, whose `loco-rs` dependency needs only
 1.94 — and CI ran green on the exact commit that cut the release before
 any crate went out. No public API changed.
 
-## Previous release — 0.7.4, 2026-08-27
+## 0.7.4, 2026-08-27
 
 **openEHR granted permission to use their trademarks, and every notice now
 says so in the Foundation's own words.** The grant is owner-reported and
@@ -92,7 +120,8 @@ changed in either release.
 
 | Version | Date | Headline |
 | --- | --- | --- |
-| **0.8.0** | 2026-08-29 | the MSRV floor moves from N−3 to N−2 (`lib:RV1`); 1.95 to 1.96 |
+| **0.9.0** | 2026-09-02 | two breaking Archetype Model changes decided (`lib:A-54`, `lib:A-55`), plus a release-profile-only defect found and fixed (`lib:A-57`) |
+| 0.8.0 | 2026-08-29 | the MSRV floor moves from N−3 to N−2 (`lib:RV1`); 1.95 to 1.96 |
 | 0.7.4 | 2026-08-27 | every notice becomes the Foundation's prescribed attribution, stating the granted permission |
 | 0.7.3 | 2026-08-26 | crate descriptions carry the notice in the owner-specified shape, checker-enforced |
 | 0.7.2 | 2026-08-26 | the notice reaches the descriptions and gets prominent in the crate READMEs |
@@ -142,7 +171,7 @@ that mentions this project; a written statement.
 Every claim below is backed by something in the repository that can be run or
 read. Nothing else about this project should be quoted as verified.
 
-- Eight crates on crates.io at 0.8.0, released 2026-08-29, implementing the
+- Eight crates on crates.io at 0.9.0, released 2026-09-02, implementing the
   openEHR Reference Model in Rust with SQL persistence for six engines.
 - **`openehr-sqlite` is at conformance level Verified** — a complete store,
   re-checked in continuous integration on every commit. Three dialects

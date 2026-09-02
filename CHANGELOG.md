@@ -5,6 +5,8 @@ Covers the eight published crates as a set: `openehr`, `openehr-store`,
 `openehr-mssql`, `openehr-oracle`. They are versioned in lockstep and released
 together.
 
+## Unreleased
+
 ## 0.9.0 — 2026-09-02
 
 **A minor bump, not a patch, over two breaking API changes.** Cargo treats
