@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**58 findings, 58 in the table below: 7 High, 31 Medium, 20 Low. 52 fixed or
+**59 findings, 59 in the table below: 7 High, 31 Medium, 21 Low. 53 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -145,6 +145,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-56 | Low | `C_PRIMITIVE_OBJECT.assumed_value` conforming to its own `constraint` (`Inv_valid_assumed_value`) — `A-48`'s own residual — was never checked; a kind-mismatched or out-of-range assumed value was accepted silently all the way to a caller who never suspected one | **fixed** — checked in `Archetype::check`, not at `CPrimitiveObject::with_assumed_value` (which builds a node in isolation, before the terminology a `C_TERMINOLOGY_CODE` `ac`-code needs is in scope); `C_UNSUPPORTED` is excluded rather than guessed at |
 | A-57 | High | `adl_lexer::Lexer::skip_parenthesised` put a side-effecting `self.next()` call inside `debug_assert!`, whose argument is not evaluated at all in a release build — every ADL 2/1.4 archetype header with a `meta_data` clause failed to parse in any release-profile build, silently, since the header readers were first added | **fixed** — the token consumed unconditionally into a binding, `debug_assert!` checking only the value; caught by `cargo bench --benches -- --test` (a release-profile run), invisible to `cargo test` (always debug profile) and to CI's own `test` job for the same reason |
 | A-58 | Low | `walk_complex` visited a `C_ATTRIBUTE_TUPLE` and reported it `Unchecked` unconditionally — `A-50`'s own residual — never resolving the instance's actual values and comparing them against a row, so a co-varying `{units, magnitude}`/`{value, symbol}` constraint was never actually enforced no matter what the data said | **fixed** — `walk_attribute_tuple` resolves each co-varying attribute to its one instance value, evaluates every row's every column by delegating to `walk_primitive` itself, and combines the three-valued result (`Conforms`/`Violates`/`Unchecked`) across a row by AND and across the tuple by OR; a column that cannot be resolved to exactly one value, or a `tuples` list with no rows at all, stays `Unchecked` rather than being guessed at |
+| A-59 | Low | `ArchetypeSlot` had no `is_closed` field — AOM2's `ARCHETYPE_SLOT.is_closed` and its `any_allowed()` function could not be represented at all, so an archetype that closes a slot to further filling could not say so under any representation | **fixed** — `is_closed`/`closed()`/`is_closed()`/`any_allowed()` added, defaulting `false` per AOM2's own stated default; carried, not enforced — `am::validate::walk_object` cannot check it for the same reason it cannot check a slot's filler at all: `crate::path::Node` does not expose `ARCHETYPED.archetype_id` |
 
 ---
 
@@ -3345,3 +3346,61 @@ the column's own path and `"0 value(s)"`).
 **No residual.** Every branch `walk_attribute_tuple` can take — unresolvable
 column, definite match, definite non-match, and the zero-rows edge case — has
 a test exercising it.
+
+## A-59 — `ARCHETYPE_SLOT.is_closed` had no counterpart
+
+**Severity: Low. Status: fixed.**
+
+Found while comparing this crate's `am::constraint` module against
+`org.openehr.am.aom2.archetype_slot.adoc` directly, the same method `A-50`,
+`A-52`, and `A-53` each used to find their own gaps, rather than assuming
+this crate's existing `ArchetypeSlot` — added before this pass, and already
+carrying `includes`/`excludes` — was complete because it had a name and two
+of its three fields.
+
+**The gap.** AOM2 declares `ARCHETYPE_SLOT` with three attributes —
+`includes: List<ASSERTION> [0..1]`, `excludes: List<ASSERTION> [0..1]`, and
+`is_closed: Boolean [1..1]` — plus one function, `any_allowed(): Boolean`,
+`"True if no constraints stated, and slot is not closed."` This crate's
+`ArchetypeSlot` had the first two and neither the third nor the function. An
+archetype closing a slot — `"closed to further filling either in further
+specialisations or at runtime"`, the class's own words for `is_closed` —
+could not say so under any representation: not accepted and checked, not
+accepted and carried unchecked, not even round-tripped through JSON, the
+same silent-loss shape `A-46`/`A-48`/`A-50`/`A-52` each found in a different
+class.
+
+**Fixed.** `is_closed: bool` added, defaulting `false` — AOM2's own stated
+default, so a slot left alone stays open, matching every existing fixture
+and caller without change. `closed()` is a builder, one-directional like
+`CComplexObjectProxy`'s own occurrence builder: there is no `open()`,
+because `false` is already what building a slot and calling nothing extra
+produces. `is_closed()` reads it back, and `any_allowed()` is `AOM2`'s own
+function verbatim: `includes.is_empty() && excludes.is_empty() &&
+!is_closed`. `#[serde(default)]` on the new field keeps JSON written before
+this pass existed readable, the same choice `A-46`/`A-48`/`A-50` made for
+their own late-added fields.
+
+**Not enforced, and not able to be from where this crate currently
+validates.** `am::validate::walk_object`'s existing `CObject::Slot` arm
+reports every slot `Unchecked` regardless — added before this finding, for
+a reason `is_closed` does not touch: which archetype, if any, fills a slot
+is recorded on the *instance's* own `ARCHETYPED.archetype_id`, and
+`crate::path::Node` — the interface every walk function in `am::validate`
+reads instance data through — does not expose it at all. `is_closed`
+answers a different question (is filling permitted here, at authoring or
+specialisation time) than a filler check would (what, if anything, actually
+filled it, at instance-validation time), so even resolving the `Node` gap
+would not make this field enforceable by itself; the two are separate
+pieces of work. Carrying it unchecked, rather than not representing it at
+all, is the same choice `A-48` made for `assumed_value` before `A-56`
+checked its own invariant three findings later.
+
+**Tests.** Four, in `am::constraint`: the default-open case and each of the
+three ways `any_allowed()` can become false — `closed()`, one inclusion
+assertion, one exclusion assertion — checked separately, since folding them
+into one assertion would hide which restriction actually flipped the
+result; canonical-JSON round-tripping with the field set; and a fixture
+written as though from before `is_closed` existed — literal JSON with no
+such key at all — still deserialising, and reading as the AOM2-stated
+default.

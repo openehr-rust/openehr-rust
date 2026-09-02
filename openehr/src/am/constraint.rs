@@ -897,6 +897,24 @@ pub struct ArchetypeSlot {
     /// requirement, and until then a slot's fillers are unchecked, not open.
     includes: Vec<String>,
     excludes: Vec<String>,
+    /// `ARCHETYPE_SLOT.is_closed`: "True if this slot specification in this
+    /// artefact is closed to further filling either in further
+    /// specialisations or at runtime" (`org.openehr.am.aom2.archetype_slot`).
+    /// Defaults `false`, per the same source — a slot is open unless an
+    /// author explicitly closes it. `#[serde(default)]` keeps JSON written
+    /// before this field existed readable, the same choice `A-46`/`A-48`
+    /// made for `C_PRIMITIVE_OBJECT`'s own late-added fields.
+    ///
+    /// Carried, not enforced: [`crate::am::validate::walk_object`] reports
+    /// every slot `Unchecked` regardless, for a reason this field does not
+    /// change — which archetype, if any, fills a slot is recorded on the
+    /// instance's own `ARCHETYPED.archetype_id`, and `crate::path::Node`
+    /// does not expose it. `is_closed` says whether filling is permitted at
+    /// all, not what a particular filler was, so even a full fix for that
+    /// gap would still need this field read at authoring/specialisation
+    /// time, not at this crate's own instance-validation time.
+    #[serde(default)]
+    is_closed: bool,
 }
 
 impl ArchetypeSlot {
@@ -926,6 +944,7 @@ impl ArchetypeSlot {
             occurrences,
             includes: Vec::new(),
             excludes: Vec::new(),
+            is_closed: false,
         })
     }
 
@@ -940,6 +959,16 @@ impl ArchetypeSlot {
     #[must_use]
     pub fn excluding(mut self, assertion: impl Into<String>) -> Self {
         self.excludes.push(assertion.into());
+        self
+    }
+
+    /// Closes the slot to further filling, in this artefact, any further
+    /// specialisation, and at runtime. There is no builder for the opposite:
+    /// `false` is the default AOM2 itself states, so a slot left alone is
+    /// already open.
+    #[must_use]
+    pub const fn closed(mut self) -> Self {
+        self.is_closed = true;
         self
     }
 
@@ -959,6 +988,20 @@ impl ArchetypeSlot {
     #[must_use]
     pub fn excludes(&self) -> &[String] {
         &self.excludes
+    }
+
+    /// Whether this slot specification is closed to further filling.
+    #[must_use]
+    pub const fn is_closed(&self) -> bool {
+        self.is_closed
+    }
+
+    /// `ARCHETYPE_SLOT.any_allowed()`: "True if no constraints stated, and
+    /// slot is not closed." — an unrestricted, open slot that any archetype
+    /// matching `rm_type_name` may fill.
+    #[must_use]
+    pub fn any_allowed(&self) -> bool {
+        self.includes.is_empty() && self.excludes.is_empty() && !self.is_closed
     }
 }
 
@@ -1345,6 +1388,61 @@ mod tests {
         )
         .unwrap();
         assert!(root.with_node_id(malformed).is_err());
+    }
+
+    /// `ARCHETYPE_SLOT.is_closed` defaults `false` — a slot is open unless an
+    /// author closes it — and `any_allowed()` is true exactly when nothing
+    /// restricts the slot at all: no inclusion or exclusion assertion, and
+    /// not closed. Each of the three ways to lose `any_allowed()` is checked
+    /// on its own, since a fold over the three would hide which one actually
+    /// flipped it.
+    #[test]
+    fn a_slot_defaults_open_and_any_allowed_tracks_all_three_restrictions() {
+        let open = ArchetypeSlot::new("CLUSTER", "at0001", MultiplicityInterval::OPTIONAL).unwrap();
+        assert!(!open.is_closed());
+        assert!(open.any_allowed());
+
+        let closed = open.clone().closed();
+        assert!(closed.is_closed());
+        assert!(!closed.any_allowed());
+
+        let included = open.clone().including("archetype_id/value matches {/.*blood_pressure.*/}");
+        assert!(!included.is_closed());
+        assert!(!included.any_allowed());
+
+        let excluded = open.excluding("archetype_id/value matches {/.*experimental.*/}");
+        assert!(!excluded.is_closed());
+        assert!(!excluded.any_allowed());
+    }
+
+    #[test]
+    fn a_slot_round_trips_through_canonical_json() {
+        let slot = ArchetypeSlot::new("CLUSTER", "at0001", MultiplicityInterval::OPTIONAL)
+            .unwrap()
+            .including("archetype_id/value matches {/openEHR-EHR-CLUSTER\\.device\\..*/}")
+            .closed();
+        let json = serde_json::to_value(&slot).unwrap();
+        assert_eq!(json["is_closed"], serde_json::json!(true));
+        let back: ArchetypeSlot = serde_json::from_value(json).unwrap();
+        assert_eq!(back, slot);
+    }
+
+    #[test]
+    fn a_slot_serialised_before_is_closed_existed_still_deserialises_as_open() {
+        // `#[serde(default)]` on `is_closed`: JSON written by an earlier
+        // version of this crate, before this field existed, carries no
+        // `is_closed` key at all — it must still read, and read as the
+        // AOM2-stated default of `false`, not refuse to deserialise.
+        let json = serde_json::json!({
+            "rm_type_name": "CLUSTER",
+            "node_id": "at0001",
+            "occurrences": { "lower": 0, "upper": 1 },
+            "includes": [],
+            "excludes": [],
+        });
+        let back: ArchetypeSlot = serde_json::from_value(json).unwrap();
+        assert!(!back.is_closed());
+        assert!(back.any_allowed());
     }
 
     #[test]

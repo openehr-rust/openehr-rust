@@ -14,6 +14,13 @@ together.
   signature changes, only what `validate_against_archetype` reports for
   archetypes using the tuple form (AOM2's replacement for ADL 1.4's
   `C_DV_QUANTITY`/`C_DV_ORDINAL`).
+- `am::ArchetypeSlot` gains `is_closed`/`closed()`/`is_closed()`/
+  `any_allowed()`, AOM2's `ARCHETYPE_SLOT.is_closed` and its function, which
+  had no counterpart at all before now. See `A-59` in
+  `openehr/spec/audit.md`. Not a breaking change: an additive field
+  defaulting to AOM2's own stated default, `#[serde(default)]` on the wire.
+  Carried, not enforced — `am::validate` cannot check it yet, for the same
+  reason it cannot check a slot's filler at all.
 
 ## 0.9.0 — 2026-09-02
 
