@@ -109,8 +109,9 @@ pub use adl14::{Adl14Error, Adl14Header, parse_header as parse_adl14_header};
 pub use archetype::{Archetype, ROOT_OCCURRENCES};
 pub use archetype_hrid::{ArchetypeHrid, VersionStatus};
 pub use constraint::{
-    ArchetypeSlot, CArchetypeRoot, CAttribute, CAttributeTuple, CComplexObject, CObject,
-    ConstraintStatus, CPrimitive, CPrimitiveObject, CPrimitiveTuple, NodeIdSyntax, PrimitiveValue,
+    ArchetypeSlot, CArchetypeRoot, CAttribute, CAttributeTuple, CComplexObject,
+    CComplexObjectProxy, CObject, ConstraintStatus, CPrimitive, CPrimitiveObject, CPrimitiveTuple,
+    NodeIdSyntax, PrimitiveValue,
 };
 pub use multiplicity::{Cardinality, MultiplicityInterval};
 pub use repository::{ArchetypeRepository, Provenance, RepositoryError, Resolved};

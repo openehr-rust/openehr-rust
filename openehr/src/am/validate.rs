@@ -530,6 +530,12 @@ fn walk_object(
              ARCHETYPED.archetype_id, which crate::path::Node does not expose",
         ),
         CObject::ArchetypeRoot(filled) => walk_archetype_root(filled, node, &path, ctx),
+        CObject::Proxy(proxy) => ctx.unchecked_detail(
+            &path,
+            "C_COMPLEX_OBJECT_PROXY: this crate does not resolve target_path against the \
+             archetype's own constraint tree",
+            proxy.target_path(),
+        ),
         CObject::Primitive(_) => unreachable!("handled above"),
     }
 }
@@ -867,8 +873,9 @@ mod tests {
     use super::*;
     use crate::am::{
         ArchetypeRepository, ArchetypeSlot, ArchetypeTerminology, CArchetypeRoot, CAttribute,
-        CAttributeTuple, CComplexObject, CObject, ConstraintStatus, CPrimitiveObject, Cardinality,
-        MultiplicityInterval, Provenance, RepositoryError, Resolved, TermDefinition,
+        CAttributeTuple, CComplexObject, CComplexObjectProxy, CObject, ConstraintStatus,
+        CPrimitiveObject, Cardinality, MultiplicityInterval, Provenance, RepositoryError,
+        Resolved, TermDefinition,
     };
     use crate::base::Interval;
     use crate::path::Pathable as _;
@@ -1096,6 +1103,38 @@ mod tests {
         assert_eq!(
             report.unchecked()[0].archetype_path(),
             "/data[id2]/items[at0004]"
+        );
+    }
+
+    /// `C_COMPLEX_OBJECT_PROXY`: resolving `target_path` against the
+    /// archetype's own constraint tree is not implemented (see
+    /// `CComplexObjectProxy`'s own module documentation), so a node it
+    /// governs is reported unchecked, never as passing — the same
+    /// `K15.20` discipline `a_slot_is_reported_unchecked_never_as_passing`
+    /// proves for `ARCHETYPE_SLOT`.
+    #[test]
+    fn a_proxy_is_reported_unchecked_never_as_passing() {
+        let proxy = CObject::Proxy(
+            CComplexObjectProxy::new(
+                "ELEMENT",
+                Some("at0004".to_owned()),
+                MultiplicityInterval::MANDATORY,
+                "/data[id2]/items[at0099]",
+            )
+            .unwrap(),
+        );
+        let archetype = evaluation_archetype(proxy);
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Systolic", "at0004"),
+            placeholder_value(),
+        )]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(!report.is_conformant());
+        assert!(report.violations().is_empty());
+        assert_eq!(report.unchecked().len(), 1);
+        assert_eq!(
+            report.unchecked()[0].detail(),
+            Some("/data[id2]/items[at0099]")
         );
     }
 

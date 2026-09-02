@@ -248,6 +248,10 @@ pub enum CObject {
     /// A slot already filled by a named archetype, as a template does.
     #[serde(rename = "C_ARCHETYPE_ROOT")]
     ArchetypeRoot(CArchetypeRoot),
+    /// A constraint defined by reference to another node in the same
+    /// archetype, rather than repeated inline.
+    #[serde(rename = "C_COMPLEX_OBJECT_PROXY")]
+    Proxy(CComplexObjectProxy),
 }
 
 impl CObject {
@@ -259,6 +263,7 @@ impl CObject {
             Self::Primitive(o) => &o.rm_type_name,
             Self::Slot(o) => &o.rm_type_name,
             Self::ArchetypeRoot(o) => &o.rm_type_name,
+            Self::Proxy(o) => &o.rm_type_name,
         }
     }
 
@@ -270,6 +275,7 @@ impl CObject {
             Self::Primitive(o) => o.node_id.as_deref(),
             Self::Slot(o) => Some(&o.node_id),
             Self::ArchetypeRoot(o) => o.node_id.as_deref(),
+            Self::Proxy(o) => o.node_id.as_deref(),
         }
     }
 
@@ -281,6 +287,7 @@ impl CObject {
             Self::Primitive(o) => &o.occurrences,
             Self::Slot(o) => &o.occurrences,
             Self::ArchetypeRoot(o) => &o.occurrences,
+            Self::Proxy(o) => &o.occurrences,
         }
     }
 
@@ -290,7 +297,7 @@ impl CObject {
         match self {
             Self::Complex(o) => &o.attributes,
             Self::ArchetypeRoot(o) => &o.attributes,
-            Self::Primitive(_) | Self::Slot(_) => &[],
+            Self::Primitive(_) | Self::Slot(_) | Self::Proxy(_) => &[],
         }
     }
 
@@ -306,7 +313,7 @@ impl CObject {
     pub fn attribute_tuples(&self) -> &[CAttributeTuple] {
         match self {
             Self::Complex(o) => &o.attribute_tuples,
-            Self::ArchetypeRoot(_) | Self::Primitive(_) | Self::Slot(_) => &[],
+            Self::ArchetypeRoot(_) | Self::Primitive(_) | Self::Slot(_) | Self::Proxy(_) => &[],
         }
     }
 }
@@ -1001,6 +1008,117 @@ impl CArchetypeRoot {
     }
 }
 
+/// A constraint defined by reference to another node in the same archetype:
+/// `C_COMPLEX_OBJECT_PROXY`.
+///
+/// AOM2's own description: "A constraint defined by proxy, using a reference
+/// to an object constraint defined elsewhere in the same archetype"
+/// (`openEHR/specifications-AM`,
+/// `docs/UML/classes/org.openehr.am.aom2.c_complex_object_proxy.adoc`) —
+/// [`Self::target_path`] names the other node, in archetype path notation,
+/// rather than repeating its constraint tree.
+///
+/// **`use_target_occurrences()` is not modelled.** AOM2 lets `occurrences` be
+/// `Void` here specifically to mean "use the target node's own occurrences
+/// instead of stating any locally", the defining feature of a proxy node
+/// alongside `target_path` itself. This crate's [`CObject::occurrences`]
+/// dispatcher returns `&MultiplicityInterval` for every kind, a shape
+/// [`CComplexObject`], [`CPrimitiveObject`], [`ArchetypeSlot`], and
+/// [`CArchetypeRoot`] already all commit to and that changing would break
+/// already-published API (the same reason `A-51`'s `code_list` shape was
+/// left rather than corrected). [`Self::occurrences`] is therefore required
+/// here too, not `Option`, and a proxy that would defer to its target cannot
+/// be represented — carried as a residual (`A-53` in `spec/audit.md`) rather
+/// than silently narrowed to "always state it explicitly" with no record of
+/// the gap.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CComplexObjectProxy {
+    rm_type_name: String,
+    node_id: Option<String>,
+    occurrences: MultiplicityInterval,
+    target_path: String,
+}
+
+impl CComplexObjectProxy {
+    /// Builds a proxy constraint.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseError`] if the RM type name or the target path is
+    /// empty, or if the node identifier is present and malformed. A proxy
+    /// naming no target is not a reference to anything, and openEHR's own
+    /// path grammar never produces an empty path.
+    pub fn new(
+        rm_type_name: impl Into<String>,
+        node_id: Option<String>,
+        occurrences: MultiplicityInterval,
+        target_path: impl Into<String>,
+    ) -> Result<Self, ParseError> {
+        let rm_type_name = rm_type_name.into();
+        if rm_type_name.is_empty() {
+            return Err(ParseError::invariant(
+                "C_COMPLEX_OBJECT_PROXY",
+                "empty rm_type_name",
+            ));
+        }
+        if let Some(code) = node_id.as_deref()
+            && NodeIdSyntax::of(code).is_none()
+        {
+            return Err(ParseError::new(
+                "C_COMPLEX_OBJECT_PROXY",
+                "node_id is not an id-, at- or ac-code",
+                code,
+            ));
+        }
+        let target_path = target_path.into();
+        if target_path.is_empty() {
+            return Err(ParseError::invariant(
+                "C_COMPLEX_OBJECT_PROXY",
+                "empty target_path",
+            ));
+        }
+        Ok(Self {
+            rm_type_name,
+            node_id,
+            occurrences,
+            target_path,
+        })
+    }
+
+    /// The RM class constrained — normally the same class the target node
+    /// itself constrains.
+    #[must_use]
+    pub fn rm_type_name(&self) -> &str {
+        &self.rm_type_name
+    }
+
+    /// The node identifier, if this node carries one.
+    #[must_use]
+    pub fn node_id(&self) -> Option<&str> {
+        self.node_id.as_deref()
+    }
+
+    /// How many times this node may occur under its parent attribute.
+    ///
+    /// Always the locally-stated value — see this type's own documentation
+    /// for AOM2's `use_target_occurrences()`, which this crate does not
+    /// model.
+    #[must_use]
+    pub const fn occurrences(&self) -> &MultiplicityInterval {
+        &self.occurrences
+    }
+
+    /// The other node this one refers to, in archetype path notation
+    /// (`org.openehr.am.aom2.c_complex_object_proxy.adoc`'s `target_path`).
+    /// Carried as written; resolving it against the archetype's own
+    /// constraint tree is not implemented (see [`crate::am::validate`]'s
+    /// treatment of [`CObject::Proxy`]).
+    #[must_use]
+    pub fn target_path(&self) -> &str {
+        &self.target_path
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1190,6 +1308,60 @@ mod tests {
         assert!(root.node_id().is_none());
         let identified = root.with_node_id("id2").unwrap();
         assert_eq!(identified.node_id(), Some("id2"));
+    }
+
+    #[test]
+    fn a_proxy_refuses_an_empty_target_path() {
+        let err = CComplexObjectProxy::new(
+            "ELEMENT",
+            Some("at0010".to_owned()),
+            MultiplicityInterval::MANDATORY,
+            "",
+        )
+        .unwrap_err();
+        assert_eq!(err.reason, "empty target_path");
+    }
+
+    #[test]
+    fn a_proxy_carries_its_target_path_and_is_reachable_through_cobject() {
+        let proxy = CComplexObjectProxy::new(
+            "ELEMENT",
+            Some("at0010".to_owned()),
+            MultiplicityInterval::OPTIONAL,
+            "/data[at0001]/events[at0002]/data[at0003]/items[at0004]",
+        )
+        .unwrap();
+        assert_eq!(
+            proxy.target_path(),
+            "/data[at0001]/events[at0002]/data[at0003]/items[at0004]"
+        );
+        // `CObject`'s own dispatcher must see the same rm_type_name, node_id,
+        // and occurrences a caller matching on `CObject::Complex`/`Primitive`
+        // already relies on, or a container attribute mixing a proxy with
+        // ordinary alternatives could not check it alongside them.
+        let wrapped = CObject::Proxy(proxy);
+        assert_eq!(wrapped.rm_type_name(), "ELEMENT");
+        assert_eq!(wrapped.node_id(), Some("at0010"));
+        assert_eq!(wrapped.occurrences(), &MultiplicityInterval::OPTIONAL);
+        assert!(wrapped.attributes().is_empty());
+        assert!(wrapped.attribute_tuples().is_empty());
+    }
+
+    #[test]
+    fn a_proxy_round_trips_through_canonical_json() {
+        let proxy = CObject::Proxy(
+            CComplexObjectProxy::new(
+                "ELEMENT",
+                Some("at0010".to_owned()),
+                MultiplicityInterval::MANDATORY,
+                "/data[at0001]/events[at0002]",
+            )
+            .unwrap(),
+        );
+        let json = serde_json::to_value(&proxy).unwrap();
+        assert_eq!(json["_type"], "C_COMPLEX_OBJECT_PROXY");
+        let back: CObject = serde_json::from_value(json).unwrap();
+        assert_eq!(back, proxy);
     }
 
     #[test]

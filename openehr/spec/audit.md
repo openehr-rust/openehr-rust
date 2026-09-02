@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**52 findings, 52 in the table below: 6 High, 30 Medium, 16 Low. 46 fixed or
+**53 findings, 53 in the table below: 6 High, 31 Medium, 16 Low. 47 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -139,6 +139,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-50 | Medium | `C_COMPLEX_OBJECT` had no `attribute_tuples` field — `C_ATTRIBUTE_TUPLE`/`C_PRIMITIVE_TUPLE` did not exist under any name, so a `{units, magnitude}` or `{value, symbol}` co-varying constraint (AOM2's replacement for ADL 1.4's `C_DV_QUANTITY`/`C_DV_ORDINAL`) could not be represented at all, not even as `CPrimitive::Unsupported` | **fixed** — `CAttributeTuple`/`CPrimitiveTuple` added, wired onto `CComplexObject` via a builder; the tree walk reports a node governed by one as `Unchecked` rather than silently passing it |
 | A-51 | Medium | `CPrimitive::TerminologyCode` had no `constraint_status` field, so an `extensible`/`preferred`/`example` (non-`Required`) terminology constraint could not be distinguished from a required one — `am::validate` reported a violation for conformant data whenever the actual code did not match the list or value set, which AOM2 states plainly is not a violation for a soft constraint | **fixed**, residual documented — `ConstraintStatus` added and checked in `walk_primitive`; `code_list: Vec<String>`, this variant's existing shape, has no counterpart in AOM2's own single-valued `constraint: String` and is left open rather than corrected in the same pass, since fixing it is a breaking change to an already-published type |
 | A-52 | Low | `ARCHETYPE.rm_overlay` had no counterpart at all — visibility and aliasing statements for RM attributes outside the constrained structure could not be attached to an `Archetype`, silently vanishing on JSON read the same way `A-50`/`A-46` found elsewhere | **fixed** — `RmOverlay`/`RmAttributeVisibility`/`VisibilityType` added in a new `am::rm_overlay` module, attached via `Archetype::with_rm_overlay`; `Inv_alias_validity` checked at construction |
+| A-53 | Medium | `C_COMPLEX_OBJECT_PROXY` had no counterpart under any name — an archetype using a proxy node to reference a constraint defined elsewhere in the same archetype, rather than repeating it, could not be represented at all, the same shape of gap `A-50` found for tuple constraints | **fixed**, residual documented — `CComplexObjectProxy` added as a new `CObject::Proxy` variant, reported `Unchecked` by `am::validate` rather than resolved; AOM2's `use_target_occurrences()` (`occurrences` deferring to the target node's own) is not modelled, since making it optional would break `CObject::occurrences`'s already-published signature |
 
 ---
 
@@ -2964,11 +2965,84 @@ object or the root", which by definition are paths this crate's own
 constraint tree does not describe, so there is nothing in an `Archetype` to
 validate a path against even in principle.
 
-**A residual noticed in passing, not chased here.** `parent_archetype_id` is
-typed `Option<ArchetypeId>` in this crate, but AOM2's own attribute is a bare
-`String`, described as "may take the form of an archetype interface
-identifier, i.e. the identifier up to the major version only, or may be a
-full archetype identifier" — a shape that may or may not be everything
-`ArchetypeId::from_str` accepts. Whether that is a real mismatch, and if so
-how large, was not checked in this pass; noted here so it is not forgotten
-rather than investigated hastily alongside an unrelated finding.
+**A residual noticed in passing, checked in the next pass and cleared.**
+`parent_archetype_id` is typed `Option<ArchetypeId>` here, but AOM2's own
+attribute is a bare `String`, described as "may take the form of an
+archetype interface identifier, i.e. the identifier up to the major version
+only, or may be a full archetype identifier". Checked against
+`openEHR/adl-antlr`'s own grammar (`src/main/antlr/adl/base_lexer.g4`):
+`ARCHETYPE_REF: ARCHETYPE_HRID_ROOT '.v' INTEGER ('.' DIGIT+)*` — every form
+of an archetype reference, "interface" included, requires `.v` followed by
+at least the major version digit; there is no version-less form to be
+narrower than. "Up to the major version only" means exactly what
+`ArchetypeId::from_str` already accepts — one to three numeric version
+components, one being the minimum — so `parent_archetype_id`'s typing is not
+a new defect. The one real gap in the same identifier is already on record:
+`ARCHETYPE_HRID_ROOT` allows an optional `NAMESPACE '::'` prefix
+`ArchetypeId::from_str` does not, which is `A-49`'s own residual, not a new
+one this parent-identifier check adds.
+
+## A-53 — `C_COMPLEX_OBJECT_PROXY` did not exist under any name
+
+**Severity: Medium. Status: fixed, residual documented.**
+
+Found continuing the same per-class sweep of `am.aom2.constraint_model`
+`A-50` started: `SIBLING_ORDER`, `CONSTRAINT_STATUS`, and
+`C_COMPLEX_OBJECT_PROXY` were the classes that finding named as having no
+counterpart here. `CONSTRAINT_STATUS` is closed — `A-51`'s own
+`ConstraintStatus` is exactly it, confirmed by checking that AOM2 uses the
+enumeration nowhere but `C_TERMINOLOGY_CODE.constraint_status`, so nothing
+further is missing on that account. This finding is the second of the
+remaining two, and the only one of them buildable without specialisation
+support this crate does not have — `SIBLING_ORDER` remains open for the
+reason `A-50` already gave it.
+
+**What was missing.** `C_COMPLEX_OBJECT_PROXY` is `C_OBJECT`'s fourth
+concrete descendant alongside `C_COMPLEX_OBJECT`, `C_PRIMITIVE_OBJECT`, and
+`ARCHETYPE_SLOT` — a node that, instead of stating its own constraint tree,
+names another node in the same archetype by path and means "the same
+constraint as that one". `openEHR/specifications-AM`,
+`docs/UML/classes/org.openehr.am.aom2.c_complex_object_proxy.adoc`: "A
+constraint defined by proxy, using a reference to an object constraint
+defined elsewhere in the same archetype." With no counterpart at all, an
+archetype using a proxy node — the mechanism a real archetype uses to avoid
+repeating an identical subtree, the same economy `C_ATTRIBUTE_TUPLE` gives
+co-varying constraints — could not be represented, checked, or round-tripped
+through JSON: `CObject` had no variant to deserialize it into, the same
+silent-loss shape `A-50` found for `attribute_tuples`.
+
+**Fixed.** `openehr::am::CComplexObjectProxy` added as a new `CObject::Proxy`
+variant — `#[non_exhaustive]` on `CObject` means an external caller matching
+only the four existing variants keeps compiling, by design (see the enum's
+own documentation on that point), but every exhaustive match inside this
+crate itself needed a new arm, and got one: `rm_type_name`, `node_id`,
+`occurrences`, `attributes`, `attribute_tuples`, and `am::validate`'s own
+`walk_object` dispatch. A node governed by a proxy is reported `Unchecked`,
+naming `target_path`, rather than resolved — resolving it means looking up
+another node in the *same archetype's own constraint tree* by archetype
+path, a capability distinct from anything `crate::path::Node` does (that
+walks Reference Model *data*, not an `am::constraint` tree) and not
+attempted here.
+
+**Not attempted — the residual named in `CComplexObjectProxy`'s own module
+documentation.** AOM2 lets a proxy's `occurrences` be `Void`, meaning
+`use_target_occurrences()`: use the target node's own occurrences instead of
+stating any locally, the class's second defining feature alongside
+`target_path` itself. Representing that needs `CObject::occurrences()` to
+return `Option<&MultiplicityInterval>` rather than `&MultiplicityInterval`,
+and every one of the four existing variants already commits to the
+non-`Option` shape as published API. Changing it is the same kind of
+breaking change `A-51` declined to make to `code_list` without going through
+`agents/publishing.md`'s process, and is declined here for the same reason:
+`CComplexObjectProxy::occurrences` is required, not optional, so a proxy
+that would defer to its target cannot be built with this type as it stands.
+Two open, undecided breaking changes to the same enum family — this one and
+`A-51`'s — are now on record together rather than each looking like an
+isolated shape choice.
+
+Four new tests: an empty `target_path` refused; `rm_type_name`/`node_id`/
+`occurrences`/`attributes`/`attribute_tuples` all reachable identically
+through `CObject::Proxy` as they are through every other variant;
+canonical-JSON round-tripping; and, in `am::validate`, a proxy governing a
+real `ELEMENT` reported `Unchecked` with its `target_path` as the detail,
+never as a silent pass.
