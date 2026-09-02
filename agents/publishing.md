@@ -257,6 +257,21 @@ No CI publish workflow exists — publishing is this manual step, from the
 maintainer's own machine, on purpose (`spec/trusted-publishing/index.md`, and
 see the section below).
 
+**Governance change, 2026-09-02: Claude is enabled to run `cargo publish`.**
+"The maintainer's own machine" now includes a Claude Code session running on
+it, invoked by the maintainer, under the same already-authenticated
+`cargo login` session — not a separate identity, not a new token, not CI.
+The token, the accountability, and the crates.io owner account are
+unchanged and remain the maintainer's alone; what changes is who is allowed
+to type the command on that machine. This does **not** relax anything else
+in this file: every check below — CI green on the commit being published,
+`cargo package --list` read rather than skimmed, the conformance-level and
+licence checks, `W0.21`'s rule against publishing over an open finding
+against a crate's own claims — still applies in full, and a Claude Code
+session runs it in full rather than treating the grant as licence to skip
+steps a human would not skip. See `MAINTAINERS.md`'s publishing-identities
+table for the same change recorded there.
+
 After the first publish of a crate, add the other owners:
 
 ```sh
