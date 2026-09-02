@@ -45,14 +45,10 @@ Invisible to `cargo test` (always `dev` profile); caught by
 file's own "before publishing anything" checklist. See
 `openehr/spec/audit.md` **A-57**. The gate earned its keep again.
 
-The commit that carries this paragraph, the version bump, and that fix
-together is the one CI must run green on before anything is published —
-its hash belongs in the "Record that 0.9.0 is published" commit that
-follows, not here, since a commit cannot state its own hash. CI's own
-result on it is the gate, the same discipline every entry below already
-follows: this paragraph does not assert green until the run has actually
-completed and been read, and nothing publishes from this state until it
-has.
+**CI ran green on `bb05f26`, the commit that cut it, before publishing.**
+All 32 jobs succeeded — `run 33609761205`, read via `gh run view`, not
+assumed from the push alone. That commit carries the version bump, the
+changelog, and the `debug_assert!` fix above together.
 
 **0.7.2 went out ahead of this file's process** (2026-08-26): the versions
 were bumped and the eight crates published before the inter-crate pins, this
