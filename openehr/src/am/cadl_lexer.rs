@@ -151,6 +151,73 @@ impl<'a> Lexer<'a> {
         Some(text)
     }
 
+    /// Attempts to read a `CONTAINED_REGEXP`'s own delimited pattern —
+    /// `'{' WS* (SLASH_REGEXP | CARET_REGEXP)` (`base_lexer.g4`) — leaving
+    /// the lexer positioned right after the closing delimiter, *before*
+    /// `CONTAINED_REGEXP`'s own optional `';' STRING` assumed value and
+    /// mandatory closing `'}'`: both of those are ordinary tokens
+    /// (`Symbol`/`Str`), read through [`Self::next`] by the caller, unlike
+    /// the regex body itself, which is not validly tokenizable that way —
+    /// it may contain `{`, `,`, `"`, anything but an unescaped delimiter or
+    /// a newline.
+    ///
+    /// Returns `Ok(None)`, consuming nothing, when the next non-trivia
+    /// text is not shaped like a `CONTAINED_REGEXP` at all — no leading
+    /// `'{'`, or a `'{'` whose first non-trivia character is neither `/`
+    /// nor `^` — so the caller falls back to its own plain `'{' ... '}'`
+    /// handling (`c_objects`, or an `ARCHETYPE_SLOT`'s own `include`/
+    /// `exclude` block). No other lexical shape in this grammar starts a
+    /// brace-delimited block with `/` or `^`, so this dispatch is exact,
+    /// not a guess.
+    ///
+    /// Returns `Err(())` for a `'{'` that *did* start a regex but has no
+    /// matching unescaped closing delimiter before a newline or the end of
+    /// input, or whose body is empty (`base_lexer.g4`'s own
+    /// `SLASH_REGEXP_CHAR+`/`CARET_REGEXP_CHAR+` both require one or more)
+    /// — the caller attributes the offset, since this method does not
+    /// track one of its own.
+    ///
+    /// The returned text includes both delimiters, exactly as written,
+    /// backslash escapes and all — the same "carried, not evaluated" form
+    /// [`crate::am::CPrimitive::String`]'s own regex `list` elements
+    /// already use (`A-63`).
+    pub(super) fn try_read_contained_regexp(&mut self) -> Result<Option<&'a str>, ()> {
+        self.skip_trivia();
+        if !self.rest.starts_with('{') {
+            return Ok(None);
+        }
+        let after_brace = self.rest[1..].trim_start();
+        let Some(delimiter @ ('/' | '^')) = after_brace.chars().next() else {
+            return Ok(None);
+        };
+        let body = &after_brace[delimiter.len_utf8()..];
+        let mut chars = body.char_indices();
+        let mut close = None;
+        while let Some((i, c)) = chars.next() {
+            if c == '\\' {
+                chars.next();
+                continue;
+            }
+            if c == delimiter {
+                close = Some(i);
+                break;
+            }
+            if c == '\n' || c == '\r' {
+                break;
+            }
+        }
+        let Some(close) = close else {
+            return Err(());
+        };
+        if close == 0 {
+            return Err(());
+        }
+        let end = delimiter.len_utf8() + close + delimiter.len_utf8();
+        let text = &after_brace[..end];
+        self.rest = &after_brace[end..];
+        Ok(Some(text))
+    }
+
     /// Skips whitespace and `-- ...` line comments, both insignificant
     /// anywhere between tokens in ADL.
     pub(super) fn skip_trivia(&mut self) {
@@ -443,5 +510,52 @@ mod tests {
     fn read_iso8601_returns_none_at_end_of_input() {
         let mut lexer = Lexer::new("   ");
         assert_eq!(lexer.read_iso8601(), None);
+    }
+
+    #[test]
+    fn try_read_contained_regexp_reads_slash_and_caret_delimited_forms() {
+        let mut lexer = Lexer::new(r"{/foo.*bar/} rest");
+        assert_eq!(lexer.try_read_contained_regexp(), Ok(Some("/foo.*bar/")));
+        // Positioned right after the closing delimiter, before the `}` —
+        // the caller's own job, via the ordinary tokenizer.
+        assert_eq!(lexer.next(), Some(Token::Symbol('}')));
+        assert_eq!(lexer.next(), Some(Token::Word("rest".to_owned())));
+
+        let mut lexer = Lexer::new(r"{^foo.*bar^}");
+        assert_eq!(lexer.try_read_contained_regexp(), Ok(Some("^foo.*bar^")));
+    }
+
+    #[test]
+    fn try_read_contained_regexp_keeps_an_escaped_delimiter_inside_the_body() {
+        let mut lexer = Lexer::new(r"{/mm\[Hg\]|kPa/}");
+        assert_eq!(lexer.try_read_contained_regexp(), Ok(Some(r"/mm\[Hg\]|kPa/")));
+    }
+
+    /// Not a `CONTAINED_REGEXP` at all — an ordinary `{c_objects}` block, or
+    /// a wrapped primitive's `{"literal"}` — nothing is consumed, so the
+    /// caller's own `'{' ... '}'` handling still sees the opening brace.
+    #[test]
+    fn try_read_contained_regexp_returns_none_and_consumes_nothing_for_a_plain_brace() {
+        let mut lexer = Lexer::new(r#"{"literal"}"#);
+        assert_eq!(lexer.try_read_contained_regexp(), Ok(None));
+        assert_eq!(lexer.next(), Some(Token::Symbol('{')));
+    }
+
+    #[test]
+    fn try_read_contained_regexp_errs_with_no_closing_delimiter() {
+        let mut lexer = Lexer::new("{/unterminated");
+        assert_eq!(lexer.try_read_contained_regexp(), Err(()));
+
+        // A newline before the closing delimiter is malformed too — a
+        // regex body permits neither `\n` nor `\r` (`base_lexer.g4`'s own
+        // `SLASH_REGEXP_CHAR`).
+        let mut lexer = Lexer::new("{/no\nclose/}");
+        assert_eq!(lexer.try_read_contained_regexp(), Err(()));
+    }
+
+    #[test]
+    fn try_read_contained_regexp_errs_on_an_empty_body() {
+        let mut lexer = Lexer::new("{//}");
+        assert_eq!(lexer.try_read_contained_regexp(), Err(()));
     }
 }

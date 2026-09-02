@@ -60,6 +60,14 @@ together.
   kinds could be parsed, discovered writing `A-64`'s own tests. See `A-65`
   in `openehr/spec/audit.md`. Not a breaking change: `parse_definition`
   accepts strictly more input than before.
+- `am::cadl` now parses `ARCHETYPE_SLOT`'s `include`/`exclude` assertions,
+  for the shape (`bound_path matches {/regex/}`) every real archetype this
+  repository has found actually uses, and a `C_STRING` regex written via
+  `c_attribute`'s own shorthand (`value matches {/regex/}`). See `A-66` in
+  `openehr/spec/audit.md`. Not a breaking change: `parse_definition`
+  accepts strictly more input than before. `am::validate` is unchanged —
+  a restricted slot's filler is still reported `Unchecked`; carrying an
+  assertion is not the same as evaluating one.
 
 ## 0.9.0 — 2026-09-02
 

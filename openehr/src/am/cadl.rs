@@ -33,31 +33,37 @@
 //!   [`super::cadl_lexer::Lexer::text_since`]'s own documentation for why),
 //!   and the latter's trailing `ADL_PATH` is read as raw, un-tokenized text
 //!   up to the next whitespace ([`super::cadl_lexer::Lexer::read_raw_path`]).
-//! - **`ARCHETYPE_SLOT`** (`allow_archetype`) is implemented only for the
-//!   unrestricted form — occurrences stated or not, no `matches` clause. Two
-//!   narrower refusals remain, each real rather than a placeholder: `closed`
-//!   is refused because its own grammar production carries no
+//! - **`ARCHETYPE_SLOT`** (`allow_archetype`) is implemented for the
+//!   unrestricted form and for `include`/`exclude` assertions shaped
+//!   `bound_path SYM_MATCHES CONTAINED_REGEXP` (`A-66`) — the shape every
+//!   real `ARCHETYPE_SLOT` assertion this repository has found actually
+//!   uses. One narrower refusal remains, real rather than a placeholder:
+//!   `closed` is refused because its own grammar production carries no
 //!   `c_occurrences` at all, and [`crate::am::ArchetypeSlot`] — unlike
 //!   [`crate::am::CComplexObjectProxy`] (`A-54`'s own scope decision) —
 //!   stores occurrences as a plain, non-deferrable `MultiplicityInterval`,
-//!   so there is no value to build one from without guessing; `matches
-//!   { include ... exclude ... }` is refused because each assertion is the
-//!   full BEOM `boolean_expr` grammar (`K15.10`), which this parser lexes
-//!   no part of.
+//!   so there is no value to build one from without guessing. An assertion
+//!   richer than the one shape above — a boolean operator, a quantifier, a
+//!   function call, or even the same `constraint_expr`'s own
+//!   `'{' c_inline_primitive_object '}'` alternative — is refused by name
+//!   ([`parse_slot_assertion`](self::parse_slot_assertion)'s own
+//!   documentation): the full BEOM `boolean_expr` grammar (`K15.10`) is not
+//!   implemented, and this crate makes no claim to have implemented more of
+//!   it than the one slice that is real.
 //! - **`SIBLING_ORDER`** (`after [at0004]` / `before [at0004]` prefixing a
 //!   node) — meaningless outside a specialised archetype
 //!   (`crate::am::rm_overlay`'s own `SIBLING_ORDER` note in `A-50`/`A-52`),
 //!   and this parser builds unspecialised archetypes only.
 //! - **`default_value`** (`_default = <...>`) — needs the ODIN grammar,
 //!   which this parser does not implement any part of.
-//! - **A `C_STRING` regex** (`CONTAINED_REGEXP`, `{/…/}`) or a **date
-//!   pattern** (`yyyy-mm-??`) — this parser does not recognise either
-//!   delimited lexical form at all, so a source using one fails to lex as
-//!   anything this parser expects rather than being silently dropped.
-//!   [`crate::am::CPrimitive::String`]'s own `list` can hold a
-//!   `/…/`-delimited element (`A-63`: no separate field for it, unlike the
-//!   four temporal variants' distinct `pattern` field), but nothing in this
-//!   parser ever puts one there.
+//! - **A `C_STRING` regex** (`CONTAINED_REGEXP`, `{/…/}` or `{^…^}`) is now
+//!   recognised (`A-66`), both as `c_attribute`'s own shorthand — an
+//!   unwrapped `C_STRING` whose `list` holds the delimited pattern
+//!   (`A-63`'s single-list shape) — and inside an `ARCHETYPE_SLOT`
+//!   assertion above. A **date pattern** (`yyyy-mm-??`, `DATE_CONSTRAINT_PATTERN`)
+//!   is a different lexical token this parser still does not recognise, so
+//!   a source using one fails to lex as anything this parser expects
+//!   rather than being silently dropped.
 //! - **More than one `C_INTEGER`/`C_REAL`/temporal range** (`|0..10|,
 //!   |20..30|`) — [`crate::am::CPrimitive::Integer`] and its siblings hold
 //!   one `Option<Interval<_>>` each, not a list of them; AOM2 itself allows
@@ -69,7 +75,7 @@
 //! - **Generic RM type parameters** (`LIST<DV_TEXT>`) — `rm_type_id` accepts
 //!   only a bare `ALPHA_UC_ID` here.
 //!
-//! # ISO8601 literals need their own lexer scan
+//! # Some literals need their own lexer scan
 //!
 //! `2024-01-01`, `12:30:00`, and `P1Y2M` all contain `-`/`:`, which
 //! [`super::cadl_lexer::Lexer`]'s ordinary word-scanner treats as `Symbol`s
@@ -80,6 +86,17 @@
 //! where a temporal literal is grammatically expected, never from the
 //! ordinary tokenizer, so there is no ambiguity with a plain
 //! `INTEGER`/`REAL` for it to resolve.
+//!
+//! `CONTAINED_REGEXP` (`{/…/}`, `{^…^}`) needs the same treatment for a
+//! different reason: its body may contain almost any character —
+//! `,`, `"`, even a bare `{` — none of which the ordinary tokenizer could
+//! ever treat as part of one token. `A-66` added
+//! [`super::cadl_lexer::Lexer::try_read_contained_regexp`], reached from
+//! both `c_attribute_def`'s own shorthand and
+//! [`parse_slot_assertion`](self::parse_slot_assertion), each already
+//! committed to expecting one by grammar position before calling it —
+//! `try_`, not `expect_`, only because a bare `{` is ambiguous with an
+//! ordinary `{c_objects}` block until the character after it is seen.
 //!
 //! # Occurrences: stated, or refused — never guessed
 //!
@@ -494,9 +511,33 @@ fn c_attribute_def(lexer: &mut Lexer<'_>) -> Result<CAttribute, CadlError> {
     let mut children = Vec::new();
     if peek_keyword(lexer, "matches") || peek_keyword(lexer, "is_in") {
         lexer.next();
-        expect_symbol(lexer, '{')?;
-        children = c_objects(lexer)?;
-        expect_symbol(lexer, '}')?;
+        let regexp_offset = lexer.offset();
+        match lexer.try_read_contained_regexp() {
+            // `c_attribute`'s own shorthand: `SYM_MATCHES CONTAINED_REGEXP`
+            // in place of `SYM_MATCHES '{' c_objects '}'`, constraining the
+            // attribute's single value directly by regex rather than
+            // naming a wrapped `C_STRING` node — built as exactly that
+            // node anyway (`CPrimitive::String { list: [pattern] }`, `A-63`'s
+            // own single-list shape), the same unwrapped-primitive shape
+            // `c_objects`'s own shorthand already produces.
+            Ok(Some(pattern)) => {
+                let constraint = CPrimitive::String { list: vec![pattern.to_owned()] };
+                let assumed = finish_contained_regexp(lexer)?.map(PrimitiveValue::Text);
+                children = vec![unwrapped_primitive_object(constraint, assumed)];
+            }
+            Ok(None) => {
+                expect_symbol(lexer, '{')?;
+                children = c_objects(lexer)?;
+                expect_symbol(lexer, '}')?;
+            }
+            Err(()) => {
+                return Err(CadlError::at(
+                    regexp_offset,
+                    "malformed CONTAINED_REGEXP: no closing delimiter found before a newline or \
+                     the end of input",
+                ));
+            }
+        }
     }
 
     let result = match cardinality {
@@ -506,17 +547,26 @@ fn c_attribute_def(lexer: &mut Lexer<'_>) -> Result<CAttribute, CadlError> {
     result.map_err(|e| CadlError::at(offset, format!("invalid C_ATTRIBUTE `{attr_name}`: {e}")))
 }
 
+/// Builds the `CObject::Primitive` an unwrapped shorthand produces —
+/// [`CPrimitiveObject::PRIMITIVE_NODE_ID`], no rm-type-name of its own —
+/// the one shape shared by `c_objects`'s own inline-primitive shorthand
+/// and `c_attribute`'s `CONTAINED_REGEXP` shorthand below (`lib:A-33`: one
+/// place, not two, for a repeated construction).
+fn unwrapped_primitive_object(constraint: CPrimitive, assumed: Option<PrimitiveValue>) -> CObject {
+    let mut object = CPrimitiveObject::new("primitive", MultiplicityInterval::MANDATORY, constraint)
+        .with_node_id(CPrimitiveObject::PRIMITIVE_NODE_ID)
+        .expect("PRIMITIVE_NODE_ID is always accepted by with_node_id");
+    if let Some(value) = assumed {
+        object = object.with_assumed_value(value);
+    }
+    CObject::Primitive(object)
+}
+
 /// `c_objects: c_regular_object_ordered+ | c_inline_primitive_object ;`
 fn c_objects(lexer: &mut Lexer<'_>) -> Result<Vec<CObject>, CadlError> {
     if starts_inline_primitive(lexer) {
         let (primitive, assumed) = parse_inline_primitive(lexer, None)?;
-        let mut object = CPrimitiveObject::new("primitive", MultiplicityInterval::MANDATORY, primitive)
-            .with_node_id(CPrimitiveObject::PRIMITIVE_NODE_ID)
-            .expect("PRIMITIVE_NODE_ID is always accepted by with_node_id");
-        if let Some(value) = assumed {
-            object = object.with_assumed_value(value);
-        }
-        return Ok(vec![CObject::Primitive(object)]);
+        return Ok(vec![unwrapped_primitive_object(primitive, assumed)]);
     }
     let mut objects = Vec::new();
     loop {
@@ -708,20 +758,88 @@ fn c_complex_object_proxy(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
     Ok(CObject::Proxy(proxy))
 }
 
+/// Consumes the tail of a `CONTAINED_REGEXP` after
+/// [`Lexer::try_read_contained_regexp`] has already read its own delimited
+/// body: an optional `';' STRING` assumed value, then the mandatory
+/// closing `'}'`. Both are ordinary tokens, read through the lexer's own
+/// tokenizer rather than more raw scanning.
+fn finish_contained_regexp(lexer: &mut Lexer<'_>) -> Result<Option<String>, CadlError> {
+    let mut assumed = None;
+    if consume_symbol_if(lexer, ';') {
+        let offset = lexer.offset();
+        match lexer.next() {
+            Some(Token::Str(s)) => assumed = Some(s),
+            Some(other) => return Err(CadlError::at(offset, format!("expected a string literal, found {other}"))),
+            None => return Err(CadlError::at(offset, "expected a string literal, found end of input")),
+        }
+    }
+    expect_symbol(lexer, '}')?;
+    Ok(assumed)
+}
+
+/// Maps [`Lexer::try_read_contained_regexp`]'s two failure shapes onto a
+/// [`CadlError`] naming which one fired — shared between `c_attribute_def`
+/// and `parse_slot_assertion`, the two call sites that need a
+/// `CONTAINED_REGEXP` and disagree about nothing past this point.
+fn expect_contained_regexp<'a>(lexer: &mut Lexer<'a>, context: &'static str) -> Result<&'a str, CadlError> {
+    let offset = lexer.offset();
+    match lexer.try_read_contained_regexp() {
+        Ok(Some(pattern)) => Ok(pattern),
+        Ok(None) => Err(CadlError::at(
+            offset,
+            format!(
+                "expected a CONTAINED_REGEXP (`{{/…/}}` or `{{^…^}}`) {context} — a richer form is \
+                 not implemented by this parser"
+            ),
+        )),
+        Err(()) => Err(CadlError::at(
+            offset,
+            "malformed CONTAINED_REGEXP: no closing delimiter found before a newline or the end \
+             of input",
+        )),
+    }
+}
+
+/// The one assertion shape this parser implements: `bound_path SYM_MATCHES
+/// CONTAINED_REGEXP` (`constraint_expr` in `base_expressions.g4`) — the
+/// shape every real `ARCHETYPE_SLOT` assertion this repository has found
+/// actually uses (`archetype_id/value matches {/…/}`), and the narrowest
+/// slice of `K15.10`'s own BEOM expression grammar that is real rather
+/// than invented for this parser. Anything richer — a boolean operator, a
+/// quantifier, a function call — is refused by
+/// [`expect_contained_regexp`], not silently accepted or dropped.
+///
+/// The whole assertion's own source text is what `ArchetypeSlot::including`/
+/// `excluding` carry (`K15.10`'s own residual: an assertion is carried, not
+/// evaluated), reconstructed by slicing rather than by re-serialising the
+/// parsed pieces — the same choice `expect_archetype_ref` makes for
+/// `use_archetype`'s own reference.
+fn parse_slot_assertion(lexer: &mut Lexer<'_>) -> Result<String, CadlError> {
+    let start = lexer.offset();
+    let path_offset = lexer.offset();
+    lexer
+        .read_raw_path()
+        .ok_or_else(|| CadlError::at(path_offset, "expected an assertion path, found end of input"))?;
+    expect_keyword(lexer, "matches")?;
+    expect_contained_regexp(lexer, "after `matches` in an ARCHETYPE_SLOT assertion")?;
+    finish_contained_regexp(lexer)?;
+    Ok(lexer.text_since(start).trim().to_owned())
+}
+
 /// `archetype_slot: SYM_ALLOW_ARCHETYPE rm_type_id '[' ID_CODE ']'
 /// (( c_occurrences? ( SYM_MATCHES '{' c_includes? c_excludes? '}' )? ) |
-/// SYM_CLOSED ) ;`
+/// SYM_CLOSED ) ;`, `c_includes: SYM_INCLUDE assertion+ ;`,
+/// `c_excludes: SYM_EXCLUDE assertion+ ;`.
 ///
-/// Only the unrestricted branch — occurrences stated or not, no `matches`
-/// clause — is built. `closed` is refused: its own grammar production
-/// carries no `c_occurrences` at all, and every `C_OBJECT` variant this
-/// parser builds except [`CComplexObjectProxy`] stores occurrences as a
-/// plain, non-deferrable `MultiplicityInterval` (`A-54`'s own scope
-/// decision) — [`ArchetypeSlot`] among them — so there is no way to build
-/// one for a closed slot without inventing a value this parser has no
-/// grammar to take it from. `matches { include ... exclude ... }` is
-/// refused for the reason `K15.10`'s own residual states: each assertion is
-/// the full BEOM `boolean_expr` grammar, and this parser lexes none of it.
+/// `closed` is refused: its own grammar production carries no
+/// `c_occurrences` at all, and every `C_OBJECT` variant this parser builds
+/// except [`CComplexObjectProxy`] stores occurrences as a plain,
+/// non-deferrable `MultiplicityInterval` (`A-54`'s own scope decision) —
+/// [`ArchetypeSlot`] among them — so there is no way to build one for a
+/// closed slot without inventing a value this parser has no grammar to
+/// take it from. `matches { include ... exclude ... }` is built for the
+/// one assertion shape [`parse_slot_assertion`] implements; a richer one
+/// is refused there, by name, not silently accepted.
 fn archetype_slot(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
     let offset = lexer.offset();
     expect_keyword(lexer, "allow_archetype")?;
@@ -740,17 +858,46 @@ fn archetype_slot(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
     }
 
     let occurrences = parse_occurrences(lexer, false)?;
+    let mut slot = ArchetypeSlot::new(rm_type_name, node_id, occurrences)
+        .map_err(|e| CadlError::at(offset, format!("invalid ARCHETYPE_SLOT: {e}")))?;
+
     if peek_keyword(lexer, "matches") {
-        return Err(CadlError::at(
-            lexer.offset(),
-            "ARCHETYPE_SLOT include/exclude assertions (`allow_archetype ... matches {...}`) are \
-             not implemented by this parser: each assertion is the full BEOM expression grammar \
-             (K15.10), which this parser does not lex",
-        ));
+        lexer.next();
+        expect_symbol(lexer, '{')?;
+        loop {
+            if consume_symbol_if(lexer, '}') {
+                break;
+            }
+            let including = if peek_keyword(lexer, "include") {
+                lexer.next();
+                true
+            } else if peek_keyword(lexer, "exclude") {
+                lexer.next();
+                false
+            } else {
+                return Err(CadlError::at(
+                    lexer.offset(),
+                    match lexer.peek() {
+                        Some(other) => format!("expected `include`, `exclude`, or `}}`, found {other}"),
+                        None => "expected `include`, `exclude`, or `}`, found end of input".to_owned(),
+                    },
+                ));
+            };
+            // `assertion+`: one or more, stopping only at the next keyword
+            // or the closing `}` — not at a fixed count.
+            loop {
+                let assertion = parse_slot_assertion(lexer)?;
+                slot = if including { slot.including(assertion) } else { slot.excluding(assertion) };
+                if peek_keyword(lexer, "include")
+                    || peek_keyword(lexer, "exclude")
+                    || matches!(lexer.peek(), Some(Token::Symbol('}')))
+                {
+                    break;
+                }
+            }
+        }
     }
 
-    let slot = ArchetypeSlot::new(rm_type_name, node_id, occurrences)
-        .map_err(|e| CadlError::at(offset, format!("invalid ARCHETYPE_SLOT: {e}")))?;
     Ok(CObject::Slot(slot))
 }
 
@@ -1347,6 +1494,97 @@ mod tests {
         assert!(err.reason.contains("ac-code"), "{err}");
     }
 
+    /// `c_attribute`'s own `SYM_MATCHES CONTAINED_REGEXP` shorthand: no
+    /// wrapping `String[id]` node, the attribute's single child built
+    /// directly as an unwrapped `C_STRING` whose `list` holds the pattern
+    /// with its own delimiters intact (`A-63`'s single-list shape).
+    #[test]
+    fn an_attributes_contained_regexp_shorthand_builds_an_unwrapped_c_string() {
+        let source = r"CLUSTER[id1] matches { units matches {/mm\[Hg\]|kPa/} }";
+        let root = parse_definition(source).unwrap();
+        let CObject::Primitive(leaf) = &root.attributes()[0].children()[0] else {
+            panic!("expected an unwrapped primitive String");
+        };
+        assert_eq!(leaf.node_id(), Some(CPrimitiveObject::PRIMITIVE_NODE_ID));
+        assert_eq!(
+            leaf.constraint(),
+            &CPrimitive::String { list: vec![r"/mm\[Hg\]|kPa/".to_owned()] }
+        );
+        assert_eq!(leaf.assumed_value(), None);
+    }
+
+    /// `CONTAINED_REGEXP`'s own optional `'; ' STRING` assumed value,
+    /// carried through to the same `C_PRIMITIVE_OBJECT.assumed_value`
+    /// (`A-48`) every other assumed-value form in this parser attaches to.
+    #[test]
+    fn a_contained_regexps_own_assumed_value_is_attached() {
+        let source = r#"CLUSTER[id1] matches { units matches {/mm\[Hg\]|kPa/; "mm[Hg]"} }"#;
+        let root = parse_definition(source).unwrap();
+        let CObject::Primitive(leaf) = &root.attributes()[0].children()[0] else {
+            panic!("expected an unwrapped primitive String");
+        };
+        assert_eq!(
+            leaf.assumed_value(),
+            Some(&PrimitiveValue::Text("mm[Hg]".to_owned()))
+        );
+    }
+
+    /// A `^…^`-delimited regex (`CARET_REGEXP`, `base_lexer.g4`'s other
+    /// delimiter form) is recognised on the same terms as `/…/`.
+    #[test]
+    fn a_caret_delimited_contained_regexp_is_recognised() {
+        let source = r"CLUSTER[id1] matches { units matches {^mm\^Hg\^^} }";
+        let root = parse_definition(source).unwrap();
+        let CObject::Primitive(leaf) = &root.attributes()[0].children()[0] else {
+            panic!("expected an unwrapped primitive String");
+        };
+        assert_eq!(
+            leaf.constraint(),
+            &CPrimitive::String { list: vec![r"^mm\^Hg\^^".to_owned()] }
+        );
+    }
+
+    /// A `CONTAINED_REGEXP` with no closing delimiter before the end of
+    /// input is refused, naming the malformation, not silently treated as
+    /// an ordinary `{c_objects}` block (which would then fail with a much
+    /// less specific error, or in the worst case at the wrong offset).
+    #[test]
+    fn an_unterminated_contained_regexp_is_refused_naming_it() {
+        let source = "CLUSTER[id1] matches { units matches {/mm[Hg]kPa }";
+        let err = parse_definition(source).unwrap_err();
+        assert!(err.reason.contains("malformed CONTAINED_REGEXP"), "{err}");
+    }
+
+    /// The other real slice of `K15.10` this parser implements: an
+    /// `ARCHETYPE_SLOT`'s own `include`/`exclude` assertions, each the one
+    /// shape `parse_slot_assertion` supports. Two assertions under one
+    /// `include` (`assertion+`, not exactly one) and one under `exclude`,
+    /// so both the "more than one" loop and the keyword switch are
+    /// exercised in the same fixture.
+    #[test]
+    fn an_archetype_slots_include_and_exclude_assertions_are_carried() {
+        let source = "CLUSTER[id1] matches { items matches { allow_archetype CLUSTER[id2] \
+                       occurrences matches {0..1} matches { \
+                       include \
+                       archetype_id/value matches {/openEHR-EHR-CLUSTER\\.device\\..*/} \
+                       archetype_id/value matches {/openEHR-EHR-CLUSTER\\.exposure\\..*/} \
+                       exclude \
+                       archetype_id/value matches {/.*\\.experimental\\..*/} \
+                       } } }";
+        let root = parse_definition(source).unwrap();
+        let CObject::Slot(slot) = &root.attributes()[0].children()[0] else {
+            panic!("expected an ARCHETYPE_SLOT");
+        };
+        assert_eq!(slot.includes().len(), 2);
+        assert_eq!(
+            slot.includes()[0],
+            "archetype_id/value matches {/openEHR-EHR-CLUSTER\\.device\\..*/}"
+        );
+        assert_eq!(slot.excludes().len(), 1);
+        assert!(!slot.any_allowed());
+        assert!(!slot.is_closed());
+    }
+
     #[test]
     fn occurrences_omitted_on_a_non_root_node_is_refused_naming_it() {
         let source = "CLUSTER[id1] matches { items matches { ELEMENT[id2] matches { } } }";
@@ -1354,17 +1592,20 @@ mod tests {
         assert!(err.reason.contains("occurrences omitted"), "{err}");
     }
 
-    /// The one `ARCHETYPE_SLOT` form this parser still refuses outright:
-    /// `matches { include ... }` names an assertion, and `K15.10`'s own
-    /// BEOM expression grammar is not implemented. Occurrences are stated
-    /// here specifically so this refusal, not "occurrences omitted", is the
-    /// one that fires.
+    /// The one assertion shape this parser still refuses: `constraint_expr`
+    /// allows `'{' c_inline_primitive_object '}'` as an alternative to
+    /// `CONTAINED_REGEXP`, and only the latter is implemented
+    /// (`parse_slot_assertion`'s own documentation) — a quoted-string form
+    /// is refused by name, not silently accepted as though it were a
+    /// regex. Occurrences are stated so this refusal, not "occurrences
+    /// omitted", is the one that fires.
     #[test]
-    fn a_restricted_archetype_slot_is_refused_by_name_not_silently_skipped() {
+    fn a_slot_assertion_using_a_quoted_string_instead_of_a_regex_is_refused() {
         let source = "CLUSTER[id1] matches { items matches { allow_archetype CLUSTER[id2] \
-                       occurrences matches {0..1} matches {} } }";
+                       occurrences matches {0..1} matches { include \
+                       archetype_id/value matches {\"literal\"} } } }";
         let err = parse_definition(source).unwrap_err();
-        assert!(err.reason.contains("ARCHETYPE_SLOT"), "{err}");
+        assert!(err.reason.contains("CONTAINED_REGEXP"), "{err}");
     }
 
     /// A closed slot's own grammar production carries no `c_occurrences` at

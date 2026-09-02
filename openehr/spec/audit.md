@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**65 findings, 65 in the table below: 7 High, 34 Medium, 24 Low. 59 fixed or
+**66 findings, 66 in the table below: 7 High, 35 Medium, 24 Low. 60 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -152,6 +152,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-63 | Low | **BREAKING.** `CPrimitive::String::pattern: Option<String>` had no counterpart in AOM2's actual single-`List<String>` `constraint` — the same shape `A-51`'s second pass fixed for `TerminologyCode::code_list`, found while researching `A-62`'s own `CONTAINED_REGEXP` boundary | **fixed** — `pattern` removed; a regex is now a `/…/`- or `^…^`-delimited element of `list` itself, matching `C_STRING`'s real AOM2 shape; `is_c_string_pattern` is the one place that recognises the delimiter convention, called from both `am::validate::walk_primitive` and `am::archetype::assumed_value_conforms` (`lib:A-33`) |
 | A-64 | Low | `am::cadl` could not parse a primitive constraint's own assumed value — `'; ' <value>`, a shape every primitive kind's grammar production states (`cadl2_primitives.g4`), and `[ac3; at5]` for `Terminology_code` specifically — though `CPrimitiveObject::with_assumed_value` (`A-48`) has existed to receive one since before this parser did | **fixed** — a shared assumed-value reader per kind (five direct, four more through the existing `temporal_primitive!` macro) plus a dedicated `[ac3; at5]` reader refusing the grammar's own stated case (an assumed at-code after a bare at-code), all wired into both call sites `parse_inline_primitive` has |
 | A-65 | Medium | No ISO8601 date, time, date-time, or duration literal can be lexed by `am::cadl` at all — found writing `A-64`'s own tests, not by a fuzzer or a report — because `cadl_lexer::Lexer`'s word-scanner treats `-`/`:` as `Symbol`s (needed for archetype identifiers elsewhere), splitting every such literal into several tokens before `expect_temporal`'s `expect_word` ever sees one | **fixed** — `Lexer::read_iso8601`, a dedicated scan reached only from `expect_temporal` (where a temporal literal is grammatically expected, so there is no ambiguity with a plain `INTEGER`/`REAL` for it to resolve), reads a maximal run of ISO8601-shaped characters and hands it to `T::from_str`, the same validation-not-lexing split `expect_word`-based parsing already used; a `.` is only consumed when followed by a digit, so a `..` range separator is never swallowed |
+| A-66 | Medium | `am::cadl` refused every `ARCHETYPE_SLOT` `matches { include ... exclude ... }` block outright, and every `C_STRING` regex, though only the full BEOM `boolean_expr` grammar genuinely needs work this parser has not done — `constraint_expr` (`bound_path SYM_MATCHES CONTAINED_REGEXP`) is the one assertion shape every real `ARCHETYPE_SLOT` assertion this repository has found actually uses, and `CONTAINED_REGEXP` is the same lexical token `C_STRING`'s own regex form needs (`A-63`) | **fixed** — `Lexer::try_read_contained_regexp` reads a `CONTAINED_REGEXP`'s delimited body (raw-scanned, since it may contain almost any character); `parse_slot_assertion` implements exactly `bound_path SYM_MATCHES CONTAINED_REGEXP` for `include`/`exclude`, refusing anything richer by name; `c_attribute`'s own `SYM_MATCHES CONTAINED_REGEXP` shorthand builds an unwrapped `C_STRING` whose `list` holds the pattern (`A-63`'s single-list shape); `closed` and a richer assertion remain the two real refusals left in `am::cadl`'s own `ARCHETYPE_SLOT` support |
 
 ---
 
@@ -2337,19 +2338,19 @@ correctly left open needs none either — only a *restricted* slot's filler
 (`includes`/`excludes`) remains unchecked, and that residual is `K15.10`'s
 own, tracked below rather than here.
 
-**Residual, added 2026-09-02.** `K15.10` itself — the BEOM assertion
-grammar `ARCHETYPE_SLOT.includes`/`.excludes` need to be evaluated for
-real, not merely carried — remains unimplemented. `A-62` scoped `am::cadl`'s
-own `allow_archetype` support around this exact boundary (the unrestricted
-form only; `matches { include ... }` refused by name), and `A-60`'s own
-`walk_slot` stops at the same place from the validation side: a restricted
-open slot's filler is reported `Unchecked`, naming the filler's archetype
-id, because nothing here can tell whether it satisfies an assertion this
-crate does not parse. Closing it needs a real (if narrowly scoped)
-implementation of `constraint_expr` (`base_expressions.g4`) — at minimum
-`bound_path SYM_MATCHES CONTAINED_REGEXP`, the shape every real
-`ARCHETYPE_SLOT` assertion this repository has found actually uses — not
-attempted here.
+**Residual, added 2026-09-02, narrowed 2026-09-02.** `K15.10` itself — the
+full BEOM assertion grammar — remains unimplemented, but `A-66` closed the
+part of it that mattered in practice: `am::cadl` now parses `matches
+{ include ... exclude ... }` for the one assertion shape every real
+`ARCHETYPE_SLOT` this repository has found actually uses,
+`constraint_expr`'s own `bound_path SYM_MATCHES CONTAINED_REGEXP`
+alternative, refusing anything richer by name. `A-60`'s own `walk_slot`
+is unchanged and still cannot evaluate what it now parses: carrying an
+assertion's text (`ArchetypeSlot::including`/`excluding`) is not the same
+as evaluating it, and nothing here compiles a regex or resolves a
+`bound_path` against instance data. That gap — turning a carried
+assertion into a real `Conforms`/`Violates` verdict — is what remains of
+`K15.10`, not the parsing this residual originally described.
 
 **Residual, added 2026-09-02, closed 2026-09-02.** `am::cadl` could not
 parse any ISO8601 date, time, date-time, or duration literal at all,
@@ -3839,3 +3840,87 @@ discrete value), `Date_time` (a ranged `|lower..upper|`), and `Duration`
 end-to-end through `parse_definition`, so every one of the four kinds the
 shared `temporal_primitive!` macro generates has been proven to parse a
 real literal at least once.
+
+## A-66 — `am::cadl` refused every `ARCHETYPE_SLOT` assertion and `C_STRING` regex
+
+**Severity: Medium. Status: fixed.**
+
+**Found continuing `A-40`'s own residual**, the same afternoon `A-63`
+found `CPrimitive::String::pattern` had no AOM2 counterpart: `A-62` had
+scoped `am::cadl`'s own `allow_archetype` support around the boundary
+`K15.10`'s own residual states — "each assertion is the full BEOM
+`boolean_expr` grammar, and this parser lexes none of it" — which is true,
+but overstates what actually stands in the way of the one assertion shape
+every real `ARCHETYPE_SLOT` this repository has found in the wild
+actually uses: `constraint_expr`'s own `bound_path SYM_MATCHES
+CONTAINED_REGEXP` alternative (`base_expressions.g4`), not the full
+`boolean_expr` recursive grammar (quantifiers, arithmetic, function
+calls). `CONTAINED_REGEXP` is a single lexical token — `{/…/}` or
+`{^…^}` — not a grammar this parser would need to parse in any richer
+sense than "find the matching delimiter." The same token is also, per
+`A-63`'s own finding, the one thing standing between `am::cadl` and
+writing a regex element into `CPrimitive::String::list` at all: nothing
+in the parser could produce one, so every `C_STRING` constraint this
+parser built was necessarily literal-only.
+
+**Fixed, in three parts.**
+
+1. **`Lexer::try_read_contained_regexp`**, a new raw scan alongside
+   `A-65`'s own `read_iso8601`: peeks for a `'{'` whose next non-trivia
+   character is `/` or `^` (the only shape `CONTAINED_REGEXP` can be —
+   nothing else in this grammar starts a brace-delimited block that way,
+   so the dispatch is exact, not a guess), then scans the delimited body
+   honouring `\/`/`\^` escapes, stopping at the matching unescaped
+   delimiter or refusing (`Err(())`) at a newline or the end of input
+   first. Returns `Ok(None)`, consuming nothing, for an ordinary `'{'` —
+   the caller falls back to its own `{c_objects}`/`{"literal"}` handling.
+   Positioned right after the closing delimiter, not after the outer `}`:
+   `CONTAINED_REGEXP`'s own optional `'; ' STRING` assumed value and its
+   mandatory closing `'}'` are both ordinary tokens, left for the caller's
+   own tokenizer (`finish_contained_regexp`) rather than more raw
+   scanning.
+2. **`parse_slot_assertion`** implements exactly `bound_path SYM_MATCHES
+   CONTAINED_REGEXP` — `read_raw_path` (`A-62`) for the path, `expect
+   "matches"`, then the regexp — and reconstructs the whole assertion's
+   own source text by slicing (`Lexer::text_since`, `A-62`'s own choice
+   for `use_archetype`'s reference) rather than re-serialising the parsed
+   pieces, since `ArchetypeSlot::including`/`excluding` still only carry
+   an assertion, never evaluate it (`K15.10`'s own residual, untouched by
+   this finding). `archetype_slot` itself now parses `matches { include
+   ... exclude ... }`, correctly handling `assertion+` — one or more per
+   keyword, not exactly one — by looping until the next `include`,
+   `exclude`, or the closing `}`.
+3. **`c_attribute_def`** gains the other half of `constraint_expr`'s own
+   alternative: `c_attribute`'s `SYM_MATCHES CONTAINED_REGEXP` shorthand,
+   built as an unwrapped `C_PRIMITIVE_OBJECT` (`CPrimitiveObject
+   ::PRIMITIVE_NODE_ID`) whose `CPrimitive::String::list` holds the
+   pattern with its own delimiters intact — the same single-list shape
+   `A-63` gave the type, and the same unwrapped-primitive construction
+   `c_objects`'s own shorthand already used, now shared through a new
+   `unwrapped_primitive_object` helper rather than duplicated a second
+   time (`lib:A-33`).
+
+**Not attempted.** The full BEOM `boolean_expr` grammar remains
+unimplemented; an assertion using `and`/`or`/`not`, a quantifier, a
+function call, or even `constraint_expr`'s own `'{'
+c_inline_primitive_object '}'` alternative (a quoted string in place of a
+regex) is refused by name, not silently accepted or guessed at. `closed`
+remains refused for the reason `A-62` already gave. `am::validate`'s own
+`walk_slot` (`A-60`) is unchanged: a restricted slot's filler is still
+`Unchecked`, since carrying an assertion's text is not the same as
+evaluating it.
+
+**Tests.** Five in `cadl_lexer` for `try_read_contained_regexp` directly:
+both delimiter forms; an escaped delimiter kept inside the body; a plain
+`{` correctly returning `None` with nothing consumed; no closing
+delimiter (including one hidden behind a real newline) refused; and an
+empty body refused. Six in `am::cadl`: the attribute shorthand building an
+unwrapped `C_STRING`; its own assumed value attached; the `^…^` delimiter
+form; an unterminated regex refused, naming the malformation; an
+`ARCHETYPE_SLOT` with two `include` assertions and one `exclude` (proving
+`assertion+`, not exactly one, and the keyword switch, in one fixture);
+and the renamed `a_slot_assertion_using_a_quoted_string_instead_of_a_regex_is_refused`
+— the pre-existing "restricted slot refused" test, whose old fixture
+(`matches {}`, empty) now parses successfully under this fix and so no
+longer demonstrates a real boundary, replaced with a fixture that
+genuinely still is one.
