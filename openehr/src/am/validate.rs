@@ -77,7 +77,10 @@
 //! is no I/O to make non-deterministic in the first place.
 
 use crate::am::archetype::Archetype;
-use crate::am::constraint::{CAttribute, CComplexObject, CObject, ConstraintStatus, CPrimitive};
+use crate::am::constraint::{
+    CAttribute, CAttributeTuple, CComplexObject, CObject, CPrimitive, CPrimitiveObject,
+    CPrimitiveTuple, ConstraintStatus,
+};
 use crate::am::repository::ArchetypeRepository;
 use crate::am::terminology::ArchetypeTerminology;
 use crate::base::{ArchetypeId, Interval, Real};
@@ -368,24 +371,140 @@ fn walk_complex(
         walk_attribute(archetype_id, terminology, attribute, node, path, ctx);
     }
     for tuple in constraint.attribute_tuples() {
-        // Checking a co-varying constraint means picking the one
-        // `C_PRIMITIVE_TUPLE` row whose values match the instance's actual
-        // values across every attribute named here *at once* — a different
-        // shape of check than `walk_attribute`'s per-attribute walk, and not
-        // attempted here. Reported unchecked, never silently passed
-        // (`K15.20`), naming which attributes the unevaluated constraint
-        // covers.
-        let names = tuple
-            .members()
-            .iter()
-            .map(CAttribute::rm_attribute_name)
-            .collect::<Vec<_>>()
-            .join(", ");
-        ctx.unchecked_detail(
-            path,
-            "C_ATTRIBUTE_TUPLE co-varying constraint is not evaluated",
-            names,
+        walk_attribute_tuple(archetype_id, terminology, tuple, node, path, ctx);
+    }
+}
+
+/// Three-valued outcome for one `C_PRIMITIVE_OBJECT` (a tuple row's one
+/// column) or, aggregated, for a whole row or the whole tuple —
+/// `walk_primitive`'s own binary violation-or-not is not enough here,
+/// because an *unchecked* column (a `C_STRING` pattern, `C_UNSUPPORTED`, …)
+/// must keep a row's fate open rather than being folded into either
+/// "matches" or "does not match".
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TupleVerdict {
+    Conforms,
+    Violates,
+    Unchecked,
+}
+
+/// A `C_ATTRIBUTE_TUPLE`: whether the instance's actual values across every
+/// co-varying attribute, taken together, match one of the permitted rows.
+///
+/// Delegates each column's own comparison to [`walk_primitive`] itself —
+/// against a scratch [`Ctx`] whose result is inspected and discarded —
+/// rather than re-implementing the six primitive kinds' comparison rules a
+/// second time (`lib:A-33` is the standing reason this crate keeps a rule in
+/// exactly one place). The three-valued combination above it is the only
+/// logic this function adds.
+fn walk_attribute_tuple(
+    archetype_id: &ArchetypeId,
+    terminology: &ArchetypeTerminology,
+    tuple: &CAttributeTuple,
+    node: Node<'_>,
+    path: &str,
+    ctx: &mut Ctx<'_>,
+) {
+    // Resolve each co-varying attribute to exactly one instance value.
+    // AOM2's own tuple examples are always single-valued attributes
+    // (`units`, `magnitude`, `value`, `symbol`) — a container attribute, or
+    // one absent entirely, is not a shape this check can resolve to a
+    // single value to compare, so it is reported unchecked rather than
+    // guessed at.
+    let mut values: Vec<Node<'_>> = Vec::with_capacity(tuple.members().len());
+    for attribute in tuple.members() {
+        let attr_path = format!("{path}/{}", attribute.rm_attribute_name());
+        match node.children(attribute.rm_attribute_name()).as_slice() {
+            [only] => values.push(*only),
+            other => {
+                ctx.unchecked_detail(
+                    &attr_path,
+                    "C_ATTRIBUTE_TUPLE column does not resolve to exactly one value",
+                    format!("{} value(s)", other.len()),
+                );
+                return;
+            }
+        }
+    }
+
+    let column_verdict = |primitive: &CPrimitiveObject, value: Node<'_>| -> TupleVerdict {
+        let mut scratch = Ctx {
+            repository: ctx.repository,
+            options: ctx.options,
+            violations: Vec::new(),
+            unchecked: Vec::new(),
+            unverified_provenance: Vec::new(),
+        };
+        walk_primitive(
+            archetype_id,
+            terminology,
+            primitive.constraint(),
+            value,
+            "",
+            &mut scratch,
         );
+        if !scratch.violations.is_empty() {
+            TupleVerdict::Violates
+        } else if !scratch.unchecked.is_empty() {
+            TupleVerdict::Unchecked
+        } else {
+            TupleVerdict::Conforms
+        }
+    };
+
+    // A row conforms only if every column does (`Violates` anywhere wins);
+    // an `Unchecked` column keeps the row open unless a later column
+    // outright violates.
+    let row_verdict = |row: &CPrimitiveTuple| -> TupleVerdict {
+        row.members()
+            .iter()
+            .zip(&values)
+            .map(|(primitive, &value)| column_verdict(primitive, value))
+            .fold(TupleVerdict::Conforms, |acc, v| match (acc, v) {
+                (TupleVerdict::Violates, _) | (_, TupleVerdict::Violates) => TupleVerdict::Violates,
+                (TupleVerdict::Unchecked, _) | (_, TupleVerdict::Unchecked) => {
+                    TupleVerdict::Unchecked
+                }
+                (TupleVerdict::Conforms, TupleVerdict::Conforms) => TupleVerdict::Conforms,
+            })
+    };
+
+    // The tuple as a whole conforms if any row does (`Conforms` anywhere
+    // wins); an `Unchecked` row keeps the whole tuple open unless a
+    // `Conforms` row is found. Only when every row definitely violates is
+    // the tuple itself a violation — the instance's values do not match any
+    // permitted combination. An empty `tuples` list (AOM2 allows it, `0..1`)
+    // has no combination to compare against at all, so `reduce` returning
+    // `None` becomes `Unchecked` rather than `Violates` — this crate has no
+    // stated reading of what an attribute tuple naming no rows means for
+    // conformance, and is not inventing one here.
+    let verdict = tuple
+        .tuples()
+        .iter()
+        .map(row_verdict)
+        .reduce(|acc, v| match (acc, v) {
+            (TupleVerdict::Conforms, _) | (_, TupleVerdict::Conforms) => TupleVerdict::Conforms,
+            (TupleVerdict::Unchecked, _) | (_, TupleVerdict::Unchecked) => TupleVerdict::Unchecked,
+            (TupleVerdict::Violates, TupleVerdict::Violates) => TupleVerdict::Violates,
+        })
+        .unwrap_or(TupleVerdict::Unchecked);
+
+    match verdict {
+        TupleVerdict::Conforms => {}
+        TupleVerdict::Violates => ctx.violation(archetype_id, path, "C_ATTRIBUTE_TUPLE"),
+        TupleVerdict::Unchecked => {
+            let names = tuple
+                .members()
+                .iter()
+                .map(CAttribute::rm_attribute_name)
+                .collect::<Vec<_>>()
+                .join(", ");
+            ctx.unchecked_detail(
+                path,
+                "C_ATTRIBUTE_TUPLE: no row could be confirmed or ruled out for every column",
+                names,
+            );
+        }
     }
 }
 
@@ -1252,21 +1371,154 @@ mod tests {
         );
     }
 
-    /// A `{units, magnitude}` tuple on `ELEMENT[at0004]/value` — the AOM2
-    /// example this crate's own `CAttributeTuple` documentation cites — is
-    /// reported unchecked, naming the two attributes it covers. The
-    /// instance's actual units and magnitude are never inspected: nothing in
-    /// `walk_complex` walks into a `C_ATTRIBUTE_TUPLE`'s own rows, which is
-    /// exactly what "carried, not evaluated" means here.
-    #[test]
-    fn an_attribute_tuple_is_unchecked_never_silently_passed() {
+    /// An `ELEMENT[at0004]/value` wrapping a `DV_QUANTITY[id14]` whose
+    /// `{units, magnitude}` tuple has `tuple_rows` rows — the shared
+    /// scaffolding every `C_ATTRIBUTE_TUPLE` test below builds on, so each
+    /// test states only what actually varies: the rows and the instance.
+    fn quantity_tuple_archetype(tuple_rows: Vec<CPrimitiveTuple>) -> Archetype {
         let tuple = CAttributeTuple::new(
             vec![
                 CAttribute::single("units", MultiplicityInterval::MANDATORY, Vec::new()).unwrap(),
                 CAttribute::single("magnitude", MultiplicityInterval::MANDATORY, Vec::new())
                     .unwrap(),
             ],
+            tuple_rows,
+        )
+        .unwrap();
+        let value_object = CComplexObject::new(
+            "DV_QUANTITY",
+            None,
+            MultiplicityInterval::MANDATORY,
             Vec::new(),
+        )
+        .unwrap()
+        .with_attribute_tuples(vec![tuple]);
+        let value_attr = CAttribute::single(
+            "value",
+            MultiplicityInterval::MANDATORY,
+            vec![CObject::Complex(value_object)],
+        )
+        .unwrap();
+        let element = CObject::Complex(
+            CComplexObject::new(
+                "ELEMENT",
+                Some("at0004".to_owned()),
+                MultiplicityInterval::MANDATORY,
+                vec![value_attr],
+            )
+            .unwrap(),
+        );
+        evaluation_archetype(element)
+    }
+
+    /// One `{units, magnitude}` row: an exact unit string paired with a
+    /// closed magnitude range — the same shape
+    /// `am::constraint::tests::a_units_magnitude_tuple_pairs_each_unit_with_its_own_range`
+    /// builds, reused here against real instance data instead of just
+    /// constructed and inspected.
+    fn units_magnitude_row(units: &str, low: f64, high: f64) -> CPrimitiveTuple {
+        CPrimitiveTuple::new(vec![
+            CPrimitiveObject::new(
+                "String",
+                MultiplicityInterval::MANDATORY,
+                CPrimitive::String {
+                    list: vec![units.to_owned()],
+                    pattern: None,
+                },
+            ),
+            CPrimitiveObject::new(
+                "Real",
+                MultiplicityInterval::MANDATORY,
+                CPrimitive::Real {
+                    list: Vec::new(),
+                    range: Some(Interval::closed(low.into(), high.into()).unwrap()),
+                },
+            ),
+        ])
+        .unwrap()
+    }
+
+    fn quantity_entry(magnitude: f64, units: &str) -> Entry {
+        build_evaluation(vec![Element::new(
+            attrs("Systolic", "at0004"),
+            DataValue::Quantity(crate::rm::data_types::DvQuantity::new(magnitude, units).unwrap()),
+        )])
+    }
+
+    /// `A-50`'s own residual, closed: naming zero rows is the one case this
+    /// crate has no stated reading for (AOM2's `tuples` is `0..1`, and an
+    /// attribute tuple with no permitted combinations at all is not the same
+    /// question as one whose combinations the instance simply does not
+    /// match), so it stays unchecked rather than becoming a guessed
+    /// violation or a guessed pass.
+    #[test]
+    fn an_attribute_tuple_with_no_rows_is_unchecked() {
+        let archetype = quantity_tuple_archetype(Vec::new());
+        let entry = quantity_entry(140.0, "mm[Hg]");
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(report.violations().is_empty());
+        assert_eq!(
+            report.unchecked()[0].reason(),
+            "C_ATTRIBUTE_TUPLE: no row could be confirmed or ruled out for every column"
+        );
+        assert_eq!(report.unchecked()[0].detail(), Some("units, magnitude"));
+    }
+
+    /// An instance whose units and magnitude both fall inside one row is
+    /// conformant — no violation, nothing unchecked. This is the actual
+    /// evaluation `A-50` deferred: `walk_attribute_tuple` resolves `units`
+    /// and `magnitude` to the instance's real values and finds a row that
+    /// accepts both together, rather than reporting unchecked regardless.
+    #[test]
+    fn an_attribute_tuple_matching_a_row_is_conformant() {
+        let archetype = quantity_tuple_archetype(vec![
+            units_magnitude_row("mm[Hg]", 0.0, 300.0),
+            units_magnitude_row("kPa", 0.0, 40.0),
+        ]);
+        let entry = quantity_entry(140.0, "mm[Hg]");
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(report.violations().is_empty());
+        assert!(report.unchecked().is_empty());
+    }
+
+    /// An instance whose units/magnitude combination matches no row at all
+    /// is a `C_ATTRIBUTE_TUPLE` violation naming the tuple's own path — not
+    /// silently passed, and not reported unchecked either, because every row
+    /// was actually evaluated and every one of them definitely ruled the
+    /// combination out (`120 mm[Hg]` is in neither row's unit, so both
+    /// columns' string constraints outright fail).
+    #[test]
+    fn an_attribute_tuple_matching_no_row_is_a_violation() {
+        let archetype = quantity_tuple_archetype(vec![
+            units_magnitude_row("mm[Hg]", 0.0, 300.0),
+            units_magnitude_row("kPa", 0.0, 40.0),
+        ]);
+        let entry = quantity_entry(120.0, "cm[H2O]");
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(report.unchecked().is_empty());
+        assert_eq!(report.violations().len(), 1);
+        assert_eq!(report.violations()[0].constraint(), "C_ATTRIBUTE_TUPLE");
+    }
+
+    /// A co-varying attribute that is not single-valued in the instance —
+    /// here, absent entirely, since `DV_QUANTITY` carries no repeating
+    /// `magnitude` — cannot be resolved to one value to compare, so the
+    /// whole tuple is reported unchecked naming exactly that column's path,
+    /// rather than guessed at. `walk_attribute_tuple`'s doc comment states
+    /// this is deliberately not a shape this check attempts.
+    #[test]
+    fn an_attribute_tuple_column_that_does_not_resolve_is_unchecked() {
+        let tuple = CAttributeTuple::new(
+            vec![
+                CAttribute::single("units", MultiplicityInterval::MANDATORY, Vec::new()).unwrap(),
+                CAttribute::single(
+                    "accuracy",
+                    MultiplicityInterval::MANDATORY,
+                    Vec::new(),
+                )
+                .unwrap(),
+            ],
+            vec![units_magnitude_row("mm[Hg]", 0.0, 300.0)],
         )
         .unwrap();
         let value_object = CComplexObject::new(
@@ -1293,17 +1545,14 @@ mod tests {
             .unwrap(),
         );
         let archetype = evaluation_archetype(element);
-        let entry = build_evaluation(vec![Element::new(
-            attrs("Systolic", "at0004"),
-            DataValue::Quantity(crate::rm::data_types::DvQuantity::new(140.0, "mm[Hg]").unwrap()),
-        )]);
+        let entry = quantity_entry(140.0, "mm[Hg]");
         let report = validate_against_archetype(&archetype, entry.as_node());
         assert!(report.violations().is_empty());
         assert_eq!(
             report.unchecked()[0].reason(),
-            "C_ATTRIBUTE_TUPLE co-varying constraint is not evaluated"
+            "C_ATTRIBUTE_TUPLE column does not resolve to exactly one value"
         );
-        assert_eq!(report.unchecked()[0].detail(), Some("units, magnitude"));
+        assert_eq!(report.unchecked()[0].detail(), Some("0 value(s)"));
     }
 
     /// `C_DATE`/`C_TIME`/`C_DATE_TIME`/`C_DURATION`: a value in range is

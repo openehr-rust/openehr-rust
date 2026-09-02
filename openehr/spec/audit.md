@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**57 findings, 57 in the table below: 7 High, 31 Medium, 19 Low. 51 fixed or
+**58 findings, 58 in the table below: 7 High, 31 Medium, 20 Low. 52 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -136,7 +136,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-47 | Low | `Terminology_code`/`Terminology_term`, the BASE foundation types `AUTHORED_RESOURCE.original_language`, `RESOURCE_DESCRIPTION_ITEM.language`, and `TRANSLATION_DETAILS.language` are typed as, did not exist in this crate at all | **fixed** — both added to `openehr::base`; a standalone prerequisite, not a claim that any of the three classes that use them is now modelled |
 | A-48 | Low | `C_PRIMITIVE_OBJECT.assumed_value` had no field at all — a default value could not be attached to a primitive constraint under any representation | **fixed** — `PrimitiveValue` and `with_assumed_value`/`assumed_value()` added; residual (`Inv_valid_assumed_value` unchecked) closed by **A-56** |
 | A-49 | Medium | `parse_adl14_header`/`parse_adl2_header` used `ArchetypeId` for the header's own identifier — narrower than the grammar both cite in their own error messages, `ARCHETYPE_HRID`, which allows a namespace prefix and a prerelease version suffix neither reader accepted | **fixed**, residual documented — `ArchetypeHrid` added and both readers corrected to use it for the archetype's own identifier; the `specialize` line's identifier is unchanged and remains narrower than its own grammar allows |
-| A-50 | Medium | `C_COMPLEX_OBJECT` had no `attribute_tuples` field — `C_ATTRIBUTE_TUPLE`/`C_PRIMITIVE_TUPLE` did not exist under any name, so a `{units, magnitude}` or `{value, symbol}` co-varying constraint (AOM2's replacement for ADL 1.4's `C_DV_QUANTITY`/`C_DV_ORDINAL`) could not be represented at all, not even as `CPrimitive::Unsupported` | **fixed** — `CAttributeTuple`/`CPrimitiveTuple` added, wired onto `CComplexObject` via a builder; the tree walk reports a node governed by one as `Unchecked` rather than silently passing it |
+| A-50 | Medium | `C_COMPLEX_OBJECT` had no `attribute_tuples` field — `C_ATTRIBUTE_TUPLE`/`C_PRIMITIVE_TUPLE` did not exist under any name, so a `{units, magnitude}` or `{value, symbol}` co-varying constraint (AOM2's replacement for ADL 1.4's `C_DV_QUANTITY`/`C_DV_ORDINAL`) could not be represented at all, not even as `CPrimitive::Unsupported` | **fixed** — `CAttributeTuple`/`CPrimitiveTuple` added, wired onto `CComplexObject` via a builder; the tree walk reports a node governed by one as `Unchecked` rather than silently passing it; residual (tuple constraints carried but never evaluated against instance data) closed by **A-58** |
 | A-51 | Medium | `CPrimitive::TerminologyCode` had no `constraint_status` field, so an `extensible`/`preferred`/`example` (non-`Required`) terminology constraint could not be distinguished from a required one — `am::validate` reported a violation for conformant data whenever the actual code did not match the list or value set, which AOM2 states plainly is not a violation for a soft constraint | **fixed**; residual (`code_list` had no AOM2 counterpart) closed by **A-55** |
 | A-52 | Low | `ARCHETYPE.rm_overlay` had no counterpart at all — visibility and aliasing statements for RM attributes outside the constrained structure could not be attached to an `Archetype`, silently vanishing on JSON read the same way `A-50`/`A-46` found elsewhere | **fixed** — `RmOverlay`/`RmAttributeVisibility`/`VisibilityType` added in a new `am::rm_overlay` module, attached via `Archetype::with_rm_overlay`; `Inv_alias_validity` checked at construction |
 | A-53 | Medium | `C_COMPLEX_OBJECT_PROXY` had no counterpart under any name — an archetype using a proxy node to reference a constraint defined elsewhere in the same archetype, rather than repeating it, could not be represented at all, the same shape of gap `A-50` found for tuple constraints | **fixed**; residual (`use_target_occurrences()` unmodelled) closed by **A-54** |
@@ -144,6 +144,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-55 | Low | **BREAKING.** `CPrimitive::TerminologyCode::code_list: Vec<String>` — `A-51`'s own residual — had no counterpart in AOM2's actual single-valued `constraint: String` | **fixed** — `code_list` removed; multiple alternative codes are now expressed as sibling `C_OBJECT`s, matching every other node kind's own alternative-matching shape; `constraint`'s `at`-code/`ac`-code kind is now distinguished by AOM2's own `"ac"` leader convention rather than by which of two fields it was written into |
 | A-56 | Low | `C_PRIMITIVE_OBJECT.assumed_value` conforming to its own `constraint` (`Inv_valid_assumed_value`) — `A-48`'s own residual — was never checked; a kind-mismatched or out-of-range assumed value was accepted silently all the way to a caller who never suspected one | **fixed** — checked in `Archetype::check`, not at `CPrimitiveObject::with_assumed_value` (which builds a node in isolation, before the terminology a `C_TERMINOLOGY_CODE` `ac`-code needs is in scope); `C_UNSUPPORTED` is excluded rather than guessed at |
 | A-57 | High | `adl_lexer::Lexer::skip_parenthesised` put a side-effecting `self.next()` call inside `debug_assert!`, whose argument is not evaluated at all in a release build — every ADL 2/1.4 archetype header with a `meta_data` clause failed to parse in any release-profile build, silently, since the header readers were first added | **fixed** — the token consumed unconditionally into a binding, `debug_assert!` checking only the value; caught by `cargo bench --benches -- --test` (a release-profile run), invisible to `cargo test` (always debug profile) and to CI's own `test` job for the same reason |
+| A-58 | Low | `walk_complex` visited a `C_ATTRIBUTE_TUPLE` and reported it `Unchecked` unconditionally — `A-50`'s own residual — never resolving the instance's actual values and comparing them against a row, so a co-varying `{units, magnitude}`/`{value, symbol}` constraint was never actually enforced no matter what the data said | **fixed** — `walk_attribute_tuple` resolves each co-varying attribute to its one instance value, evaluates every row's every column by delegating to `walk_primitive` itself, and combines the three-valued result (`Conforms`/`Violates`/`Unchecked`) across a row by AND and across the tuple by OR; a column that cannot be resolved to exactly one value, or a `tuples` list with no rows at all, stays `Unchecked` rather than being guessed at |
 
 ---
 
@@ -3277,3 +3278,70 @@ changing behaviour either build already had right.
 crates returns exactly one file: `adl_lexer.rs`, the one fixed here. This
 was not one instance of a pattern repeated elsewhere — it was the only
 `debug_assert!` in the entire tree.
+
+## A-58 — a `C_ATTRIBUTE_TUPLE` was carried but never evaluated
+
+**Severity: Low. Status: fixed.** Closes `A-50`'s own residual.
+
+**The gap.** `A-50` gave `CComplexObject` somewhere to put a
+`C_ATTRIBUTE_TUPLE`/`C_PRIMITIVE_TUPLE` constraint and made `walk_complex`
+visit it — but only to report it `Unchecked`, unconditionally, naming the
+attributes it covers. Nothing resolved the instance's actual `units` and
+`magnitude` (or `value`/`symbol`) and asked whether any permitted row
+accepted them together. `A-50`'s own text named this explicitly as deferred:
+"a larger piece of work, decoupled from `walk_complex`'s existing
+per-attribute shape, and not attempted here." Left as it stood, a
+`C_ATTRIBUTE_TUPLE` constraint could not fail — every instance, conformant or
+not, produced the same unchecked report, which `K15.20` requires this crate
+to never let read as a pass.
+
+**Fixed.** `walk_complex` now calls a new `walk_attribute_tuple` for each
+`CAttributeTuple` it visits. It:
+
+1. Resolves each co-varying attribute (`tuple.members()`) to exactly one
+   instance value via `Node::children`. An attribute that is not
+   single-valued in the instance — absent, or repeating — cannot be resolved
+   to one value to compare, so the whole tuple is reported `Unchecked`
+   there, naming the unresolved attribute's own path and how many values it
+   actually had. AOM2's own tuple examples (`units`/`magnitude`,
+   `value`/`symbol`) are always single-valued attributes; this is not a
+   shape the check guesses at.
+2. Evaluates every row's every column by calling `walk_primitive` itself —
+   the same function `walk_attribute` already uses for an ordinary
+   `C_PRIMITIVE_OBJECT` — against a scratch `Ctx` whose result is inspected
+   and discarded, rather than re-implementing the six primitive kinds'
+   comparison rules a second time. `lib:A-33` is the standing reason a rule
+   stays in exactly one place in this crate; a tuple's row is nothing more
+   than several ordinary primitive constraints evaluated together.
+3. Combines each column's three-valued outcome (`Conforms`/`Violates`/
+   `Unchecked` — a new, function-local `TupleVerdict`, not `ConstraintStatus`,
+   which is AOM2's own carried-in-the-archetype status rather than a computed
+   verdict) into a row verdict by AND (`Violates` anywhere wins; `Unchecked`
+   anywhere else keeps the row open), then into a tuple verdict by OR
+   (`Conforms` anywhere wins; `Unchecked` anywhere else keeps the tuple open).
+   Only when every row definitely violates does the tuple itself become a
+   violation — the instance's values do not match any permitted combination.
+4. An empty `tuples` list (AOM2 declares it `0..1`, so absence is legal) has
+   no row to compare against at all, and stays `Unchecked` rather than
+   becoming a guessed `Conforms` or `Violates` — this crate has no stated
+   reading of what a tuple naming zero rows means for conformance, and is
+   not inventing one here.
+
+**Tests.** Four in `am::validate`, replacing the single always-unchecked test
+`A-50` added: the zero-rows edge case (renamed
+`an_attribute_tuple_with_no_rows_is_unchecked`, asserting the new message and
+detail — the old test's doc comment described the pre-fix "nothing walks
+into a tuple's own rows" behaviour, which this fix makes false in general,
+true only for this specific degenerate input); a real matching row
+(`an_attribute_tuple_matching_a_row_is_conformant`, `140 mm[Hg]` against
+`mm[Hg]`/`kPa` rows — no violation, nothing unchecked); a real non-matching
+set of rows (`an_attribute_tuple_matching_no_row_is_a_violation`, `120
+cm[H2O]` against the same two rows — exactly one violation naming
+`C_ATTRIBUTE_TUPLE`); and an unresolvable column
+(`an_attribute_tuple_column_that_does_not_resolve_is_unchecked`, an
+`accuracy` attribute `DV_QUANTITY` has no children for — unchecked, naming
+the column's own path and `"0 value(s)"`).
+
+**No residual.** Every branch `walk_attribute_tuple` can take — unresolvable
+column, definite match, definite non-match, and the zero-rows edge case — has
+a test exercising it.

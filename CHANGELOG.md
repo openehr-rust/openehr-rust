@@ -7,6 +7,14 @@ together.
 
 ## Unreleased
 
+- `am::validate` now actually evaluates a `C_ATTRIBUTE_TUPLE` constraint
+  against instance data, rather than reporting every one of them `Unchecked`
+  unconditionally — closes `A-50`'s own residual. See `A-58` in
+  `openehr/spec/audit.md`. Not a breaking change: no public type or function
+  signature changes, only what `validate_against_archetype` reports for
+  archetypes using the tuple form (AOM2's replacement for ADL 1.4's
+  `C_DV_QUANTITY`/`C_DV_ORDINAL`).
+
 ## 0.9.0 — 2026-09-02
 
 **A minor bump, not a patch, over two breaking API changes.** Cargo treats
