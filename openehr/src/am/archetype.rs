@@ -12,6 +12,7 @@
 //! | `VATDF` — every `at`/`id`-code in the definition is defined | yes | the terminology is in hand |
 //! | `VACDF` — every `ac`-code names a value set | yes | as above |
 //! | `VATCD` — code specialisation depth within the archetype's own | yes | derived from the identifier |
+//! | `Inv_valid_assumed_value` — a `C_PRIMITIVE_OBJECT`'s `assumed_value` conforms to its own `constraint` | yes | needs the terminology, for a `C_TERMINOLOGY_CODE` naming an `ac`-code — `A-48`'s own residual, closed here rather than at `CPrimitiveObject::with_assumed_value`, which builds a node in isolation |
 //! | `VASID` — the `specialise` clause names the immediate parent | **no** | needs the parent artefact, which needs retrieval (`K15.24`) |
 //! | `VACSD` — concept depth is one greater than the parent's | **no** | as above |
 //!
@@ -19,10 +20,13 @@
 //! unenforced rule that nobody wrote down reads as an enforced one (`C0.9`).
 
 use crate::am::{
-    ArchetypeTerminology, CComplexObject, CObject, MultiplicityInterval, NodeIdSyntax, RmOverlay,
+    ArchetypeTerminology, CComplexObject, CObject, CPrimitive, MultiplicityInterval, NodeIdSyntax,
+    PrimitiveValue, RmOverlay,
 };
-use crate::base::ArchetypeId;
+use crate::base::{ArchetypeId, Date, DateTime, Duration, Time};
 use crate::error::ParseError;
+use core::cmp::Ordering;
+use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 /// A parsed, in-memory archetype.
@@ -250,6 +254,15 @@ impl Archetype {
                 return Err(ParseError::new("ARCHETYPE", "VACDF", &ac_code));
             }
         }
+
+        // Inv_valid_assumed_value: a primitive object's assumed_value, if it
+        // has one, must conform to its own constraint.
+        let mut mismatches = Vec::new();
+        assumed_value_mismatches(self.definition.attributes(), &self.terminology, &mut mismatches);
+        if let Some(node_id) = mismatches.first() {
+            return Err(ParseError::new("ARCHETYPE", "Inv_valid_assumed_value", node_id));
+        }
+
         Ok(())
     }
 }
@@ -289,6 +302,102 @@ fn terminology_constraints(attributes: &[crate::am::CAttribute]) -> Vec<String> 
         }
     }
     out
+}
+
+/// The node identifier of every primitive object in the tree whose
+/// `assumed_value` does not conform to its own `constraint` —
+/// `Inv_valid_assumed_value`. `"<unidentified>"` stands in for a node with
+/// no `node_id` of its own (a hand-built object with no `with_node_id` call;
+/// AOM2 requires one, `A-46`'s own residual, so this only happens with a
+/// deliberately malformed in-memory tree).
+fn assumed_value_mismatches<'a>(
+    attributes: &'a [crate::am::CAttribute],
+    terminology: &ArchetypeTerminology,
+    out: &mut Vec<&'a str>,
+) {
+    for attribute in attributes {
+        for child in attribute.children() {
+            if let CObject::Primitive(primitive) = child
+                && let Some(value) = primitive.assumed_value()
+                && !assumed_value_conforms(primitive.constraint(), value, terminology)
+            {
+                out.push(primitive.node_id().unwrap_or("<unidentified>"));
+            }
+            assumed_value_mismatches(child.attributes(), terminology, out);
+        }
+    }
+}
+
+/// Whether `value` satisfies `constraint` — AOM2's own `C_PRIMITIVE_OBJECT
+/// .valid_value`, the function `Inv_valid_assumed_value` calls
+/// (`org.openehr.am.aom2.c_primitive_object.adoc`). `terminology` matters
+/// only for a `C_TERMINOLOGY_CODE` naming an `ac`-code; every other kind
+/// decides on its own.
+///
+/// A kind mismatch — a `Boolean` value against a `C_INTEGER` constraint,
+/// say — does not conform. `PrimitiveValue::Text` stands in for `C_STRING`,
+/// `C_DATE`, `C_TIME`, `C_DATE_TIME`, `C_DURATION`, and `C_TERMINOLOGY_CODE`
+/// alike ([`PrimitiveValue`]'s own module documentation), so which of those
+/// five a given `Text` means is decided here by which `CPrimitive` variant
+/// it is paired with, the same way [`crate::am::validate`] decides for RM
+/// data. `CPrimitive::Unsupported` is excluded rather than treated as a pass
+/// or a failure — this crate cannot interpret it, so neither claim is
+/// verified, the same reasoning that leaves `VASID`/`VACSD` unchecked above
+/// rather than guessed.
+fn assumed_value_conforms(
+    constraint: &CPrimitive,
+    value: &PrimitiveValue,
+    terminology: &ArchetypeTerminology,
+) -> bool {
+    match (constraint, value) {
+        (
+            CPrimitive::Boolean {
+                allow_true,
+                allow_false,
+            },
+            PrimitiveValue::Boolean(b),
+        ) => {
+            if *b {
+                *allow_true
+            } else {
+                *allow_false
+            }
+        }
+        (CPrimitive::String { list, .. }, PrimitiveValue::Text(s)) => list.is_empty() || list.contains(s),
+        (CPrimitive::Integer { list, range }, PrimitiveValue::Integer(n)) => {
+            (list.is_empty() || list.contains(n)) && range.as_ref().is_none_or(|r| r.contains(n))
+        }
+        (CPrimitive::Real { list, range }, PrimitiveValue::Real(r)) => {
+            (list.is_empty()
+                || list
+                    .iter()
+                    .any(|item| item.semantic_cmp(r) == Some(Ordering::Equal)))
+                && range.as_ref().is_none_or(|iv| iv.contains(r))
+        }
+        (CPrimitive::TerminologyCode { constraint, .. }, PrimitiveValue::Text(code)) => {
+            match constraint.as_deref() {
+                None | Some("") => true,
+                Some(c) if c.starts_with("ac") => {
+                    terminology.value_set(c).is_some_and(|set| set.contains(code))
+                }
+                Some(c) => code == c,
+            }
+        }
+        (CPrimitive::Date { range, .. }, PrimitiveValue::Text(s)) => {
+            Date::from_str(s).is_ok_and(|d| range.is_empty() || range.iter().any(|r| r.contains(&d)))
+        }
+        (CPrimitive::Time { range, .. }, PrimitiveValue::Text(s)) => {
+            Time::from_str(s).is_ok_and(|t| range.is_empty() || range.iter().any(|r| r.contains(&t)))
+        }
+        (CPrimitive::DateTime { range, .. }, PrimitiveValue::Text(s)) => {
+            DateTime::from_str(s).is_ok_and(|dt| range.is_empty() || range.iter().any(|r| r.contains(&dt)))
+        }
+        (CPrimitive::Duration { range, .. }, PrimitiveValue::Text(s)) => {
+            Duration::from_str(s).is_ok_and(|d| range.is_empty() || range.iter().any(|r| r.contains(&d)))
+        }
+        (CPrimitive::Unsupported { .. }, _) => true,
+        _ => false,
+    }
 }
 
 /// The occurrences of the definition root, which AOM2 fixes at exactly one.
@@ -423,6 +532,146 @@ mod tests {
                 "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
                 observation(&[], vec![coded]),
                 with_set,
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn an_assumed_value_of_the_matching_kind_and_in_range_is_accepted() {
+        let leaf = CObject::Primitive(
+            CPrimitiveObject::new(
+                "DV_COUNT",
+                MultiplicityInterval::MANDATORY,
+                CPrimitive::Integer {
+                    list: Vec::new(),
+                    range: Some(crate::base::Interval::closed(0, 10).unwrap()),
+                },
+            )
+            .with_assumed_value(crate::am::PrimitiveValue::Integer(5)),
+        );
+        assert!(
+            Archetype::new(
+                "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
+                observation(&[], vec![leaf]),
+                ArchetypeTerminology::new("en", terms(&["id1"])).unwrap(),
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn an_assumed_value_outside_its_own_range_is_refused() {
+        let leaf = CObject::Primitive(
+            CPrimitiveObject::new(
+                "DV_COUNT",
+                MultiplicityInterval::MANDATORY,
+                CPrimitive::Integer {
+                    list: Vec::new(),
+                    range: Some(crate::base::Interval::closed(0, 10).unwrap()),
+                },
+            )
+            .with_assumed_value(crate::am::PrimitiveValue::Integer(50)),
+        );
+        let err = Archetype::new(
+            "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
+            observation(&[], vec![leaf]),
+            ArchetypeTerminology::new("en", terms(&["id1"])).unwrap(),
+        )
+        .unwrap_err();
+        assert_eq!(err.reason, "Inv_valid_assumed_value");
+    }
+
+    /// `CPrimitiveObject::with_assumed_value`'s own documentation says a
+    /// mismatched kind is "accepted exactly as given" — true of that
+    /// function alone. `Archetype::new` sees the whole tree and the
+    /// terminology besides, and this is where `Inv_valid_assumed_value` is
+    /// actually enforced: a `Boolean` value can never conform to a
+    /// `C_INTEGER` constraint, and building an archetype that claims it
+    /// does is refused here rather than silently carried all the way to a
+    /// caller who never suspected a mismatch.
+    #[test]
+    fn a_kind_mismatched_assumed_value_is_refused_at_the_archetype_not_the_leaf() {
+        let leaf = CPrimitiveObject::new(
+            "DV_COUNT",
+            MultiplicityInterval::MANDATORY,
+            CPrimitive::Integer {
+                list: Vec::new(),
+                range: None,
+            },
+        )
+        .with_assumed_value(crate::am::PrimitiveValue::Boolean(true));
+        // The leaf alone still carries it unchecked, as documented.
+        assert_eq!(
+            leaf.assumed_value(),
+            Some(&crate::am::PrimitiveValue::Boolean(true))
+        );
+
+        let err = Archetype::new(
+            "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
+            observation(&[], vec![CObject::Primitive(leaf)]),
+            ArchetypeTerminology::new("en", terms(&["id1"])).unwrap(),
+        )
+        .unwrap_err();
+        assert_eq!(err.reason, "Inv_valid_assumed_value");
+    }
+
+    #[test]
+    fn a_terminology_code_assumed_value_is_checked_against_the_value_set() {
+        let coded = CPrimitiveObject::new(
+            "DV_CODED_TEXT",
+            MultiplicityInterval::MANDATORY,
+            CPrimitive::TerminologyCode {
+                constraint: Some("ac0001".to_owned()),
+                constraint_status: None,
+            },
+        )
+        .with_assumed_value(crate::am::PrimitiveValue::Text("at0099".to_owned()));
+        let terminology = ArchetypeTerminology::new("en", terms(&["id1", "at0010"]))
+            .unwrap()
+            .with_value_set("ac0001", BTreeSet::from(["at0010".to_owned()]))
+            .unwrap();
+        let err = Archetype::new(
+            "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
+            observation(&[], vec![CObject::Primitive(coded.clone())]),
+            terminology.clone(),
+        )
+        .unwrap_err();
+        assert_eq!(err.reason, "Inv_valid_assumed_value");
+
+        let in_set = coded.with_assumed_value(crate::am::PrimitiveValue::Text("at0010".to_owned()));
+        assert!(
+            Archetype::new(
+                "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
+                observation(&[], vec![CObject::Primitive(in_set)]),
+                terminology,
+            )
+            .is_ok()
+        );
+    }
+
+    /// A `C_UNSUPPORTED` constraint's assumed value is excluded from
+    /// `Inv_valid_assumed_value` entirely, not passed and not failed — this
+    /// crate cannot interpret the constraint, so it has no basis to claim
+    /// either.
+    #[test]
+    fn an_unsupported_constraints_assumed_value_is_not_checked() {
+        let leaf = CObject::Primitive(
+            CPrimitiveObject::new(
+                "DV_INTERVAL",
+                MultiplicityInterval::MANDATORY,
+                CPrimitive::Unsupported {
+                    rm_type_name: "DV_INTERVAL".to_owned(),
+                    source: "<unparsed>".to_owned(),
+                },
+            )
+            .with_assumed_value(crate::am::PrimitiveValue::Boolean(true)),
+        );
+        assert!(
+            Archetype::new(
+                "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
+                observation(&[], vec![leaf]),
+                ArchetypeTerminology::new("en", terms(&["id1"])).unwrap(),
             )
             .is_ok()
         );

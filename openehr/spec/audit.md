@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**55 findings, 55 in the table below: 6 High, 31 Medium, 18 Low. 49 fixed or
+**56 findings, 56 in the table below: 6 High, 31 Medium, 19 Low. 50 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -134,7 +134,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-45 | Medium | `C_DATE`/`C_TIME`/`C_DATE_TIME`/`C_DURATION` had no `CPrimitive` variant at all — every node they governed was `Unchecked`, which on most real archetypes (nearly all constrain at least one date or time field) meant `is_conformant()` was `false` far more often than the disclosure's wording suggested | **fixed** — `SemanticOrd` implemented for the four `base` temporal types (previously blocked on nothing implementing it, not a choice to skip it), then the four `CPrimitive` variants, each a list of ranges matching AOM2's own shape |
 | A-46 | Low | `C_PRIMITIVE_OBJECT` could not carry a `node_id` at all, though `CObject::node_id`'s dispatcher already read the field — it just stayed `None` forever, since nothing could set it | **fixed** — `with_node_id`/`node_id()` added, plus a `PRIMITIVE_NODE_ID` constant for AOM2's own inline-form sentinel, which is a literal string rather than coded syntax |
 | A-47 | Low | `Terminology_code`/`Terminology_term`, the BASE foundation types `AUTHORED_RESOURCE.original_language`, `RESOURCE_DESCRIPTION_ITEM.language`, and `TRANSLATION_DETAILS.language` are typed as, did not exist in this crate at all | **fixed** — both added to `openehr::base`; a standalone prerequisite, not a claim that any of the three classes that use them is now modelled |
-| A-48 | Low | `C_PRIMITIVE_OBJECT.assumed_value` had no field at all — a default value could not be attached to a primitive constraint under any representation | **fixed** — `PrimitiveValue` and `with_assumed_value`/`assumed_value()` added; `Inv_valid_assumed_value` (conformance to the attached `CPrimitive`) is carried unchecked, declared rather than silently passed |
+| A-48 | Low | `C_PRIMITIVE_OBJECT.assumed_value` had no field at all — a default value could not be attached to a primitive constraint under any representation | **fixed** — `PrimitiveValue` and `with_assumed_value`/`assumed_value()` added; residual (`Inv_valid_assumed_value` unchecked) closed by **A-56** |
 | A-49 | Medium | `parse_adl14_header`/`parse_adl2_header` used `ArchetypeId` for the header's own identifier — narrower than the grammar both cite in their own error messages, `ARCHETYPE_HRID`, which allows a namespace prefix and a prerelease version suffix neither reader accepted | **fixed**, residual documented — `ArchetypeHrid` added and both readers corrected to use it for the archetype's own identifier; the `specialize` line's identifier is unchanged and remains narrower than its own grammar allows |
 | A-50 | Medium | `C_COMPLEX_OBJECT` had no `attribute_tuples` field — `C_ATTRIBUTE_TUPLE`/`C_PRIMITIVE_TUPLE` did not exist under any name, so a `{units, magnitude}` or `{value, symbol}` co-varying constraint (AOM2's replacement for ADL 1.4's `C_DV_QUANTITY`/`C_DV_ORDINAL`) could not be represented at all, not even as `CPrimitive::Unsupported` | **fixed** — `CAttributeTuple`/`CPrimitiveTuple` added, wired onto `CComplexObject` via a builder; the tree walk reports a node governed by one as `Unchecked` rather than silently passing it |
 | A-51 | Medium | `CPrimitive::TerminologyCode` had no `constraint_status` field, so an `extensible`/`preferred`/`example` (non-`Required`) terminology constraint could not be distinguished from a required one — `am::validate` reported a violation for conformant data whenever the actual code did not match the list or value set, which AOM2 states plainly is not a violation for a soft constraint | **fixed**; residual (`code_list` had no AOM2 counterpart) closed by **A-55** |
@@ -142,6 +142,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-53 | Medium | `C_COMPLEX_OBJECT_PROXY` had no counterpart under any name — an archetype using a proxy node to reference a constraint defined elsewhere in the same archetype, rather than repeating it, could not be represented at all, the same shape of gap `A-50` found for tuple constraints | **fixed**; residual (`use_target_occurrences()` unmodelled) closed by **A-54** |
 | A-54 | Low | **BREAKING.** `CComplexObjectProxy` could not represent AOM2's `use_target_occurrences()` — `A-53`'s own residual — because `CObject::occurrences()` returned `&MultiplicityInterval`, a shape every other `C_OBJECT` variant already committed to as published API | **fixed** — `occurrences()` widened to `Option<&MultiplicityInterval>`; the four other variants are unaffected (always `Some`), and `CAttribute::single`/`container`'s own construction-time checks treat a deferred child per AOM2's own stated default (lower bound `0`, upper bound unchecked) rather than guessing |
 | A-55 | Low | **BREAKING.** `CPrimitive::TerminologyCode::code_list: Vec<String>` — `A-51`'s own residual — had no counterpart in AOM2's actual single-valued `constraint: String` | **fixed** — `code_list` removed; multiple alternative codes are now expressed as sibling `C_OBJECT`s, matching every other node kind's own alternative-matching shape; `constraint`'s `at`-code/`ac`-code kind is now distinguished by AOM2's own `"ac"` leader convention rather than by which of two fields it was written into |
+| A-56 | Low | `C_PRIMITIVE_OBJECT.assumed_value` conforming to its own `constraint` (`Inv_valid_assumed_value`) — `A-48`'s own residual — was never checked; a kind-mismatched or out-of-range assumed value was accepted silently all the way to a caller who never suspected one | **fixed** — checked in `Archetype::check`, not at `CPrimitiveObject::with_assumed_value` (which builds a node in isolation, before the terminology a `C_TERMINOLOGY_CODE` `ac`-code needs is in scope); `C_UNSUPPORTED` is excluded rather than guessed at |
 
 ---
 
@@ -3140,3 +3141,62 @@ directions (the matching code passes, a different one violates); and
 `constraint: None` and AOM2's own `Some(String::new())` spelling both
 reported unchecked with the same reason, proving the two are read as one
 case rather than one being silently favoured.
+
+## A-56 — `Inv_valid_assumed_value` was never checked
+
+**Severity: Low. Status: fixed.** Closes `A-48`'s own residual.
+
+**Why this one, now.** `A-48` deferred `Inv_valid_assumed_value` — AOM2's
+own validity condition that `C_PRIMITIVE_OBJECT.assumed_value` conforms to
+the same node's `constraint` — reasoning that "nothing calls this before a
+template author or a form generator would, and neither exists in this
+crate." That reasoning was about *runtime* consumers of an assumed value,
+which is correct and remains true; it did not consider that the archetype
+*itself* can be checked for internal consistency independent of any
+consumer, the same way `VARDT`/`VATDF`/`VACDF`/`VATCD` already are. An
+archetype whose own stated default cannot satisfy its own stated constraint
+is malformed on its own terms, whether or not anything downstream ever asks
+for the default.
+
+**Where the check lives, and why not at the leaf.** `CPrimitiveObject
+::with_assumed_value` builds one node in isolation and has no terminology in
+scope — `Inv_valid_assumed_value` for a `C_TERMINOLOGY_CODE` naming an
+`ac`-code needs the archetype's own value set, which only exists once a
+`CComplexObject` and an `ArchetypeTerminology` are assembled together. So
+the check is in `Archetype::check` (`am::archetype`), the same place
+`VACDF` already needed the terminology for the same reason.
+`CPrimitiveObject::with_assumed_value` itself is unchanged — still
+infallible, still carries a mismatched value exactly as given, exactly as
+its own documentation already said — because that is correct in isolation,
+not merely undone.
+
+**The check itself.** `assumed_value_conforms` — AOM2's own `valid_value`
+— matches `(CPrimitive, PrimitiveValue)` pairs: `Boolean` against
+`allow_true`/`allow_false`; `String` against `list` (empty means
+unconstrained, matching every other kind's own convention); `Integer`/`Real`
+against `list`/`range`, `Real` compared by `semantic_cmp` for the `D3.18d`
+reason every other numeric comparison in this crate already gives;
+`Terminology_code` against an exact `at`-code or, for an `ac`-code, the
+terminology's own value set (`A-55`'s `"ac"`-leader convention, reused
+rather than re-derived); the four temporal kinds by parsing
+`PrimitiveValue::Text` via the relevant `base` type's own `FromStr` and
+checking it against `range`. A kind mismatch — `PrimitiveValue::Boolean`
+paired with `CPrimitive::Integer`, say — does not conform, full stop:
+AOM2's `valid_value` has no notion of "close enough".
+
+**`C_UNSUPPORTED` is excluded, not guessed at.** This crate cannot interpret
+a constraint kind it does not model, so it makes no claim about whether an
+assumed value conforms to one — neither "passes" (which would be
+unverified) nor "fails" (which would refuse an archetype for a reason this
+crate cannot actually establish). The same reasoning `VASID`/`VACSD` already
+state for the two conditions this crate cannot check at all.
+
+Five new tests: a matching, in-range assumed value accepted; an
+out-of-range one refused, naming `Inv_valid_assumed_value`; a
+kind-mismatched one — `Boolean` on `C_INTEGER` — refused at the archetype
+even though `CPrimitiveObject` alone still carries it unchecked, confirming
+the two levels genuinely disagree on purpose rather than one silently
+overriding the other; a `Terminology_code` assumed value checked against a
+real value set, both directions; and a `C_UNSUPPORTED` constraint's assumed
+value building a conformant archetype regardless of what the value actually
+is, confirming the exclusion is real rather than an accidental pass.

@@ -222,6 +222,18 @@ drawn where it is; this does not build an `Archetype`, and does not
 compose with `am::adl2::parse_header` into more of `K15.5` than either
 addition is alone.
 
+**Fixed: `Inv_valid_assumed_value` — a `C_PRIMITIVE_OBJECT`'s
+`assumed_value` conforming to its own `constraint` — was never checked.**
+Closes `A-48`'s own residual. A kind-mismatched assumed value (`Boolean` on
+a `C_INTEGER` constraint) or an out-of-range one was accepted silently all
+the way through to a caller who never suspected either. Checked in
+`Archetype::check`, not at `CPrimitiveObject::with_assumed_value` — which
+stays exactly as permissive as documented, since it builds one node in
+isolation, before the terminology a `Terminology_code` `ac`-code needs is in
+scope. `C_UNSUPPORTED` is excluded from the check rather than guessed at,
+the same reasoning `VASID`/`VACSD` already state for what this crate cannot
+establish at all. See `openehr/spec/audit.md` **A-56**.
+
 ## 0.8.0 — 2026-08-29
 
 **BREAKING: the MSRV floor moved from N−3 to N−2 — 1.95 to 1.96.** `RV1`
