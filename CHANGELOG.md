@@ -50,6 +50,14 @@ together.
   evaluated. A `match` naming both fields exhaustively will not compile
   against this release; conformance behaviour for existing archetypes is
   unchanged once `pattern` is refolded into `list`.
+- `am::cadl` now parses a primitive constraint's own assumed value —
+  `'; ' <value>` for eight kinds, `[ac3; at5]` for `Terminology_code` — and
+  attaches it via `CPrimitiveObject::with_assumed_value` (`A-48`). See
+  `A-64` in `openehr/spec/audit.md`. Not a breaking change:
+  `parse_definition` accepts strictly more input than before. Found while
+  writing its tests and tracked separately: no ISO8601 date, time,
+  date-time, or duration literal can be lexed by `am::cadl` at all — see
+  `A-65`, open, in `openehr/spec/audit.md`.
 
 ## 0.9.0 — 2026-09-02
 

@@ -58,9 +58,16 @@
 //!   `/…/`-delimited element (`A-63`: no separate field for it, unlike the
 //!   four temporal variants' distinct `pattern` field), but nothing in this
 //!   parser ever puts one there.
-//! - **An `ac`-code's assumed value** (`[ac3; at5]`) — needs
-//!   [`crate::am::PrimitiveValue`] attached via `with_assumed_value`, which
-//!   this parser does not do.
+//! - **An ISO8601 date, time, date-time, or duration literal** — needs a
+//!   [`super::cadl_lexer::Token`] this lexer's word-scanner does not
+//!   produce: `2024-01-01`, `12:30:00`, and `P1Y` all contain `-`/`:`,
+//!   which the lexer treats as `Symbol`s (needed elsewhere), splitting each
+//!   literal into several tokens rather than the one `Word`
+//!   `expect_temporal` expects (`A-65`). This is total, not partial — no
+//!   `C_DATE`/`C_TIME`/`C_DATE_TIME`/`C_DURATION` constraint, wrapped or
+//!   unwrapped, assumed-value or not, can be parsed by this pass at all,
+//!   though the dispatch table and the four temporal `CPrimitive` variants
+//!   have existed since `A-45`.
 //! - **More than one `C_INTEGER`/`C_REAL`/temporal range** (`|0..10|,
 //!   |20..30|`) — [`crate::am::CPrimitive::Integer`] and its siblings hold
 //!   one `Option<Interval<_>>` each, not a list of them; AOM2 itself allows
@@ -113,7 +120,7 @@ use super::{
     ArchetypeSlot, CAttribute, CArchetypeRoot, CComplexObject, CComplexObjectProxy, CObject,
     Cardinality, MultiplicityInterval, NodeIdSyntax, ROOT_OCCURRENCES,
 };
-use crate::am::{CPrimitive, CPrimitiveObject};
+use crate::am::{CPrimitive, CPrimitiveObject, PrimitiveValue};
 use crate::base::{Date, DateTime, Duration, Interval, Real, Time};
 use core::str::FromStr;
 
@@ -500,10 +507,13 @@ fn c_attribute_def(lexer: &mut Lexer<'_>) -> Result<CAttribute, CadlError> {
 /// `c_objects: c_regular_object_ordered+ | c_inline_primitive_object ;`
 fn c_objects(lexer: &mut Lexer<'_>) -> Result<Vec<CObject>, CadlError> {
     if starts_inline_primitive(lexer) {
-        let primitive = parse_inline_primitive(lexer, None)?;
-        let object = CPrimitiveObject::new("primitive", MultiplicityInterval::MANDATORY, primitive)
+        let (primitive, assumed) = parse_inline_primitive(lexer, None)?;
+        let mut object = CPrimitiveObject::new("primitive", MultiplicityInterval::MANDATORY, primitive)
             .with_node_id(CPrimitiveObject::PRIMITIVE_NODE_ID)
             .expect("PRIMITIVE_NODE_ID is always accepted by with_node_id");
+        if let Some(value) = assumed {
+            object = object.with_assumed_value(value);
+        }
         return Ok(vec![CObject::Primitive(object)]);
     }
     let mut objects = Vec::new();
@@ -564,15 +574,19 @@ fn c_regular_object(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
             allow_true: true,
             allow_false: true,
         };
+        let mut assumed = None;
         if peek_keyword(lexer, "matches") || peek_keyword(lexer, "is_in") {
             lexer.next();
             expect_symbol(lexer, '{')?;
-            constraint = parse_inline_primitive(lexer, Some(&rm_type_name))?;
+            (constraint, assumed) = parse_inline_primitive(lexer, Some(&rm_type_name))?;
             expect_symbol(lexer, '}')?;
         }
-        let object = CPrimitiveObject::new(rm_type_name, occurrences, constraint)
+        let mut object = CPrimitiveObject::new(rm_type_name, occurrences, constraint)
             .with_node_id(node_id)
             .map_err(|e| CadlError::at(offset, format!("invalid C_PRIMITIVE_OBJECT: {e}")))?;
+        if let Some(value) = assumed {
+            object = object.with_assumed_value(value);
+        }
         return Ok(CObject::Primitive(object));
     }
 
@@ -773,7 +787,17 @@ fn primitive_kind(rm_type_name: &str) -> Option<&'static str> {
 /// [`starts_inline_primitive`], which only ever calls this with `None` for
 /// `Boolean`/`String`/`Integer`/`Real`/`Terminology_code` shapes; the four
 /// temporal kinds are not reachable unwrapped in this parser at all).
-fn parse_inline_primitive(lexer: &mut Lexer<'_>, rm_type_hint: Option<&str>) -> Result<CPrimitive, CadlError> {
+///
+/// The second element of the returned pair is the trailing assumed value
+/// (`'; ' <value>`), every one of the eight kinds' own grammar production
+/// (`cadl2_primitives.g4`) states as an optional suffix — except
+/// `c_terminology_code`, whose `[ac3; at5]` is a second code inside its own
+/// brackets rather than a value trailing them, read in
+/// `parse_terminology_code_primitive` itself.
+fn parse_inline_primitive(
+    lexer: &mut Lexer<'_>,
+    rm_type_hint: Option<&str>,
+) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
     match rm_type_hint {
         Some(kind) if kind.eq_ignore_ascii_case("boolean") => parse_boolean_primitive(lexer),
         Some(kind) if kind.eq_ignore_ascii_case("string") => parse_string_primitive(lexer),
@@ -807,7 +831,24 @@ fn parse_inline_primitive(lexer: &mut Lexer<'_>, rm_type_hint: Option<&str>) -> 
     }
 }
 
-fn parse_boolean_primitive(lexer: &mut Lexer<'_>) -> Result<CPrimitive, CadlError> {
+/// Reads an optional trailing `';' <value>` — `assumed_boolean_value`,
+/// `assumed_string_value`, … in `cadl2_primitives.g4`, the same shape every
+/// primitive kind but `C_TERMINOLOGY_CODE` shares (see
+/// [`parse_inline_primitive`]'s own documentation).
+fn parse_assumed_boolean(lexer: &mut Lexer<'_>) -> Result<Option<PrimitiveValue>, CadlError> {
+    if !consume_symbol_if(lexer, ';') {
+        return Ok(None);
+    }
+    let offset = lexer.offset();
+    match lexer.next() {
+        Some(Token::Word(w)) if w.eq_ignore_ascii_case("true") => Ok(Some(PrimitiveValue::Boolean(true))),
+        Some(Token::Word(w)) if w.eq_ignore_ascii_case("false") => Ok(Some(PrimitiveValue::Boolean(false))),
+        Some(other) => Err(CadlError::at(offset, format!("expected `true` or `false`, found {other}"))),
+        None => Err(CadlError::at(offset, "expected `true` or `false`, found end of input")),
+    }
+}
+
+fn parse_boolean_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
     let (mut allow_true, mut allow_false) = (false, false);
     loop {
         let offset = lexer.offset();
@@ -821,10 +862,23 @@ fn parse_boolean_primitive(lexer: &mut Lexer<'_>) -> Result<CPrimitive, CadlErro
             break;
         }
     }
-    Ok(CPrimitive::Boolean { allow_true, allow_false })
+    let assumed = parse_assumed_boolean(lexer)?;
+    Ok((CPrimitive::Boolean { allow_true, allow_false }, assumed))
 }
 
-fn parse_string_primitive(lexer: &mut Lexer<'_>) -> Result<CPrimitive, CadlError> {
+fn parse_assumed_string(lexer: &mut Lexer<'_>) -> Result<Option<PrimitiveValue>, CadlError> {
+    if !consume_symbol_if(lexer, ';') {
+        return Ok(None);
+    }
+    let offset = lexer.offset();
+    match lexer.next() {
+        Some(Token::Str(s)) => Ok(Some(PrimitiveValue::Text(s))),
+        Some(other) => Err(CadlError::at(offset, format!("expected a string literal, found {other}"))),
+        None => Err(CadlError::at(offset, "expected a string literal, found end of input")),
+    }
+}
+
+fn parse_string_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
     let mut list = Vec::new();
     loop {
         let offset = lexer.offset();
@@ -837,11 +891,19 @@ fn parse_string_primitive(lexer: &mut Lexer<'_>) -> Result<CPrimitive, CadlError
             break;
         }
     }
-    Ok(CPrimitive::String { list })
+    let assumed = parse_assumed_string(lexer)?;
+    Ok((CPrimitive::String { list }, assumed))
 }
 
-fn parse_integer_primitive(lexer: &mut Lexer<'_>) -> Result<CPrimitive, CadlError> {
-    if matches!(lexer.peek(), Some(Token::Symbol('|'))) {
+fn parse_assumed_integer(lexer: &mut Lexer<'_>) -> Result<Option<PrimitiveValue>, CadlError> {
+    if !consume_symbol_if(lexer, ';') {
+        return Ok(None);
+    }
+    Ok(Some(PrimitiveValue::Integer(expect_signed_integer(lexer)?)))
+}
+
+fn parse_integer_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
+    let constraint = if matches!(lexer.peek(), Some(Token::Symbol('|'))) {
         let range = parse_integer_interval(lexer)?;
         if matches!(lexer.peek(), Some(Token::Symbol(','))) {
             return Err(CadlError::at(
@@ -850,16 +912,19 @@ fn parse_integer_primitive(lexer: &mut Lexer<'_>) -> Result<CPrimitive, CadlErro
                  CPrimitive::Integer (one Option<Interval<i64>>)",
             ));
         }
-        return Ok(CPrimitive::Integer { list: Vec::new(), range: Some(range) });
-    }
-    let mut list = Vec::new();
-    loop {
-        list.push(expect_signed_integer(lexer)?);
-        if !consume_symbol_if(lexer, ',') {
-            break;
+        CPrimitive::Integer { list: Vec::new(), range: Some(range) }
+    } else {
+        let mut list = Vec::new();
+        loop {
+            list.push(expect_signed_integer(lexer)?);
+            if !consume_symbol_if(lexer, ',') {
+                break;
+            }
         }
-    }
-    Ok(CPrimitive::Integer { list, range: None })
+        CPrimitive::Integer { list, range: None }
+    };
+    let assumed = parse_assumed_integer(lexer)?;
+    Ok((constraint, assumed))
 }
 
 fn parse_integer_interval(lexer: &mut Lexer<'_>) -> Result<Interval<i64>, CadlError> {
@@ -875,8 +940,15 @@ fn parse_integer_interval(lexer: &mut Lexer<'_>) -> Result<Interval<i64>, CadlEr
         .map_err(|e| CadlError::at(offset, e.to_string()))
 }
 
-fn parse_real_primitive(lexer: &mut Lexer<'_>) -> Result<CPrimitive, CadlError> {
-    if matches!(lexer.peek(), Some(Token::Symbol('|'))) {
+fn parse_assumed_real(lexer: &mut Lexer<'_>) -> Result<Option<PrimitiveValue>, CadlError> {
+    if !consume_symbol_if(lexer, ';') {
+        return Ok(None);
+    }
+    Ok(Some(PrimitiveValue::Real(expect_signed_real(lexer)?)))
+}
+
+fn parse_real_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
+    let constraint = if matches!(lexer.peek(), Some(Token::Symbol('|'))) {
         let range = parse_real_interval(lexer)?;
         if matches!(lexer.peek(), Some(Token::Symbol(','))) {
             return Err(CadlError::at(
@@ -885,16 +957,19 @@ fn parse_real_primitive(lexer: &mut Lexer<'_>) -> Result<CPrimitive, CadlError> 
                  CPrimitive::Real (one Option<Interval<Real>>)",
             ));
         }
-        return Ok(CPrimitive::Real { list: Vec::new(), range: Some(range) });
-    }
-    let mut list = Vec::new();
-    loop {
-        list.push(expect_signed_real(lexer)?);
-        if !consume_symbol_if(lexer, ',') {
-            break;
+        CPrimitive::Real { list: Vec::new(), range: Some(range) }
+    } else {
+        let mut list = Vec::new();
+        loop {
+            list.push(expect_signed_real(lexer)?);
+            if !consume_symbol_if(lexer, ',') {
+                break;
+            }
         }
-    }
-    Ok(CPrimitive::Real { list, range: None })
+        CPrimitive::Real { list, range: None }
+    };
+    let assumed = parse_assumed_real(lexer)?;
+    Ok((constraint, assumed))
 }
 
 fn parse_real_interval(lexer: &mut Lexer<'_>) -> Result<Interval<Real>, CadlError> {
@@ -910,24 +985,45 @@ fn parse_real_interval(lexer: &mut Lexer<'_>) -> Result<Interval<Real>, CadlErro
         .map_err(|e| CadlError::at(offset, e.to_string()))
 }
 
-fn parse_terminology_code_primitive(lexer: &mut Lexer<'_>) -> Result<CPrimitive, CadlError> {
+/// `c_terminology_code: '[' ( AC_CODE ( ';' AT_CODE )? | AT_CODE ) ']' ;`
+///
+/// The assumed value is read here rather than through
+/// [`parse_assumed_boolean`]'s siblings: it is a second code *inside* the
+/// brackets, not a value trailing them, and the grammar's own note is
+/// explicit that it "can only occur after an ac-code not after the single
+/// at-code" — enforced below rather than accepted and left for
+/// `Inv_valid_assumed_value` (`A-56`) to catch later.
+fn parse_terminology_code_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
     expect_symbol(lexer, '[')?;
     let offset = lexer.offset();
     let code = expect_word(lexer, "an at- or ac-code")?;
     if NodeIdSyntax::of(&code).is_none() {
         return Err(CadlError::at(offset, format!("`{code}` is not a valid at- or ac-code")));
     }
-    if matches!(lexer.peek(), Some(Token::Symbol(';'))) {
-        return Err(CadlError::at(
-            lexer.offset(),
-            "an ac-code's assumed at-code (`[acN; atN]`) is not implemented by this parser",
-        ));
+    let mut assumed = None;
+    if consume_symbol_if(lexer, ';') {
+        if !code.starts_with("ac") {
+            return Err(CadlError::at(
+                offset,
+                "an assumed at-code (`[acN; atN]`) may only follow an ac-code, not a bare \
+                 at-code — cadl2_primitives.g4's own note",
+            ));
+        }
+        let at_offset = lexer.offset();
+        let at_code = expect_word(lexer, "an assumed at-code")?;
+        if !at_code.starts_with("at") || NodeIdSyntax::of(&at_code).is_none() {
+            return Err(CadlError::at(at_offset, format!("`{at_code}` is not a valid at-code")));
+        }
+        assumed = Some(PrimitiveValue::Text(at_code));
     }
     expect_symbol(lexer, ']')?;
-    Ok(CPrimitive::TerminologyCode {
-        constraint: Some(code),
-        constraint_status: None,
-    })
+    Ok((
+        CPrimitive::TerminologyCode {
+            constraint: Some(code),
+            constraint_status: None,
+        },
+        assumed,
+    ))
 }
 
 /// Reads one `ISO8601_*`-shaped [`Token::Word`] and parses it via `T`'s own
@@ -939,6 +1035,26 @@ fn expect_temporal<T: FromStr>(lexer: &mut Lexer<'_>, what: &'static str) -> Res
     let offset = lexer.offset();
     let text = expect_word(lexer, what)?;
     T::from_str(&text).map_err(|_| CadlError::at(offset, format!("`{text}` is not a valid {what}")))
+}
+
+/// Reads an optional trailing `';' <value>` for a temporal kind —
+/// `assumed_date_value`/`assumed_time_value`/… in `cadl2_primitives.g4`,
+/// the same shape [`parse_assumed_boolean`]'s siblings share. The text is
+/// kept, not a re-serialised `T`: [`PrimitiveValue::Text`] stands in for
+/// every non-numeric kind alike ([`PrimitiveValue`]'s own module
+/// documentation), and validating through `T::from_str` without discarding
+/// the original text is cheaper than parsing and reformatting.
+fn parse_assumed_temporal<T: FromStr>(
+    lexer: &mut Lexer<'_>,
+    what: &'static str,
+) -> Result<Option<PrimitiveValue>, CadlError> {
+    if !consume_symbol_if(lexer, ';') {
+        return Ok(None);
+    }
+    let offset = lexer.offset();
+    let text = expect_word(lexer, what)?;
+    T::from_str(&text).map_err(|_| CadlError::at(offset, format!("`{text}` is not a valid {what}")))?;
+    Ok(Some(PrimitiveValue::Text(text)))
 }
 
 macro_rules! temporal_primitive {
@@ -956,8 +1072,8 @@ macro_rules! temporal_primitive {
                 .map_err(|e| CadlError::at(offset, e.to_string()))
         }
 
-        fn $fn_primitive(lexer: &mut Lexer<'_>) -> Result<CPrimitive, CadlError> {
-            if matches!(lexer.peek(), Some(Token::Symbol('|'))) {
+        fn $fn_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
+            let constraint = if matches!(lexer.peek(), Some(Token::Symbol('|'))) {
                 let range = $fn_interval(lexer)?;
                 if matches!(lexer.peek(), Some(Token::Symbol(','))) {
                     return Err(CadlError::at(
@@ -970,19 +1086,22 @@ macro_rules! temporal_primitive {
                         ),
                     ));
                 }
-                return Ok(CPrimitive::$variant { range: vec![range], pattern: None });
-            }
-            let value: $ty = expect_temporal(lexer, $what)?;
-            let mut range = vec![Interval::new(Some(value.clone()), Some(value), Some(true), Some(true))
-                .map_err(|e| CadlError::at(lexer.offset(), e.to_string()))?];
-            while consume_symbol_if(lexer, ',') {
+                CPrimitive::$variant { range: vec![range], pattern: None }
+            } else {
                 let value: $ty = expect_temporal(lexer, $what)?;
-                range.push(
-                    Interval::new(Some(value.clone()), Some(value), Some(true), Some(true))
-                        .map_err(|e| CadlError::at(lexer.offset(), e.to_string()))?,
-                );
-            }
-            Ok(CPrimitive::$variant { range, pattern: None })
+                let mut range = vec![Interval::new(Some(value.clone()), Some(value), Some(true), Some(true))
+                    .map_err(|e| CadlError::at(lexer.offset(), e.to_string()))?];
+                while consume_symbol_if(lexer, ',') {
+                    let value: $ty = expect_temporal(lexer, $what)?;
+                    range.push(
+                        Interval::new(Some(value.clone()), Some(value), Some(true), Some(true))
+                            .map_err(|e| CadlError::at(lexer.offset(), e.to_string()))?,
+                    );
+                }
+                CPrimitive::$variant { range, pattern: None }
+            };
+            let assumed = parse_assumed_temporal::<$ty>(lexer, $what)?;
+            Ok((constraint, assumed))
         }
     };
 }
@@ -1099,6 +1218,92 @@ mod tests {
             panic!("expected an unwrapped primitive String");
         };
         assert_eq!(unwrapped.node_id(), Some(CPrimitiveObject::PRIMITIVE_NODE_ID));
+    }
+
+    /// The trailing `'; ' <value>` every primitive kind but
+    /// `Terminology_code` shares (`cadl2_primitives.g4`'s own
+    /// `assumed_*_value` productions) — one case per kind, wrapped, so each
+    /// confirms both the parse and that `with_assumed_value` (`A-48`) is
+    /// actually reached rather than the value being read and discarded.
+    ///
+    /// The four temporal kinds are not among these cases: `A-65` found, in
+    /// the course of writing this very test, that no ISO8601 literal can be
+    /// lexed by this parser at all — a pre-existing defect this finding
+    /// does not fix, only documents. `parse_assumed_temporal` is added to
+    /// the temporal macro on the same terms as the other five kinds below,
+    /// correct by the same reasoning, but genuinely untestable end-to-end
+    /// until `A-65` is closed.
+    #[test]
+    fn a_wrapped_primitives_assumed_value_is_attached() {
+        let cases: &[(&str, &str, PrimitiveValue)] = &[
+            ("Boolean", "true; false", PrimitiveValue::Boolean(false)),
+            ("String", "\"a\", \"b\"; \"a\"", PrimitiveValue::Text("a".to_owned())),
+            ("Integer", "|0..10|; 5", PrimitiveValue::Integer(5)),
+            ("Real", "|0.0..10.0|; 5.0", PrimitiveValue::Real("5.0".parse().unwrap())),
+        ];
+        for (kind, body, want) in cases {
+            let source = format!(
+                "ELEMENT[id1] matches {{ value matches {{ {kind}[id2] occurrences matches {{1}} \
+                 matches {{{body}}} }} }}"
+            );
+            let root = parse_definition(&source).unwrap();
+            let CObject::Primitive(leaf) = &root.attributes()[0].children()[0] else {
+                panic!("expected a primitive {kind}, source: {source}");
+            };
+            assert_eq!(leaf.assumed_value(), Some(want), "kind {kind}, source: {source}");
+        }
+    }
+
+    /// The unwrapped shorthand (`c_objects`'s own `parse_inline_primitive`
+    /// call, `None` hint) reaches the same assumed-value path as the
+    /// wrapped form above — a second call site, not a second
+    /// implementation (`lib:A-33`).
+    #[test]
+    fn an_unwrapped_primitives_assumed_value_is_attached() {
+        let source = r#"CLUSTER[id1] matches { units matches {"mm[Hg]", "kPa"; "mm[Hg]"} }"#;
+        let root = parse_definition(source).unwrap();
+        let CObject::Primitive(leaf) = &root.attributes()[0].children()[0] else {
+            panic!("expected an unwrapped primitive String");
+        };
+        assert_eq!(
+            leaf.assumed_value(),
+            Some(&PrimitiveValue::Text("mm[Hg]".to_owned()))
+        );
+    }
+
+    /// `[ac3; at5]`: an ac-code's assumed at-code, the one assumed-value
+    /// shape with its own grammar production rather than a trailing `;
+    /// <value>` — read inside `parse_terminology_code_primitive` itself.
+    #[test]
+    fn an_ac_codes_assumed_at_code_is_attached() {
+        let source = "ELEMENT[id1] matches { value matches { Terminology_code[id2] \
+                       occurrences matches {1} matches {[ac1; at5]} } }";
+        let root = parse_definition(source).unwrap();
+        let CObject::Primitive(leaf) = &root.attributes()[0].children()[0] else {
+            panic!("expected a primitive Terminology_code");
+        };
+        assert_eq!(
+            leaf.constraint(),
+            &CPrimitive::TerminologyCode {
+                constraint: Some("ac1".to_owned()),
+                constraint_status: None,
+            }
+        );
+        assert_eq!(
+            leaf.assumed_value(),
+            Some(&PrimitiveValue::Text("at5".to_owned()))
+        );
+    }
+
+    /// The grammar's own note: an assumed at-code may only follow an
+    /// ac-code, never a bare at-code — `[at5; at6]` is refused, not
+    /// silently accepted with the second code ignored.
+    #[test]
+    fn an_at_codes_own_assumed_value_is_refused_not_silently_ignored() {
+        let source = "ELEMENT[id1] matches { value matches { Terminology_code[id2] \
+                       occurrences matches {1} matches {[at5; at6]} } }";
+        let err = parse_definition(source).unwrap_err();
+        assert!(err.reason.contains("ac-code"), "{err}");
     }
 
     #[test]

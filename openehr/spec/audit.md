@@ -15,14 +15,15 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**63 findings, 63 in the table below: 7 High, 33 Medium, 23 Low. 57 fixed or
-classified, 6 open.** These counts are checked against the table by CI
+**65 findings, 65 in the table below: 7 High, 34 Medium, 24 Low. 58 fixed or
+classified, 7 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
-verified), and the check should have failed. Every one of the 6 open findings
-is open by a stated reason rather than by omission — **A-40** is the newest and
-the largest, an entire specification section in force with no code behind it —
-and the rest: **A-02**, **A-08** and
+verified), and the check should have failed. Every one of the 7 open findings
+is open by a stated reason rather than by omission — **A-40** is the largest,
+an entire specification section in force with no code behind it, and **A-65**
+is its own newest residual — no ISO8601 literal can be lexed by `am::cadl` at
+all, found while extending it — and the rest: **A-02**, **A-08** and
 **A-19** are declared departures the crate does not intend to close; **A-05**, **A-10**,
 **A-30** are recorded limitations or residuals with the reasoning
 for leaving them written beside them — **A-38** is a defect in `serde_json`
@@ -150,6 +151,8 @@ in the documentation, which is the class this register most exists to catch.
 | A-61 | Low | `TermDefinition` had no `other_items` field — AOM2's `ARCHETYPE_TERM.other_items`, a hash of extra keyed items "e.g. provenance", could not be represented at all, the same silent-loss shape `A-46`/`A-48`/`A-50`/`A-52`/`A-59` each found in a different class | **fixed** — `other_items`/`with_other_item()`/`other_items()` added, defaulting to an empty map and `#[serde(default)]` on the wire; carried, not interpreted, the same position this crate already takes on `ArchetypeTerminology`'s own external bindings — no fixed list of recognised keys exists to check against |
 | A-62 | Medium | `am::cadl` (`A-40`'s own "smallest real slice") refused `use_archetype`, `use_node`, and `allow_archetype` outright, though `C_ARCHETYPE_ROOT`, `C_COMPLEX_OBJECT_PROXY`, and `ArchetypeSlot` all already existed as types (`A-50`, `A-53`) — the blanket refusal overstated what stood in the way: only `allow_archetype`'s own `matches { include ... }` form genuinely needs the `K15.10` assertion grammar this parser does not lex | **fixed** — `use_archetype`/`use_node` fully implemented (`archetype_ref` reconstructed by slicing the source between token boundaries, `ADL_PATH` read as raw text to the next whitespace — two new `Lexer` primitives, since neither lexes atomically as a `Word`); `allow_archetype` implemented for its unrestricted form only, with `closed` and `matches {...}` each refused by name for a distinct, real reason (the former's own grammar carries no occurrences to build `ArchetypeSlot` from; the latter genuinely needs `K15.10`) |
 | A-63 | Low | **BREAKING.** `CPrimitive::String::pattern: Option<String>` had no counterpart in AOM2's actual single-`List<String>` `constraint` — the same shape `A-51`'s second pass fixed for `TerminologyCode::code_list`, found while researching `A-62`'s own `CONTAINED_REGEXP` boundary | **fixed** — `pattern` removed; a regex is now a `/…/`- or `^…^`-delimited element of `list` itself, matching `C_STRING`'s real AOM2 shape; `is_c_string_pattern` is the one place that recognises the delimiter convention, called from both `am::validate::walk_primitive` and `am::archetype::assumed_value_conforms` (`lib:A-33`) |
+| A-64 | Low | `am::cadl` could not parse a primitive constraint's own assumed value — `'; ' <value>`, a shape every primitive kind's grammar production states (`cadl2_primitives.g4`), and `[ac3; at5]` for `Terminology_code` specifically — though `CPrimitiveObject::with_assumed_value` (`A-48`) has existed to receive one since before this parser did | **fixed** — a shared assumed-value reader per kind (five direct, four more through the existing `temporal_primitive!` macro) plus a dedicated `[ac3; at5]` reader refusing the grammar's own stated case (an assumed at-code after a bare at-code), all wired into both call sites `parse_inline_primitive` has |
+| A-65 | Medium | No ISO8601 date, time, date-time, or duration literal can be lexed by `am::cadl` at all — found writing `A-64`'s own tests, not by a fuzzer or a report — because `cadl_lexer::Lexer`'s word-scanner treats `-`/`:` as `Symbol`s (needed for archetype identifiers elsewhere), splitting every such literal into several tokens before `expect_temporal`'s `expect_word` ever sees one | **open** — the four temporal `CPrimitive` kinds' own dispatch table and macro-generated parsers have existed since `A-45`/before, reachable by rm-type-id dispatch, and have never once successfully parsed a real literal; `A-64`'s own temporal assumed-value code is added on the same terms as its five working siblings but is equally unreachable until this is fixed |
 
 ---
 
@@ -2221,7 +2224,12 @@ depth. A finding is not deleted when it is fixed; it is marked.
 
 **Severity: Medium. Status: open — object model built 2026-08-26; validation
 against an in-memory archetype, and repository resolution of a filled slot,
-built 2026-08-30; no parser, flattening, or template expansion.**
+built 2026-08-30; a bounded `definition`-only cADL parser (`am::cadl`, not
+`K15.5` — see its own module documentation for the exact boundary) built
+2026-09-02, covering most `C_OBJECT`/`C_PRIMITIVE_OBJECT` shapes and their
+assumed values (`A-62`, `A-64`); still no header/specialisation/
+terminology/rules/annotations parsing, no flattening, and no template
+expansion.**
 
 **What happened.** `S1.4` — *the crate MUST NOT implement the Archetype Model* —
 was withdrawn on 2026-08-26 and replaced by `S1.21` and
@@ -2252,19 +2260,30 @@ caller to opt in before validating against a result with no established
 provenance (`K15.26`), and never treating a retrieval failure as a pass
 (`K15.27`).
 
-**Eighteen requirements have no code.** No ADL 2 parser (`K15.5`–`K15.7`), no
-ADL 1.4 ingestion (`K15.8`–`K15.10`), no flattening (`K15.11`–`K15.13`), and no
-template expansion or operational template (`K15.14`–`K15.17`). For a caller,
-the practically important sentence is now narrower still: this crate can tell
-you whether a `COMPOSITION` conforms to an archetype it already holds in
-memory or can retrieve through a repository it is given, and still cannot tell
-you whether it conforms to the *published* archetype named on the instance,
-because nothing here reads ADL or merges a specialisation's inherited
-constraints in first. A bare `ARCHETYPE_SLOT` stays unchecked regardless of a
-repository: which archetype fills it lives on the instance's own
-`ARCHETYPED.archetype_id`, which `crate::path::Node` does not expose — a
-residual named in its own right below, not folded into this count because it
-is a gap in `crate::path`, not in §15.
+**Eighteen requirements have no code, as counted 2026-08-30; still true today,
+though "no code" is no longer the accurate word for one of them.** No
+*complete* ADL 2 parser (`K15.5`–`K15.7`) — `am::cadl`, built 2026-09-02
+(`A-40`'s own status line above), reads `definition`'s own `c_complex_object`
+grammar rule for a real but bounded subset of node kinds, not the header,
+specialisation, terminology, rules, or annotations `K15.5` itself requires,
+and does not build an `Archetype`; the eighteen-requirement count is
+unchanged because none of `K15.5`–`K15.7` is satisfied by a partial reader of
+one grammar rule. Still fully absent: ADL 1.4 ingestion (`K15.8`–`K15.10`),
+flattening (`K15.11`–`K15.13`), and template expansion or operational
+template (`K15.14`–`K15.17`). For a caller, the practically important
+sentence is now narrower still: this crate can tell you whether a
+`COMPOSITION` conforms to an archetype it already holds in memory or can
+retrieve through a repository it is given, and still cannot tell you whether
+it conforms to the *published* archetype named on the instance, because
+nothing here reads a whole ADL source into an `Archetype` or merges a
+specialisation's inherited constraints in first. A filled `ARCHETYPE_SLOT`
+is checked against `is_closed`/`any_allowed()` since `A-60`, which closed
+the `crate::path` residual this paragraph used to name (`Node` did not
+expose `ARCHETYPED.archetype_id` at all); a *restricted* slot's filler —
+`includes`/`excludes` — still is not, because those are `K15.10`'s own
+assertion grammar, a residual named in its own right below and not folded
+into this eighteen-requirement count because it is a gap in `am::cadl` and
+`am::validate`, not an unbuilt requirement of §15 itself.
 
 **Why this is a finding rather than a plan.** `C0.9` — a gap that is not written
 down reads as a pass. A specification section with no code is the most flattering
@@ -2306,17 +2325,39 @@ does not change, and a mass rewrite during a specification change is how a
 citation stops meaning anything. They are re-pointed when the code they describe
 changes, and this paragraph is the record that they are known.
 
-**Residual, added 2026-08-30.** `validate_with_repository` resolves a
-`C_ARCHETYPE_ROOT`, but a bare `ARCHETYPE_SLOT` stays unchecked with or
-without a repository, and this is a gap in a different module than the one
-this finding is about: which archetype fills a slot is recorded on the
-instance's `ARCHETYPED.archetype_id`, and `crate::path::Node` — built for AQL
-and path resolution, before archetype support existed — exposes only
-`archetype_node_id`, the short code, never that attribute. Closing it means
-adding a variant or a method to `crate::path::Node`, which is `path.rs`'s
-surface, not `am`'s; `openehr::am::validate`'s own module documentation states
-the gap rather than working around it with something that looks like a
-resolution and is not one.
+**Residual, added 2026-08-30, closed 2026-09-02.** `validate_with_repository`
+resolves a `C_ARCHETYPE_ROOT`, but a bare `ARCHETYPE_SLOT` stayed unchecked
+with or without a repository, because `crate::path::Node` — built for AQL and
+path resolution, before archetype support existed — exposed only
+`archetype_node_id`, the short code, never `ARCHETYPED.archetype_id`, which
+is where the identity of whatever fills a slot actually lives. `A-60` added
+`Node::archetype_details()` and rewired `am::validate`'s slot handling
+(`walk_slot`) around it: a closed slot filled anyway is now a real
+violation, an unrestricted slot's filler needs no further check, and a slot
+correctly left open needs none either — only a *restricted* slot's filler
+(`includes`/`excludes`) remains unchecked, and that residual is `K15.10`'s
+own, tracked below rather than here.
+
+**Residual, added 2026-09-02.** `K15.10` itself — the BEOM assertion
+grammar `ARCHETYPE_SLOT.includes`/`.excludes` need to be evaluated for
+real, not merely carried — remains unimplemented. `A-62` scoped `am::cadl`'s
+own `allow_archetype` support around this exact boundary (the unrestricted
+form only; `matches { include ... }` refused by name), and `A-60`'s own
+`walk_slot` stops at the same place from the validation side: a restricted
+open slot's filler is reported `Unchecked`, naming the filler's archetype
+id, because nothing here can tell whether it satisfies an assertion this
+crate does not parse. Closing it needs a real (if narrowly scoped)
+implementation of `constraint_expr` (`base_expressions.g4`) — at minimum
+`bound_path SYM_MATCHES CONTAINED_REGEXP`, the shape every real
+`ARCHETYPE_SLOT` assertion this repository has found actually uses — not
+attempted here.
+
+**Residual, added 2026-09-02.** `am::cadl` cannot parse any ISO8601 date,
+time, date-time, or duration literal at all, discovered while closing the
+next residual below (`A-64`) and tracked separately as `A-65`: this is a
+lexer defect, not a grammar-coverage gap, and affects every use of the four
+temporal `CPrimitive` kinds this parser's own dispatch table already names,
+not merely their assumed values.
 
 ## A-41 — the matrix's totals went stale, again
 
@@ -3674,3 +3715,101 @@ beside it in the same list (the behavioural continuity claim above,
 checked rather than asserted); and a literal-only list with no regex
 element rejects an unmatched value as a definite violation, exactly as
 before this finding, confirming the ordinary case is untouched.
+
+## A-64 — `am::cadl` could not parse a primitive's own assumed value
+
+**Severity: Low. Status: fixed.**
+
+Found continuing `A-40`'s own residual — extending `am::cadl`'s coverage
+— by reading `cadl2_primitives.g4` directly rather than assuming the
+parser's existing eight primitive readers were complete because each
+already handled its own list/range shape. They were not: every one of
+`c_boolean`, `c_string`, `c_integer`, `c_real`, `c_date`, `c_time`,
+`c_date_time`, and `c_duration` states an optional `'; ' <value>` suffix in
+its own grammar production (`assumed_boolean_value`, `assumed_string_value`,
+…), and `c_terminology_code` states its own distinct form, `[ac3; at5]`.
+`am::cadl` recognised none of the nine — the eight generic ones were never
+attempted, and the ac-code form was refused explicitly, naming exactly what
+was missing. `CPrimitiveObject::with_assumed_value` (`A-48`) has existed to
+receive one since before this parser's own primitive readers did.
+
+**Fixed.** `parse_inline_primitive` and its nine per-kind readers now
+return the constraint *and* an `Option<PrimitiveValue>` together. Eight
+kinds share one shape: `parse_assumed_boolean`/`_string`/`_integer`/`_real`
+each read the trailing `';' <value>` directly, and `parse_assumed_temporal`
+does the same generically for all four temporal kinds through the existing
+`temporal_primitive!` macro — one new function reused four times, not four
+new ones (`lib:A-33`). `c_terminology_code`'s own `[ac3; at5]` is read
+inside `parse_terminology_code_primitive` itself, since it is a second code
+*inside* the brackets rather than a value trailing them, and the grammar's
+own note — "can only occur after an ac-code not after the single at-code" —
+is enforced as a refusal, not silently accepted or left for
+`Inv_valid_assumed_value` (`A-56`) to catch three findings later. Both call
+sites `parse_inline_primitive` has (the wrapped `rm_type_id[id] matches
+{...}` form and the unwrapped shorthand under `c_objects`) attach the
+returned value via `with_assumed_value` when present.
+
+**Tests.** Six: one table-driven test covering the five kinds that are
+actually reachable end-to-end (`Boolean`, `String`, `Integer`, `Real`, and
+the wrapped form generally) plus a matching test for the unwrapped
+shorthand, confirming the second call site reaches the same code; the
+`[ac3; at5]` case attaching the assumed at-code; and the grammar's own
+refusal — an assumed value after a bare at-code — confirmed refused rather
+than silently accepted with the second code ignored.
+
+**Residual, found while writing this finding's own tests, not fixed here.**
+The four temporal kinds could not be included in the table-driven test:
+every attempt to parse a plain `Date`/`Time`/`Date_time`/`Duration` literal
+— with or without an assumed value — failed to lex at all. Tracked
+separately as `A-65`, since it is a distinct, pre-existing defect this
+finding's own changes do not cause and do not fix; `parse_assumed_temporal`
+is added to the temporal macro on the same terms as its five working
+siblings, correct by the same reasoning, but genuinely untestable
+end-to-end until `A-65` is closed.
+
+## A-65 — no ISO8601 literal can be lexed by `am::cadl` at all
+
+**Severity: Medium. Status: open.**
+
+**Found while writing `A-64`'s own tests**, not by a fuzzer or a report: a
+plain `Date[id2] occurrences matches {1} matches {2024-01-01}`, no assumed
+value involved, fails with `"expected ISO8601_DATE, found `2024`"`.
+Reproduced directly against `parse_definition`, isolated from every other
+change in `A-64`'s own commit, and confirmed the same failure predates it —
+this is not a regression `A-64` introduced.
+
+**The bug.** `cadl_lexer::Lexer::next`'s word-scanner stops at the first
+character that is neither alphanumeric, `_`, nor a mid-word `.` — `-` and
+`:` fall through to `SYMBOLS` (needed for archetype identifiers and
+interval/negative-number syntax elsewhere in this same lexer) rather than
+continuing a word. An ISO8601 date (`2024-01-01`), time (`12:30:00`), or
+duration (`P1Y2M`) all contain at least one of those two characters, and a
+date additionally *starts* with a digit, so `Lexer::next` never reaches the
+word-scanning branch at all for one — it lexes `"2024"` as `Token::Integer`
+via `read_number`, then `-` as `Token::Symbol('-')`, splitting one literal
+into several tokens. `expect_temporal`'s `expect_word` call — the single
+point every temporal reader goes through — fails on the very first token of
+any real literal, unconditionally.
+
+**Severity.** Rated `Medium`, not `Low`: this is total, not partial, and
+`A-45`'s own reasoning for rating the *absence* of temporal `CPrimitive`
+variants `Medium` applies again here — "nearly all [real archetypes]
+constrain at least one date or time field." The four temporal kinds'
+dispatch table, macro-generated readers, and now (`A-64`) their
+assumed-value handling all exist and compile, giving every appearance of
+support that has never once actually parsed a real literal.
+
+**Why nothing had caught it before now.** No test in this crate ever
+constructed a `Date`/`Time`/`Date_time`/`Duration` cADL fixture and called
+`parse_definition` on it — `A-64`'s own table-driven assumed-value test is
+the first to have tried, and it failed immediately, before ever reaching
+the assumed-value code the test was written to exercise.
+
+**Not fixed here.** Recognising ISO8601 date/time/duration literals as
+atomic tokens needs real lexer work — at minimum, a lookahead from a
+leading digit run that distinguishes a plain `INTEGER`/`REAL` from the
+start of a date, and separate handling for `:`-bearing times and
+`P`-prefixed durations — comparable in scope to `A-62`'s own `Lexer`
+additions for archetype references and paths, not a small patch to the
+existing word-scanner. Left open rather than worked around with something
+that looks like temporal support and is not one.
