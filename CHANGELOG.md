@@ -68,6 +68,13 @@ together.
   accepts strictly more input than before. `am::validate` is unchanged —
   a restricted slot's filler is still reported `Unchecked`; carrying an
   assertion is not the same as evaluating one.
+- `am::cadl` now parses `C_ATTRIBUTE_TUPLE` (`[units, magnitude] matches
+  {...}`) — previously refused outright, though `am::CAttributeTuple` and
+  `am::validate`'s own evaluation of it have existed since `A-50`/`A-58`.
+  See `A-67` in `openehr/spec/audit.md` for what this does and does not
+  cover (a tuple row using an interval still hits a separate, pre-existing
+  ambiguity; a discrete-valued row parses cleanly). Not a breaking change:
+  `parse_definition` accepts strictly more input than before.
 
 ## 0.9.0 — 2026-09-02
 

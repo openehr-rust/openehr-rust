@@ -22,10 +22,13 @@
 //! (`K15.6`), and none resynchronises past what it could not parse
 //! (`K15.7`) — a `CadlError` stops the parse where it happens.
 //!
-//! - **`C_ATTRIBUTE_TUPLE`** (`[units, magnitude] matches {...}`) — this
-//!   crate's own [`crate::am::CAttributeTuple`] exists (`A-50`), but wiring
-//!   ADL's own tuple syntax into it is separate parser work not attempted
-//!   here.
+//! - **`C_ATTRIBUTE_TUPLE`** (`[units, magnitude] matches { [...], ... }`)
+//!   is implemented (`A-67`), wired to [`crate::am::CAttributeTuple`]
+//!   (`A-50`). Its own row items (`c_primitive_tuple_item`) are always the
+//!   unwrapped shorthand — the grammar gives a tuple row no room for a
+//!   wrapping `rm_type_id` — so an interval item like `{|0..300|}` still
+//!   hits the unwrapped-interval ambiguity a few bullets below; a tuple
+//!   using a discrete value instead parses cleanly.
 //! - **`C_ARCHETYPE_ROOT`** (`use_archetype`) and **`C_COMPLEX_OBJECT_PROXY`**
 //!   (`use_node`) are fully implemented: the former's `archetype_ref`
 //!   (`ARCHETYPE_HRID` or `ARCHETYPE_REF`) is reconstructed by slicing the
@@ -136,10 +139,11 @@
 
 use super::cadl_lexer::{Lexer, Token};
 use super::{
-    ArchetypeSlot, CAttribute, CArchetypeRoot, CComplexObject, CComplexObjectProxy, CObject,
-    Cardinality, MultiplicityInterval, NodeIdSyntax, ROOT_OCCURRENCES,
+    ArchetypeSlot, CArchetypeRoot, CAttribute, CAttributeTuple, CComplexObject,
+    CComplexObjectProxy, CObject, Cardinality, MultiplicityInterval, NodeIdSyntax,
+    ROOT_OCCURRENCES,
 };
-use crate::am::{CPrimitive, CPrimitiveObject, PrimitiveValue};
+use crate::am::{CPrimitive, CPrimitiveObject, CPrimitiveTuple, PrimitiveValue};
 use crate::base::{Date, DateTime, Duration, Interval, Real, Time};
 use core::str::FromStr;
 
@@ -327,6 +331,7 @@ fn c_complex_object(lexer: &mut Lexer<'_>, is_root: bool) -> Result<CComplexObje
     let occurrences = parse_occurrences(lexer, is_root)?;
 
     let mut attributes = Vec::new();
+    let mut attribute_tuples = Vec::new();
     if peek_keyword(lexer, "matches") || peek_keyword(lexer, "is_in") {
         lexer.next();
         expect_symbol(lexer, '{')?;
@@ -340,11 +345,15 @@ fn c_complex_object(lexer: &mut Lexer<'_>, is_root: bool) -> Result<CComplexObje
                     "default_value (`_default = <...>`) is not implemented by this parser",
                 ));
             }
-            attributes.push(c_attribute_def(lexer)?);
+            match c_attribute_def(lexer)? {
+                AttributeDef::Attribute(a) => attributes.push(a),
+                AttributeDef::Tuple(t) => attribute_tuples.push(t),
+            }
         }
     }
 
     CComplexObject::new(rm_type_name, Some(node_id), occurrences, attributes)
+        .map(|c| c.with_attribute_tuples(attribute_tuples))
         .map_err(|e| CadlError::at(lexer.offset(), format!("invalid C_COMPLEX_OBJECT: {e}")))
 }
 
@@ -467,20 +476,28 @@ fn parse_cardinality(lexer: &mut Lexer<'_>) -> Result<Cardinality, CadlError> {
     Ok(cardinality)
 }
 
+/// The two kinds of child a `C_COMPLEX_OBJECT`'s own `matches {...}` block
+/// can name — `c_attribute_def: c_attribute | c_attribute_tuple ;` — kept
+/// distinct here because [`CComplexObject`] itself holds them in two
+/// separate fields (`attributes`, `attribute_tuples`), not one list.
+enum AttributeDef {
+    Attribute(CAttribute),
+    Tuple(CAttributeTuple),
+}
+
 /// `c_attribute_def: c_attribute | c_attribute_tuple ;` — a leading `[`
-/// means the tuple form (module documentation: not implemented).
+/// means the tuple form, dispatched to [`c_attribute_tuple`]: nothing in
+/// `c_attribute` (`ADL_PATH | rm_attribute_id`) starts with `[`, so this
+/// is exact, not a guess.
 ///
 /// `c_attribute: (ADL_PATH | rm_attribute_id) c_existence? c_cardinality?
 /// ( SYM_MATCHES ( '{' c_objects '}' | CONTAINED_REGEXP) )? ;` — `ADL_PATH`
 /// (an attribute named by an absolute or relative path rather than a bare
-/// name) is likewise not implemented; every attribute name this parser
-/// accepts is a plain word.
-fn c_attribute_def(lexer: &mut Lexer<'_>) -> Result<CAttribute, CadlError> {
+/// name) is not implemented; every attribute name this parser accepts is a
+/// plain word.
+fn c_attribute_def(lexer: &mut Lexer<'_>) -> Result<AttributeDef, CadlError> {
     if matches!(lexer.peek(), Some(Token::Symbol('['))) {
-        return Err(CadlError::at(
-            lexer.offset(),
-            "C_ATTRIBUTE_TUPLE (`[a, b] matches {...}`) is not implemented by this parser",
-        ));
+        return c_attribute_tuple(lexer).map(AttributeDef::Tuple);
     }
     let offset = lexer.offset();
     let attr_name = expect_word(lexer, "an attribute name")?;
@@ -544,22 +561,119 @@ fn c_attribute_def(lexer: &mut Lexer<'_>) -> Result<CAttribute, CadlError> {
         Some(cardinality) => CAttribute::container(attr_name.clone(), existence, cardinality, children),
         None => CAttribute::single(attr_name.clone(), existence, children),
     };
-    result.map_err(|e| CadlError::at(offset, format!("invalid C_ATTRIBUTE `{attr_name}`: {e}")))
+    result
+        .map(AttributeDef::Attribute)
+        .map_err(|e| CadlError::at(offset, format!("invalid C_ATTRIBUTE `{attr_name}`: {e}")))
 }
 
-/// Builds the `CObject::Primitive` an unwrapped shorthand produces —
+/// `c_attribute_tuple : '[' rm_attribute_id ( ',' rm_attribute_id )* ']'
+/// SYM_MATCHES '{' c_primitive_tuple ( ',' c_primitive_tuple )* '}' ;`
+///
+/// Each co-varying attribute is built `CAttribute::single`, `MANDATORY` —
+/// the grammar states no `c_existence`/`c_cardinality` of its own for one,
+/// and AOM2's own tuple examples (`{units, magnitude}`,
+/// `{value, symbol}`) are always single, mandatory values, which is the
+/// whole reason a tuple exists rather than two independent attributes.
+fn c_attribute_tuple(lexer: &mut Lexer<'_>) -> Result<CAttributeTuple, CadlError> {
+    let offset = lexer.offset();
+    expect_symbol(lexer, '[')?;
+    let mut member_names = Vec::new();
+    loop {
+        member_names.push(expect_word(lexer, "an RM attribute name")?);
+        if !consume_symbol_if(lexer, ',') {
+            break;
+        }
+    }
+    expect_symbol(lexer, ']')?;
+    expect_keyword(lexer, "matches")?;
+    expect_symbol(lexer, '{')?;
+    let mut rows = Vec::new();
+    loop {
+        rows.push(c_primitive_tuple(lexer)?);
+        if !consume_symbol_if(lexer, ',') {
+            break;
+        }
+    }
+    expect_symbol(lexer, '}')?;
+
+    let members = member_names
+        .iter()
+        .map(|name| {
+            CAttribute::single(name.clone(), MultiplicityInterval::MANDATORY, Vec::new())
+                .map_err(|e| CadlError::at(offset, format!("invalid C_ATTRIBUTE `{name}`: {e}")))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    CAttributeTuple::new(members, rows)
+        .map_err(|e| CadlError::at(offset, format!("invalid C_ATTRIBUTE_TUPLE: {e}")))
+}
+
+/// `c_primitive_tuple : '[' c_primitive_tuple_item ( ','
+/// c_primitive_tuple_item )* ']' ;`
+fn c_primitive_tuple(lexer: &mut Lexer<'_>) -> Result<CPrimitiveTuple, CadlError> {
+    let offset = lexer.offset();
+    expect_symbol(lexer, '[')?;
+    let mut items = Vec::new();
+    loop {
+        items.push(c_primitive_tuple_item(lexer)?);
+        if !consume_symbol_if(lexer, ',') {
+            break;
+        }
+    }
+    expect_symbol(lexer, ']')?;
+    CPrimitiveTuple::new(items).map_err(|e| CadlError::at(offset, format!("invalid C_PRIMITIVE_TUPLE: {e}")))
+}
+
+/// `c_primitive_tuple_item: '{' c_inline_primitive_object '}' |
+/// CONTAINED_REGEXP ;` — the same two shapes, and the same reasoning,
+/// `c_attribute_def`'s own `CONTAINED_REGEXP` shorthand already
+/// implements above; the real grammar's own comment states why a tuple
+/// row's regex item is written this way rather than as a `C_STRING`:
+/// "the only workable solution to match a regex unambiguously appears to
+/// be to match with enclosing `{}`... as a `C_OBJECT` alternative, not as
+/// a `C_STRING`."
+fn c_primitive_tuple_item(lexer: &mut Lexer<'_>) -> Result<CPrimitiveObject, CadlError> {
+    let regexp_offset = lexer.offset();
+    match lexer.try_read_contained_regexp() {
+        Ok(Some(pattern)) => {
+            let constraint = CPrimitive::String { list: vec![pattern.to_owned()] };
+            let assumed = finish_contained_regexp(lexer)?.map(PrimitiveValue::Text);
+            Ok(unwrapped_primitive(constraint, assumed))
+        }
+        Ok(None) => {
+            expect_symbol(lexer, '{')?;
+            let (constraint, assumed) = parse_inline_primitive(lexer, None)?;
+            expect_symbol(lexer, '}')?;
+            Ok(unwrapped_primitive(constraint, assumed))
+        }
+        Err(()) => Err(CadlError::at(
+            regexp_offset,
+            "malformed CONTAINED_REGEXP: no closing delimiter found before a newline or the end \
+             of input",
+        )),
+    }
+}
+
+/// Builds the `C_PRIMITIVE_OBJECT` an unwrapped shorthand produces —
 /// [`CPrimitiveObject::PRIMITIVE_NODE_ID`], no rm-type-name of its own —
-/// the one shape shared by `c_objects`'s own inline-primitive shorthand
-/// and `c_attribute`'s `CONTAINED_REGEXP` shorthand below (`lib:A-33`: one
-/// place, not two, for a repeated construction).
-fn unwrapped_primitive_object(constraint: CPrimitive, assumed: Option<PrimitiveValue>) -> CObject {
+/// the one shape shared by `c_objects`'s own inline-primitive shorthand,
+/// `c_attribute`'s `CONTAINED_REGEXP` shorthand, and each
+/// `c_primitive_tuple_item` in a `C_ATTRIBUTE_TUPLE` row (`lib:A-33`: one
+/// place, not three, for a repeated construction).
+fn unwrapped_primitive(constraint: CPrimitive, assumed: Option<PrimitiveValue>) -> CPrimitiveObject {
     let mut object = CPrimitiveObject::new("primitive", MultiplicityInterval::MANDATORY, constraint)
         .with_node_id(CPrimitiveObject::PRIMITIVE_NODE_ID)
         .expect("PRIMITIVE_NODE_ID is always accepted by with_node_id");
     if let Some(value) = assumed {
         object = object.with_assumed_value(value);
     }
-    CObject::Primitive(object)
+    object
+}
+
+/// [`unwrapped_primitive`], wrapped as the `CObject::Primitive` most call
+/// sites actually need — a `C_ATTRIBUTE_TUPLE` row is the one exception,
+/// which wants the bare `CPrimitiveObject` itself.
+fn unwrapped_primitive_object(constraint: CPrimitive, assumed: Option<PrimitiveValue>) -> CObject {
+    CObject::Primitive(unwrapped_primitive(constraint, assumed))
 }
 
 /// `c_objects: c_regular_object_ordered+ | c_inline_primitive_object ;`
@@ -648,6 +762,7 @@ fn c_regular_object(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
     // than calling `c_complex_object` itself and re-reading them.
     let occurrences = parse_occurrences(lexer, false)?;
     let mut attributes = Vec::new();
+    let mut attribute_tuples = Vec::new();
     if peek_keyword(lexer, "matches") || peek_keyword(lexer, "is_in") {
         lexer.next();
         expect_symbol(lexer, '{')?;
@@ -661,10 +776,14 @@ fn c_regular_object(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
                     "default_value (`_default = <...>`) is not implemented by this parser",
                 ));
             }
-            attributes.push(c_attribute_def(lexer)?);
+            match c_attribute_def(lexer)? {
+                AttributeDef::Attribute(a) => attributes.push(a),
+                AttributeDef::Tuple(t) => attribute_tuples.push(t),
+            }
         }
     }
     let complex = CComplexObject::new(rm_type_name, Some(node_id), occurrences, attributes)
+        .map(|c| c.with_attribute_tuples(attribute_tuples))
         .map_err(|e| CadlError::at(offset, format!("invalid C_COMPLEX_OBJECT: {e}")))?;
     Ok(CObject::Complex(complex))
 }
@@ -1674,12 +1793,89 @@ mod tests {
         assert_eq!(proxy.occurrences(), None);
     }
 
+    /// `A-67`: `C_ATTRIBUTE_TUPLE` syntax itself is now implemented, but a
+    /// row's own items are always the unwrapped shorthand — the grammar
+    /// gives `c_primitive_tuple_item` no room for a wrapping `rm_type_id`
+    /// — so AOM2's own canonical `{units, magnitude}` example, whose
+    /// magnitude column is a *range*, still hits the pre-existing
+    /// unwrapped-interval ambiguity (`starts_inline_primitive`'s own
+    /// module documentation), not a tuple-syntax refusal.
+    /// `a_c_attribute_tuple_with_discrete_values_is_parsed` below proves
+    /// the tuple mechanism itself works once that separate ambiguity is
+    /// avoided.
     #[test]
-    fn a_c_attribute_tuple_is_refused_by_name() {
+    fn a_c_attribute_tuple_with_an_unwrapped_interval_item_hits_a_different_refusal() {
         let source = r#"
             DV_QUANTITY[id1] matches {
                 [units, magnitude] matches {
                     [{"mm[Hg]"}, {|0..300|}]
+                }
+            }
+        "#;
+        let err = parse_definition(source).unwrap_err();
+        assert!(err.reason.contains("unwrapped interval"), "{err}");
+    }
+
+    /// The tuple mechanism itself, proven end-to-end: two rows, each
+    /// pairing a unit string with a discrete magnitude value (not a
+    /// range, so no unwrapped-interval ambiguity — see the test above)
+    /// — the same `{deg F, deg C}` shape
+    /// `am::constraint::tests::a_units_magnitude_tuple_pairs_each_unit_with_its_own_range`
+    /// builds directly, here read from real cADL text instead.
+    #[test]
+    fn a_c_attribute_tuple_with_discrete_values_is_parsed() {
+        let source = r#"
+            DV_QUANTITY[id1] matches {
+                [units, magnitude] matches {
+                    [{"deg F"}, {212.0}],
+                    [{"deg C"}, {100.0}]
+                }
+            }
+        "#;
+        let root = parse_definition(source).unwrap();
+        assert_eq!(root.attribute_tuples().len(), 1);
+        let tuple = &root.attribute_tuples()[0];
+        assert_eq!(
+            tuple.members().iter().map(CAttribute::rm_attribute_name).collect::<Vec<_>>(),
+            ["units", "magnitude"]
+        );
+        assert_eq!(tuple.tuples().len(), 2);
+        assert_eq!(tuple.tuples()[0].members()[0].constraint(), &CPrimitive::String { list: vec!["deg F".to_owned()] });
+        assert_eq!(
+            tuple.tuples()[0].members()[1].constraint(),
+            &CPrimitive::Real { list: vec!["212.0".parse().unwrap()], range: None }
+        );
+    }
+
+    /// A regex tuple item — `c_primitive_tuple_item`'s own `CONTAINED_REGEXP`
+    /// alternative, the same shorthand `c_attribute`'s own regex form uses.
+    #[test]
+    fn a_c_attribute_tuple_with_a_regex_item_is_parsed() {
+        let source = r"
+            DV_QUANTITY[id1] matches {
+                [units, magnitude] matches {
+                    [{/mm\[Hg\]|kPa/}, {300.0}]
+                }
+            }
+        ";
+        let root = parse_definition(source).unwrap();
+        let tuple = &root.attribute_tuples()[0];
+        assert_eq!(
+            tuple.tuples()[0].members()[0].constraint(),
+            &CPrimitive::String { list: vec![r"/mm\[Hg\]|kPa/".to_owned()] }
+        );
+    }
+
+    /// `assumed_value` on the outer `C_COMPLEX_OBJECT` — `default_value`
+    /// (`_default = <...>`) — is a different, still-unimplemented ODIN
+    /// construct; a `C_ATTRIBUTE_TUPLE` is refused by name only when its
+    /// own syntax is malformed, never silently skipped.
+    #[test]
+    fn a_malformed_c_attribute_tuple_is_refused_naming_it() {
+        let source = r#"
+            DV_QUANTITY[id1] matches {
+                [units, magnitude] matches {
+                    [{"deg F"}]
                 }
             }
         "#;

@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**66 findings, 66 in the table below: 7 High, 35 Medium, 24 Low. 60 fixed or
+**67 findings, 67 in the table below: 7 High, 36 Medium, 24 Low. 61 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -153,6 +153,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-64 | Low | `am::cadl` could not parse a primitive constraint's own assumed value — `'; ' <value>`, a shape every primitive kind's grammar production states (`cadl2_primitives.g4`), and `[ac3; at5]` for `Terminology_code` specifically — though `CPrimitiveObject::with_assumed_value` (`A-48`) has existed to receive one since before this parser did | **fixed** — a shared assumed-value reader per kind (five direct, four more through the existing `temporal_primitive!` macro) plus a dedicated `[ac3; at5]` reader refusing the grammar's own stated case (an assumed at-code after a bare at-code), all wired into both call sites `parse_inline_primitive` has |
 | A-65 | Medium | No ISO8601 date, time, date-time, or duration literal can be lexed by `am::cadl` at all — found writing `A-64`'s own tests, not by a fuzzer or a report — because `cadl_lexer::Lexer`'s word-scanner treats `-`/`:` as `Symbol`s (needed for archetype identifiers elsewhere), splitting every such literal into several tokens before `expect_temporal`'s `expect_word` ever sees one | **fixed** — `Lexer::read_iso8601`, a dedicated scan reached only from `expect_temporal` (where a temporal literal is grammatically expected, so there is no ambiguity with a plain `INTEGER`/`REAL` for it to resolve), reads a maximal run of ISO8601-shaped characters and hands it to `T::from_str`, the same validation-not-lexing split `expect_word`-based parsing already used; a `.` is only consumed when followed by a digit, so a `..` range separator is never swallowed |
 | A-66 | Medium | `am::cadl` refused every `ARCHETYPE_SLOT` `matches { include ... exclude ... }` block outright, and every `C_STRING` regex, though only the full BEOM `boolean_expr` grammar genuinely needs work this parser has not done — `constraint_expr` (`bound_path SYM_MATCHES CONTAINED_REGEXP`) is the one assertion shape every real `ARCHETYPE_SLOT` assertion this repository has found actually uses, and `CONTAINED_REGEXP` is the same lexical token `C_STRING`'s own regex form needs (`A-63`) | **fixed** — `Lexer::try_read_contained_regexp` reads a `CONTAINED_REGEXP`'s delimited body (raw-scanned, since it may contain almost any character); `parse_slot_assertion` implements exactly `bound_path SYM_MATCHES CONTAINED_REGEXP` for `include`/`exclude`, refusing anything richer by name; `c_attribute`'s own `SYM_MATCHES CONTAINED_REGEXP` shorthand builds an unwrapped `C_STRING` whose `list` holds the pattern (`A-63`'s single-list shape); `closed` and a richer assertion remain the two real refusals left in `am::cadl`'s own `ARCHETYPE_SLOT` support |
+| A-67 | Medium | `am::cadl` refused `C_ATTRIBUTE_TUPLE` (`[units, magnitude] matches {...}`) outright, though `crate::am::CAttributeTuple`/`CPrimitiveTuple` have existed since `A-50` and `am::validate` has evaluated them since `A-58` — nothing in the parser could ever produce one to evaluate | **fixed** — `c_attribute_def` dispatches to a leading `[` (nothing in `c_attribute` starts with one); `c_attribute_tuple`/`c_primitive_tuple`/`c_primitive_tuple_item` build the type directly, the latter sharing `A-66`'s own `CONTAINED_REGEXP` handling and a new `unwrapped_primitive` helper with `c_objects`'/`c_attribute`'s own unwrapped-primitive shorthands (`lib:A-33`); a tuple row's own items are always unwrapped, with no room in the grammar for a wrapping `rm_type_id`, so a row using an interval (AOM2's own canonical `{units, magnitude}` example among them) still hits the pre-existing, separate unwrapped-interval ambiguity — a discrete-valued row parses cleanly |
 
 ---
 
@@ -3924,3 +3925,74 @@ and the renamed `a_slot_assertion_using_a_quoted_string_instead_of_a_regex_is_re
 (`matches {}`, empty) now parses successfully under this fix and so no
 longer demonstrates a real boundary, replaced with a fixture that
 genuinely still is one.
+
+## A-67 — `am::cadl` refused `C_ATTRIBUTE_TUPLE` outright
+
+**Severity: Medium. Status: fixed.**
+
+**Found continuing `A-40`'s own residual**, the same pass that closed
+`A-66`: `am::cadl`'s own module documentation already named
+`C_ATTRIBUTE_TUPLE` as a real, deliberate gap — "this crate's own
+`crate::am::CAttributeTuple` exists (`A-50`), but wiring ADL's own tuple
+syntax into it is separate parser work not attempted here" — and `A-58`
+had gone further still, giving `am::validate::walk_complex` real
+conformance evaluation for a tuple an archetype *already held in memory*
+carried. Between the two, nothing in this crate could ever produce a
+`CAttributeTuple` by reading ADL text: the type existed, the evaluator
+existed, and the one thing missing was the parser to connect them.
+
+**Fixed.** `cadl2.g4`'s own grammar:
+
+```text
+c_attribute_def: c_attribute | c_attribute_tuple ;
+c_attribute_tuple : '[' rm_attribute_id (',' rm_attribute_id)* ']'
+    SYM_MATCHES '{' c_primitive_tuple (',' c_primitive_tuple)* '}' ;
+c_primitive_tuple : '[' c_primitive_tuple_item (',' c_primitive_tuple_item)* ']' ;
+c_primitive_tuple_item: '{' c_inline_primitive_object '}' | CONTAINED_REGEXP ;
+```
+
+`c_attribute_def` dispatches on a leading `[` — nothing in `c_attribute`
+(`ADL_PATH | rm_attribute_id`) starts with one, so the choice is exact,
+not a guess — to a new `c_attribute_tuple`, which reads the co-varying
+attribute names (each built `CAttribute::single`, `MANDATORY`: the
+grammar states no `c_existence`/`c_cardinality` of its own for one, and
+every AOM2 tuple example is single, mandatory values, which is the whole
+reason a tuple exists rather than two independent attributes) and each
+row via `c_primitive_tuple`. A row's own items
+(`c_primitive_tuple_item`) reuse `A-66`'s own `CONTAINED_REGEXP` handling
+for the bare-regex alternative, and `parse_inline_primitive(lexer, None)`
+— already built for `c_objects`'s own unwrapped shorthand — for the
+`'{' c_inline_primitive_object '}'` alternative, since a tuple row item
+is always unwrapped: the grammar gives it no room for a wrapping
+`rm_type_id` at all. Both now share one `unwrapped_primitive` helper
+with `c_objects`'s own inline shorthand and `c_attribute`'s own
+`CONTAINED_REGEXP` shorthand, rather than three separate constructions of
+the same `PRIMITIVE_NODE_ID`-tagged `CPrimitiveObject` (`lib:A-33`).
+`c_complex_object` and its own duplicated tail in `c_regular_object`
+(already an acknowledged, pre-existing duplication, not one this finding
+introduces or removes) both now collect `attribute_tuples` alongside
+`attributes` from the same `c_attribute_def+` loop, attaching them via
+`CComplexObject::with_attribute_tuples`.
+
+**Not attempted, and a real limitation left by the grammar itself, not by
+this parser's own scope.** A tuple row's items are always the unwrapped
+shorthand, and `parse_inline_primitive(lexer, None)`'s own dispatch
+cannot tell a `C_INTEGER` interval from a `C_REAL` one without a wrapping
+`rm_type_id` to ask (a limitation this parser already states and refuses
+by name elsewhere, not new here). AOM2's own canonical `{units,
+magnitude}` example pairs a unit string with a magnitude *range*
+(`"deg F"` with `32.0..212.0`) — exactly the shape that hits this
+ambiguity — so that specific example still cannot be parsed end to end,
+not because tuple syntax is unimplemented, but because of a separate,
+pre-existing, and correctly-still-refused limitation. A tuple pairing a
+unit with a discrete magnitude *value* instead parses cleanly.
+
+**Tests.** Six: the pre-existing refusal test is retitled and its
+assertion corrected to name the real reason it now fails
+(`a_c_attribute_tuple_with_an_unwrapped_interval_item_hits_a_different_refusal`
+— the interval ambiguity above, not "tuple syntax not implemented", which
+is no longer true); a genuinely successful two-row, discrete-valued tuple
+parsed end to end and its shape inspected
+(`a_c_attribute_tuple_with_discrete_values_is_parsed`); a `CONTAINED_REGEXP`
+tuple item; and a malformed tuple (wrong row arity) refused by name, not
+silently accepted or dropped.
