@@ -132,18 +132,23 @@ impl CAttribute {
     /// occurrences has a finite upper bound greater than `1` (`VACSO`): a
     /// single-valued attribute holds at most one object, so a child declaring
     /// it may occur more than once is a constraint this attribute shape
-    /// cannot satisfy.
+    /// cannot satisfy. A child with no occurrences stated at all — only
+    /// [`CComplexObjectProxy`] can leave it unstated
+    /// (`use_target_occurrences()`) — is not checked here: its effective
+    /// upper bound depends on the target this crate does not resolve, so
+    /// `VACSO` cannot be decided from the artefact alone for that child, and
+    /// is not enforced rather than guessed at.
     pub fn single(
         rm_attribute_name: impl Into<String>,
         existence: MultiplicityInterval,
         children: Vec<CObject>,
     ) -> Result<Self, ParseError> {
         let attribute = Self::new_raw(rm_attribute_name, existence, children)?;
-        if attribute
-            .children
-            .iter()
-            .any(|child| child.occurrences().upper().is_some_and(|upper| upper > 1))
-        {
+        if attribute.children.iter().any(|child| {
+            child
+                .occurrences()
+                .is_some_and(|o| o.upper().is_some_and(|upper| upper > 1))
+        }) {
             return Err(ParseError::invariant(
                 "C_ATTRIBUTE",
                 "a single-valued attribute's child occurrences upper bound exceeds 1",
@@ -164,7 +169,15 @@ impl CAttribute {
     /// or if a child's occurrences has a finite upper bound greater than the
     /// cardinality's own finite upper bound (`VACMCU`): a cardinality of
     /// `0..2` cannot hold a single child declared `0..10`, independent of
-    /// how many children there are or what their lower bounds sum to.
+    /// how many children there are or what their lower bounds sum to. A
+    /// child with no occurrences stated at all — only [`CComplexObjectProxy`]
+    /// can leave it unstated — contributes AOM2's own stated default for
+    /// that case to `required`'s sum: "If local `occurrences` not set,
+    /// always assume 0 as the lower bound"
+    /// (`org.openehr.am.aom2.c_object.adoc`'s `effective_occurrences()`), and
+    /// is excluded from the `VACMCU` check entirely, for the same reason
+    /// [`Self::single`] excludes it: its effective upper bound depends on a
+    /// target this crate does not resolve.
     pub fn container(
         rm_attribute_name: impl Into<String>,
         existence: MultiplicityInterval,
@@ -175,7 +188,7 @@ impl CAttribute {
         let required: u32 = attribute
             .children
             .iter()
-            .map(|child| child.occurrences().lower())
+            .map(|child| child.occurrences().map_or(0, MultiplicityInterval::lower))
             .sum();
         if let Some(upper) = cardinality.interval().upper() {
             if required > upper {
@@ -184,11 +197,11 @@ impl CAttribute {
                     "children require more occurrences than the cardinality permits",
                 ));
             }
-            if attribute
-                .children
-                .iter()
-                .any(|child| child.occurrences().upper().is_some_and(|u| u > upper))
-            {
+            if attribute.children.iter().any(|child| {
+                child
+                    .occurrences()
+                    .is_some_and(|o| o.upper().is_some_and(|u| u > upper))
+            }) {
                 return Err(ParseError::invariant(
                     "C_ATTRIBUTE",
                     "a child's occurrences upper bound exceeds the cardinality upper bound",
@@ -279,15 +292,26 @@ impl CObject {
         }
     }
 
-    /// How many times this node may occur under its parent attribute.
+    /// How many times this node may occur under its parent attribute, if
+    /// stated locally.
+    ///
+    /// `None` for every kind but `Proxy` is impossible today, not merely
+    /// unobserved: [`CComplexObject`], [`CPrimitiveObject`],
+    /// [`ArchetypeSlot`], and [`CArchetypeRoot`] each require `occurrences`
+    /// at construction and have no way to leave it unset — only
+    /// [`CComplexObjectProxy`] can, meaning `use_target_occurrences()`
+    /// (`org.openehr.am.aom2.c_complex_object_proxy.adoc`). A caller seeing
+    /// `None` here is always looking at a proxy deferring to its target,
+    /// which this crate does not resolve — see that type's own
+    /// documentation.
     #[must_use]
-    pub const fn occurrences(&self) -> &MultiplicityInterval {
+    pub const fn occurrences(&self) -> Option<&MultiplicityInterval> {
         match self {
-            Self::Complex(o) => &o.occurrences,
-            Self::Primitive(o) => &o.occurrences,
-            Self::Slot(o) => &o.occurrences,
-            Self::ArchetypeRoot(o) => &o.occurrences,
-            Self::Proxy(o) => &o.occurrences,
+            Self::Complex(o) => Some(&o.occurrences),
+            Self::Primitive(o) => Some(&o.occurrences),
+            Self::Slot(o) => Some(&o.occurrences),
+            Self::ArchetypeRoot(o) => Some(&o.occurrences),
+            Self::Proxy(o) => o.occurrences.as_ref(),
         }
     }
 
@@ -759,29 +783,41 @@ pub enum CPrimitive {
         /// A permitted range.
         range: Option<Interval<Real>>,
     },
-    /// `C_TERMINOLOGY_CODE`: an `ac`-code naming a value set, or a list of
-    /// `at`-codes.
+    /// `C_TERMINOLOGY_CODE`: a single `at`-code, or a single `ac`-code
+    /// naming a value set.
     ///
-    /// **Residual, not fixed here.** AOM2's own `constraint` attribute
+    /// **Corrected in `A-51`'s second pass.** This variant used to also
+    /// carry `code_list: Vec<String>`, a list of inline `at`-codes with no
+    /// counterpart in AOM2's own `constraint` attribute
     /// (`openEHR/specifications-AM`,
-    /// `docs/UML/classes/org.openehr.am.aom2.c_terminology_code.adoc`) is a
-    /// single `String` — one `at`-code, or one `ac`-code naming a value set —
-    /// never a list; ADL's own way of offering several alternative codes is
-    /// several sibling `C_OBJECT`s under one attribute, each with its own
-    /// single-code `C_TERMINOLOGY_CODE`, the same alternative-matching shape
-    /// [`CAttribute::children`] already gives every other node kind. This
-    /// variant's `code_list: Vec<String>` has no such counterpart in AOM2 and
-    /// was not re-derived from the primary source when it was written. Fixing
-    /// the shape — most likely dropping `code_list` in favour of the sibling
-    /// pattern — is a breaking change to an already-published type and is left
-    /// open (`A-51` in `spec/audit.md`) rather than made silently in the same
-    /// pass that added this variant's `constraint_status` field below.
+    /// `docs/UML/classes/org.openehr.am.aom2.c_terminology_code.adoc`),
+    /// which is a single `String` — never a list. ADL's own way of offering
+    /// several alternative codes is several sibling `C_OBJECT`s under one
+    /// attribute, each with its own single-code `C_TERMINOLOGY_CODE`, the
+    /// same alternative-matching shape [`CAttribute::children`] already
+    /// gives every other node kind — `code_list: ["at1", "at2"]` on one node
+    /// is now two `CObject::Primitive` alternatives, each with `constraint:
+    /// Some("at1".into())` and `Some("at2".into())`. `spec/audit.md`'s
+    /// **A-51** records why this was left for a second pass rather than
+    /// fixed in the same one that added `constraint_status`: this is a
+    /// breaking change to a type shipped in a published version (`openehr`
+    /// 0.7.0), made here as an ordinary source change per this crate's own
+    /// practice for breaking fixes within `0.x` — the version bump and
+    /// `CHANGELOG.md` entry are `agents/publishing.md`'s concern at the next
+    /// actual release, not this commit's.
     #[serde(rename = "C_TERMINOLOGY_CODE")]
     TerminologyCode {
-        /// The `ac`-code whose value set constrains this node, if any.
+        /// A single `at`-code (an exact required value) or `ac`-code (a
+        /// value set), distinguished by AOM2's own leader convention —
+        /// `is_value_set_code`'s `starts_with("ac")`
+        /// (`org.openehr.am.aom2.adl_code_definitions.adoc`) — not by which
+        /// of two fields it was written into. `None`, or `Some("")`, is
+        /// AOM2's own "no constraint" (its class documentation: "Use an
+        /// empty string for no constraint"); both are accepted as
+        /// equivalent since `Deserialize` does not run this crate's own
+        /// constructors and a foreign or hand-written payload may use
+        /// either.
         constraint: Option<String>,
-        /// Permitted `at`-codes, if the constraint is inline.
-        code_list: Vec<String>,
         /// Whether the constraint is strictly binding, or a preference or
         /// example (`org.openehr.am.aom2.c_terminology_code.adoc`'s
         /// `constraint_status`). `None` reads as [`ConstraintStatus::Required`]
@@ -1018,29 +1054,35 @@ impl CArchetypeRoot {
 /// [`Self::target_path`] names the other node, in archetype path notation,
 /// rather than repeating its constraint tree.
 ///
-/// **`use_target_occurrences()` is not modelled.** AOM2 lets `occurrences` be
-/// `Void` here specifically to mean "use the target node's own occurrences
+/// [`Self::occurrences`] is `Option`, unlike [`CComplexObject`],
+/// [`CPrimitiveObject`], [`ArchetypeSlot`], and [`CArchetypeRoot`]: AOM2 lets
+/// `occurrences` be `Void` here specifically to mean
+/// [`Self::use_target_occurrences`] — "use the target node's own occurrences
 /// instead of stating any locally", the defining feature of a proxy node
-/// alongside `target_path` itself. This crate's [`CObject::occurrences`]
-/// dispatcher returns `&MultiplicityInterval` for every kind, a shape
-/// [`CComplexObject`], [`CPrimitiveObject`], [`ArchetypeSlot`], and
-/// [`CArchetypeRoot`] already all commit to and that changing would break
-/// already-published API (the same reason `A-51`'s `code_list` shape was
-/// left rather than corrected). [`Self::occurrences`] is therefore required
-/// here too, not `Option`, and a proxy that would defer to its target cannot
-/// be represented — carried as a residual (`A-53` in `spec/audit.md`) rather
-/// than silently narrowed to "always state it explicitly" with no record of
-/// the gap.
+/// alongside `target_path` itself. [`CObject::occurrences`]'s own dispatcher
+/// widened to `Option<&MultiplicityInterval>` to carry this honestly rather
+/// than requiring every proxy to state a value AOM2 says it need not.
+/// **Resolving `target_path` to find the target's real occurrences is not
+/// implemented** — see [`crate::am::validate`]'s treatment of
+/// [`CObject::Proxy`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CComplexObjectProxy {
     rm_type_name: String,
     node_id: Option<String>,
-    occurrences: MultiplicityInterval,
+    occurrences: Option<MultiplicityInterval>,
     target_path: String,
 }
 
 impl CComplexObjectProxy {
     /// Builds a proxy constraint.
+    ///
+    /// `occurrences` is `Option` here, unlike every other `C_OBJECT`
+    /// descendant in this crate: `None` is AOM2's own `Void`, meaning
+    /// `use_target_occurrences()` — "the target occurrences should be used"
+    /// (`org.openehr.am.aom2.c_complex_object_proxy.adoc`) instead of stating
+    /// any locally. Resolving `target_path` to find that value is not
+    /// implemented; see [`crate::am::validate`]'s treatment of
+    /// [`CObject::Proxy`].
     ///
     /// # Errors
     ///
@@ -1051,7 +1093,7 @@ impl CComplexObjectProxy {
     pub fn new(
         rm_type_name: impl Into<String>,
         node_id: Option<String>,
-        occurrences: MultiplicityInterval,
+        occurrences: Option<MultiplicityInterval>,
         target_path: impl Into<String>,
     ) -> Result<Self, ParseError> {
         let rm_type_name = rm_type_name.into();
@@ -1098,14 +1140,21 @@ impl CComplexObjectProxy {
         self.node_id.as_deref()
     }
 
-    /// How many times this node may occur under its parent attribute.
-    ///
-    /// Always the locally-stated value — see this type's own documentation
-    /// for AOM2's `use_target_occurrences()`, which this crate does not
-    /// model.
+    /// How many times this node may occur under its parent attribute, if
+    /// stated locally. `None` means [`Self::use_target_occurrences`] is
+    /// `true`.
     #[must_use]
-    pub const fn occurrences(&self) -> &MultiplicityInterval {
-        &self.occurrences
+    pub const fn occurrences(&self) -> Option<&MultiplicityInterval> {
+        self.occurrences.as_ref()
+    }
+
+    /// Whether the target node's own occurrences should be used instead of
+    /// this node's (AOM2's `use_target_occurrences()`: "`Result = (occurrences
+    /// = Void)`"). Resolving the target to find that value is not
+    /// implemented here.
+    #[must_use]
+    pub const fn use_target_occurrences(&self) -> bool {
+        self.occurrences.is_none()
     }
 
     /// The other node this one refers to, in archetype path notation
@@ -1315,7 +1364,7 @@ mod tests {
         let err = CComplexObjectProxy::new(
             "ELEMENT",
             Some("at0010".to_owned()),
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             "",
         )
         .unwrap_err();
@@ -1327,7 +1376,7 @@ mod tests {
         let proxy = CComplexObjectProxy::new(
             "ELEMENT",
             Some("at0010".to_owned()),
-            MultiplicityInterval::OPTIONAL,
+            Some(MultiplicityInterval::OPTIONAL),
             "/data[at0001]/events[at0002]/data[at0003]/items[at0004]",
         )
         .unwrap();
@@ -1335,6 +1384,7 @@ mod tests {
             proxy.target_path(),
             "/data[at0001]/events[at0002]/data[at0003]/items[at0004]"
         );
+        assert!(!proxy.use_target_occurrences());
         // `CObject`'s own dispatcher must see the same rm_type_name, node_id,
         // and occurrences a caller matching on `CObject::Complex`/`Primitive`
         // already relies on, or a container attribute mixing a proxy with
@@ -1342,9 +1392,27 @@ mod tests {
         let wrapped = CObject::Proxy(proxy);
         assert_eq!(wrapped.rm_type_name(), "ELEMENT");
         assert_eq!(wrapped.node_id(), Some("at0010"));
-        assert_eq!(wrapped.occurrences(), &MultiplicityInterval::OPTIONAL);
+        assert_eq!(
+            wrapped.occurrences(),
+            Some(&MultiplicityInterval::OPTIONAL)
+        );
         assert!(wrapped.attributes().is_empty());
         assert!(wrapped.attribute_tuples().is_empty());
+    }
+
+    #[test]
+    fn a_proxy_with_no_stated_occurrences_defers_to_its_target() {
+        // AOM2's `use_target_occurrences()`: `Result = (occurrences = Void)`.
+        let proxy = CComplexObjectProxy::new(
+            "ELEMENT",
+            Some("at0010".to_owned()),
+            None,
+            "/data[at0001]/events[at0002]",
+        )
+        .unwrap();
+        assert!(proxy.use_target_occurrences());
+        assert!(proxy.occurrences().is_none());
+        assert!(CObject::Proxy(proxy).occurrences().is_none());
     }
 
     #[test]
@@ -1353,7 +1421,7 @@ mod tests {
             CComplexObjectProxy::new(
                 "ELEMENT",
                 Some("at0010".to_owned()),
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 "/data[at0001]/events[at0002]",
             )
             .unwrap(),
@@ -1682,7 +1750,6 @@ mod tests {
     fn constraint_status_round_trips_through_canonical_json_and_omits_when_absent() {
         let with_status = CPrimitive::TerminologyCode {
             constraint: Some("ac0001".to_owned()),
-            code_list: Vec::new(),
             constraint_status: Some(ConstraintStatus::Extensible),
         };
         let json = serde_json::to_value(&with_status).unwrap();
@@ -1692,7 +1759,6 @@ mod tests {
 
         let without_status = CPrimitive::TerminologyCode {
             constraint: Some("ac0001".to_owned()),
-            code_list: Vec::new(),
             constraint_status: None,
         };
         let json = serde_json::to_value(&without_status).unwrap();
@@ -1705,18 +1771,22 @@ mod tests {
     #[test]
     fn a_terminology_code_written_before_constraint_status_existed_still_deserialises() {
         // `#[serde(default)]`: JSON emitted by an earlier version of this
-        // crate had no `constraint_status` key at all.
+        // crate had no `constraint_status` key at all. It also had a
+        // `code_list` key (`A-51`'s own residual, corrected in a second
+        // pass) this variant no longer has a field for at all — absent any
+        // `#[serde(deny_unknown_fields)]`, an unrecognised key is silently
+        // ignored rather than refused, which is what lets this fixture
+        // still deserialise instead of erroring.
         let json = serde_json::json!({
             "_type": "C_TERMINOLOGY_CODE",
             "constraint": "ac0001",
-            "code_list": [],
+            "code_list": ["at0001", "at0002"],
         });
         let back: CPrimitive = serde_json::from_value(json).unwrap();
         assert_eq!(
             back,
             CPrimitive::TerminologyCode {
                 constraint: Some("ac0001".to_owned()),
-                code_list: Vec::new(),
                 constraint_status: None,
             }
         );

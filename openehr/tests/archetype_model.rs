@@ -55,7 +55,6 @@ fn blood_pressure() -> Archetype {
         MultiplicityInterval::OPTIONAL,
         CPrimitive::TerminologyCode {
             constraint: Some("ac0001".to_owned()),
-            code_list: Vec::new(),
             constraint_status: None,
         },
     ));

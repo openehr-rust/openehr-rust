@@ -266,18 +266,24 @@ fn collect_from_attributes<'a>(attributes: &'a [crate::am::CAttribute], out: &mu
     }
 }
 
-/// Every `ac`-code named by a terminology constraint in the tree.
+/// Every `ac`-code named by a terminology constraint in the tree. `VACDF`
+/// governs `ac`-codes specifically — "every `ac`-code a terminology
+/// constraint names has a value set" — and `constraint` may equally hold a
+/// plain `at`-code (an exact required value, needing no value set at all)
+/// since `A-51`'s second pass, so this filters on AOM2's own leader
+/// convention rather than treating every non-empty `constraint` as one.
 fn terminology_constraints(attributes: &[crate::am::CAttribute]) -> Vec<String> {
     let mut out = Vec::new();
     for attribute in attributes {
         for child in attribute.children() {
             if let CObject::Primitive(primitive) = child
                 && let crate::am::CPrimitive::TerminologyCode {
-                    constraint: Some(ac_code),
+                    constraint: Some(code),
                     ..
                 } = primitive.constraint()
+                && code.starts_with("ac")
             {
-                out.push(ac_code.clone());
+                out.push(code.clone());
             }
             out.extend(terminology_constraints(child.attributes()));
         }
@@ -396,7 +402,6 @@ mod tests {
             MultiplicityInterval::MANDATORY,
             CPrimitive::TerminologyCode {
                 constraint: Some("ac0001".to_owned()),
-                code_list: Vec::new(),
                 constraint_status: None,
             },
         ));

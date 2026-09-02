@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**53 findings, 53 in the table below: 6 High, 31 Medium, 16 Low. 47 fixed or
+**55 findings, 55 in the table below: 6 High, 31 Medium, 18 Low. 49 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -137,9 +137,11 @@ in the documentation, which is the class this register most exists to catch.
 | A-48 | Low | `C_PRIMITIVE_OBJECT.assumed_value` had no field at all — a default value could not be attached to a primitive constraint under any representation | **fixed** — `PrimitiveValue` and `with_assumed_value`/`assumed_value()` added; `Inv_valid_assumed_value` (conformance to the attached `CPrimitive`) is carried unchecked, declared rather than silently passed |
 | A-49 | Medium | `parse_adl14_header`/`parse_adl2_header` used `ArchetypeId` for the header's own identifier — narrower than the grammar both cite in their own error messages, `ARCHETYPE_HRID`, which allows a namespace prefix and a prerelease version suffix neither reader accepted | **fixed**, residual documented — `ArchetypeHrid` added and both readers corrected to use it for the archetype's own identifier; the `specialize` line's identifier is unchanged and remains narrower than its own grammar allows |
 | A-50 | Medium | `C_COMPLEX_OBJECT` had no `attribute_tuples` field — `C_ATTRIBUTE_TUPLE`/`C_PRIMITIVE_TUPLE` did not exist under any name, so a `{units, magnitude}` or `{value, symbol}` co-varying constraint (AOM2's replacement for ADL 1.4's `C_DV_QUANTITY`/`C_DV_ORDINAL`) could not be represented at all, not even as `CPrimitive::Unsupported` | **fixed** — `CAttributeTuple`/`CPrimitiveTuple` added, wired onto `CComplexObject` via a builder; the tree walk reports a node governed by one as `Unchecked` rather than silently passing it |
-| A-51 | Medium | `CPrimitive::TerminologyCode` had no `constraint_status` field, so an `extensible`/`preferred`/`example` (non-`Required`) terminology constraint could not be distinguished from a required one — `am::validate` reported a violation for conformant data whenever the actual code did not match the list or value set, which AOM2 states plainly is not a violation for a soft constraint | **fixed**, residual documented — `ConstraintStatus` added and checked in `walk_primitive`; `code_list: Vec<String>`, this variant's existing shape, has no counterpart in AOM2's own single-valued `constraint: String` and is left open rather than corrected in the same pass, since fixing it is a breaking change to an already-published type |
+| A-51 | Medium | `CPrimitive::TerminologyCode` had no `constraint_status` field, so an `extensible`/`preferred`/`example` (non-`Required`) terminology constraint could not be distinguished from a required one — `am::validate` reported a violation for conformant data whenever the actual code did not match the list or value set, which AOM2 states plainly is not a violation for a soft constraint | **fixed**; residual (`code_list` had no AOM2 counterpart) closed by **A-55** |
 | A-52 | Low | `ARCHETYPE.rm_overlay` had no counterpart at all — visibility and aliasing statements for RM attributes outside the constrained structure could not be attached to an `Archetype`, silently vanishing on JSON read the same way `A-50`/`A-46` found elsewhere | **fixed** — `RmOverlay`/`RmAttributeVisibility`/`VisibilityType` added in a new `am::rm_overlay` module, attached via `Archetype::with_rm_overlay`; `Inv_alias_validity` checked at construction |
-| A-53 | Medium | `C_COMPLEX_OBJECT_PROXY` had no counterpart under any name — an archetype using a proxy node to reference a constraint defined elsewhere in the same archetype, rather than repeating it, could not be represented at all, the same shape of gap `A-50` found for tuple constraints | **fixed**, residual documented — `CComplexObjectProxy` added as a new `CObject::Proxy` variant, reported `Unchecked` by `am::validate` rather than resolved; AOM2's `use_target_occurrences()` (`occurrences` deferring to the target node's own) is not modelled, since making it optional would break `CObject::occurrences`'s already-published signature |
+| A-53 | Medium | `C_COMPLEX_OBJECT_PROXY` had no counterpart under any name — an archetype using a proxy node to reference a constraint defined elsewhere in the same archetype, rather than repeating it, could not be represented at all, the same shape of gap `A-50` found for tuple constraints | **fixed**; residual (`use_target_occurrences()` unmodelled) closed by **A-54** |
+| A-54 | Low | **BREAKING.** `CComplexObjectProxy` could not represent AOM2's `use_target_occurrences()` — `A-53`'s own residual — because `CObject::occurrences()` returned `&MultiplicityInterval`, a shape every other `C_OBJECT` variant already committed to as published API | **fixed** — `occurrences()` widened to `Option<&MultiplicityInterval>`; the four other variants are unaffected (always `Some`), and `CAttribute::single`/`container`'s own construction-time checks treat a deferred child per AOM2's own stated default (lower bound `0`, upper bound unchecked) rather than guessing |
+| A-55 | Low | **BREAKING.** `CPrimitive::TerminologyCode::code_list: Vec<String>` — `A-51`'s own residual — had no counterpart in AOM2's actual single-valued `constraint: String` | **fixed** — `code_list` removed; multiple alternative codes are now expressed as sibling `C_OBJECT`s, matching every other node kind's own alternative-matching shape; `constraint`'s `at`-code/`ac`-code kind is now distinguished by AOM2's own `"ac"` leader convention rather than by which of two fields it was written into |
 
 ---
 
@@ -3046,3 +3048,95 @@ through `CObject::Proxy` as they are through every other variant;
 canonical-JSON round-tripping; and, in `am::validate`, a proxy governing a
 real `ELEMENT` reported `Unchecked` with its `target_path` as the detail,
 never as a silent pass.
+
+## A-54 — `CObject::occurrences()` could not represent a deferred value
+
+**Severity: Low. Status: fixed.** Closes `A-53`'s own residual.
+
+**Deciding, rather than deferring again.** `A-51` and `A-53` each declined a
+breaking fix to already-published API and recorded the decision as a
+residual instead of making it — the same choice twice in a row, which is
+itself worth noticing: leaving both open indefinitely is itself a decision,
+just an unstated one. `agents/publishing.md`, read in full for the first
+time this pass rather than assumed to gate source changes as well as
+releases, turns out to describe only release *mechanics* — version tables,
+publish ordering, a checklist — not a design-approval process, and this
+repository's own history (`0.6.0`'s `f64`→`Real` migration, `0.4.0`'s
+`PartialOrd` removal) already establishes that a breaking API change is an
+ordinary commit here, version-bumped only when someone actually runs
+`cargo publish`. That act needs credentials and manual confirmation neither
+of these findings required; making the fix did not.
+
+**The fix.** `CObject::occurrences()` now returns `Option<&MultiplicityInterval>`.
+The four existing variants — `CComplexObject`, `CPrimitiveObject`,
+`ArchetypeSlot`, `CArchetypeRoot` — are unaffected in every other respect:
+their own struct fields stay `MultiplicityInterval`, not `Option`, and the
+dispatcher simply wraps each in `Some`. Only `CComplexObjectProxy::occurrences`
+itself becomes genuinely `Option<MultiplicityInterval>`, `None` now meaning
+AOM2's own `use_target_occurrences()` — the residual `A-53` named. Two
+construction-time checks in `CAttribute::single`/`container` read
+`child.occurrences()` and needed a rule for a deferred child: AOM2 states one
+directly, in `C_OBJECT.effective_occurrences()`'s own text — "If local
+`occurrences` not set, always assume 0 as the lower bound" — cited and
+applied to the `required`-count sum in `container`; the upper-bound checks in
+both functions (`VACSO`, `VACMCU`) exclude a deferred child entirely, since
+its effective upper bound depends on a target this crate does not resolve
+and guessing one would be exactly the kind of unverified claim `W0.3` exists
+to catch. `am::validate::walk_attribute`'s own occurrences check gained the
+matching case: a deferred alternative is reported `Unchecked`, naming
+`use_target_occurrences`, rather than causing a `match` to not compile or a
+panic to reach a caller.
+
+Two new tests: a proxy built with `None` occurrences reads
+`use_target_occurrences() == true` and `occurrences() == None` through both
+`CComplexObjectProxy` and `CObject`; and, in `am::validate`, a proxy with
+deferred occurrences governing one matched instance node is unchecked
+*twice* — once from `walk_object`'s own per-node handling (`A-53`), once
+from the separate alternative-occurrences loop — confirmed as two distinct,
+correctly-worded reports rather than one masking the other.
+
+## A-55 — `CPrimitive::TerminologyCode::code_list` had no AOM2 counterpart
+
+**Severity: Low. Status: fixed.** Closes `A-51`'s own residual, made for the
+reason `A-54`'s own opening paragraph gives.
+
+**The fix.** `code_list: Vec<String>` removed. `constraint: Option<String>`
+now carries either kind of code AOM2's own single-valued `constraint`
+attribute can — a required `at`-code or a value-set `ac`-code — distinguished
+at check time by AOM2's own leader convention, `is_value_set_code`:
+`a_code.starts_with (Value_set_code_leader)`, `Value_set_code_leader = "ac"`
+(`openEHR/specifications-AM`,
+`docs/UML/classes/org.openehr.am.aom2.adl_code_definitions.adoc`), not by
+which of two Rust fields a caller happened to populate. `am::validate`'s
+`C_TERMINOLOGY_CODE` arm was rewritten around that distinction: an `ac`-code
+checks value-set membership as before; an `at`-code now checks exact
+equality with the instance's own coded value, a check `code_list` never
+correctly performed in the first place (it checked *membership in a list*,
+which happened to coincide with equality only for a single-element list).
+`archetype.rs`'s own `VACDF` sweep (`terminology_constraints`) is narrowed to
+match: it used to treat every non-empty `constraint` as an `ac`-code needing
+a value set, which was safe only because `constraint` was never anything
+else; now that an `at`-code can appear there too, the sweep filters on the
+same `"ac"` leader before demanding a value set for it, so an `at`-code
+constraint is no longer wrongly refused for lacking one.
+
+`AOM2`'s own convention for "no constraint" is an empty string, not `Void`
+— this crate keeps translating that to `None` for the idiomatic reason
+`constraint: Option<String>` already gave, but now also accepts `Some("")`
+as the same case, defensively: `Deserialize` does not run this crate's own
+constructors, so a foreign or hand-written payload may use either spelling
+and both must be read the same way.
+
+**Multiple alternative codes are unaffected in what they can express, only
+in how.** `code_list: ["at1", "at2"]` on one node is now two sibling
+`CObject::Primitive` alternatives under the same `C_ATTRIBUTE`, each with
+its own single-code `constraint` — the shape `CAttribute::children` already
+gives every other node kind for exactly this purpose (`A-50`'s own tuple
+alternatives are a second instance of the same pattern). No expressive power
+is lost; what changes is which part of the tree carries the alternation.
+
+Two new tests: an `at`-code constraint checked for exact equality, both
+directions (the matching code passes, a different one violates); and
+`constraint: None` and AOM2's own `Some(String::new())` spelling both
+reported unchecked with the same reason, proving the two are read as one
+case rather than one being silently favoured.

@@ -139,6 +139,68 @@ remains narrower than its own grammar (`ARCHETYPE_REF`, or for ADL 2 either
 `ARCHETYPE_HRID` or `ARCHETYPE_REF`) allows — declared, not fixed, in this
 pass; see `openehr/spec/audit.md` **A-49**.
 
+**New: `openehr::am::CAttributeTuple`/`CPrimitiveTuple`, and
+`CComplexObject::with_attribute_tuples`/`attribute_tuples()`.** AOM2's
+mechanism for a co-varying constraint — `{units, magnitude}` on a
+`DV_QUANTITY`, `{value, symbol}` on a `DV_ORDINAL` — "replaces all
+domain-specific constraint types defined in ADL/AOM 1.4, including
+`C_DV_QUANTITY` and `C_DV_ORDINAL`", and had no counterpart here at all:
+`CComplexObject` had nowhere to put one, so it vanished silently on JSON
+read. A structural invariant is checked at construction — every tuple row's
+arity must match the number of co-varying attributes. `am::validate` reports
+a node governed by one as `Unchecked`, naming the attributes it covers,
+rather than evaluating it. See `openehr/spec/audit.md` **A-50**.
+
+**New: `CPrimitive::TerminologyCode::constraint_status`, and
+`openehr::am::ConstraintStatus`.** Fixes a false violation on conformant
+data: AOM2 states that an `extensible`/`preferred`/`example` terminology
+constraint is satisfied by *any* terminology code, and with no field to
+carry that, `am::validate` checked every `C_TERMINOLOGY_CODE` as though it
+were `required` — a real archetype using the specification's own
+recommended `extensible` pattern would have every conformant instance whose
+code is not already in the value set reported as a violation. See
+`openehr/spec/audit.md` **A-51**.
+
+**New: `openehr::am::RmOverlay`/`RmAttributeVisibility`/`VisibilityType`, and
+`Archetype::with_rm_overlay`/`rm_overlay()`.** `ARCHETYPE.rm_overlay` had no
+counterpart at all — visibility and aliasing statements for RM attributes
+outside the constrained structure vanished silently on JSON read.
+`Inv_alias_validity` is checked at construction. Authoring-tool metadata
+only; `am::validate` does not read it. See `openehr/spec/audit.md` **A-52**.
+
+**New: `openehr::am::CComplexObjectProxy`, and `CObject::Proxy`.**
+`C_COMPLEX_OBJECT_PROXY` — a node that references another node's constraint
+by path instead of repeating it — had no counterpart under any name.
+`am::validate` reports a node governed by one as `Unchecked`, naming
+`target_path`, rather than resolving it. See `openehr/spec/audit.md`
+**A-53**.
+
+**BREAKING: `CObject::occurrences()` now returns
+`Option<&MultiplicityInterval>`, not `&MultiplicityInterval`.** Closes
+`A-53`'s own residual: only this widening lets `CComplexObjectProxy`
+represent AOM2's `use_target_occurrences()` — `None` meaning "defer to the
+target node's own occurrences", which this crate does not resolve. The four
+other `C_OBJECT` variants are unaffected in every other respect and always
+return `Some`; `CAttribute::single`/`container`'s own construction-time
+checks treat a deferred child per AOM2's own stated default (assume a lower
+bound of `0`; the upper-bound checks do not apply to it, since its effective
+upper bound depends on a target this crate does not resolve). See
+`openehr/spec/audit.md` **A-54**, and see there too for why this is an
+ordinary source change rather than a version bump: this repository's own
+history already treats a breaking `0.x` API change as a normal commit,
+version-bumped only at the next actual `cargo publish`
+(`agents/publishing.md`).
+
+**BREAKING: `CPrimitive::TerminologyCode` no longer has a `code_list`
+field.** Closes `A-51`'s own residual: `code_list` had no counterpart in
+AOM2's actual single-valued `constraint: String` attribute. `constraint:
+Option<String>` now carries either an `at`-code (an exact required value) or
+an `ac`-code (a value set), distinguished by AOM2's own `"ac"` leader
+convention rather than by which field a caller populated; multiple
+alternative codes are now expressed as sibling `C_OBJECT`s, the same
+alternative-matching shape every other node kind already uses. See
+`openehr/spec/audit.md` **A-55**.
+
 ## 0.8.0 — 2026-08-29
 
 **BREAKING: the MSRV floor moved from N−3 to N−2 — 1.95 to 1.96.** `RV1`

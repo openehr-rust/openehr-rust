@@ -455,12 +455,24 @@ fn walk_attribute(
     }
 
     for (alternative, count) in alternatives.iter().zip(matched_counts) {
-        if !alternative.occurrences().contains(count) {
-            let node_path = match alternative.node_id() {
-                Some(id) => format!("{attr_path}[{id}]"),
-                None => attr_path.clone(),
-            };
-            ctx.violation(archetype_id, &node_path, "Occurrences");
+        let node_path = match alternative.node_id() {
+            Some(id) => format!("{attr_path}[{id}]"),
+            None => attr_path.clone(),
+        };
+        match alternative.occurrences() {
+            Some(occurrences) => {
+                if !occurrences.contains(count) {
+                    ctx.violation(archetype_id, &node_path, "Occurrences");
+                }
+            }
+            // Only a `C_COMPLEX_OBJECT_PROXY` reaches this: `use_target_occurrences()`
+            // defers to a target node this crate does not resolve, so the
+            // actual permitted count is unknown here, not merely unstated.
+            None => ctx.unchecked(
+                &node_path,
+                "occurrences is deferred to another node (use_target_occurrences), which \
+                 this crate does not resolve",
+            ),
         }
     }
 }
@@ -809,8 +821,7 @@ fn walk_primitive(
         }
         (
             CPrimitive::TerminologyCode {
-                constraint: ac_code,
-                code_list,
+                constraint,
                 constraint_status,
             },
             Scalar::Str(value),
@@ -820,27 +831,38 @@ fn walk_primitive(
             // code" (`docs/ADL2/master04.5-cadl_primitive_types.adoc`) — a
             // `Scalar::Str` reaching this arm at all already is one, so a
             // soft constraint is satisfied, not merely unchecked. Checking
-            // the code against `code_list`/`ac_code` below for `extensible`,
+            // the code against `constraint` below for `extensible`,
             // `preferred`, or `example` would report a violation AOM2
             // explicitly says is not one — the bug this arm existed to avoid
             // before `constraint_status` had anywhere to be attached at all.
             let required = constraint_status.is_none_or(ConstraintStatus::is_required);
             if required {
-                if ac_code.is_none() && code_list.is_empty() {
-                    // Neither an `ac`-code nor an inline list: nothing here
-                    // constrains the code, so nothing can be checked against it.
-                    ctx.unchecked(
-                        path,
-                        "C_TERMINOLOGY_CODE names neither an ac-code nor an inline code list",
-                    );
-                } else {
-                    let inline_ok = code_list.iter().any(|code| code == value);
-                    let value_set_ok = ac_code
-                        .as_deref()
-                        .and_then(|ac| terminology.value_set(ac))
-                        .is_some_and(|set| set.contains(value));
-                    if !inline_ok && !value_set_ok {
-                        ctx.violation(archetype_id, path, "C_TERMINOLOGY_CODE");
+                match constraint.as_deref() {
+                    // AOM2's own "no constraint" spelling, plus `None` for
+                    // the same reason — see this variant's own field
+                    // documentation.
+                    None | Some("") => {
+                        ctx.unchecked(path, "C_TERMINOLOGY_CODE names no constraint");
+                    }
+                    // `is_value_set_code`: `a_code.starts_with (Value_set_code_leader)`,
+                    // `Value_set_code_leader = "ac"`
+                    // (`org.openehr.am.aom2.adl_code_definitions.adoc`) — an
+                    // `ac`-code names a value set to check membership
+                    // against, not a value to compare equal to.
+                    Some(ac_code) if ac_code.starts_with("ac") => {
+                        let value_set_ok = terminology
+                            .value_set(ac_code)
+                            .is_some_and(|set| set.contains(value));
+                        if !value_set_ok {
+                            ctx.violation(archetype_id, path, "C_TERMINOLOGY_CODE");
+                        }
+                    }
+                    // An `at`-code names one specific value; conformance is
+                    // exact equality with the code itself, not a lookup.
+                    Some(at_code) => {
+                        if value != at_code {
+                            ctx.violation(archetype_id, path, "C_TERMINOLOGY_CODE");
+                        }
                     }
                 }
             }
@@ -1118,7 +1140,7 @@ mod tests {
             CComplexObjectProxy::new(
                 "ELEMENT",
                 Some("at0004".to_owned()),
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 "/data[id2]/items[at0099]",
             )
             .unwrap(),
@@ -1135,6 +1157,45 @@ mod tests {
         assert_eq!(
             report.unchecked()[0].detail(),
             Some("/data[id2]/items[at0099]")
+        );
+    }
+
+    /// A proxy with no stated occurrences (`use_target_occurrences()`) is
+    /// unchecked twice over for one matched instance node: once from
+    /// `walk_object`'s own Proxy handling (above), and once from the
+    /// separate loop that checks how many times each alternative matched
+    /// against its own occurrences — which cannot check a deferred value
+    /// either, and says so rather than silently skipping the check.
+    #[test]
+    fn a_proxy_with_deferred_occurrences_is_unchecked_on_both_counts() {
+        let proxy = CObject::Proxy(
+            CComplexObjectProxy::new(
+                "ELEMENT",
+                Some("at0004".to_owned()),
+                None,
+                "/data[id2]/items[at0099]",
+            )
+            .unwrap(),
+        );
+        let archetype = evaluation_archetype(proxy);
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Systolic", "at0004"),
+            placeholder_value(),
+        )]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(report.violations().is_empty());
+        assert_eq!(report.unchecked().len(), 2);
+        assert!(
+            report
+                .unchecked()
+                .iter()
+                .any(|u| u.reason().contains("C_COMPLEX_OBJECT_PROXY"))
+        );
+        assert!(
+            report
+                .unchecked()
+                .iter()
+                .any(|u| u.reason().contains("use_target_occurrences"))
         );
     }
 
@@ -1380,7 +1441,6 @@ mod tests {
             "defining_code",
             CPrimitive::TerminologyCode {
                 constraint: Some("ac0001".to_owned()),
-                code_list: Vec::new(),
                 constraint_status: None,
             },
             "DV_CODED_TEXT",
@@ -1450,22 +1510,87 @@ mod tests {
         assert_eq!(report.violations()[0].constraint(), "C_TERMINOLOGY_CODE");
     }
 
+    /// A `constraint` naming a single `at`-code (AOM2's leader convention,
+    /// not a separate field) checks exact equality with the code itself, not
+    /// a value-set lookup — `code_list`'s replacement, `A-51`'s second pass.
+    #[test]
+    fn a_c_terminology_code_at_code_constraint_checks_exact_equality() {
+        let constraint = element_with_value_constraint(
+            "at0004",
+            "defining_code",
+            CPrimitive::TerminologyCode {
+                constraint: Some("at0010".to_owned()),
+                constraint_status: None,
+            },
+            "DV_CODED_TEXT",
+        );
+        let archetype = evaluation_archetype(constraint);
+        let coded = |code: &str| {
+            DataValue::CodedText(
+                DvCodedText::new("value", CodePhrase::new("local", code).unwrap()).unwrap(),
+            )
+        };
+
+        let exact =
+            build_evaluation(vec![Element::new(attrs("Systolic", "at0004"), coded("at0010"))]);
+        assert!(validate_against_archetype(&archetype, exact.as_node()).is_conformant());
+
+        let other = build_evaluation(vec![Element::new(
+            attrs("Systolic", "at0004"),
+            coded("at0011"),
+        )]);
+        let report = validate_against_archetype(&archetype, other.as_node());
+        assert_eq!(report.violations()[0].constraint(), "C_TERMINOLOGY_CODE");
+    }
+
+    /// `constraint: None`, and AOM2's own empty-string spelling of the same
+    /// thing, are both "no constraint" — unchecked, not a violation and not
+    /// silently satisfied.
+    #[test]
+    fn a_c_terminology_code_with_no_constraint_is_unchecked_either_spelling() {
+        for constraint in [None, Some(String::new())] {
+            let element =
+                element_with_value_constraint(
+                    "at0004",
+                    "defining_code",
+                    CPrimitive::TerminologyCode {
+                        constraint,
+                        constraint_status: None,
+                    },
+                    "DV_CODED_TEXT",
+                );
+            let archetype = evaluation_archetype(element);
+            let entry = build_evaluation(vec![Element::new(
+                attrs("Systolic", "at0004"),
+                DataValue::CodedText(
+                    DvCodedText::new("value", CodePhrase::new("local", "at0010").unwrap())
+                        .unwrap(),
+                ),
+            )]);
+            let report = validate_against_archetype(&archetype, entry.as_node());
+            assert!(report.violations().is_empty());
+            assert_eq!(
+                report.unchecked()[0].reason(),
+                "C_TERMINOLOGY_CODE names no constraint"
+            );
+        }
+    }
+
     /// `constraint_status`: AOM2's own words for anything but `Required` are
     /// "validity of the data instance is achieved by supplying *any*
-    /// terminology code" — a code absent from `code_list` must still be
+    /// terminology code" — a code other than the one named must still be
     /// conformant once the constraint is `extensible`, `preferred`, or
     /// `example`. Before `constraint_status` existed anywhere in this crate,
     /// this exact case reported a `C_TERMINOLOGY_CODE` violation for
     /// conformant data, because nothing distinguished a soft constraint from
     /// a required one (`A-51`).
     #[test]
-    fn a_soft_terminology_constraint_accepts_a_code_absent_from_its_own_list() {
+    fn a_soft_terminology_constraint_accepts_a_code_other_than_the_one_named() {
         let constraint = element_with_value_constraint(
             "at0004",
             "defining_code",
             CPrimitive::TerminologyCode {
-                constraint: None,
-                code_list: vec!["at0010".to_owned()],
+                constraint: Some("at0010".to_owned()),
                 constraint_status: Some(ConstraintStatus::Extensible),
             },
             "DV_CODED_TEXT",
