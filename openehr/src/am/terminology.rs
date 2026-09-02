@@ -23,6 +23,12 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct TermDefinition {
     text: String,
     description: Option<String>,
+    /// `ARCHETYPE_TERM.other_items`: "Hash of keys and corresponding values
+    /// for other items in a term, e.g. provenance."
+    /// (`org.openehr.am.aom2.archetype_term`). Carried, not enforced — this
+    /// crate has no fixed list of recognised keys and does not invent one.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    other_items: BTreeMap<String, String>,
 }
 
 impl TermDefinition {
@@ -40,7 +46,21 @@ impl TermDefinition {
         if text.trim().is_empty() {
             return Err(ParseError::invariant("ARCHETYPE_TERM", "empty text"));
         }
-        Ok(Self { text, description })
+        Ok(Self {
+            text,
+            description,
+            other_items: BTreeMap::new(),
+        })
+    }
+
+    /// Adds an entry to `other_items`, carried as written and never
+    /// interpreted — this crate has no fixed list of recognised keys, the
+    /// same position it already takes on `ArchetypeTerminology`'s external
+    /// bindings.
+    #[must_use]
+    pub fn with_other_item(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.other_items.insert(key.into(), value.into());
+        self
     }
 
     /// The rubric.
@@ -53,6 +73,12 @@ impl TermDefinition {
     #[must_use]
     pub fn description(&self) -> Option<&str> {
         self.description.as_deref()
+    }
+
+    /// Other items carried alongside this term, unchecked (`other_items`).
+    #[must_use]
+    pub const fn other_items(&self) -> &BTreeMap<String, String> {
+        &self.other_items
     }
 }
 
@@ -234,5 +260,46 @@ mod tests {
         assert_eq!(terminology.bindings()["SNOMED-CT"]["at0001"], "271649006");
         // …and no accessor reports it as validated, because nothing validated it.
         assert!(terminology.defines("at0001"));
+    }
+
+    /// `ARCHETYPE_TERM.other_items`: absent by default, attached with the
+    /// builder, carried as written — the same "carried, not enforced"
+    /// position `external_bindings_are_carried_and_not_checked` above proves
+    /// for `ArchetypeTerminology`'s own external bindings.
+    #[test]
+    fn other_items_are_absent_by_default_and_carried_once_attached() {
+        let bare = TermDefinition::new("Systolic", None).unwrap();
+        assert!(bare.other_items().is_empty());
+
+        let term = bare.with_other_item("provenance", "imported from LOINC");
+        assert_eq!(term.other_items()["provenance"], "imported from LOINC");
+    }
+
+    #[test]
+    fn a_term_definition_round_trips_through_canonical_json_and_omits_other_items_when_absent() {
+        let bare = TermDefinition::new("Systolic", None).unwrap();
+        let bare_json = serde_json::to_value(&bare).unwrap();
+        assert!(bare_json.get("other_items").is_none());
+        assert_eq!(
+            serde_json::from_value::<TermDefinition>(bare_json).unwrap(),
+            bare
+        );
+
+        let with_items = bare.with_other_item("provenance", "imported from LOINC");
+        let json = serde_json::to_value(&with_items).unwrap();
+        assert_eq!(
+            serde_json::from_value::<TermDefinition>(json).unwrap(),
+            with_items
+        );
+    }
+
+    #[test]
+    fn a_term_definition_serialised_before_other_items_existed_still_deserialises() {
+        // `#[serde(default)]`: a term definition written by an earlier
+        // version of this crate, before `other_items` existed, carries no
+        // such key at all — it must still read, as an empty map.
+        let json = serde_json::json!({ "text": "Systolic" });
+        let back: TermDefinition = serde_json::from_value(json).unwrap();
+        assert!(back.other_items().is_empty());
     }
 }

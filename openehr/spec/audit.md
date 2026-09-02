@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**60 findings, 60 in the table below: 7 High, 32 Medium, 21 Low. 54 fixed or
+**61 findings, 61 in the table below: 7 High, 32 Medium, 22 Low. 55 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -147,6 +147,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-58 | Low | `walk_complex` visited a `C_ATTRIBUTE_TUPLE` and reported it `Unchecked` unconditionally — `A-50`'s own residual — never resolving the instance's actual values and comparing them against a row, so a co-varying `{units, magnitude}`/`{value, symbol}` constraint was never actually enforced no matter what the data said | **fixed** — `walk_attribute_tuple` resolves each co-varying attribute to its one instance value, evaluates every row's every column by delegating to `walk_primitive` itself, and combines the three-valued result (`Conforms`/`Violates`/`Unchecked`) across a row by AND and across the tuple by OR; a column that cannot be resolved to exactly one value, or a `tuples` list with no rows at all, stays `Unchecked` rather than being guessed at |
 | A-59 | Low | `ArchetypeSlot` had no `is_closed` field — AOM2's `ARCHETYPE_SLOT.is_closed` and its `any_allowed()` function could not be represented at all, so an archetype that closes a slot to further filling could not say so under any representation | **fixed** — `is_closed`/`closed()`/`is_closed()`/`any_allowed()` added, defaulting `false` per AOM2's own stated default; residual (`crate::path::Node` did not expose `ARCHETYPED.archetype_id`, so nothing could be checked) closed by **A-60** |
 | A-60 | Medium | `am::validate::walk_object`'s `CObject::Slot` arm reported every `ARCHETYPE_SLOT` `Unchecked` unconditionally, including a slot closed with `is_closed()` (`A-59`) that the instance filled anyway — a defect this crate could state (`A-59` gave it somewhere to put `is_closed`) but never actually catch, because `crate::path::Node` had no way to tell whether a position was filled by another archetype at all | **fixed** — `Node::archetype_details()` added, exposing `ARCHETYPED` at an archetype root; `walk_object`'s slot handling now reports a real violation when a closed slot was filled regardless, needs no further check when an open, unrestricted slot was filled or any slot was correctly left open, and stays `Unchecked` only for the one case this crate genuinely cannot resolve — a restricted open slot's filler, since `includes`/`excludes` assertions are not parsed (`K15.10`) |
+| A-61 | Low | `TermDefinition` had no `other_items` field — AOM2's `ARCHETYPE_TERM.other_items`, a hash of extra keyed items "e.g. provenance", could not be represented at all, the same silent-loss shape `A-46`/`A-48`/`A-50`/`A-52`/`A-59` each found in a different class | **fixed** — `other_items`/`with_other_item()`/`other_items()` added, defaulting to an empty map and `#[serde(default)]` on the wire; carried, not interpreted, the same position this crate already takes on `ArchetypeTerminology`'s own external bindings — no fixed list of recognised keys exists to check against |
 
 ---
 
@@ -3488,3 +3489,46 @@ single test's name claimed for all four cases at once. A shared `filled()`
 helper in `am::validate`'s own test module builds an `Element` with
 `archetype_details` set, the shape every "was this slot actually filled"
 question in this finding turns on.
+
+## A-61 — `ARCHETYPE_TERM.other_items` had no counterpart
+
+**Severity: Low. Status: fixed.**
+
+Found comparing `am::terminology` against
+`org.openehr.am.aom2.archetype_term.adoc` directly, the same method
+`A-50`/`A-52`/`A-53`/`A-59` each used to find their own gaps — this crate's
+`TermDefinition` already modelled `code` (as the enclosing map's own key,
+not a duplicated field — a reasonable choice, not a gap), `text`, and
+`description`, and had for as long as the type existed, so it read as
+complete. It was not: AOM2 states a fourth attribute, `other_items:
+Hash<String, String> [0..1]`, described as a "Hash of keys and
+corresponding values for other items in a term, e.g. provenance." Nothing
+in this crate could hold one — not accepted and checked, not accepted and
+carried unchecked, not even round-tripped through JSON — the same
+silent-loss shape every one of the findings above found in a different
+class.
+
+**Fixed.** `other_items: BTreeMap<String, String>` added, defaulting empty.
+`with_other_item(key, value)` is a builder, matching
+`ArchetypeTerminology::with_binding`'s own one-entry-at-a-time shape for its
+external bindings; `other_items()` reads the whole map back.
+`#[serde(skip_serializing_if = "BTreeMap::is_empty", default)]` keeps JSON
+written before this field existed both readable and unchanged in shape when
+unused, the same choice `A-46`/`A-48`/`A-50`/`A-59` made for their own
+late-added fields.
+
+**Not enforced, deliberately.** AOM2 does not name a fixed set of
+recognised keys for `other_items` — "e.g. provenance" is one example, not
+an enumeration — so there is nothing to validate a key or value against.
+This is the same position `am::terminology`'s own module documentation
+already states for `ArchetypeTerminology`'s external bindings: "A binding
+to SNOMED CT or LOINC names a terminology this crate cannot reach... those
+are carried, reported as unchecked, and never reported as satisfied"
+(`S1.10`, `K15.22`). `other_items` is carried on the same terms.
+
+**Tests.** Three: absent by default and carried once attached via the
+builder; canonical-JSON round-tripping, both bare and with entries, and
+confirming `other_items` is omitted from the JSON entirely when empty
+rather than written as `{}`; and a fixture written as though from before
+this field existed — literal JSON with no `other_items` key at all — still
+deserialising, reading as an empty map.

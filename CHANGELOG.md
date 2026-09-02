@@ -28,6 +28,12 @@ together.
   unrestricted one. See `A-60` in `openehr/spec/audit.md`. Not a breaking
   change: an additive accessor, and `am::validate`'s report only becomes
   *more* precise for archetypes using `ARCHETYPE_SLOT`, never less.
+- `am::TermDefinition` gains `other_items`/`with_other_item()`/
+  `other_items()`, AOM2's `ARCHETYPE_TERM.other_items`, which had no
+  counterpart at all before now. See `A-61` in `openehr/spec/audit.md`. Not
+  a breaking change: an additive field defaulting to an empty map,
+  `#[serde(default)]` on the wire. Carried, not interpreted — AOM2 names no
+  fixed set of recognised keys to check against.
 
 ## 0.9.0 — 2026-09-02
 
