@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**61 findings, 61 in the table below: 7 High, 32 Medium, 22 Low. 55 fixed or
+**62 findings, 62 in the table below: 7 High, 33 Medium, 22 Low. 56 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -148,6 +148,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-59 | Low | `ArchetypeSlot` had no `is_closed` field — AOM2's `ARCHETYPE_SLOT.is_closed` and its `any_allowed()` function could not be represented at all, so an archetype that closes a slot to further filling could not say so under any representation | **fixed** — `is_closed`/`closed()`/`is_closed()`/`any_allowed()` added, defaulting `false` per AOM2's own stated default; residual (`crate::path::Node` did not expose `ARCHETYPED.archetype_id`, so nothing could be checked) closed by **A-60** |
 | A-60 | Medium | `am::validate::walk_object`'s `CObject::Slot` arm reported every `ARCHETYPE_SLOT` `Unchecked` unconditionally, including a slot closed with `is_closed()` (`A-59`) that the instance filled anyway — a defect this crate could state (`A-59` gave it somewhere to put `is_closed`) but never actually catch, because `crate::path::Node` had no way to tell whether a position was filled by another archetype at all | **fixed** — `Node::archetype_details()` added, exposing `ARCHETYPED` at an archetype root; `walk_object`'s slot handling now reports a real violation when a closed slot was filled regardless, needs no further check when an open, unrestricted slot was filled or any slot was correctly left open, and stays `Unchecked` only for the one case this crate genuinely cannot resolve — a restricted open slot's filler, since `includes`/`excludes` assertions are not parsed (`K15.10`) |
 | A-61 | Low | `TermDefinition` had no `other_items` field — AOM2's `ARCHETYPE_TERM.other_items`, a hash of extra keyed items "e.g. provenance", could not be represented at all, the same silent-loss shape `A-46`/`A-48`/`A-50`/`A-52`/`A-59` each found in a different class | **fixed** — `other_items`/`with_other_item()`/`other_items()` added, defaulting to an empty map and `#[serde(default)]` on the wire; carried, not interpreted, the same position this crate already takes on `ArchetypeTerminology`'s own external bindings — no fixed list of recognised keys exists to check against |
+| A-62 | Medium | `am::cadl` (`A-40`'s own "smallest real slice") refused `use_archetype`, `use_node`, and `allow_archetype` outright, though `C_ARCHETYPE_ROOT`, `C_COMPLEX_OBJECT_PROXY`, and `ArchetypeSlot` all already existed as types (`A-50`, `A-53`) — the blanket refusal overstated what stood in the way: only `allow_archetype`'s own `matches { include ... }` form genuinely needs the `K15.10` assertion grammar this parser does not lex | **fixed** — `use_archetype`/`use_node` fully implemented (`archetype_ref` reconstructed by slicing the source between token boundaries, `ADL_PATH` read as raw text to the next whitespace — two new `Lexer` primitives, since neither lexes atomically as a `Word`); `allow_archetype` implemented for its unrestricted form only, with `closed` and `matches {...}` each refused by name for a distinct, real reason (the former's own grammar carries no occurrences to build `ArchetypeSlot` from; the latter genuinely needs `K15.10`) |
 
 ---
 
@@ -3532,3 +3533,86 @@ confirming `other_items` is omitted from the JSON entirely when empty
 rather than written as `{}`; and a fixture written as though from before
 this field existed — literal JSON with no `other_items` key at all — still
 deserialising, reading as an empty map.
+
+## A-62 — `am::cadl` refused three constructs its own types already modelled
+
+**Severity: Medium. Status: fixed.**
+
+**The gap.** `am::cadl`'s own module documentation grouped `ARCHETYPE_SLOT`
+(`allow_archetype`), `C_ARCHETYPE_ROOT` (`use_archetype`), and
+`C_COMPLEX_OBJECT_PROXY` (`use_node`) under one blanket refusal, reasoning
+that `allow_archetype`'s own `include`/`exclude` clauses need the assertion
+language `K15.10` covers and this parser does not — true, but stated as the
+reason for refusing all three, when only one of them actually touches an
+assertion at all. `c_archetype_root`'s own grammar
+(`archetype_ref: ARCHETYPE_HRID | ARCHETYPE_REF`) and
+`c_complex_object_proxy`'s (`ADL_PATH`, a single trailing token) need
+nothing from `K15.10` — both types already existed in this crate (`A-50`,
+`A-53`), already had constructors ready to take exactly what the grammar
+offers, and archetypes using either construct were refused for a reason
+that, on inspection, did not apply to them.
+
+**Fixed, in three parts.**
+
+1. **`use_archetype` → `C_ARCHETYPE_ROOT`**, fully. The only real obstacle
+   was lexical, not grammatical: `ARCHETYPE_HRID`/`ARCHETYPE_REF` do not
+   lex as one `Word` token in `cadl_lexer::Lexer` — its word-scanner stops
+   at `-` (needed elsewhere, so `at`/`id`-codes and RM type names tokenize
+   correctly), which splits `openEHR-EHR-CLUSTER.device.v1` into five
+   tokens. Rather than adding a second, `-`-tolerant scanning rule only
+   this one construct would use, `Lexer::text_since(start)` slices the
+   original source between two offsets a caller has already bounded —
+   `c_archetype_root`'s own grammar puts nothing but the reference between
+   its leading `,` and the closing `]`, so "everything up to `]`" is exact
+   for this call site, not a guess. `CArchetypeRoot::new` takes the
+   reconstructed text as a plain `String` (it was never typed narrower
+   than that — `A-49`'s own `ARCHETYPE_REF`-vs-`ArchetypeId` residual does
+   not apply here), so no further validation is invented.
+2. **`use_node` → `C_COMPLEX_OBJECT_PROXY`**, fully, including the case its
+   own `occurrences` is absent. `Lexer::read_raw_path()` reads raw,
+   un-tokenized text to the next whitespace — `ADL_PATH`'s own grammar
+   (`base_lexer.g4`) contains no unescaped whitespace, so this is exact,
+   not approximate, and simpler than tokenizing `/`-separated segments only
+   to immediately re-join them. A new `parse_optional_occurrences`, distinct
+   from the existing `parse_occurrences`, builds `None` rather than
+   refusing an absent `occurrences` here specifically:
+   `C_COMPLEX_OBJECT_PROXY.occurrences` is the one field in this crate an
+   absence is *meaningful* for (`use_target_occurrences()`, `A-53`), not
+   something to guess a value for or treat as an omission.
+3. **`allow_archetype` → `ARCHETYPE_SLOT`**, for its unrestricted form only
+   — occurrences stated or not, no `matches` clause. Two narrower refusals
+   remain, each real: `closed` is refused because its own grammar
+   production (`archetype_slot: ... (( c_occurrences? (...)? ) |
+   SYM_CLOSED )`) carries no `c_occurrences` at all alongside `closed`, and
+   `ArchetypeSlot` — unlike `CComplexObjectProxy` (`A-54`'s own scope
+   decision) — stores occurrences as a plain, non-deferrable
+   `MultiplicityInterval`, so there is no value to build one from without
+   inventing one; `matches { include ... exclude ... }` is refused because
+   `K15.10` genuinely applies there — each assertion is the full BEOM
+   `boolean_expr` grammar (quantifiers, arithmetic, function calls), and
+   this parser lexes no part of it.
+
+**Not attempted.** `K15.10` itself — the BEOM expression grammar
+`allow_archetype`'s `matches` clause needs — remains out of scope, as does
+`closed`'s own occurrences gap; both are refused by name, not silently
+accepted with an empty assertion list or a guessed multiplicity, exactly
+the discipline the module documentation already states for every other
+refusal in this parser.
+
+**Tests.** The one pre-existing `allow_archetype` test asserted a fixture
+that, under this fix, hits a different (also correct) refusal first —
+"occurrences omitted" fires before the parser ever reaches the `matches`
+clause it was written to exercise, since occurrences precedes `matches` in
+the grammar and the old fixture stated neither. It is renamed and given
+occurrences so the refusal it actually names fires. Five new tests:
+`use_archetype` parsed into a `C_ARCHETYPE_ROOT`, using exactly the
+`-`-split fixture that proves the slice reconstruction is exact;
+`use_node` with no stated `occurrences`, confirming it builds `None`
+rather than refusing; an unrestricted `allow_archetype` parsed into an
+`ArchetypeSlot` with `any_allowed()` true — the case `A-60`'s
+`walk_slot` can now fully check on data reached through real ADL text, not
+only through direct Rust construction; and the `closed` and `matches`
+refusals, each naming its own reason. Two more in `cadl_lexer`:
+`text_since` reconstructing a `-`-split archetype reference, and
+`read_raw_path` stopping at whitespace after skipping trivia, plus its
+end-of-input case.

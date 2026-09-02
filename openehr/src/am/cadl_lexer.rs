@@ -70,6 +70,38 @@ impl<'a> Lexer<'a> {
         self.source.len() - self.rest.len()
     }
 
+    /// The source text from `start` up to the current position, verbatim —
+    /// no re-tokenization, no trimming. `ARCHETYPE_HRID`/`ARCHETYPE_REF`
+    /// (`archetype_id/value matches`'s own target, `use_archetype`'s second
+    /// bracket argument) lex as several `Word`/`Symbol('-')` tokens rather
+    /// than one, because this lexer's word-scanner stops at `-`
+    /// (`Self::next`'s own comment on `SYMBOLS`) and nothing else in this
+    /// parser needs an archetype reference lexed atomically. Slicing the
+    /// original source between two offsets a caller has already bounded —
+    /// rather than adding a second, `-`-tolerant word-scanning rule that
+    /// only this one construct would use — reconstructs the exact text
+    /// without guessing at a grammar this parser does not otherwise lex.
+    pub(super) fn text_since(&self, start: usize) -> &'a str {
+        &self.source[start..self.offset()]
+    }
+
+    /// Reads raw, un-tokenized text up to the next whitespace or the end of
+    /// input — `ADL_PATH`'s own shape (`base_lexer.g4`): a run of
+    /// `/`-separated segments with no unescaped whitespace inside it, so
+    /// this is exact, not approximate. `use_node`'s trailing target path is
+    /// the only construct this parser reads this way; everything else it
+    /// parses is well served by `Self::next`'s own token boundaries.
+    pub(super) fn read_raw_path(&mut self) -> Option<&'a str> {
+        self.skip_trivia();
+        if self.rest.is_empty() {
+            return None;
+        }
+        let end = self.rest.find(char::is_whitespace).unwrap_or(self.rest.len());
+        let text = &self.rest[..end];
+        self.rest = &self.rest[end..];
+        Some(text)
+    }
+
     /// Skips whitespace and `-- ...` line comments, both insignificant
     /// anywhere between tokens in ADL.
     pub(super) fn skip_trivia(&mut self) {
@@ -289,5 +321,28 @@ mod tests {
                 Token::Symbol(']'),
             ]
         );
+    }
+
+    #[test]
+    fn text_since_reconstructs_an_archetype_ref_split_across_several_tokens() {
+        let mut lexer = Lexer::new("openEHR-EHR-CLUSTER.device.v1]");
+        let start = lexer.offset();
+        while !matches!(lexer.peek(), Some(Token::Symbol(']')) | None) {
+            lexer.next();
+        }
+        assert_eq!(lexer.text_since(start), "openEHR-EHR-CLUSTER.device.v1");
+    }
+
+    #[test]
+    fn read_raw_path_stops_at_whitespace_and_skips_leading_trivia() {
+        let mut lexer = Lexer::new("  -- a comment\n /data[at0001]  matches");
+        assert_eq!(lexer.read_raw_path(), Some("/data[at0001]"));
+        assert_eq!(lexer.next(), Some(Token::Word("matches".to_owned())));
+    }
+
+    #[test]
+    fn read_raw_path_returns_none_at_end_of_input() {
+        let mut lexer = Lexer::new("   ");
+        assert_eq!(lexer.read_raw_path(), None);
     }
 }

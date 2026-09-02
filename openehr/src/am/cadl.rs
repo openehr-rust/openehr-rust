@@ -26,14 +26,24 @@
 //!   crate's own [`crate::am::CAttributeTuple`] exists (`A-50`), but wiring
 //!   ADL's own tuple syntax into it is separate parser work not attempted
 //!   here.
-//! - **`ARCHETYPE_SLOT`** (`allow_archetype`), **`C_ARCHETYPE_ROOT`**
-//!   (`use_archetype`), **`C_COMPLEX_OBJECT_PROXY`** (`use_node`) — each has
-//!   a real type in this crate already ([`crate::am::ArchetypeSlot`],
-//!   [`crate::am::CArchetypeRoot`], [`crate::am::CComplexObjectProxy`]), but
-//!   `allow_archetype`'s own `include`/`exclude` clauses need the assertion
-//!   language `K15.10` covers and this parser does not, so all three are
-//!   refused rather than built with an empty assertion list that would read
-//!   as "no restriction" instead of "not implemented".
+//! - **`C_ARCHETYPE_ROOT`** (`use_archetype`) and **`C_COMPLEX_OBJECT_PROXY`**
+//!   (`use_node`) are fully implemented: the former's `archetype_ref`
+//!   (`ARCHETYPE_HRID` or `ARCHETYPE_REF`) is reconstructed by slicing the
+//!   source between two token boundaries rather than lexed atomically (see
+//!   [`super::cadl_lexer::Lexer::text_since`]'s own documentation for why),
+//!   and the latter's trailing `ADL_PATH` is read as raw, un-tokenized text
+//!   up to the next whitespace ([`super::cadl_lexer::Lexer::read_raw_path`]).
+//! - **`ARCHETYPE_SLOT`** (`allow_archetype`) is implemented only for the
+//!   unrestricted form — occurrences stated or not, no `matches` clause. Two
+//!   narrower refusals remain, each real rather than a placeholder: `closed`
+//!   is refused because its own grammar production carries no
+//!   `c_occurrences` at all, and [`crate::am::ArchetypeSlot`] — unlike
+//!   [`crate::am::CComplexObjectProxy`] (`A-54`'s own scope decision) —
+//!   stores occurrences as a plain, non-deferrable `MultiplicityInterval`,
+//!   so there is no value to build one from without guessing; `matches
+//!   { include ... exclude ... }` is refused because each assertion is the
+//!   full BEOM `boolean_expr` grammar (`K15.10`), which this parser lexes
+//!   no part of.
 //! - **`SIBLING_ORDER`** (`after [at0004]` / `before [at0004]` prefixing a
 //!   node) — meaningless outside a specialised archetype
 //!   (`crate::am::rm_overlay`'s own `SIBLING_ORDER` note in `A-50`/`A-52`),
@@ -67,10 +77,13 @@
 //! bound if it has one, else the Reference Model's own multiplicity for that
 //! attribute, which this crate has no table of. Every [`crate::am::CObject`]
 //! variant this parser builds stores `occurrences` as a plain
-//! `MultiplicityInterval`, not `Option` (`A-54`'s own scope decision, made
-//! for [`crate::am::CComplexObjectProxy`] alone). So: the definition's own
+//! `MultiplicityInterval`, not `Option`, **except**
+//! [`crate::am::CComplexObjectProxy`] (`A-54`'s own scope decision: `Void`
+//! there is a real, distinct meaning, `use_target_occurrences()`, not an
+//! omission to guess at). So: the definition's own
 //! root may omit `occurrences` — AOM2 fixes it at exactly one
-//! ([`crate::am::ROOT_OCCURRENCES`]) — and every other node must state it
+//! ([`crate::am::ROOT_OCCURRENCES`]) — a `use_node` may omit it with `None`
+//! built rather than refused, and every other node must state it
 //! explicitly, refused by name if it does not. Real archetypes omit it
 //! often, relying on inference this parser does not implement; this is a
 //! real, narrowing limitation, not an oversight, and is why the "real
@@ -95,8 +108,8 @@
 
 use super::cadl_lexer::{Lexer, Token};
 use super::{
-    CAttribute, CComplexObject, CObject, Cardinality, MultiplicityInterval, NodeIdSyntax,
-    ROOT_OCCURRENCES,
+    ArchetypeSlot, CAttribute, CArchetypeRoot, CComplexObject, CComplexObjectProxy, CObject,
+    Cardinality, MultiplicityInterval, NodeIdSyntax, ROOT_OCCURRENCES,
 };
 use crate::am::{CPrimitive, CPrimitiveObject};
 use crate::base::{Date, DateTime, Duration, Interval, Real, Time};
@@ -527,22 +540,13 @@ fn c_regular_object_ordered(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError>
 /// c_complex_object_proxy | archetype_slot | c_regular_primitive_object ;`
 fn c_regular_object(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
     if peek_keyword(lexer, "use_archetype") {
-        return Err(CadlError::at(
-            lexer.offset(),
-            "C_ARCHETYPE_ROOT (`use_archetype`) is not implemented by this parser",
-        ));
+        return c_archetype_root(lexer);
     }
     if peek_keyword(lexer, "use_node") {
-        return Err(CadlError::at(
-            lexer.offset(),
-            "C_COMPLEX_OBJECT_PROXY (`use_node`) is not implemented by this parser",
-        ));
+        return c_complex_object_proxy(lexer);
     }
     if peek_keyword(lexer, "allow_archetype") {
-        return Err(CadlError::at(
-            lexer.offset(),
-            "ARCHETYPE_SLOT (`allow_archetype`) is not implemented by this parser",
-        ));
+        return archetype_slot(lexer);
     }
 
     let offset = lexer.offset();
@@ -595,6 +599,141 @@ fn c_regular_object(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
     let complex = CComplexObject::new(rm_type_name, Some(node_id), occurrences, attributes)
         .map_err(|e| CadlError::at(offset, format!("invalid C_COMPLEX_OBJECT: {e}")))?;
     Ok(CObject::Complex(complex))
+}
+
+/// Reads text up to (not including) the next `]`, trimmed — `archetype_ref:
+/// ARCHETYPE_HRID | ARCHETYPE_REF`'s own source, reconstructed by slicing
+/// rather than by tokenizing (see [`Lexer::text_since`]'s own module
+/// documentation for why). `c_archetype_root`'s grammar puts nothing else
+/// between the reference and the closing bracket, so "everything up to
+/// `]`" is exact for this one call site, not a guess.
+///
+/// # Errors
+///
+/// Returns [`CadlError`] if `]` is the very next token — an archetype
+/// reference naming nothing.
+fn expect_archetype_ref(lexer: &mut Lexer<'_>) -> Result<String, CadlError> {
+    let start = lexer.offset();
+    loop {
+        match lexer.peek() {
+            Some(Token::Symbol(']')) | None => break,
+            _ => {
+                lexer.next();
+            }
+        }
+    }
+    let text = lexer.text_since(start).trim();
+    if text.is_empty() {
+        return Err(CadlError::at(
+            start,
+            "expected an archetype reference (ARCHETYPE_HRID or ARCHETYPE_REF), found `]`",
+        ));
+    }
+    Ok(text.to_owned())
+}
+
+/// Reads `c_occurrences?` without defaulting an absent one — unlike
+/// [`parse_occurrences`], where every non-root absence is refused.
+/// `C_COMPLEX_OBJECT_PROXY.occurrences` is the one `C_OBJECT` field in this
+/// crate an absence is meaningful for: `None` is AOM2's own `Void`, meaning
+/// `use_target_occurrences()` (`crate::am::CComplexObjectProxy::new`'s own
+/// documentation), not something to guess a value for or refuse.
+fn parse_optional_occurrences(lexer: &mut Lexer<'_>) -> Result<Option<MultiplicityInterval>, CadlError> {
+    if peek_keyword(lexer, "occurrences") {
+        lexer.next();
+        expect_keyword(lexer, "matches")?;
+        expect_symbol(lexer, '{')?;
+        let m = parse_multiplicity(lexer)?;
+        expect_symbol(lexer, '}')?;
+        Ok(Some(m))
+    } else {
+        Ok(None)
+    }
+}
+
+/// `c_archetype_root: SYM_USE_ARCHETYPE rm_type_id '[' ID_CODE ','
+/// archetype_ref ']' c_occurrences? ;`
+fn c_archetype_root(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
+    let offset = lexer.offset();
+    expect_keyword(lexer, "use_archetype")?;
+    let rm_type_name = expect_rm_type_id(lexer)?;
+    expect_symbol(lexer, '[')?;
+    let node_id = expect_node_id(lexer)?;
+    expect_symbol(lexer, ',')?;
+    let archetype_ref = expect_archetype_ref(lexer)?;
+    expect_symbol(lexer, ']')?;
+    let occurrences = parse_occurrences(lexer, false)?;
+
+    let root = CArchetypeRoot::new(rm_type_name, archetype_ref, occurrences)
+        .and_then(|r| r.with_node_id(node_id))
+        .map_err(|e| CadlError::at(offset, format!("invalid C_ARCHETYPE_ROOT: {e}")))?;
+    Ok(CObject::ArchetypeRoot(root))
+}
+
+/// `c_complex_object_proxy: SYM_USE_NODE rm_type_id '[' ID_CODE ']'
+/// c_occurrences? ADL_PATH ;`
+fn c_complex_object_proxy(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
+    let offset = lexer.offset();
+    expect_keyword(lexer, "use_node")?;
+    let rm_type_name = expect_rm_type_id(lexer)?;
+    expect_symbol(lexer, '[')?;
+    let node_id = expect_node_id(lexer)?;
+    expect_symbol(lexer, ']')?;
+    let occurrences = parse_optional_occurrences(lexer)?;
+    let path_offset = lexer.offset();
+    let target_path = lexer.read_raw_path().ok_or_else(|| {
+        CadlError::at(path_offset, "expected a target ADL_PATH, found end of input")
+    })?;
+
+    let proxy = CComplexObjectProxy::new(rm_type_name, Some(node_id), occurrences, target_path)
+        .map_err(|e| CadlError::at(offset, format!("invalid C_COMPLEX_OBJECT_PROXY: {e}")))?;
+    Ok(CObject::Proxy(proxy))
+}
+
+/// `archetype_slot: SYM_ALLOW_ARCHETYPE rm_type_id '[' ID_CODE ']'
+/// (( c_occurrences? ( SYM_MATCHES '{' c_includes? c_excludes? '}' )? ) |
+/// SYM_CLOSED ) ;`
+///
+/// Only the unrestricted branch — occurrences stated or not, no `matches`
+/// clause — is built. `closed` is refused: its own grammar production
+/// carries no `c_occurrences` at all, and every `C_OBJECT` variant this
+/// parser builds except [`CComplexObjectProxy`] stores occurrences as a
+/// plain, non-deferrable `MultiplicityInterval` (`A-54`'s own scope
+/// decision) — [`ArchetypeSlot`] among them — so there is no way to build
+/// one for a closed slot without inventing a value this parser has no
+/// grammar to take it from. `matches { include ... exclude ... }` is
+/// refused for the reason `K15.10`'s own residual states: each assertion is
+/// the full BEOM `boolean_expr` grammar, and this parser lexes none of it.
+fn archetype_slot(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
+    let offset = lexer.offset();
+    expect_keyword(lexer, "allow_archetype")?;
+    let rm_type_name = expect_rm_type_id(lexer)?;
+    expect_symbol(lexer, '[')?;
+    let node_id = expect_node_id(lexer)?;
+    expect_symbol(lexer, ']')?;
+
+    if peek_keyword(lexer, "closed") {
+        return Err(CadlError::at(
+            lexer.offset(),
+            "a closed ARCHETYPE_SLOT (`allow_archetype ... closed`) is not implemented by this \
+             parser: its own grammar states no occurrences for this form, and ArchetypeSlot has \
+             none to default to",
+        ));
+    }
+
+    let occurrences = parse_occurrences(lexer, false)?;
+    if peek_keyword(lexer, "matches") {
+        return Err(CadlError::at(
+            lexer.offset(),
+            "ARCHETYPE_SLOT include/exclude assertions (`allow_archetype ... matches {...}`) are \
+             not implemented by this parser: each assertion is the full BEOM expression grammar \
+             (K15.10), which this parser does not lex",
+        ));
+    }
+
+    let slot = ArchetypeSlot::new(rm_type_name, node_id, occurrences)
+        .map_err(|e| CadlError::at(offset, format!("invalid ARCHETYPE_SLOT: {e}")))?;
+    Ok(CObject::Slot(slot))
 }
 
 // ---------------------------------------------------------------------
@@ -968,12 +1107,83 @@ mod tests {
         assert!(err.reason.contains("occurrences omitted"), "{err}");
     }
 
+    /// The one `ARCHETYPE_SLOT` form this parser still refuses outright:
+    /// `matches { include ... }` names an assertion, and `K15.10`'s own
+    /// BEOM expression grammar is not implemented. Occurrences are stated
+    /// here specifically so this refusal, not "occurrences omitted", is the
+    /// one that fires.
     #[test]
-    fn an_archetype_slot_is_refused_by_name_not_silently_skipped() {
-        let source =
-            "CLUSTER[id1] matches { items matches { allow_archetype CLUSTER[id2] matches {} } }";
+    fn a_restricted_archetype_slot_is_refused_by_name_not_silently_skipped() {
+        let source = "CLUSTER[id1] matches { items matches { allow_archetype CLUSTER[id2] \
+                       occurrences matches {0..1} matches {} } }";
         let err = parse_definition(source).unwrap_err();
         assert!(err.reason.contains("ARCHETYPE_SLOT"), "{err}");
+    }
+
+    /// A closed slot's own grammar production carries no `c_occurrences` at
+    /// all (`archetype_slot`'s own module documentation), and
+    /// [`crate::am::ArchetypeSlot`] has no `Void` to build one from — so
+    /// this is refused, not guessed at.
+    #[test]
+    fn a_closed_archetype_slot_is_refused_by_name() {
+        let source = "CLUSTER[id1] matches { items matches { allow_archetype CLUSTER[id2] \
+                       closed } }";
+        let err = parse_definition(source).unwrap_err();
+        assert!(err.reason.contains("closed"), "{err}");
+        assert!(err.reason.contains("ARCHETYPE_SLOT"), "{err}");
+    }
+
+    /// The one `ARCHETYPE_SLOT` form this parser does build: no `matches`
+    /// clause at all, so `any_allowed()` is true and
+    /// `am::validate::walk_slot` (`A-60`) can fully check whatever, if
+    /// anything, fills it.
+    #[test]
+    fn an_unrestricted_archetype_slot_is_parsed() {
+        let source = "CLUSTER[id1] matches { items matches { allow_archetype ELEMENT[id2] \
+                       occurrences matches {0..1} } }";
+        let root = parse_definition(source).unwrap();
+        let CObject::Slot(slot) = &root.attributes()[0].children()[0] else {
+            panic!("expected an ARCHETYPE_SLOT");
+        };
+        assert_eq!(slot.node_id(), "id2");
+        assert!(!slot.is_closed());
+        assert!(slot.any_allowed());
+    }
+
+    /// `c_archetype_root`'s `archetype_ref` is reconstructed by slicing the
+    /// source, not by tokenizing it (`expect_archetype_ref`'s own
+    /// documentation) — this is the fixture that proves the slice is exact
+    /// across the `-`-separated `rm_publisher-rm_package-rm_class` prefix
+    /// the lexer's own word-scanner splits into several tokens.
+    #[test]
+    fn a_use_archetype_is_parsed_into_a_c_archetype_root() {
+        let source = "CLUSTER[id1] matches { items matches { \
+                       use_archetype CLUSTER[id2, openEHR-EHR-CLUSTER.device.v1] \
+                       occurrences matches {0..1} } }";
+        let root = parse_definition(source).unwrap();
+        let CObject::ArchetypeRoot(filled) = &root.attributes()[0].children()[0] else {
+            panic!("expected a C_ARCHETYPE_ROOT");
+        };
+        assert_eq!(filled.node_id(), Some("id2"));
+        assert_eq!(filled.archetype_ref(), "openEHR-EHR-CLUSTER.device.v1");
+    }
+
+    /// `c_complex_object_proxy`'s trailing `ADL_PATH` is read as raw text up
+    /// to the next whitespace ([`super::cadl_lexer::Lexer::read_raw_path`]),
+    /// and its `occurrences` builds `None` — AOM2's own `Void` meaning
+    /// `use_target_occurrences()` — rather than being refused, unlike every
+    /// other node kind an absent `occurrences` refuses.
+    #[test]
+    fn a_use_node_with_no_stated_occurrences_defers_to_its_target() {
+        let source = "CLUSTER[id1] matches { items matches { \
+                       use_node ELEMENT[id2] /items[id9] } }";
+        let root = parse_definition(source).unwrap();
+        let CObject::Proxy(proxy) = &root.attributes()[0].children()[0] else {
+            panic!("expected a C_COMPLEX_OBJECT_PROXY");
+        };
+        assert_eq!(proxy.node_id(), Some("id2"));
+        assert_eq!(proxy.target_path(), "/items[id9]");
+        assert_eq!(proxy.occurrences(), None);
     }
 
     #[test]
@@ -998,11 +1208,11 @@ mod tests {
     /// A real, published archetype's own `definition` bytes
     /// (`openEHR/adl-archetypes`, `openEHR-EHR-CLUSTER.device.v1.0.0.adls`),
     /// not an invented fixture — this parser cannot consume the whole file
-    /// (it uses `allow_archetype`, which this pass does not implement, and
-    /// omits `occurrences` on several nodes this pass requires it for), so
-    /// this confirms the real, honest outcome K15.6/K15.7 require: a named
-    /// refusal at the first construct out of scope, never a silent partial
-    /// tree.
+    /// (it uses `allow_archetype`'s own `matches { include ... }` form,
+    /// which this pass does not implement, and omits `occurrences` on
+    /// several nodes this pass requires it for), so this confirms the real,
+    /// honest outcome K15.6/K15.7 require: a named refusal at the first
+    /// construct out of scope, never a silent partial tree.
     #[test]
     fn a_real_published_archetypes_definition_is_refused_by_name_not_mis_parsed() {
         let source = r"

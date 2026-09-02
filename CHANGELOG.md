@@ -34,6 +34,13 @@ together.
   a breaking change: an additive field defaulting to an empty map,
   `#[serde(default)]` on the wire. Carried, not interpreted — AOM2 names no
   fixed set of recognised keys to check against.
+- `am::cadl` now parses `use_archetype` and `use_node` in full, and
+  `allow_archetype` for its unrestricted form (no `matches` clause) —
+  previously all three were refused outright. See `A-62` in
+  `openehr/spec/audit.md`. Not a breaking change: `parse_definition` accepts
+  strictly more input than before; `closed` and a restricted
+  `allow_archetype ... matches {...}` remain refused by name, each for a
+  distinct, real reason stated in `am::cadl`'s own module documentation.
 
 ## 0.9.0 — 2026-09-02
 
