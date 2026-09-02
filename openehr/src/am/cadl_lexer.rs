@@ -52,6 +52,14 @@ impl core::fmt::Display for Token {
 
 const SYMBOLS: &str = "[]{}(),;|<>*=+-";
 
+/// Whether `c` can appear in an ISO8601 date/time/date-time/duration
+/// literal — see [`Lexer::read_iso8601`]'s own documentation.
+fn is_iso8601_char(c: char) -> bool {
+    c.is_ascii_digit()
+        || matches!(c, '-' | ':' | '+' | '?' | ',')
+        || matches!(c.to_ascii_uppercase(), 'T' | 'Z' | 'P' | 'Y' | 'W' | 'D' | 'H' | 'S' | 'M')
+}
+
 pub(super) struct Lexer<'a> {
     source: &'a str,
     rest: &'a str,
@@ -97,6 +105,47 @@ impl<'a> Lexer<'a> {
             return None;
         }
         let end = self.rest.find(char::is_whitespace).unwrap_or(self.rest.len());
+        let text = &self.rest[..end];
+        self.rest = &self.rest[end..];
+        Some(text)
+    }
+
+    /// Reads a maximal run of ISO8601 date/time/date-time/duration
+    /// characters — digits, `-:+?,`, and the letters `TZPYMWDHS` in either
+    /// case (`base_lexer.g4`'s `YEAR`/`MONTH`/`DAY`/`HOUR`/`MINUTE`/
+    /// `SECOND`/`TIMEZONE`/`ISO8601_DURATION` fragments, folded into one
+    /// character class since every caller re-validates through `T::from_str`
+    /// anyway) — plus a `.` only when followed by another digit
+    /// (`SECOND_DEC_SEP` allows `.` or `,` before a fractional second), never
+    /// when followed by a second `.`: a `..` range separator must stay a
+    /// range separator, not the start of one of these literals (`A-65`).
+    ///
+    /// This is a lexical scan, not a validator: no dedicated ISO8601 token
+    /// exists in this lexer, unlike `INTEGER`/`REAL`'s own number-scanning
+    /// (`A-65` — before this method, `2024-01-01` lexed as `Integer("2024")`,
+    /// `Symbol('-')`, …, five tokens, because the word-scanner treats `-`
+    /// as a symbol). [`super::cadl::expect_temporal`] is the only caller,
+    /// and only where a temporal literal is grammatically expected, so
+    /// there is no ambiguity with a plain `INTEGER`/`REAL` for this scan to
+    /// resolve — it hands the result straight to `T::from_str`, the same as
+    /// [`Self::next`] already does for a `Word`-shaped token elsewhere.
+    pub(super) fn read_iso8601(&mut self) -> Option<&'a str> {
+        self.skip_trivia();
+        let mut end = 0;
+        let mut chars = self.rest.char_indices().peekable();
+        while let Some(&(i, c)) = chars.peek() {
+            let is_fraction_dot =
+                c == '.' && self.rest[i + 1..].starts_with(|next: char| next.is_ascii_digit());
+            if is_iso8601_char(c) || is_fraction_dot {
+                end = i + c.len_utf8();
+                chars.next();
+            } else {
+                break;
+            }
+        }
+        if end == 0 {
+            return None;
+        }
         let text = &self.rest[..end];
         self.rest = &self.rest[end..];
         Some(text)
@@ -344,5 +393,55 @@ mod tests {
     fn read_raw_path_returns_none_at_end_of_input() {
         let mut lexer = Lexer::new("   ");
         assert_eq!(lexer.read_raw_path(), None);
+    }
+
+    /// `A-65`: before `read_iso8601` existed, none of these lexed as one
+    /// token — `2024-01-01` alone split into `Integer("2024")`,
+    /// `Symbol('-')`, `Integer("01")`, `Symbol('-')`, `Integer("01")`.
+    #[test]
+    fn read_iso8601_reads_date_time_date_time_and_duration_literals_whole() {
+        for literal in [
+            "2024-01-01",
+            "12:30:00",
+            "12:30:00.500",
+            "2024-01-01T12:30:00+0100",
+            "2024-01-01T12:30:00Z",
+            "P1Y2M3DT4H5M6S",
+            "19??-01",
+        ] {
+            let mut lexer = Lexer::new(literal);
+            assert_eq!(lexer.read_iso8601(), Some(literal), "literal: {literal}");
+            assert_eq!(lexer.next(), None, "literal: {literal}");
+        }
+    }
+
+    /// The one boundary `read_iso8601` exists to get right: a `..` range
+    /// separator must stay a range separator, never be swallowed as the
+    /// start of a fractional-second `.` — the same ambiguity
+    /// `a_range_between_two_reals_does_not_swallow_the_dot_dot` proves this
+    /// lexer already resolves correctly for `REAL`.
+    #[test]
+    fn read_iso8601_stops_before_a_dot_dot_range_separator() {
+        let mut lexer = Lexer::new("2024-01-01..2024-12-31");
+        assert_eq!(lexer.read_iso8601(), Some("2024-01-01"));
+        assert_eq!(lexer.next(), Some(Token::DotDot));
+        assert_eq!(lexer.read_iso8601(), Some("2024-12-31"));
+    }
+
+    /// The other boundary: a `;` (assumed-value separator) or `}` (closing
+    /// the enclosing `matches {...}`) must not be swallowed either.
+    #[test]
+    fn read_iso8601_stops_before_a_semicolon_or_closing_brace() {
+        let mut lexer = Lexer::new("2024-01-01; 2024-06-15}");
+        assert_eq!(lexer.read_iso8601(), Some("2024-01-01"));
+        assert_eq!(lexer.next(), Some(Token::Symbol(';')));
+        assert_eq!(lexer.read_iso8601(), Some("2024-06-15"));
+        assert_eq!(lexer.next(), Some(Token::Symbol('}')));
+    }
+
+    #[test]
+    fn read_iso8601_returns_none_at_end_of_input() {
+        let mut lexer = Lexer::new("   ");
+        assert_eq!(lexer.read_iso8601(), None);
     }
 }

@@ -15,15 +15,14 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**65 findings, 65 in the table below: 7 High, 34 Medium, 24 Low. 58 fixed or
-classified, 7 open.** These counts are checked against the table by CI
+**65 findings, 65 in the table below: 7 High, 34 Medium, 24 Low. 59 fixed or
+classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
-verified), and the check should have failed. Every one of the 7 open findings
+verified), and the check should have failed. Every one of the 6 open findings
 is open by a stated reason rather than by omission — **A-40** is the largest,
-an entire specification section in force with no code behind it, and **A-65**
-is its own newest residual — no ISO8601 literal can be lexed by `am::cadl` at
-all, found while extending it — and the rest: **A-02**, **A-08** and
+an entire specification section in force with no code behind it — and the
+rest: **A-02**, **A-08** and
 **A-19** are declared departures the crate does not intend to close; **A-05**, **A-10**,
 **A-30** are recorded limitations or residuals with the reasoning
 for leaving them written beside them — **A-38** is a defect in `serde_json`
@@ -152,7 +151,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-62 | Medium | `am::cadl` (`A-40`'s own "smallest real slice") refused `use_archetype`, `use_node`, and `allow_archetype` outright, though `C_ARCHETYPE_ROOT`, `C_COMPLEX_OBJECT_PROXY`, and `ArchetypeSlot` all already existed as types (`A-50`, `A-53`) — the blanket refusal overstated what stood in the way: only `allow_archetype`'s own `matches { include ... }` form genuinely needs the `K15.10` assertion grammar this parser does not lex | **fixed** — `use_archetype`/`use_node` fully implemented (`archetype_ref` reconstructed by slicing the source between token boundaries, `ADL_PATH` read as raw text to the next whitespace — two new `Lexer` primitives, since neither lexes atomically as a `Word`); `allow_archetype` implemented for its unrestricted form only, with `closed` and `matches {...}` each refused by name for a distinct, real reason (the former's own grammar carries no occurrences to build `ArchetypeSlot` from; the latter genuinely needs `K15.10`) |
 | A-63 | Low | **BREAKING.** `CPrimitive::String::pattern: Option<String>` had no counterpart in AOM2's actual single-`List<String>` `constraint` — the same shape `A-51`'s second pass fixed for `TerminologyCode::code_list`, found while researching `A-62`'s own `CONTAINED_REGEXP` boundary | **fixed** — `pattern` removed; a regex is now a `/…/`- or `^…^`-delimited element of `list` itself, matching `C_STRING`'s real AOM2 shape; `is_c_string_pattern` is the one place that recognises the delimiter convention, called from both `am::validate::walk_primitive` and `am::archetype::assumed_value_conforms` (`lib:A-33`) |
 | A-64 | Low | `am::cadl` could not parse a primitive constraint's own assumed value — `'; ' <value>`, a shape every primitive kind's grammar production states (`cadl2_primitives.g4`), and `[ac3; at5]` for `Terminology_code` specifically — though `CPrimitiveObject::with_assumed_value` (`A-48`) has existed to receive one since before this parser did | **fixed** — a shared assumed-value reader per kind (five direct, four more through the existing `temporal_primitive!` macro) plus a dedicated `[ac3; at5]` reader refusing the grammar's own stated case (an assumed at-code after a bare at-code), all wired into both call sites `parse_inline_primitive` has |
-| A-65 | Medium | No ISO8601 date, time, date-time, or duration literal can be lexed by `am::cadl` at all — found writing `A-64`'s own tests, not by a fuzzer or a report — because `cadl_lexer::Lexer`'s word-scanner treats `-`/`:` as `Symbol`s (needed for archetype identifiers elsewhere), splitting every such literal into several tokens before `expect_temporal`'s `expect_word` ever sees one | **open** — the four temporal `CPrimitive` kinds' own dispatch table and macro-generated parsers have existed since `A-45`/before, reachable by rm-type-id dispatch, and have never once successfully parsed a real literal; `A-64`'s own temporal assumed-value code is added on the same terms as its five working siblings but is equally unreachable until this is fixed |
+| A-65 | Medium | No ISO8601 date, time, date-time, or duration literal can be lexed by `am::cadl` at all — found writing `A-64`'s own tests, not by a fuzzer or a report — because `cadl_lexer::Lexer`'s word-scanner treats `-`/`:` as `Symbol`s (needed for archetype identifiers elsewhere), splitting every such literal into several tokens before `expect_temporal`'s `expect_word` ever sees one | **fixed** — `Lexer::read_iso8601`, a dedicated scan reached only from `expect_temporal` (where a temporal literal is grammatically expected, so there is no ambiguity with a plain `INTEGER`/`REAL` for it to resolve), reads a maximal run of ISO8601-shaped characters and hands it to `T::from_str`, the same validation-not-lexing split `expect_word`-based parsing already used; a `.` is only consumed when followed by a digit, so a `..` range separator is never swallowed |
 
 ---
 
@@ -2352,12 +2351,14 @@ implementation of `constraint_expr` (`base_expressions.g4`) — at minimum
 `ARCHETYPE_SLOT` assertion this repository has found actually uses — not
 attempted here.
 
-**Residual, added 2026-09-02.** `am::cadl` cannot parse any ISO8601 date,
-time, date-time, or duration literal at all, discovered while closing the
-next residual below (`A-64`) and tracked separately as `A-65`: this is a
-lexer defect, not a grammar-coverage gap, and affects every use of the four
-temporal `CPrimitive` kinds this parser's own dispatch table already names,
-not merely their assumed values.
+**Residual, added 2026-09-02, closed 2026-09-02.** `am::cadl` could not
+parse any ISO8601 date, time, date-time, or duration literal at all,
+discovered while extending assumed-value parsing (`A-64`) and tracked
+separately as `A-65`: a lexer defect, not a grammar-coverage gap, affecting
+every use of the four temporal `CPrimitive` kinds this parser's own
+dispatch table already named, not merely their assumed values. `A-65`
+added a dedicated lexer scan for the shape and closed it the same day it
+was found.
 
 ## A-41 — the matrix's totals went stale, again
 
@@ -3769,7 +3770,7 @@ end-to-end until `A-65` is closed.
 
 ## A-65 — no ISO8601 literal can be lexed by `am::cadl` at all
 
-**Severity: Medium. Status: open.**
+**Severity: Medium. Status: fixed.**
 
 **Found while writing `A-64`'s own tests**, not by a fuzzer or a report: a
 plain `Date[id2] occurrences matches {1} matches {2024-01-01}`, no assumed
@@ -3805,11 +3806,36 @@ constructed a `Date`/`Time`/`Date_time`/`Duration` cADL fixture and called
 the first to have tried, and it failed immediately, before ever reaching
 the assumed-value code the test was written to exercise.
 
-**Not fixed here.** Recognising ISO8601 date/time/duration literals as
-atomic tokens needs real lexer work — at minimum, a lookahead from a
-leading digit run that distinguishes a plain `INTEGER`/`REAL` from the
-start of a date, and separate handling for `:`-bearing times and
-`P`-prefixed durations — comparable in scope to `A-62`'s own `Lexer`
-additions for archetype references and paths, not a small patch to the
-existing word-scanner. Left open rather than worked around with something
-that looks like temporal support and is not one.
+**Fixed.** `Lexer::read_iso8601` — comparable in shape to `A-62`'s own
+`text_since`/`read_raw_path` additions, not a patch to the existing
+word-scanner — reads a maximal run of ISO8601-shaped characters (digits,
+`-:+?,`, and the letters `TZPYMWDHS` in either case, folding every
+temporal fragment's own alphabet into one character class since the real
+grammar validation happens in `T::from_str` regardless) directly from the
+source, bypassing the ordinary tokenizer entirely. A `.` is consumed only
+when immediately followed by a digit — never when followed by a second
+`.` — so a `..` range separator is left for the ordinary tokenizer rather
+than swallowed into the literal, the same ambiguity this lexer's own
+`REAL`-vs-`DotDot` number-scanning already resolves for plain numbers.
+`expect_temporal` and `parse_assumed_temporal` (`A-64`) both call it in
+place of `expect_word`; `T::from_str` still does 100% of the actual
+grammar validation, exactly as before — this is a lexical boundary fix,
+not a new parser.
+
+There is no ambiguity for `read_iso8601` to get wrong that `Self::next`
+would also face: it is reached only from `expect_temporal`, itself called
+only where AOM2's own grammar already says a temporal literal comes next
+(`c_date`/`c_time`/`c_date_time`/`c_duration`'s own productions), never
+from the ordinary token stream a plain `C_INTEGER`/`C_REAL` also flows
+through.
+
+**Tests.** Five in `cadl_lexer`: all four literal shapes (plus a
+partial/unknown date, `19??-01`) read whole in one call; the `..`
+boundary; the `;`/`}` boundary; and end-of-input. Two in `am::cadl`: the
+`a_wrapped_primitives_assumed_value_is_attached` table (`A-64`) gains its
+previously-excluded `Date` case back, and a new
+`a_temporal_primitive_of_each_kind_is_parsed` exercises `Time` (a
+discrete value), `Date_time` (a ranged `|lower..upper|`), and `Duration`
+end-to-end through `parse_definition`, so every one of the four kinds the
+shared `temporal_primitive!` macro generates has been proven to parse a
+real literal at least once.

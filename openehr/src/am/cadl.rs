@@ -58,16 +58,6 @@
 //!   `/…/`-delimited element (`A-63`: no separate field for it, unlike the
 //!   four temporal variants' distinct `pattern` field), but nothing in this
 //!   parser ever puts one there.
-//! - **An ISO8601 date, time, date-time, or duration literal** — needs a
-//!   [`super::cadl_lexer::Token`] this lexer's word-scanner does not
-//!   produce: `2024-01-01`, `12:30:00`, and `P1Y` all contain `-`/`:`,
-//!   which the lexer treats as `Symbol`s (needed elsewhere), splitting each
-//!   literal into several tokens rather than the one `Word`
-//!   `expect_temporal` expects (`A-65`). This is total, not partial — no
-//!   `C_DATE`/`C_TIME`/`C_DATE_TIME`/`C_DURATION` constraint, wrapped or
-//!   unwrapped, assumed-value or not, can be parsed by this pass at all,
-//!   though the dispatch table and the four temporal `CPrimitive` variants
-//!   have existed since `A-45`.
 //! - **More than one `C_INTEGER`/`C_REAL`/temporal range** (`|0..10|,
 //!   |20..30|`) — [`crate::am::CPrimitive::Integer`] and its siblings hold
 //!   one `Option<Interval<_>>` each, not a list of them; AOM2 itself allows
@@ -78,6 +68,18 @@
 //!   implemented; the other two ODIN interval spellings are refused.
 //! - **Generic RM type parameters** (`LIST<DV_TEXT>`) — `rm_type_id` accepts
 //!   only a bare `ALPHA_UC_ID` here.
+//!
+//! # ISO8601 literals need their own lexer scan
+//!
+//! `2024-01-01`, `12:30:00`, and `P1Y2M` all contain `-`/`:`, which
+//! [`super::cadl_lexer::Lexer`]'s ordinary word-scanner treats as `Symbol`s
+//! (needed for archetype identifiers and interval syntax elsewhere), so
+//! none of the four temporal kinds could be parsed at all until `A-65`
+//! added [`super::cadl_lexer::Lexer::read_iso8601`] — a second, dedicated
+//! scan reached only from [`expect_temporal`](self::expect_temporal),
+//! where a temporal literal is grammatically expected, never from the
+//! ordinary tokenizer, so there is no ambiguity with a plain
+//! `INTEGER`/`REAL` for it to resolve.
 //!
 //! # Occurrences: stated, or refused — never guessed
 //!
@@ -1026,15 +1028,22 @@ fn parse_terminology_code_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive
     ))
 }
 
-/// Reads one `ISO8601_*`-shaped [`Token::Word`] and parses it via `T`'s own
-/// `FromStr`. Every ISO8601 literal lexes as a bare `Word` in
-/// [`super::cadl_lexer`] — no dedicated date/time token exists — so the
-/// distinction between a real literal and a malformed one is made entirely
-/// by whether `T::from_str` accepts it.
+/// Reads one ISO8601-shaped literal via [`Lexer::read_iso8601`] and parses
+/// it via `T`'s own `FromStr` — the distinction between a real literal and
+/// a malformed one is made entirely by whether `T::from_str` accepts it,
+/// this function's own scan being a lexical boundary, not a grammar
+/// (`A-65`, `read_iso8601`'s own documentation for why a dedicated scan
+/// exists at all rather than the ordinary `Word`/`Integer` tokenizing every
+/// other literal in this parser uses).
 fn expect_temporal<T: FromStr>(lexer: &mut Lexer<'_>, what: &'static str) -> Result<T, CadlError> {
     let offset = lexer.offset();
-    let text = expect_word(lexer, what)?;
-    T::from_str(&text).map_err(|_| CadlError::at(offset, format!("`{text}` is not a valid {what}")))
+    let Some(text) = lexer.read_iso8601() else {
+        return Err(match lexer.peek() {
+            Some(other) => CadlError::at(offset, format!("expected {what}, found {other}")),
+            None => CadlError::at(offset, format!("expected {what}, found end of input")),
+        });
+    };
+    T::from_str(text).map_err(|_| CadlError::at(offset, format!("`{text}` is not a valid {what}")))
 }
 
 /// Reads an optional trailing `';' <value>` for a temporal kind —
@@ -1052,9 +1061,14 @@ fn parse_assumed_temporal<T: FromStr>(
         return Ok(None);
     }
     let offset = lexer.offset();
-    let text = expect_word(lexer, what)?;
-    T::from_str(&text).map_err(|_| CadlError::at(offset, format!("`{text}` is not a valid {what}")))?;
-    Ok(Some(PrimitiveValue::Text(text)))
+    let Some(text) = lexer.read_iso8601() else {
+        return Err(match lexer.peek() {
+            Some(other) => CadlError::at(offset, format!("expected {what}, found {other}")),
+            None => CadlError::at(offset, format!("expected {what}, found end of input")),
+        });
+    };
+    T::from_str(text).map_err(|_| CadlError::at(offset, format!("`{text}` is not a valid {what}")))?;
+    Ok(Some(PrimitiveValue::Text(text.to_owned())))
 }
 
 macro_rules! temporal_primitive {
@@ -1225,14 +1239,10 @@ mod tests {
     /// `assumed_*_value` productions) — one case per kind, wrapped, so each
     /// confirms both the parse and that `with_assumed_value` (`A-48`) is
     /// actually reached rather than the value being read and discarded.
-    ///
-    /// The four temporal kinds are not among these cases: `A-65` found, in
-    /// the course of writing this very test, that no ISO8601 literal can be
-    /// lexed by this parser at all — a pre-existing defect this finding
-    /// does not fix, only documents. `parse_assumed_temporal` is added to
-    /// the temporal macro on the same terms as the other five kinds below,
-    /// correct by the same reasoning, but genuinely untestable end-to-end
-    /// until `A-65` is closed.
+    /// `Date` stands in for all four temporal kinds, which share one macro
+    /// (`temporal_primitive!`) and, since `A-65`, one lexer scan
+    /// (`Lexer::read_iso8601`); the other three get their own end-to-end
+    /// coverage in `a_temporal_primitive_of_each_kind_is_parsed` below.
     #[test]
     fn a_wrapped_primitives_assumed_value_is_attached() {
         let cases: &[(&str, &str, PrimitiveValue)] = &[
@@ -1240,6 +1250,11 @@ mod tests {
             ("String", "\"a\", \"b\"; \"a\"", PrimitiveValue::Text("a".to_owned())),
             ("Integer", "|0..10|; 5", PrimitiveValue::Integer(5)),
             ("Real", "|0.0..10.0|; 5.0", PrimitiveValue::Real("5.0".parse().unwrap())),
+            (
+                "Date",
+                "2024-01-01; 2024-06-15",
+                PrimitiveValue::Text("2024-06-15".to_owned()),
+            ),
         ];
         for (kind, body, want) in cases {
             let source = format!(
@@ -1251,6 +1266,32 @@ mod tests {
                 panic!("expected a primitive {kind}, source: {source}");
             };
             assert_eq!(leaf.assumed_value(), Some(want), "kind {kind}, source: {source}");
+        }
+    }
+
+    /// `A-65`: before `Lexer::read_iso8601` existed, none of these four
+    /// kinds could parse a single literal — `Date`'s own coverage is above
+    /// (a discrete value, via the assumed-value test); this covers a
+    /// discrete `Time`, a ranged `Date_time`, and a `Duration`, so every
+    /// kind the shared `temporal_primitive!` macro generates has been
+    /// exercised at least once through the full `parse_definition` path.
+    #[test]
+    fn a_temporal_primitive_of_each_kind_is_parsed() {
+        let cases: &[(&str, &str)] = &[
+            ("Time", "12:30:00"),
+            ("Date_time", "|2024-01-01T00:00:00..2024-12-31T23:59:59|"),
+            ("Duration", "P1Y2M3DT4H5M6S"),
+        ];
+        for (kind, body) in cases {
+            let source = format!(
+                "ELEMENT[id1] matches {{ value matches {{ {kind}[id2] occurrences matches {{1}} \
+                 matches {{{body}}} }} }}"
+            );
+            let root = parse_definition(&source).unwrap();
+            let CObject::Primitive(leaf) = &root.attributes()[0].children()[0] else {
+                panic!("expected a primitive {kind}, source: {source}");
+            };
+            assert_eq!(leaf.rm_type_name(), *kind);
         }
     }
 
