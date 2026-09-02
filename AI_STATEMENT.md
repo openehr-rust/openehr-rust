@@ -2,8 +2,8 @@
 
 | | |
 | --- | --- |
-| Version | 1.1.0 |
-| Effective date | 2026-08-26 (§4/§8's publish-execution carve-out: 2026-09-02) |
+| Version | 1.2.0 |
+| Effective date | 2026-08-26 (§4/§8's publish-execution carve-out and commit-trailer correction: 2026-09-02) |
 | Status | Active |
 | Owner | Joel Parker Henderson, sole maintainer ([`MAINTAINERS.md`](MAINTAINERS.md)) |
 | Canonical location | `AI_STATEMENT.md` at the repository root |
@@ -59,9 +59,18 @@ the tests — under a human's direction.
 ## 4. Accountability, and where AI is used
 
 One named human is the author of, and accountable for, every change in this
-repository, whatever produced the bytes. **A tool is never named as an author,
-co-author, or signer**, because responsibility that cannot be borne cannot be
-assigned. There is no AI sign-off of anything.
+repository, whatever produced the bytes. **Git's `author` and `committer`
+identity — the field responsibility, review, and the SSH signature
+(`MAINTAINERS.md`) actually attach to — is always that human's, never a
+tool's, and there is no AI sign-off of anything.** A commit message may
+additionally carry a `Co-Authored-By: <tool>` trailer disclosing which tool
+helped produce it — plain text in the message body, checkable with `git log
+--format=%an/%cn` against `%B` on any commit, and never a substitute for the
+author/committer identity above, which a trailer cannot change and does not
+attempt to. Revised 2026-09-02 (Annex A): the first issue of this document
+read this practice backwards, prohibiting the trailer as though it were the
+same claim as the identity field it sits beside — it is not, and §8 restates
+the corrected rule for contributors.
 
 The tooling is agentic coding assistance — currently Claude Code, by Anthropic —
 run in sessions the maintainer directs, reads, and merges. The repository is
@@ -163,8 +172,14 @@ claims go stale silently.
 
 Contributors may use AI tools. A contribution containing **ai-generated** content
 should say so in the pull request description — which tool, and what it did —
-rather than in commit trailers. The contributor remains fully responsible for
-the submission: understood, explainable on request, tested, and honest.
+**and the commit messages themselves should carry a `Co-Authored-By: <tool>`
+trailer**, the same disclosure practice this repository's own commits use
+(§4). A trailer is not a substitute for the description — GitHub renders it
+as a second avatar on the commit but a reviewer scanning pull request
+descriptions for AI involvement should not have to open every commit to
+find it — so both apply, not either. The contributor remains fully
+responsible for the submission: understood, explainable on request, tested,
+and honest.
 
 In this project, AI **must not**: merge anything; sign anything; decide
 whether a conformance level has been earned; decide that a release is ready,
@@ -222,6 +237,7 @@ joel@joelparkerhenderson.com rather than opening a public issue.
 | --- | --- | --- |
 | 1.0.0 | 2026-08-26 | First issue. |
 | 1.1.0 | 2026-09-02 | §4 and §8 reconciled with a governance change recorded the same day in `agents/publishing.md` and `MAINTAINERS.md`: Claude Code may now execute `cargo publish` on the maintainer's own machine, under his direction. The decision that a release is ready, its version, and what ships remain the maintainer's alone — this is execution authority over an already-made decision, not a delegation of the decision. Merging and signing are unchanged: still `none`, still manual. |
+| 1.2.0 | 2026-09-02 | §4 and §8 corrected: a `Co-Authored-By: <tool>` commit-message trailer is disclosure, not an authorship or sign-off claim, and this document had conflated the two — prohibiting the trailer as though it were the same thing as the `author`/`committer` identity field it sits beside, which it cannot change and never has. The identity field, and the SSH signature, remain exclusively the maintainer's, unchanged. §8's contributor guidance and `CONTRIBUTING.md`'s cross-reference now ask for the trailer alongside the pull request description rather than instead of it. |
 
 ## Annex B. Machine-readable summary
 
@@ -229,7 +245,7 @@ Levels per §3. The prose above is authoritative wherever the two could disagree
 
 ```yaml
 ai-statement:
-  version: 1.1.0
+  version: 1.2.0
   last-updated: 2026-09-02
   vocabulary: w3c-ai-content-disclosure
   disclosure-default: ai-generated
@@ -245,6 +261,7 @@ ai-statement:
     adjudication: none
     release-decisions: none
     publish-execution: claude-code-under-maintainer-direction  # since 2026-09-02; see §4/§8
+  commit-trailer-disclosure: co-authored-by  # message-body trailer; author/committer identity is always the human, see §4
   ships-ai-system: false
   autonomous-use: none
 ```

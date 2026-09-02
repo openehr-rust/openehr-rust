@@ -87,8 +87,10 @@ explains *why* a decision was made is the house style; when you change such
 code, update the reasoning rather than deleting it.
 
 **Disclose AI assistance** in the pull request description — which tool, and what
-it did — per [`AI_STATEMENT.md`](AI_STATEMENT.md) §8. Nobody here will hold it
-against you; an undisclosed one, discovered later, is a different conversation.
+it did — and with a `Co-Authored-By: <tool>` trailer in the commit messages
+themselves, per [`AI_STATEMENT.md`](AI_STATEMENT.md) §8. Nobody here will hold
+it against you; an undisclosed one, discovered later, is a different
+conversation.
 
 ## Contributing time without writing Rust
 
