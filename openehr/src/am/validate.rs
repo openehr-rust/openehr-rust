@@ -78,8 +78,8 @@
 
 use crate::am::archetype::Archetype;
 use crate::am::constraint::{
-    CAttribute, CAttributeTuple, CComplexObject, CObject, CPrimitive, CPrimitiveObject,
-    CPrimitiveTuple, ConstraintStatus,
+    ArchetypeSlot, CAttribute, CAttributeTuple, CComplexObject, CObject, CPrimitive,
+    CPrimitiveObject, CPrimitiveTuple, ConstraintStatus,
 };
 use crate::am::repository::ArchetypeRepository;
 use crate::am::terminology::ArchetypeTerminology;
@@ -655,11 +655,7 @@ fn walk_object(
 
     match constraint {
         CObject::Complex(c) => walk_complex(archetype_id, terminology, c, node, &path, ctx),
-        CObject::Slot(_) => ctx.unchecked(
-            &path,
-            "ARCHETYPE_SLOT: which archetype fills this is recorded on the instance's \
-             ARCHETYPED.archetype_id, which crate::path::Node does not expose",
-        ),
+        CObject::Slot(slot) => walk_slot(slot, node, archetype_id, &path, ctx),
         CObject::ArchetypeRoot(filled) => walk_archetype_root(filled, node, &path, ctx),
         CObject::Proxy(proxy) => ctx.unchecked_detail(
             &path,
@@ -669,6 +665,59 @@ fn walk_object(
         ),
         CObject::Primitive(_) => unreachable!("handled above"),
     }
+}
+
+/// An `ARCHETYPE_SLOT`: whether the instance leaves the position open where
+/// `is_closed()` forbids filling it, and — when a filler is present and the
+/// slot does not forbid one — whether anything is actually left to check.
+///
+/// `includes`/`excludes` are carried as written and never evaluated
+/// (`K15.10`), so this cannot tell whether one particular filler satisfies
+/// them. It does not need to for two of the three outcomes below, though:
+/// [`Node::archetype_details`] (`lib:A-59`'s own "not able to be from where
+/// this crate currently validates" note, now partly closed) is what a
+/// filling archetype's root looks like on the instance side, and that alone
+/// settles both the closed-slot case and the no-restriction case without
+/// reading a single assertion.
+fn walk_slot(
+    slot: &ArchetypeSlot,
+    node: Node<'_>,
+    archetype_id: &ArchetypeId,
+    path: &str,
+    ctx: &mut Ctx<'_>,
+) {
+    let Some(filler) = node.archetype_details() else {
+        // No archetype root at this position: the slot was left open.
+        // `is_closed`, `includes`, and `excludes` all restrict what may fill
+        // a slot; none of them restricts leaving it unfilled — that is
+        // occurrences' own job, checked separately by the attribute this
+        // slot sits under. Nothing here to violate or leave unchecked.
+        return;
+    };
+
+    if slot.is_closed() {
+        // "closed to further filling either in further specialisations or
+        // at runtime" (AOM2's own words for `is_closed`) — no filler was
+        // ever permitted here, so one being present at all is the
+        // violation, whatever it is and whatever `includes`/`excludes`
+        // might otherwise have allowed.
+        ctx.violation(archetype_id, path, "ARCHETYPE_SLOT.is_closed");
+        return;
+    }
+
+    if slot.any_allowed() {
+        // Open, with neither `includes` nor `excludes` stated: any
+        // archetype may fill it, so whatever actually filled it needs no
+        // further check to conform.
+        return;
+    }
+
+    ctx.unchecked_detail(
+        path,
+        "ARCHETYPE_SLOT: includes/excludes assertions are carried as written and not \
+         evaluated (K15.10), so this filler cannot be checked against them",
+        filler.archetype_id().to_string(),
+    );
 }
 
 /// A `C_ARCHETYPE_ROOT`: a slot a template already filled, naming the filler
@@ -1020,7 +1069,7 @@ mod tests {
     };
     use crate::base::Interval;
     use crate::path::Pathable as _;
-    use crate::rm::common::LocatableAttrs;
+    use crate::rm::common::{Archetyped, LocatableAttrs};
     use crate::rm::data_structures::{Element, ItemList};
     use crate::rm::data_types::{
         CodePhrase, DataValue, DvBoolean, DvCodedText, DvCount, DvDate, DvDateTime, DvDuration,
@@ -1220,23 +1269,98 @@ mod tests {
         );
     }
 
+    /// One filled `ELEMENT` position, its `archetype_details` naming a
+    /// filler — the shape [`Node::archetype_details`] exists to expose
+    /// (`lib:A-59`'s own residual, `walk_slot`'s own module documentation).
+    fn filled(name: &str, node_id: &str) -> Element {
+        Element::new(
+            attrs(name, node_id).with_archetype_details(
+                Archetyped::new("openEHR-EHR-CLUSTER.device.v1", "1.1.0").unwrap(),
+            ),
+            placeholder_value(),
+        )
+    }
+
+    /// `node_id` goes through a binding rather than sitting beside the class
+    /// name as a literal in each test below: `openehr-assets` counts any
+    /// adjacent pair of string literals shaped like a class and an
+    /// invariant as a citation, deliberately, and `("ELEMENT", "at0004")`
+    /// would enter the invariant-coverage report as one.
+    const SLOT_NODE_ID: &str = "at0004";
+
+    /// An open slot (the default: not closed, no `includes`/`excludes`)
+    /// left unfilled — no `archetype_details` on the instance node at all.
+    /// Nothing in `ARCHETYPE_SLOT` restricts leaving a slot empty; that is
+    /// occurrences' own job, checked elsewhere. Not a violation, and nothing
+    /// left unchecked either: there is nothing here to be unsure about.
     #[test]
-    fn a_slot_is_reported_unchecked_never_as_passing() {
-        // `node_id` goes through a binding rather than sitting beside the
-        // class name as a literal: `openehr-assets` counts any adjacent pair
-        // of string literals shaped like a class and an invariant as a
-        // citation, deliberately, and `("ELEMENT", "at0004")` would enter the
-        // invariant-coverage report as one (see `am::constraint::tests`'s own
-        // note on this).
-        let node_id = "at0004";
+    fn an_open_slot_left_unfilled_is_fully_conformant() {
         let slot = CObject::Slot(
-            ArchetypeSlot::new("ELEMENT", node_id, MultiplicityInterval::MANDATORY).unwrap(),
+            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, MultiplicityInterval::OPTIONAL).unwrap(),
         );
         let archetype = evaluation_archetype(slot);
         let entry = build_evaluation(vec![Element::new(
-            attrs("Systolic", "at0004"),
+            attrs("Systolic", SLOT_NODE_ID),
             placeholder_value(),
         )]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(report.is_conformant());
+        assert!(report.unchecked().is_empty());
+    }
+
+    /// A closed slot (`is_closed()`) that was filled anyway — "closed to
+    /// further filling either in further specialisations or at runtime"
+    /// (AOM2's own words) means no filler was ever permitted here, so one
+    /// being present at all is the violation, not a question of whether it
+    /// happens to satisfy `includes`/`excludes`.
+    #[test]
+    fn a_closed_slot_that_was_filled_anyway_is_a_violation() {
+        let slot = CObject::Slot(
+            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, MultiplicityInterval::OPTIONAL)
+                .unwrap()
+                .closed(),
+        );
+        let archetype = evaluation_archetype(slot);
+        let entry = build_evaluation(vec![filled("Systolic", SLOT_NODE_ID)]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(report.unchecked().is_empty());
+        assert_eq!(report.violations().len(), 1);
+        assert_eq!(report.violations()[0].constraint(), "ARCHETYPE_SLOT.is_closed");
+        assert_eq!(
+            report.violations()[0].archetype_path(),
+            "/data[id2]/items[at0004]"
+        );
+    }
+
+    /// An open slot with neither `includes` nor `excludes` stated
+    /// (`any_allowed()`) that was filled — any archetype may fill it, so the
+    /// filler needs no further check to conform, whatever it actually is.
+    #[test]
+    fn an_unrestricted_open_slots_filler_is_fully_conformant() {
+        let slot = CObject::Slot(
+            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, MultiplicityInterval::OPTIONAL).unwrap(),
+        );
+        let archetype = evaluation_archetype(slot);
+        let entry = build_evaluation(vec![filled("Systolic", SLOT_NODE_ID)]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(report.is_conformant());
+        assert!(report.unchecked().is_empty());
+    }
+
+    /// An open slot naming an `includes` assertion, filled — `K15.10`:
+    /// `includes`/`excludes` are carried as written and not evaluated, so
+    /// whether this particular filler actually satisfies the assertion
+    /// cannot be checked, and is reported unchecked rather than silently
+    /// passed, naming the filler's own archetype id as detail.
+    #[test]
+    fn a_restricted_open_slots_filler_is_unchecked_not_silently_passed() {
+        let slot = CObject::Slot(
+            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, MultiplicityInterval::OPTIONAL)
+                .unwrap()
+                .including("archetype_id/value matches {/.*device.*/}"),
+        );
+        let archetype = evaluation_archetype(slot);
+        let entry = build_evaluation(vec![filled("Systolic", SLOT_NODE_ID)]);
         let report = validate_against_archetype(&archetype, entry.as_node());
         assert!(!report.is_conformant());
         assert!(report.violations().is_empty());
@@ -1245,14 +1369,20 @@ mod tests {
             report.unchecked()[0].archetype_path(),
             "/data[id2]/items[at0004]"
         );
+        assert_eq!(
+            report.unchecked()[0].detail(),
+            Some("openEHR-EHR-CLUSTER.device.v1")
+        );
     }
 
     /// `C_COMPLEX_OBJECT_PROXY`: resolving `target_path` against the
     /// archetype's own constraint tree is not implemented (see
     /// `CComplexObjectProxy`'s own module documentation), so a node it
     /// governs is reported unchecked, never as passing — the same
-    /// `K15.20` discipline `a_slot_is_reported_unchecked_never_as_passing`
-    /// proves for `ARCHETYPE_SLOT`.
+    /// `K15.20` discipline
+    /// `a_restricted_open_slots_filler_is_unchecked_not_silently_passed`
+    /// proves for the one real case `ARCHETYPE_SLOT` still cannot check
+    /// (`walk_slot`'s own module documentation covers the two it now can).
     #[test]
     fn a_proxy_is_reported_unchecked_never_as_passing() {
         let proxy = CObject::Proxy(

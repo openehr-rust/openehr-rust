@@ -533,6 +533,21 @@ impl ItemStructure {
         }
     }
 
+    /// The archetype and template that shaped this node, present only at an
+    /// archetype root. A dispatcher of its own, not `self.locatable()
+    /// .archetype_details()` — see [`crate::rm::ehr::Entry::archetype_details`]
+    /// for why.
+    #[must_use]
+    pub fn archetype_details(&self) -> Option<&crate::rm::common::Archetyped> {
+        use crate::rm::common::Locatable as _;
+        match self {
+            Self::Single(s) => s.archetype_details(),
+            Self::List(s) => s.archetype_details(),
+            Self::Table(s) => s.archetype_details(),
+            Self::Tree(s) => s.archetype_details(),
+        }
+    }
+
     /// Every element in the structure, in document order.
     ///
     /// The one traversal that works across all four shapes, which is what
@@ -860,6 +875,19 @@ impl Event {
         match self {
             Self::Point(e) => e.locatable(),
             Self::Interval(e) => e.locatable(),
+        }
+    }
+
+    /// The archetype and template that shaped this node, present only at an
+    /// archetype root. A dispatcher of its own, not `self.locatable()
+    /// .archetype_details()` — see [`crate::rm::ehr::Entry::archetype_details`]
+    /// for why.
+    #[must_use]
+    pub fn archetype_details(&self) -> Option<&crate::rm::common::Archetyped> {
+        use crate::rm::common::Locatable as _;
+        match self {
+            Self::Point(e) => e.archetype_details(),
+            Self::Interval(e) => e.archetype_details(),
         }
     }
 }

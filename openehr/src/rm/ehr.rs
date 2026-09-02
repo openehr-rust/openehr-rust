@@ -30,7 +30,7 @@
 use crate::base::{HierObjectId, LocatableRef, ObjectRef};
 use crate::error::ParseError;
 use crate::rm::common::{
-    Locatable, LocatableAttrs, Participation, PartyProxy, PartySelf, impl_locatable,
+    Archetyped, Locatable, LocatableAttrs, Participation, PartyProxy, PartySelf, impl_locatable,
 };
 use crate::rm::data_structures::{History, ItemStructure};
 use crate::rm::data_types::{
@@ -1544,6 +1544,22 @@ impl Entry {
             Self::Instruction(e) => e.locatable(),
             Self::Action(e) => e.locatable(),
             Self::AdminEntry(e) => e.locatable(),
+        }
+    }
+
+    /// The archetype and template that shaped this node, present only at an
+    /// archetype root. A dispatcher of its own, not `self.locatable()
+    /// .archetype_details()`, because `archetype_details` is a
+    /// [`Locatable`]-provided method with no inherent counterpart on
+    /// [`LocatableAttrs`] — unlike `archetype_node_id`, which is both.
+    #[must_use]
+    pub fn archetype_details(&self) -> Option<&Archetyped> {
+        match self {
+            Self::Observation(e) => e.archetype_details(),
+            Self::Evaluation(e) => e.archetype_details(),
+            Self::Instruction(e) => e.archetype_details(),
+            Self::Action(e) => e.archetype_details(),
+            Self::AdminEntry(e) => e.archetype_details(),
         }
     }
 

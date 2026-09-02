@@ -21,6 +21,13 @@ together.
   defaulting to AOM2's own stated default, `#[serde(default)]` on the wire.
   Carried, not enforced — `am::validate` cannot check it yet, for the same
   reason it cannot check a slot's filler at all.
+- `path::Node` gains `archetype_details()`, exposing `ARCHETYPED` at an
+  archetype root — closes `A-59`'s own residual. `am::validate` now reports
+  a real violation when a closed `ARCHETYPE_SLOT` was filled anyway, and no
+  longer reports `Unchecked` for a slot correctly left open or filled by an
+  unrestricted one. See `A-60` in `openehr/spec/audit.md`. Not a breaking
+  change: an additive accessor, and `am::validate`'s report only becomes
+  *more* precise for archetypes using `ARCHETYPE_SLOT`, never less.
 
 ## 0.9.0 — 2026-09-02
 

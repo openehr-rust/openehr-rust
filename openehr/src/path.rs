@@ -39,7 +39,7 @@
 //! records the choice.
 
 use crate::error::PathError;
-use crate::rm::common::Locatable as _;
+use crate::rm::common::{Archetyped, Locatable as _};
 use crate::rm::data_structures::{Cluster, Element, Event, History, Item, ItemStructure};
 use crate::rm::data_types::{
     DataValue, DvCodedText, DvInterval, DvOrdered as _, DvText, OrderedAttrs, ReferenceRange, Text,
@@ -439,6 +439,42 @@ impl<'a> Node<'a> {
             | Self::ReferenceRange(_)
             | Self::Scalar(_) => return None,
         })
+    }
+
+    /// The archetype and template that shaped this node, where it is an
+    /// archetype root — `None` everywhere else, including an internal node
+    /// of the same archetype, where `Locatable::archetype_details` is `None`
+    /// for the same reason (`Archetyped`'s own module documentation: "An
+    /// `ARCHETYPED` on every node would be a lie about where the archetype
+    /// boundaries are").
+    ///
+    /// This is what an `ARCHETYPE_SLOT` was filled with, if it was filled at
+    /// all: a slot's own position in the constraining archetype corresponds
+    /// exactly to where a filling archetype's root would appear in the
+    /// instance, so a `Some` here at that position names the filler and a
+    /// `None` says the slot was left open — `am::validate::walk_object`'s
+    /// `CObject::Slot` arm is the reason this accessor was added
+    /// (`lib:A-59`'s own "not able to be from where this crate currently
+    /// validates" note, now partly closed).
+    #[must_use]
+    pub fn archetype_details(&self) -> Option<&'a Archetyped> {
+        match self {
+            Self::Composition(c) => c.archetype_details(),
+            Self::Section(s) => s.archetype_details(),
+            Self::Entry(e) => e.archetype_details(),
+            Self::ItemStructure(s) => s.archetype_details(),
+            Self::Cluster(c) => c.archetype_details(),
+            Self::Element(e) => e.archetype_details(),
+            Self::History(h) => h.archetype_details(),
+            Self::Event(e) => e.archetype_details(),
+            Self::DataValue(_)
+            | Self::Text(_)
+            | Self::CodedText(_)
+            | Self::PlainText(_)
+            | Self::Interval(_)
+            | Self::ReferenceRange(_)
+            | Self::Scalar(_) => None,
+        }
     }
 
     /// The node's runtime name, where it has one.
