@@ -2,8 +2,8 @@
 
 | | |
 | --- | --- |
-| Version | 1.0.0 |
-| Effective date | 2026-08-26 |
+| Version | 1.1.0 |
+| Effective date | 2026-08-26 (§4/§8's publish-execution carve-out: 2026-09-02) |
 | Status | Active |
 | Owner | Joel Parker Henderson, sole maintainer ([`MAINTAINERS.md`](MAINTAINERS.md)) |
 | Canonical location | `AI_STATEMENT.md` at the repository root |
@@ -76,7 +76,9 @@ are a fair description of how the work is actually done.
 | Specifications in `spec/` and `openehr/spec/` | ai-generated | drafted in session, adopted by the maintainer. `W0.19` requires the requirement to exist before the commit, which makes the *order* of the work reviewable |
 | Documentation, including this file | ai-generated | held to the same claim discipline as the code |
 | What a specification silence means; what ships in a release; whether a conformance level is earned | none | the maintainer's, and recorded in the tree — the conformance matrix, the audit register, `agents/publishing.md` |
-| Merging, publishing, tagging | none | manual, by the one account that can (`MAINTAINERS.md`) |
+| Merging, tagging | none | manual, by the one account that can (`MAINTAINERS.md`) |
+| Publishing — the decision that a release is ready, the version it takes, and what ships | none | the maintainer's alone, unchanged by the row below |
+| Publishing — running `cargo publish` itself | none (execution only) | since 2026-09-02, Claude Code may run this command, on the maintainer's own machine, under his direction, using his already-authenticated `cargo login` session — not a second identity, not a standing delegation of the decision above. See `agents/publishing.md`'s own governance-change note and `MAINTAINERS.md`'s publishing-identities table |
 
 **No row says autonomous**, and no percentage appears anywhere in this document,
 because no defensible way to measure one exists.
@@ -164,11 +166,21 @@ should say so in the pull request description — which tool, and what it did �
 rather than in commit trailers. The contributor remains fully responsible for
 the submission: understood, explainable on request, tested, and honest.
 
-In this project, AI **must not**: merge anything; publish anything; sign
-anything; decide whether a conformance level has been earned; weaken a test, a
-lint, or a gate to make something pass; or add `no_run`, `ignore`, or a `_ =>`
-arm to silence a check that is doing its job. The last is written into
+In this project, AI **must not**: merge anything; sign anything; decide
+whether a conformance level has been earned; decide that a release is ready,
+what version it takes, or what ships in it; weaken a test, a lint, or a gate
+to make something pass; or add `no_run`, `ignore`, or a `_ =>` arm to silence
+a check that is doing its job. The last is written into
 [`CLAUDE.md`](CLAUDE.md) because it is the temptation that actually arises.
+
+**One narrow, dated exception: running `cargo publish` itself.** Since
+2026-09-02, Claude Code may execute that one command — on the maintainer's
+own machine, under his direction, using credentials that remain his (§4,
+`agents/publishing.md`'s own governance-change note). This is execution
+authority over a decision the maintainer has already made and verified
+against `agents/publishing.md`'s own checklist, not a delegation of the
+decision itself — the paragraph above still governs everything the decision
+covers.
 
 ## 9. Limitations, and the residual risk
 
@@ -209,6 +221,7 @@ joel@joelparkerhenderson.com rather than opening a public issue.
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.0.0 | 2026-08-26 | First issue. |
+| 1.1.0 | 2026-09-02 | §4 and §8 reconciled with a governance change recorded the same day in `agents/publishing.md` and `MAINTAINERS.md`: Claude Code may now execute `cargo publish` on the maintainer's own machine, under his direction. The decision that a release is ready, its version, and what ships remain the maintainer's alone — this is execution authority over an already-made decision, not a delegation of the decision. Merging and signing are unchanged: still `none`, still manual. |
 
 ## Annex B. Machine-readable summary
 
@@ -216,8 +229,8 @@ Levels per §3. The prose above is authoritative wherever the two could disagree
 
 ```yaml
 ai-statement:
-  version: 1.0.0
-  last-updated: 2026-08-26
+  version: 1.1.0
+  last-updated: 2026-09-02
   vocabulary: w3c-ai-content-disclosure
   disclosure-default: ai-generated
   tools:
@@ -231,6 +244,7 @@ ai-statement:
     review: none
     adjudication: none
     release-decisions: none
+    publish-execution: claude-code-under-maintainer-direction  # since 2026-09-02; see §4/§8
   ships-ai-system: false
   autonomous-use: none
 ```
