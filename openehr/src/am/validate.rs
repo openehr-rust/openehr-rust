@@ -79,7 +79,7 @@
 use crate::am::archetype::Archetype;
 use crate::am::constraint::{
     ArchetypeSlot, CAttribute, CAttributeTuple, CComplexObject, CObject, CPrimitive,
-    CPrimitiveObject, CPrimitiveTuple, ConstraintStatus,
+    CPrimitiveObject, CPrimitiveTuple, ConstraintStatus, is_c_string_pattern,
 };
 use crate::am::repository::ArchetypeRepository;
 use crate::am::terminology::ArchetypeTerminology;
@@ -952,12 +952,23 @@ fn walk_primitive(
                 ctx.violation(archetype_id, path, "C_BOOLEAN");
             }
         }
-        (CPrimitive::String { list, pattern }, Scalar::Str(value)) => {
-            if !list.is_empty() && !list.iter().any(|item| item == value) {
+        (CPrimitive::String { list }, Scalar::Str(value)) => {
+            // `list` mixes literals and `/…/`/`^…^`-delimited regex
+            // elements (`CPrimitive::String`'s own documentation, `A-63`) —
+            // split them once rather than scanning `list` twice with two
+            // different predicates.
+            let (patterns, literals): (Vec<_>, Vec<_>) =
+                list.iter().partition(|item| is_c_string_pattern(item));
+            let literal_match = literals.iter().any(|item| *item == value);
+            if !literals.is_empty() && !literal_match {
                 ctx.violation(archetype_id, path, "C_STRING");
-            } else if pattern.is_some() {
+            } else if !patterns.is_empty() {
                 // Carried but never compiled or applied — see
-                // `crate::am::CPrimitive::String`'s own documentation for why.
+                // `crate::am::CPrimitive::String`'s own documentation for
+                // why. Reported even when a literal already matched: this
+                // mirrors the behaviour before `A-63` folded the two into
+                // one list, when a `pattern` set alongside a matching
+                // `list` entry was unchecked rather than an early `Conforms`.
                 ctx.unchecked(path, "C_STRING pattern is not evaluated");
             }
         }
@@ -1478,13 +1489,12 @@ mod tests {
     }
 
     #[test]
-    fn a_c_string_pattern_is_unchecked_even_when_the_list_passes() {
+    fn a_c_string_pattern_is_unchecked_even_with_no_literals_to_check() {
         let constraint = element_with_value_constraint(
             "at0004",
             "value",
             CPrimitive::String {
-                list: Vec::new(),
-                pattern: Some(r"\d+".to_owned()),
+                list: vec![r"/\d+/".to_owned()],
             },
             "DV_TEXT",
         );
@@ -1499,6 +1509,58 @@ mod tests {
             report.unchecked()[0].reason(),
             "C_STRING pattern is not evaluated"
         );
+    }
+
+    /// `A-63`: a regex element lives in the same `list` as any literals —
+    /// a value that already matches a literal is still reported unchecked
+    /// if a pattern element is also present, the same choice this crate
+    /// made when the two lived in separate fields (a matching `list` and a
+    /// set `pattern` together were already unchecked, not `Conforms`).
+    #[test]
+    fn a_c_string_pattern_is_unchecked_even_when_a_literal_already_matched() {
+        let constraint = element_with_value_constraint(
+            "at0004",
+            "value",
+            CPrimitive::String {
+                list: vec!["Systolic".to_owned(), r"/\d+/".to_owned()],
+            },
+            "DV_TEXT",
+        );
+        let archetype = evaluation_archetype(constraint);
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Free text", "at0004"),
+            DataValue::Text(crate::rm::data_types::DvText::new("Systolic").unwrap()),
+        )]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(report.violations().is_empty());
+        assert_eq!(
+            report.unchecked()[0].reason(),
+            "C_STRING pattern is not evaluated"
+        );
+    }
+
+    /// A literal-only `list` with no regex element behaves exactly as
+    /// before `A-63`: an unmatched value is a definite violation, not
+    /// unchecked.
+    #[test]
+    fn a_literal_only_c_string_list_rejects_a_value_outside_it() {
+        let constraint = element_with_value_constraint(
+            "at0004",
+            "value",
+            CPrimitive::String {
+                list: vec!["Systolic".to_owned()],
+            },
+            "DV_TEXT",
+        );
+        let archetype = evaluation_archetype(constraint);
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Free text", "at0004"),
+            DataValue::Text(crate::rm::data_types::DvText::new("Diastolic").unwrap()),
+        )]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(report.unchecked().is_empty());
+        assert_eq!(report.violations().len(), 1);
+        assert_eq!(report.violations()[0].constraint(), "C_STRING");
     }
 
     /// An `ELEMENT[at0004]/value` wrapping a `DV_QUANTITY[id14]` whose
@@ -1553,7 +1615,6 @@ mod tests {
                 MultiplicityInterval::MANDATORY,
                 CPrimitive::String {
                     list: vec![units.to_owned()],
-                    pattern: None,
                 },
             ),
             CPrimitiveObject::new(

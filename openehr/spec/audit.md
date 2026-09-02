@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**62 findings, 62 in the table below: 7 High, 33 Medium, 22 Low. 56 fixed or
+**63 findings, 63 in the table below: 7 High, 33 Medium, 23 Low. 57 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -149,6 +149,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-60 | Medium | `am::validate::walk_object`'s `CObject::Slot` arm reported every `ARCHETYPE_SLOT` `Unchecked` unconditionally, including a slot closed with `is_closed()` (`A-59`) that the instance filled anyway — a defect this crate could state (`A-59` gave it somewhere to put `is_closed`) but never actually catch, because `crate::path::Node` had no way to tell whether a position was filled by another archetype at all | **fixed** — `Node::archetype_details()` added, exposing `ARCHETYPED` at an archetype root; `walk_object`'s slot handling now reports a real violation when a closed slot was filled regardless, needs no further check when an open, unrestricted slot was filled or any slot was correctly left open, and stays `Unchecked` only for the one case this crate genuinely cannot resolve — a restricted open slot's filler, since `includes`/`excludes` assertions are not parsed (`K15.10`) |
 | A-61 | Low | `TermDefinition` had no `other_items` field — AOM2's `ARCHETYPE_TERM.other_items`, a hash of extra keyed items "e.g. provenance", could not be represented at all, the same silent-loss shape `A-46`/`A-48`/`A-50`/`A-52`/`A-59` each found in a different class | **fixed** — `other_items`/`with_other_item()`/`other_items()` added, defaulting to an empty map and `#[serde(default)]` on the wire; carried, not interpreted, the same position this crate already takes on `ArchetypeTerminology`'s own external bindings — no fixed list of recognised keys exists to check against |
 | A-62 | Medium | `am::cadl` (`A-40`'s own "smallest real slice") refused `use_archetype`, `use_node`, and `allow_archetype` outright, though `C_ARCHETYPE_ROOT`, `C_COMPLEX_OBJECT_PROXY`, and `ArchetypeSlot` all already existed as types (`A-50`, `A-53`) — the blanket refusal overstated what stood in the way: only `allow_archetype`'s own `matches { include ... }` form genuinely needs the `K15.10` assertion grammar this parser does not lex | **fixed** — `use_archetype`/`use_node` fully implemented (`archetype_ref` reconstructed by slicing the source between token boundaries, `ADL_PATH` read as raw text to the next whitespace — two new `Lexer` primitives, since neither lexes atomically as a `Word`); `allow_archetype` implemented for its unrestricted form only, with `closed` and `matches {...}` each refused by name for a distinct, real reason (the former's own grammar carries no occurrences to build `ArchetypeSlot` from; the latter genuinely needs `K15.10`) |
+| A-63 | Low | **BREAKING.** `CPrimitive::String::pattern: Option<String>` had no counterpart in AOM2's actual single-`List<String>` `constraint` — the same shape `A-51`'s second pass fixed for `TerminologyCode::code_list`, found while researching `A-62`'s own `CONTAINED_REGEXP` boundary | **fixed** — `pattern` removed; a regex is now a `/…/`- or `^…^`-delimited element of `list` itself, matching `C_STRING`'s real AOM2 shape; `is_c_string_pattern` is the one place that recognises the delimiter convention, called from both `am::validate::walk_primitive` and `am::archetype::assumed_value_conforms` (`lib:A-33`) |
 
 ---
 
@@ -3616,3 +3617,60 @@ refusals, each naming its own reason. Two more in `cadl_lexer`:
 `text_since` reconstructing a `-`-split archetype reference, and
 `read_raw_path` stopping at whitespace after skipping trivia, plus its
 end-of-input case.
+
+## A-63 — `CPrimitive::String::pattern` had no AOM2 counterpart
+
+**Severity: Low. Status: fixed.**
+
+Found while researching `A-62`: confirming exactly what `CONTAINED_REGEXP`
+governs meant reading `org.openehr.am.aom2.c_string.adoc` directly rather
+than assuming this crate's existing `pattern: Option<String>` field, sitting
+beside `list: Vec<String>`, already matched it. It does not. `C_STRING`'s
+own `constraint` attribute is a single `List<String>`: "a list of literal
+strings and/or regular expression strings delimited by the '/' character."
+There is no second attribute — `C_PRIMITIVE_OBJECT`, `C_STRING`'s direct
+parent, declares only `assumed_value`, `is_enumerated_type_constraint`, and
+`constraint` itself. This is exactly the shape `A-51`'s second pass found
+in `TerminologyCode::code_list`: a field this crate invented alongside the
+real one, with nothing in AOM2 to correspond to it.
+
+**Why this one stayed hidden as long as it did.** `C_TEMPORAL.pattern_constraint`
+— the four temporal `CPrimitive` variants' own `pattern` field — genuinely
+*is* a separate AOM2 attribute, distinct from `constraint`
+(`org.openehr.am.aom2.c_temporal.adoc`, with its own
+`Pattern_validity` invariant). `CPrimitive::String`'s `pattern` was added
+alongside those four, in the same finding, and inherited their shape by
+resemblance rather than by checking `C_STRING`'s own class definition
+separately — the four temporal types being right made the fifth read as
+right too.
+
+**Fixed.** `pattern` removed from `CPrimitive::String`; `list` now carries
+literal and regex elements together, exactly as AOM2 states. `is_c_string_pattern`
+(`am::constraint`) recognises the delimiter convention — `/…/` or `^…^`,
+at least one character between them, matching `CONTAINED_REGEXP`'s own
+grammar (`openEHR/adl-antlr`, `base_lexer.g4`) — and is the *only* place
+that does: `am::validate::walk_primitive` and
+`am::archetype::assumed_value_conforms` both call it rather than
+re-deriving the rule (`lib:A-33`). Conformance behaviour is unchanged, not
+merely the representation: a value matching a literal element still leaves
+the node `Unchecked` if a pattern element is also present in the same
+list, the same choice this crate already made when the two lived in
+separate fields, not silently upgraded to `Conforms` now that they share
+one.
+
+**Not attempted.** Actually compiling and applying a regex element remains
+`K15.18`, unaffected by this finding — a pattern element is still carried,
+not evaluated. `am::cadl` does not gain the ability to *write* a pattern
+element into `list`: `CONTAINED_REGEXP` lexing is still unimplemented
+there, listed in the parser's own module documentation with corrected
+wording rather than removed, since the gap it names is real and unchanged
+by this fix.
+
+**Tests.** The one existing `C_STRING` pattern test is renamed and its
+fixture folded (`list: vec![r"/\d+/".to_owned()]` in place of a separate
+`pattern: Some(...)`), proving the same outcome. Two new: a literal element
+that matches leaves the node unchecked anyway when a pattern element sits
+beside it in the same list (the behavioural continuity claim above,
+checked rather than asserted); and a literal-only list with no regex
+element rejects an unmatched value as a definite violation, exactly as
+before this finding, confirming the ordinary case is untouched.

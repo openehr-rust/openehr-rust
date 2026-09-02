@@ -757,14 +757,28 @@ pub enum CPrimitive {
         /// Whether `false` is permitted.
         allow_false: bool,
     },
-    /// `C_STRING`: a list of permitted values, a regular expression, or both.
+    /// `C_STRING`: a list of literal strings and/or regular expressions,
+    /// never a separate field for the two — AOM2's `constraint` attribute
+    /// is one `List<String>` where a regex is simply an element delimited
+    /// by `/…/` or `^…^` (`org.openehr.am.aom2.c_string.adoc`, and
+    /// `CONTAINED_REGEXP` in `openEHR/adl-antlr`'s `base_lexer.g4`), the
+    /// same lexical convention `is_c_string_pattern` recognises.
+    ///
+    /// **Corrected, the same shape `A-51`'s second pass fixed for
+    /// `TerminologyCode`.** This variant used to carry a distinct
+    /// `pattern: Option<String>` field alongside `list`, with no
+    /// counterpart in AOM2's own single-`List<String>` `constraint` — see
+    /// `A-63` in `spec/audit.md` for the finding. A regex element is
+    /// **carried, not compiled or applied** — a node whose `list` contains
+    /// one is unchecked (`ctx.unchecked`) unless a literal element already
+    /// matched, until a real pattern-matching implementation exists
+    /// (`K15.18`).
     #[serde(rename = "C_STRING")]
     String {
-        /// Permitted literal values.
+        /// Literal values and/or `/…/`- or `^…^`-delimited regular
+        /// expressions, in AOM2's own order — an empty list is
+        /// unconstrained (`any_allowed()`).
         list: Vec<String>,
-        /// A pattern, carried as written. **Not compiled and not applied** —
-        /// a node governed by one is unchecked until `K15.18` lands.
-        pattern: Option<String>,
     },
     /// `C_INTEGER`.
     #[serde(rename = "C_INTEGER")]
@@ -843,11 +857,13 @@ pub enum CPrimitive {
         /// still apply).
         range: Vec<Interval<Date>>,
         /// An ISO 8601 constraint pattern (e.g. `"YYYY-??-??"`), carried as
-        /// written. **Not compiled and not applied** — the same choice
-        /// [`CPrimitive::String`]'s own `pattern` field already documents,
-        /// for the same reason: a node governed by one is unchecked
-        /// (`ctx.unchecked`), not silently passed, until a real
-        /// pattern-matching implementation exists.
+        /// written. **Not compiled and not applied** — a node governed by
+        /// one is unchecked (`ctx.unchecked`), not silently passed, until a
+        /// real pattern-matching implementation exists. Unlike
+        /// [`CPrimitive::String`]'s own regex form, this genuinely is a
+        /// separate AOM2 attribute — `C_TEMPORAL.pattern_constraint`,
+        /// distinct from `constraint` — not a second field invented for a
+        /// single-list shape.
         pattern: Option<String>,
     },
     /// `C_TIME`. See [`CPrimitive::Date`] for why this is a list of ranges
@@ -885,6 +901,20 @@ pub enum CPrimitive {
         /// The constraint's own serialised form, preserved verbatim.
         source: String,
     },
+}
+
+/// Whether one [`CPrimitive::String`] `list` element is a regular
+/// expression rather than a literal — `CONTAINED_REGEXP`'s own delimiters
+/// (`openEHR/adl-antlr`, `base_lexer.g4`): `/…/` or `^…^`, with at least
+/// one character between them (`SLASH_REGEXP_CHAR+`/`CARET_REGEXP_CHAR+`
+/// both require one or more). This is the one place that recognises the
+/// convention — `am::validate::walk_primitive` and
+/// `am::archetype::assumed_value_conforms` both call it rather than
+/// re-deriving it (`lib:A-33`).
+#[must_use]
+pub(crate) fn is_c_string_pattern(item: &str) -> bool {
+    let delimited = |d: char| item.len() >= 3 && item.starts_with(d) && item.ends_with(d);
+    delimited('/') || delimited('^')
 }
 
 /// A point at which another archetype may be used: `ARCHETYPE_SLOT`.
@@ -1628,7 +1658,6 @@ mod tests {
             MultiplicityInterval::MANDATORY,
             CPrimitive::String {
                 list: Vec::new(),
-                pattern: None,
             },
         )
         .with_assumed_value(PrimitiveValue::Text("unknown".to_owned()));
@@ -1642,7 +1671,6 @@ mod tests {
             MultiplicityInterval::MANDATORY,
             CPrimitive::String {
                 list: Vec::new(),
-                pattern: None,
             },
         );
         let json = serde_json::to_value(&without_value).unwrap();
@@ -1679,7 +1707,6 @@ mod tests {
                 MultiplicityInterval::MANDATORY,
                 CPrimitive::String {
                     list: vec![units.to_owned()],
-                    pattern: None,
                 },
             ),
             CPrimitiveObject::new(
@@ -1733,7 +1760,6 @@ mod tests {
             MultiplicityInterval::MANDATORY,
             CPrimitive::String {
                 list: vec!["deg F".to_owned()],
-                pattern: None,
             },
         )])
         .unwrap();

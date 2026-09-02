@@ -50,12 +50,14 @@
 //!   and this parser builds unspecialised archetypes only.
 //! - **`default_value`** (`_default = <...>`) — needs the ODIN grammar,
 //!   which this parser does not implement any part of.
-//! - **A `C_STRING`/date pattern** (`CONTAINED_REGEXP`, `yyyy-mm-??`) — this
-//!   crate's own [`crate::am::CPrimitive::String`] and the four temporal
-//!   variants already carry a `pattern` field, but this parser does not
-//!   recognise the delimited-regex or date-pattern lexical forms at all, so
-//!   a source using one fails to lex as anything this parser expects rather
-//!   than being silently dropped.
+//! - **A `C_STRING` regex** (`CONTAINED_REGEXP`, `{/…/}`) or a **date
+//!   pattern** (`yyyy-mm-??`) — this parser does not recognise either
+//!   delimited lexical form at all, so a source using one fails to lex as
+//!   anything this parser expects rather than being silently dropped.
+//!   [`crate::am::CPrimitive::String`]'s own `list` can hold a
+//!   `/…/`-delimited element (`A-63`: no separate field for it, unlike the
+//!   four temporal variants' distinct `pattern` field), but nothing in this
+//!   parser ever puts one there.
 //! - **An `ac`-code's assumed value** (`[ac3; at5]`) — needs
 //!   [`crate::am::PrimitiveValue`] attached via `with_assumed_value`, which
 //!   this parser does not do.
@@ -835,7 +837,7 @@ fn parse_string_primitive(lexer: &mut Lexer<'_>) -> Result<CPrimitive, CadlError
             break;
         }
     }
-    Ok(CPrimitive::String { list, pattern: None })
+    Ok(CPrimitive::String { list })
 }
 
 fn parse_integer_primitive(lexer: &mut Lexer<'_>) -> Result<CPrimitive, CadlError> {
@@ -1051,7 +1053,6 @@ mod tests {
             leaf.constraint(),
             &CPrimitive::String {
                 list: vec!["a".to_owned(), "b".to_owned()],
-                pattern: None,
             }
         );
     }

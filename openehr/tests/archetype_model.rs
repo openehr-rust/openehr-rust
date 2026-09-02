@@ -258,7 +258,7 @@ fn every_accessor_returns_what_was_constructed() {
     let leaf = CObject::Primitive(CPrimitiveObject::new(
         "DV_TEXT",
         MultiplicityInterval::MANDATORY,
-        CPrimitive::String { list: Vec::new(), pattern: None },
+        CPrimitive::String { list: Vec::new() },
     ));
     let single = CAttribute::single("value", MultiplicityInterval::MANDATORY, vec![leaf.clone()])
         .unwrap();

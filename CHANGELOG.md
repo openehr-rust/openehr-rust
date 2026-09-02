@@ -41,6 +41,15 @@ together.
   strictly more input than before; `closed` and a restricted
   `allow_archetype ... matches {...}` remain refused by name, each for a
   distinct, real reason stated in `am::cadl`'s own module documentation.
+- **Breaking.** `CPrimitive::String` loses its `pattern: Option<String>`
+  field — it had no counterpart in AOM2's actual `C_STRING.constraint`,
+  which is a single `List<String>` where a regex is simply a `/…/`- or
+  `^…^`-delimited element of the same list, the same defect shape `0.9.0`
+  already fixed once for `TerminologyCode::code_list`. See `A-63` in
+  `openehr/spec/audit.md` for the finding and what stays carried, not
+  evaluated. A `match` naming both fields exhaustively will not compile
+  against this release; conformance behaviour for existing archetypes is
+  unchanged once `pattern` is refolded into `list`.
 
 ## 0.9.0 — 2026-09-02
 

@@ -19,6 +19,7 @@
 //! The two unchecked rules are stated rather than omitted, because an
 //! unenforced rule that nobody wrote down reads as an enforced one (`C0.9`).
 
+use crate::am::constraint::is_c_string_pattern;
 use crate::am::{
     ArchetypeTerminology, CComplexObject, CObject, CPrimitive, MultiplicityInterval, NodeIdSyntax,
     PrimitiveValue, RmOverlay,
@@ -363,7 +364,17 @@ fn assumed_value_conforms(
                 *allow_false
             }
         }
-        (CPrimitive::String { list, .. }, PrimitiveValue::Text(s)) => list.is_empty() || list.contains(s),
+        (CPrimitive::String { list }, PrimitiveValue::Text(s)) => {
+            // A regex element is carried, not evaluated — the same
+            // "unchecked, not silently passed" position `am::validate`
+            // takes, but this function returns a plain `bool` with no
+            // unchecked outcome to return, so a `list` naming only regex
+            // elements is treated as unconstrained rather than as a
+            // literal-match failure (`is_c_string_pattern`'s own callers).
+            let literals = list.iter().filter(|item| !is_c_string_pattern(item));
+            let mut literals = literals.peekable();
+            literals.peek().is_none() || literals.any(|item| item == s)
+        }
         (CPrimitive::Integer { list, range }, PrimitiveValue::Integer(n)) => {
             (list.is_empty() || list.contains(n)) && range.as_ref().is_none_or(|r| r.contains(n))
         }
