@@ -287,6 +287,15 @@ Twenty-one targets in total.
   `repository` field pointing at an unrelated project; that field is now immutable
   for that version. See [`audit.md`](audit.md) **W-03**.
 
+  `W0.21` is exactly the gate [`AI_STATEMENT.md`](../AI_STATEMENT.md) §4/§8
+  and [`agents/publishing.md`](../agents/publishing.md) name when Claude Code
+  determines a specific, already-prepared release is ready to publish
+  (since 2026-09-02) — a checked determination against this requirement and
+  the rest of that checklist, not open-ended discretion. Non-normative note:
+  who may make that determination is governance, not a conformance
+  requirement, and is recorded in full in [`GOVERNANCE.md`](../GOVERNANCE.md)
+  and `AI_STATEMENT.md`, not here.
+
 ## Licensing
 
 - **W0.22** Every crate MUST carry the same licence expression:

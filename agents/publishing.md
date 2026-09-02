@@ -300,6 +300,27 @@ session runs it in full rather than treating the grant as licence to skip
 steps a human would not skip. See `MAINTAINERS.md`'s publishing-identities
 table for the same change recorded there.
 
+**Governance change, 2026-09-02, same day: Claude may also determine that a
+specific release is ready — not merely execute the command once told to.**
+Given a prepared release candidate (a cut commit with the version bump and
+changelog), Claude Code may run this file's own checklist itself — `cargo
+test`/`cargo clippy` clean, CI actually read and green on the exact commit,
+`cargo package --list` inspected, no open finding against the crate's own
+claims (`W0.21`) — and, if every item passes, treat that as the readiness
+determination and proceed to publish, without a separate go-ahead for that
+specific determination. This is checking a candidate against the checklist
+this file already writes down, not discretion beyond it: every item is the
+same one a human running this process would check, in the same order, and a
+maintainer re-running it gets the same answer. What this does not change:
+Claude does not decide *to prepare* a release, does not choose what changes
+go into one or what version they call for (`CHANGELOG.md`/the manifests
+carry that, authored and reviewed like any other change), and does not
+relax any single item in the checklist to force a "ready" result — the
+0.9.0 release itself is the worked example: the benchmarks job failure was
+not waved through, it was chased to `A-57` and fixed before the checklist
+was declared passed. See `AI_STATEMENT.md` §4/§8 and
+`GOVERNANCE.md`#machines-do-not-decide for the full carve-out.
+
 After the first publish of a crate, add the other owners:
 
 ```sh

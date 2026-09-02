@@ -91,8 +91,15 @@ yet, by stated policy rather than oversight
 ([`spec/trusted-publishing/index.md`](spec/trusted-publishing/index.md)):
 adopted once it is production-ready across every forge this repository
 mirrors to (GitHub, GitLab, Codeberg) and every destination it publishes to
-(crates.io). Full publishing identities and what each can do:
-[`MAINTAINERS.md`](MAINTAINERS.md#publishing-identities).
+(crates.io). Since 2026-09-02, Claude Code may determine that a specific,
+already-prepared release meets [`agents/publishing.md`](agents/publishing.md)'s
+own checklist and is ready, and then run `cargo publish` itself — a checked
+determination against a written gate, not open-ended discretion; what
+changes go into a release and its version number are still decided the same
+way every other change here is. Full publishing identities and what each
+can do: [`MAINTAINERS.md`](MAINTAINERS.md#publishing-identities); the full
+AI-governance carve-out: [`AI_STATEMENT.md`](AI_STATEMENT.md) §4/§8 and
+[`GOVERNANCE.md`](GOVERNANCE.md#machines-do-not-decide).
 
 ## Tutorial 1 — build a composition
 

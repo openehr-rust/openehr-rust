@@ -84,10 +84,24 @@ paraphrases the roster is how the two come to disagree.
 
 This project is developed with agentic AI assistance, disclosed in
 [`AI_STATEMENT.md`](AI_STATEMENT.md). For governance the relevant rules are
-that no tool merges, publishes, signs, adjudicates a specification question, or
-decides whether a conformance level has been earned, and that a tool is never
-named as an author or signer. One named human is accountable for every change,
+that no tool merges, signs, adjudicates a specification question, or decides
+whether a conformance level has been earned, and that a tool is never named
+as an author or signer. One named human is accountable for every change,
 whatever produced the bytes.
+
+**One narrow, checked exception, since 2026-09-02: publishing a specific,
+already-prepared release.** Claude Code may determine that a release
+candidate meets [`agents/publishing.md`](agents/publishing.md)'s own written
+checklist — CI green on the exact commit, tests and lints clean, no open
+finding against the crate's own claims (`W0.21`) — and, once it does,
+execute `cargo publish`. This is checking a candidate against a gate written
+down in the tree, the same way any other test here is checked rather than
+trusted, not an open-ended judgment call: a maintainer re-running the same
+checklist by hand gets the same answer. What changes go into a release and
+what version they call for remain decided the same way every other change
+in this repository is — authored and reviewed, visible in `CHANGELOG.md`
+and the manifests before anything ships. See `AI_STATEMENT.md` §4/§8 for the
+full carve-out and what it does not touch.
 
 ## Independence
 
