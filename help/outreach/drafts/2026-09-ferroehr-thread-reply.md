@@ -29,8 +29,11 @@ testers](https://discourse.openehr.org/t/ferroehr-a-new-rust-based-openehr-cdr-l
 > were observed refusing `UPDATE`); SQL Server and Oracle are at **Dialect**
 > (no server has parsed it yet). The Archetype Model is in scope since August:
 > the AOM2 object model, validation of a composition against an archetype
-> already in memory, and a reader for an archetype's `definition` section —
-> no whole-archetype parser, no OPT, no flattening yet. The matrix that owns
+> already in memory, and a reader for an archetype's `definition` section
+> that, as of 2026-09-03, parses 774 of the 1,379 ADL 2 files in
+> `openEHR/adl-archetypes` and refuses the rest by name, with every refusal
+> category recorded — no whole-archetype parser, no OPT, no flattening yet.
+> The matrix that owns
 > every one of those claims is
 > [here](https://github.com/openehr-rust/openehr-rust/blob/main/spec/databases/conformance-matrix.md),
 > and the register of our own defects is next to it.

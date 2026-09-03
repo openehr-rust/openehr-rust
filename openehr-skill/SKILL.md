@@ -91,8 +91,12 @@ for what is actually verified:
   I/O itself) — a bare, unfilled `ARCHETYPE_SLOT` cannot, because which
   archetype fills it is recorded on the instance itself, and this crate's
   path machinery does not yet expose that attribute.
-- **Parsing ADL itself, and applying a specialised archetype's inherited
-  constraints,** is not implemented yet. **AQL parses and is statically
+- **Reading an archetype's `definition` section** from ADL 2 text is
+  implemented (`openehr::am::cadl`): 774 of the 1,379 ADL 2 files in
+  `openEHR/adl-archetypes` parse as of 2026-09-03 and the rest are refused by
+  name (`openehr/spec/corpus.md`). **Parsing a whole archetype, and applying
+  a specialised archetype's inherited constraints,** is not implemented yet
+  — a `definition` alone does not compose into an `Archetype`. **AQL parses and is statically
   checked but does not execute** — running a query needs a repository of
   versioned data this crate does not provide on its own.
 

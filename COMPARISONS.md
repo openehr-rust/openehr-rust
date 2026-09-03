@@ -41,8 +41,11 @@ this afternoon, one of the projects below is the better answer.
   `definition` section (`openehr::am::cadl`) — and nothing above those. Until
   2026-08-26 the Archetype Model was excluded by decision (`lib:S1.4`); it is
   now specified by `lib:S1.21` and `openehr/spec/15-archetypes.md`, and 16 of
-  those 32 requirements have no code (`lib:A-40`): no parser for a whole ADL
-  archetype, no ADL 1.4, no OPT, no flattening, no template expansion. Archie
+  those 33 requirements have no code (`lib:A-40`): no parser for a whole ADL
+  archetype, no ADL 1.4, no OPT, no flattening, no template expansion. The
+  `definition` reader parses 774 of the 1,379 ADL 2 files in
+  `openEHR/adl-archetypes` as of 2026-09-03 and refuses the rest by name
+  (`openehr/spec/corpus.md`) — a parser, not archetype support. Archie
   is the library for that work today, and every CDR above validates a
   composition against an uploaded template, which this project does not.
 - **…you need the openEHR REST API as a supported product.** `openehr-loco` is

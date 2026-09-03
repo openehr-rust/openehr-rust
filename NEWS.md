@@ -3,6 +3,25 @@
 Release notes with their reasoning live in [`CHANGELOG.md`](CHANGELOG.md); this
 page is the short form, plus what is coming and how to reach a human.
 
+## The `definition` reader meets the published corpus, 2026-09-03
+
+Later the same day, archetypes nobody here wrote: `openEHR/adl-archetypes`
+(1,379 ADL 2 files, 593 ADL 1.4) run through `openehr::am::cadl`, with the
+results, the corpus commit, and every refusal category recorded in
+[`openehr/spec/corpus.md`](openehr/spec/corpus.md). The morning's reader
+parsed 178 of the 1,379; by evening **774**, through two findings the run
+produced. `lib:A-70`: a differential-form attribute (`/data/events
+cardinality matches {…}`, how every specialised archetype states what it
+redefines) was refused as a `VOKU` duplicate named `""`. `lib:A-71`
+(**breaking**): AOM2's `C_OBJECT.occurrences` is optional and this crate's
+was not, so an unstated one — most real nodes — could not be represented
+at all and was refused; every `C_OBJECT` constructor now takes an `Option`,
+and the new `lib:K15.32` says how the value is inferred and never invented.
+Three breaking changes are now unreleased, all for 0.10.0. The corpus is read
+where it is, never vendored — it carries no licence — and what it still
+refuses is listed largest first, with the grammar reading that says which
+refusals are the parser's fault.
+
 ## Archetype Model: a `definition` reader and slot checking, 2026-09-03
 
 Twelve findings closed in one pass (`lib:A-58`–`A-69`), unreleased as of

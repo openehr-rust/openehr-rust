@@ -32,8 +32,8 @@ Doctests count as tests: they compile and run in CI (`T13.8`).
 ## Totals
 
 Counted mechanically from the tables below, with every requirement id in
-`spec/*.md` checked to appear exactly once — **344 ids, 344 covered, none
-missing**.
+`spec/*.md` checked to appear exactly once — **345 ids, 345 covered, none
+missing** (344 before `K15.32`, 2026-09-03).
 
 A hand-written total in a file like this is a number nobody rechecks, and this
 one proved the point: it said 291 of 291 while six requirements added after the
@@ -59,17 +59,28 @@ third time the same day**, after `K15.24`–`K15.27` made the same move: four
 ids, `openehr::am::repository` and `openehr::am::validate`'s
 `validate_with_repository`.
 
-| Status | 2026-08-30 | 2026-08-26 | 2026-07-31 |
-| --- | --- | --- | --- |
-| • verified | 268 | 258 | 175 |
-| doc | 33 | 33 | 30 |
-| **spec** — in force, unimplemented | 18 | 28 | — |
-| type | 13 | 13 | — |
-| — out of scope | 8 | 8 | 6 |
-| ? implemented, untested | 3 | 3 | 54 |
-| withdrawn | 1 | 1 | — |
-| open | 0 | 0 | 4 |
-| **total requirements** | **344** | **344** | 269 |
+**Re-derived a fourth time, 2026-09-03**, after `K15.6`–`K15.7` moved from
+**spec** to **•**: two ids, the refusal discipline `am::cadl` and the two
+header readers are now held to and tested for (`A-62`–`A-67`). The same pass
+found that two test names the `K15.18`–`K15.23` row cited had been renamed by
+`A-60` and `A-63` without this file following — corrected below, because this
+file promises every name in it is runnable, and for four days two were not.
+Later the same day `K15.32` was added and satisfied together (`A-71`, after
+the first external corpus run): 345 ids, 271 **•**; the two `K15.6`–`K15.7`
+test names that asserted the old refusal of an omitted `occurrences` were
+replaced by the names that now assert the parse.
+
+| Status | 2026-09-03 | 2026-08-30 | 2026-08-26 | 2026-07-31 |
+| --- | --- | --- | --- | --- |
+| • verified | 271 | 268 | 258 | 175 |
+| doc | 33 | 33 | 33 | 30 |
+| **spec** — in force, unimplemented | 16 | 18 | 28 | — |
+| type | 13 | 13 | 13 | — |
+| — out of scope | 8 | 8 | 8 | 6 |
+| ? implemented, untested | 3 | 3 | 3 | 54 |
+| withdrawn | 1 | 1 | 1 | — |
+| open | 0 | 0 | 0 | 4 |
+| **total requirements** | **345** | **344** | **344** | 269 |
 
 The **spec** rows are §15 plus `S1.21`, added on 2026-08-26 when `S1.4` was
 withdrawn and the Archetype Model brought into scope. There were 32 of them that
@@ -78,7 +89,14 @@ same day, leaving 28. `K15.18`–`K15.23` — validating a Reference Model insta
 against an archetype already held in memory, as a verdict kept separate from
 `L10.x` and with no partial pass — followed on 2026-08-30, leaving 22.
 `K15.24`–`K15.27` — the repository abstraction, and resolving a
-`C_ARCHETYPE_ROOT` filler through one — followed the same day, leaving **18**.
+`C_ARCHETYPE_ROOT` filler through one — followed the same day, leaving 18.
+`K15.6`–`K15.7` — the refusal discipline: an unimplemented construct is
+refused by name at its offset, never skipped, defaulted, or returned as a
+partial tree — followed on 2026-09-03, once `am::cadl` existed to be held to
+it (`A-62`–`A-67`), leaving **16**. `K15.32` — an unstated `occurrences`
+stays unstated and is inferred only by AOM2's own rule — was added later
+that day and satisfied in the same commit (`A-71`), so it never joined the
+block: 33 ids in §15, 16 of them still **spec**.
 They remain a large block of unsatisfied requirements this crate has carried
 since 2026-08-26, and they are counted here rather than described elsewhere so
 that the size of the gap is a number a reader can see.
@@ -135,7 +153,7 @@ Process requirements; they govern this specification rather than the code.
 | S1.13 | • | `canonical_json` round trip covers `DV_PARSABLE` and time specifications |
 | S1.14 | doc | `security` module header |
 | S1.15 | doc | `J9.15`; bounded by `canonical_json::reading_a_composition_stays_within_a_small_stack` |
-| S1.21 | spec | §15 in full; nothing implemented — **A-40** |
+| S1.21 | spec | §15 in full — seventeen of the thirty-three ids it brought into scope are **•** and sixteen **spec** (2026-09-03, `K15.32` added and satisfied the same day); **A-40** |
 | S1.16–S1.17 | • | `terminology::tests::the_codes_that_disagree_between_terminology_repositories_are_the_current_ones` |
 | S1.18 | — | declared departure: ISO 3166 and ISO 639 are not carried, so `COMPOSITION.Territory_valid` and `Language_valid` are not checked. Its closing requirement — that a caller can do the check instead — **is** verified: `guarantees::a_caller_can_read_every_code_the_crate_declines_to_check` (`A-19`) |
 | S1.19 | — | declared exclusion: no demographic repository, so the four `PARTY` graph invariants cannot be checked from a value in hand |
@@ -437,21 +455,25 @@ Process requirements; they govern this specification rather than the code.
 
 ## §15 Archetypes and templates — `K15`
 
-The section was added on 2026-08-26 when `S1.4` was withdrawn. **Fourteen rows
-are satisfied and eighteen are not**: `openehr::am` is the AOM2 object model,
+The section was added on 2026-08-26 when `S1.4` was withdrawn. **Seventeen
+ids are satisfied and sixteen are not** (thirty-three since `K15.32`,
+2026-09-03): `openehr::am` is the AOM2 object model,
 `openehr::am::validate` (2026-08-30) checks a Reference Model instance against
-an `Archetype` already held in memory, and `openehr::am::repository` plus
+an `Archetype` already held in memory, `openehr::am::repository` plus
 `validate_with_repository` (2026-08-30, same day) resolve a `C_ARCHETYPE_ROOT`
 filler through a caller-supplied repository — `openehr` performs no I/O
-itself (`K15.25`). No code in this crate parses ADL, flattens a specialised
-archetype, or expands a template — so what `validate_with_repository` checks
-is the definition each resolved archetype gives as its own, not as a
-flattened OPT2 would be, and that scope limit is stated in its own module
-documentation rather than left for the row below to imply more. A bare
-`ARCHETYPE_SLOT` stays unchecked even with a repository, because which
-archetype filled it lives on the instance's `ARCHETYPED.archetype_id`, an
-attribute `crate::path::Node` does not expose — a gap in `crate::path`, not in
-this section. **A-40** tracks the rest.
+itself (`K15.25`) — and `openehr::am::cadl` (2026-09-02, `A-62`–`A-67`) reads
+an archetype's `definition` section, refusing what it does not implement by
+name (`K15.6`, `K15.7`). No code in this crate reads a *whole* ADL archetype
+into an `Archetype`, reads an ADL 1.4 body, flattens a specialised archetype,
+or expands a template — so what `validate_with_repository` checks is the
+definition each resolved archetype gives as its own, not as a flattened OPT2
+would be, and that scope limit is stated in its own module documentation
+rather than left for the row below to imply more. A filled `ARCHETYPE_SLOT` is
+checked against its own `is_closed` rule through `crate::path::Node::
+archetype_details` (`A-60`); one restricted by `include`/`exclude` assertions
+carries them (`A-66`) and does not evaluate them (`K15.10`). **A-40** tracks
+the rest.
 
 This table exists so that the gap is counted rather than described. A row moves
 off **spec** when the code implements it *and* a named test exercises it
@@ -464,11 +486,13 @@ off **spec** when the code implements it *and* a named test exercises it
 | K15.2 | • | `archetype_model::the_targeted_archetype_model_release_is_named`; `am::AM_RELEASE` is 2.3.0 and an artefact's own declared versions round-trip unenforced |
 | K15.3 | • | `archetype_model::an_archetype_round_trips_through_json_unchanged`, `…a_constraint_this_crate_cannot_model_survives_rather_than_disappearing`. **Scope:** the only serialisation this crate accepts today is its own JSON. ADL and the AM ITS forms are `K15.5`, `K15.8`, and `K15.16`, all below |
 | K15.4 | • | `archetype_model::an_archetype_is_constructible_without_a_parser` |
-| K15.5–K15.7 | spec | ADL 2 parsing, and the refusal discipline that replaces recovery |
+| K15.5 | spec | ADL 2 in full. `am::adl2::parse_header` (the header) and `am::cadl::parse_definition` (`definition`'s own `c_complex_object` — every node kind but a `closed` slot and `SIBLING_ORDER`, `A-62`–`A-67`) read two sections and do not compose into an `Archetype`: no `language`, `description`, `rules`, `terminology`, or `annotations` — **A-40** |
+| K15.6–K15.7 | • | `am::cadl::tests::a_closed_archetype_slot_is_refused_by_name`, `…a_slot_assertion_using_a_quoted_string_instead_of_a_regex_is_refused`, `…an_unterminated_contained_regexp_is_refused_naming_it`, `…a_c_attribute_tuple_with_an_unwrapped_interval_item_hits_a_different_refusal`, `…trailing_content_after_the_root_is_refused`, `…a_name_that_is_not_an_identifier_is_refused_by_name`; `am::adl2::tests::a_trailing_concept_section_is_refused_not_silently_accepted`; `am::adl14::tests::missing_concept_section_is_refused_not_defaulted`. **Scope:** proven for the parsers that exist — `am::cadl` and the two header readers — each refusing an unimplemented construct by name at its offset and returning no partial tree; binding on any parser `K15.5` later adds |
 | K15.8–K15.10 | spec | ADL 1.4 ingestion, provenance, and the assertion subset |
 | K15.11–K15.13 | spec | specialisation, flattening, and the narrowing check |
 | K15.14–K15.17 | spec | template expansion and operational templates, both directions |
-| K15.18–K15.23 | • | `am::validate::tests::a_matching_instance_is_conformant`, `…a_missing_mandatory_element_is_a_violation`, `…an_unrecognised_node_id_is_a_violation`, `…an_alternative_below_its_own_mandatory_occurrences_is_a_violation`, `…a_slot_is_reported_unchecked_never_as_passing`, `…a_c_integer_range_rejects_a_value_outside_it`, `…a_c_string_pattern_is_unchecked_even_when_the_list_passes`, `…a_c_terminology_code_checks_against_the_archetypes_own_value_set`, `…the_wrong_root_rm_class_is_a_single_violation_not_a_cascade`. **Scope:** against an `Archetype` already in memory, not a flattened OPT2 (`K15.11`, `K15.15` are not implemented) — see `openehr::am::validate`'s own module documentation |
-| K15.24–K15.27 | • | `am::repository::tests::a_resolved_archetype_without_provenance_says_so`, `…a_resolved_archetype_with_provenance_carries_it`, `…each_failure_kind_names_what_happened`, `…a_fixed_repository_can_stand_in_for_a_real_one_in_a_test`; `am::validate::tests::a_repository_resolved_filler_validates_the_same_subtree`, `…a_retrieval_failure_is_unchecked_and_names_what_happened`, `…a_repository_returning_a_different_archetype_is_unchecked_not_used`, `…unestablished_provenance_is_unchecked_unless_the_caller_opts_in`. **Scope:** resolves `C_ARCHETYPE_ROOT` fillers only — a bare `ARCHETYPE_SLOT` stays unchecked even with a repository supplied, because which archetype filled it is recorded on the instance's `ARCHETYPED.archetype_id`, which `crate::path::Node` does not expose (a gap in `crate::path`, not here) |
+| K15.18–K15.23 | • | `am::validate::tests::a_matching_instance_is_conformant`, `…a_missing_mandatory_element_is_a_violation`, `…an_unrecognised_node_id_is_a_violation`, `…an_alternative_below_its_own_mandatory_occurrences_is_a_violation`, `…a_closed_slot_that_was_filled_anyway_is_a_violation`, `…a_restricted_open_slots_filler_is_unchecked_not_silently_passed`, `…an_attribute_tuple_matching_no_row_is_a_violation`, `…a_c_integer_range_rejects_a_value_outside_it`, `…a_c_string_pattern_is_unchecked_even_with_no_literals_to_check`, `…a_c_terminology_code_checks_against_the_archetypes_own_value_set`, `…the_wrong_root_rm_class_is_a_single_violation_not_a_cascade`. **Scope:** against an `Archetype` already in memory, not a flattened OPT2 (`K15.11`, `K15.15` are not implemented) — see `openehr::am::validate`'s own module documentation |
+| K15.24–K15.27 | • | `am::repository::tests::a_resolved_archetype_without_provenance_says_so`, `…a_resolved_archetype_with_provenance_carries_it`, `…each_failure_kind_names_what_happened`, `…a_fixed_repository_can_stand_in_for_a_real_one_in_a_test`; `am::validate::tests::a_repository_resolved_filler_validates_the_same_subtree`, `…a_retrieval_failure_is_unchecked_and_names_what_happened`, `…a_repository_returning_a_different_archetype_is_unchecked_not_used`, `…unestablished_provenance_is_unchecked_unless_the_caller_opts_in`. **Scope:** resolves `C_ARCHETYPE_ROOT` fillers only. An `ARCHETYPE_SLOT` is checked against its own `is_closed`/`any_allowed()` rule through `crate::path::Node::archetype_details` (`A-60`, `…a_closed_slot_that_was_filled_anyway_is_a_violation`); a slot restricted by `include`/`exclude` assertions carries them (`A-66`) and does not evaluate them — `K15.10`'s remainder — so its filler is reported unchecked, naming the filler's archetype id |
 | K15.28–K15.29 | spec | the boundaries this section does **not** move: authoring, publishing, AQL execution |
 | K15.30–K15.31 | spec | the honesty gate while the rest is unbuilt — refuse, and do not describe a parser as archetype support |
+| K15.32 | • | `am::constraint::tests::effective_occurrences_follows_aom2s_rule_and_defers_only_for_a_proxy`, `…an_unstated_occurrences_is_absent_on_the_wire_and_a_stated_one_round_trips`; `am::cadl::tests::occurrences_omitted_on_a_non_root_node_is_carried_unstated_and_inferred_from_its_owner`, `…a_real_published_archetypes_definition_is_parsed_whole`; `am::validate::tests::an_unstated_occurrences_is_checked_against_the_value_aom2_infers`. **Scope:** the Reference Model multiplicity half of the rule is the one stated assumption — an attribute built without a cardinality is single-valued (`A-71`'s residual) |

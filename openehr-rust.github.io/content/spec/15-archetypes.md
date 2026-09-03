@@ -20,30 +20,35 @@ and never a pass. A partial constraint engine is still prohibited. What changed
 is that the refusal now lives inside an implementation instead of standing in
 for one.
 
-**Fourteen of these requirements are implemented; eighteen are not.**
+**Seventeen of these requirements are implemented; sixteen are not** (`K15.32`,
+added 2026-09-03, was satisfied the same day).
 `K15.1`–`K15.4` — the AOM2 object model — landed as `openehr::am` on
 2026-08-26; `K15.18`–`K15.23` — validating a Reference Model instance against
 an archetype, as a separate verdict from Reference-Model validation, never a
-partial pass — landed as `openehr::am::validate` on 2026-08-30; and
+partial pass — landed as `openehr::am::validate` on 2026-08-30;
 `K15.24`–`K15.27` — a repository abstraction, and resolving a
 `C_ARCHETYPE_ROOT` filler through one, `openehr` itself performing no I/O
 (`K15.25`) — landed as `openehr::am::repository` and
-`validate_with_repository` the same day. All three with tests named in the
+`validate_with_repository` the same day; and `K15.6`–`K15.7` — the refusal
+discipline — were held to and tested on 2026-09-03, once `openehr::am::cadl`
+existed to be held to them (`A-62`–`A-67`). All four with tests named in the
 [conformance matrix](conformance-matrix.md). What remains is still real: no
-ADL parser, no flattening, no template expansion, no operational template.
-`validate_with_repository` validates each resolved `Archetype` **as given**,
-not as a flattened OPT2 would be — flattening (`K15.11`) and template
-expansion (`K15.14`) do not exist to merge a specialisation's inherited
-constraints in first, and there is still no parser to read one from ADL text.
-A bare `ARCHETYPE_SLOT` stays unchecked even with a repository supplied: which
-archetype filled it is recorded on the instance's `ARCHETYPED.archetype_id`,
-an attribute `crate::path::Node` does not expose, so nothing here can name
-what to resolve — a gap in `crate::path`, stated rather than worked around.
-So the crate can now tell you whether a `COMPOSITION` conforms to an
-archetype you built, already have, or can retrieve through a repository you
-supply, and still cannot tell you whether it conforms to the *published*
-archetype unless whatever produced or retrieved that `Archetype` already did
-the flattening by hand. [`audit.md`](audit.md) **A-40** keeps the remaining
+parser that reads a *whole* ADL archetype into an `Archetype` (`am::cadl`
+reads the `definition` section and `am::adl2` the header; they do not
+compose), no ADL 1.4 body, no flattening, no template expansion, no
+operational template. `validate_with_repository` validates each resolved
+`Archetype` **as given**, not as a flattened OPT2 would be — flattening
+(`K15.11`) and template expansion (`K15.14`) do not exist to merge a
+specialisation's inherited constraints in first. An `ARCHETYPE_SLOT` is
+checked against its own `is_closed` rule through the instance's
+`ARCHETYPED.archetype_id`, which `crate::path::Node::archetype_details`
+exposes since `A-60`; a slot restricted by `include`/`exclude` assertions
+carries them (`A-66`) and does not evaluate them (`K15.10`), so its filler
+is reported unchecked rather than passed. So the crate can now tell you
+whether a `COMPOSITION` conforms to an archetype you built, already have,
+or can retrieve through a repository you supply, and still cannot tell you
+whether it conforms to the *published* archetype unless whatever produced
+or retrieved that `Archetype` already did the flattening by hand. [`audit.md`](audit.md) **A-40** keeps the remaining
 gap visible until the code closes it (`C0.9`), and `K15.30` is what stops the
 documentation from moving
 before the code does.
@@ -79,12 +84,54 @@ before the code does.
   A caller that builds constraints programmatically — a test, a generator, a
   tool — MUST NOT be forced through ADL text, and the parser MUST NOT be the
   only way to reach a valid model.
+- **K15.32** **An unstated `occurrences` MUST stay unstated, and MUST be
+  inferred only by AOM2's own rule.** `C_OBJECT.occurrences` is `0..1` in
+  AOM2: "only set if it overrides the parent archetype in the case of
+  specialised archetypes, or else the occurrences inferred from the
+  underlying reference model existence and/or cardinality of the containing
+  attribute" (`org.openehr.am.aom2.c_object.adoc`). Every `C_OBJECT` type
+  MUST be able to carry it absent (`K15.1`); a parser MUST NOT fill it in
+  (`K15.3`: a round trip must not invent what the author omitted; `K15.13`:
+  specialisation conformance reads "set" as "overrides") and MUST NOT refuse
+  the omission, which most published archetype nodes make. Where a value is
+  needed — validation (`K15.18`), the cardinality agreement checks of
+  `C_ATTRIBUTE` — it MUST come from `effective_occurrences()`: lower bound
+  `0`; upper bound the owning `C_ATTRIBUTE.cardinality`'s upper bound if
+  one is set, else the Reference Model multiplicity of the owning attribute.
+  The crate has no table of Reference Model multiplicities; it MUST apply
+  the same rule its `C_ATTRIBUTE` constructors already commit to — an
+  attribute built without a cardinality is single-valued, multiplicity `1`
+  — and say so, rather than consult one it does not have. Added 2026-09-03
+  (`A-71`), after the first external corpus run found the parser's refusal
+  of an omitted `occurrences` to be two thirds of every refusal it made
+  (`corpus.md`).
 
 ## 15.2 Parsing
 
 - **K15.5** The crate MUST parse **ADL 2** into the AOM2 model: header,
   specialisation, language, description, definition, rules, terminology, and
   annotations.
+
+  Still not implemented, in this sense, as of the additions below.
+  `am::adl2::parse_header` reads an ADL 2 archetype's `archetype` and
+  `specialize` lines only — an identifier and an optional parent, nothing
+  that reaches `language`, `definition`, `terminology`, or any other
+  section — and does not build an `Archetype`. `am::cadl::parse_definition`
+  reads `definition`'s own grammar rule, `c_complex_object`
+  (`openEHR/adl-antlr`, `cadl2.g4`) — the constraint tree itself, refusing
+  what it does not implement by name (`K15.6`, `K15.7`). As of 2026-09-03
+  (`A-62`–`A-67`) that is every node kind but a `closed` `ARCHETYPE_SLOT`
+  and `SIBLING_ORDER`, and every primitive form but a date pattern
+  (`yyyy-mm-??`), an unwrapped interval whose kind — `C_INTEGER` or
+  `C_REAL` — no wrapping type name settles, `default_value`, and more than
+  one disjoint numeric or temporal range (see the module's own documentation
+  for the exact boundary and why each one is drawn where it is). It reads
+  `definition` alone, still cannot build an
+  `Archetype` (no `language`, no `terminology`, so a node id it reads names
+  nothing), and does not read the header either — the two additions do not
+  compose into more of `K15.5` together than either is alone. Recorded here
+  for the same reason `K15.8`'s entry below records `am::adl14::parse_header`:
+  so neither addition is later misread as partial progress on `K15.5` itself.
 - **K15.6** **A construct the parser does not implement MUST be a refusal that
   names it** (`S1.12`), attributed to its position in the source. It MUST NOT be
   skipped, defaulted, or carried as an opaque blob that later reads as "no
@@ -99,6 +146,17 @@ before the code does.
   archetype MUST record its provenance — source syntax, source text digest, and
   the conversion the crate performed — so that a 1.4-derived constraint is
   distinguishable from an authored ADL 2 one at every later step.
+
+  Still not implemented, in this sense, as of the addition below.
+  `am::adl14::parse_header` reads an ADL 1.4 archetype's `archetype` and
+  `concept` lines only — an identifier and a term code, nothing that reaches
+  `definition`, `terminology`, or any other section — and does not build an
+  `Archetype`, which needs both. It is useful for identifying and cataloguing
+  `.adl` source, and it is not a step toward this requirement: satisfying
+  `K15.8` needs the full cADL and ODIN grammars this function does not parse,
+  which `spec/audit.md` **A-40**'s residual already scopes at several weeks
+  of work. Recorded here so the addition cannot later be misread as partial
+  progress on `K15.8` itself.
 - **K15.9** Where a 1.4 construct has no faithful AOM2 equivalent, conversion
   MUST fail naming the construct. An approximate conversion is prohibited: it
   produces an archetype that no author wrote and no reviewer approved.

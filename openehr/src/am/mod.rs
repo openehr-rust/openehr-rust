@@ -22,6 +22,7 @@
 //! | Template expansion, operational templates | `K15.14`–`K15.17` | not implemented |
 //! | Validating data against an archetype | `K15.18`–`K15.23` | **here** (`validate`) |
 //! | Retrieval, CKM included | `K15.24`–`K15.27` | **here** (`repository`, `validate`) |
+//! | An unstated `occurrences` stays unstated and is inferred only by AOM2's own rule | `K15.32` | **here** ([`CObject::effective_occurrences`]; `A-71`) |
 //!
 //! **So this crate can tell you whether a `COMPOSITION` conforms to an
 //! archetype you already have in memory, or to a `C_ARCHETYPE_ROOT` filler

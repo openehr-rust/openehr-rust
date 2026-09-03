@@ -4,7 +4,7 @@ Goal: a production-grade, spec-driven Rust monorepo for openEHR — the
 `openehr/` model crate (Reference Model, paths, AQL parsing, RM validation,
 audit-chain security), six `openehr-<engine>/` database ports,
 `openehr-store/`, `openehr-loco/`, and the fuzz crates; eight crates
-published at 0.8.0 (`openehr-loco` and the fuzz crates stay unpublished) —
+published at 0.9.0 (`openehr-loco` and the fuzz crates stay unpublished) —
 professionalized for its real audience: healthcare
 professionals and the engineers who serve them, worldwide, in settings where
 a wrong claim has clinical cost.
@@ -23,14 +23,19 @@ Engineering status is read from `openehr/spec/conformance-matrix.md` and
 items live in [`tasks.md`](tasks.md), where a `[x]` means verified, not
 intended.
 
-## Where the repository stands (verified 2026-08-30)
+## Where the repository stands (verified 2026-09-03)
 
-Eight crates at 0.8.0 on crates.io — up from 0.6.0 on 2026-08-26, through
-0.7.0–0.7.4 (Archetype Model in scope, trademark notices) and 0.8.0 (MSRV
-N−3 to N−2, 1.95 to 1.96). A ~700-line CI workflow with test/msrv/examples/
-bench/schema/fuzz/assets/layering/claims jobs, green on the tip commit
-before every release; the library matrix machine-derived (344 ids, 258
-verified). The root document set — SECURITY.md, GOVERNANCE.md,
+Eight crates at 0.9.0 on crates.io (2026-09-02) — up from 0.6.0 on
+2026-08-26, through 0.7.0–0.7.4 (Archetype Model in scope, trademark
+notices), 0.8.0 (MSRV N−3 to N−2, 1.95 to 1.96), and 0.9.0 (`A-54`, `A-55`,
+`A-57`). Three breaking changes are unreleased as of this date (`A-63`,
+`A-69`, `A-71`), so the next release is **0.10.0**, not 0.9.1
+(`agents/publishing.md` tracks it). An eleven-job CI workflow — test, msrv,
+examples, bench, schema, fuzz, assets, layering, trademarks, claims,
+mutants — green on the pushed head (run 33785547358, 33 of 33 jobs); the
+library matrix machine-checked for exact-once coverage (345 ids, 271
+verified, 16 `spec`) and its tally re-derived by hand five times, each
+dated. The root document set — SECURITY.md, GOVERNANCE.md,
 CONTRIBUTING.md, MAINTAINERS.md, CITATION.cff, `CODEOWNERS`,
 `help/outreach/index.md` and more — is committed and visible on GitHub;
 "largely uncommitted" was true on 2026-08-26 and stopped being true the same
@@ -45,16 +50,24 @@ to (GitHub, GitLab, Codeberg) and every destination it publishes to
 
 The headline capability gap is honest and registered: the Archetype Model
 entered scope on 2026-08-26 with 28 of 32 requirements having no code
-(**A-40**, open). Ten more closed the same week (2026-08-30): six from
-`openehr::am::validate` — a Reference Model instance can now be checked
-against an `Archetype` already held in memory, as a verdict kept separate from
-Reference-Model validation and with no partial pass — and four from
-`openehr::am::repository`, which resolves a `C_ARCHETYPE_ROOT` filler through
-a repository the caller supplies (`openehr` itself performs no I/O). That
-leaves 18: still no ADL parser, no flattening, no template expansion, and a
-bare `ARCHETYPE_SLOT` still unresolvable regardless of a repository, because
-`crate::path::Node` does not expose which archetype filled it. That remainder
-is engineering work tracked by the matrix, not by this file.
+(**A-40**, open). Ten closed the same week (2026-08-30): `openehr::am::validate`
+— a Reference Model instance checked against an `Archetype` already in
+memory, a verdict kept separate from Reference-Model validation, no partial
+pass — and `openehr::am::repository`, resolving a `C_ARCHETYPE_ROOT` filler
+through a repository the caller supplies (`openehr` performs no I/O). Two
+more closed on 2026-09-03 (`K15.6`–`K15.7`, the refusal discipline, once
+`openehr::am::cadl` existed to be held to it), and `K15.32` was added and
+satisfied the same day. That leaves **16 of 33**: no whole-archetype ADL
+parser (the `definition` section and the header are read; they do not
+compose), no ADL 1.4 body, no flattening, no template expansion, no
+operational template, no evaluation of a slot's own assertions. What
+changed the picture on 2026-09-03 is evidence nobody here wrote: the first
+external corpus run (`openehr/spec/corpus.md`, `openEHR/adl-archetypes` at
+`093c77ea`) took the `definition` reader from 178 to **774 of 1,379** ADL 2
+files parsed in one day, through two findings it produced (`A-70`,
+`A-71`), and left the next three candidates and one decision written
+down. That remainder is engineering work tracked by the matrix and by
+`corpus.md`, not by this file.
 
 ## Workstreams — professionalization (2026-08 onward)
 
@@ -167,6 +180,14 @@ posture. Open items for each are in `tasks.md`.
   to get wrong), or decide that assertions stay carried-not-evaluated and
   say so in the matrix. `tasks.md` P0 names it; nothing is blocked on it but
   the last slice of `K15.10`.
+- **A Reference Model multiplicity table for `am`** — opened 2026-09-03,
+  `A-71`'s residual. `am::cadl` decides single-valued or container by
+  whether a `cardinality` clause was written, because the crate has no
+  table of which RM attributes are containers; AOM2 infers from the RM. The
+  corpus shows the cost (11 refused files, and an inferred `0..1` where AOM2
+  infers `0..*`). The table is small and the RM is already in `rm::`; the
+  decision is whether to derive it there once (`lib:A-33`'s shape) or carry
+  a second table in `am`. A requirement first, then code.
 
 ## Non-goals (for now)
 
@@ -186,9 +207,15 @@ posture. Open items for each are in `tasks.md`.
   Nothing remains open on this axis.
 - The uncommitted document batch has zero external effect until it lands and
   can rot against the moving tree.
-- A-40's 28 unimplemented requirements are correctly labeled `spec` in the
-  matrix today; the risk is a future page summarizing them as capability.
-  The matrix, not prose, is the status document.
+- A-40's 16 unimplemented requirements (28 on 2026-08-26) are correctly
+  labeled `spec` in the matrix today; the risk is a future page summarizing
+  them as capability — a `definition` reader that parses 774 of 1,379
+  published files is still not archetype support (`K15.31`). The matrix,
+  not prose, is the status document.
+- The mutation job mutates `event.before..HEAD` on a push, so a survivor in
+  an earlier push is never re-checked by CI; run 33775455452 found 14 in
+  code CI had already passed once, and the whole-function local run found
+  14 more. `agents/auditing.md` says how to run it by name.
 
 ## Trademarks
 

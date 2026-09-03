@@ -213,10 +213,37 @@ cd openehr && cargo mutants --file src/<module>.rs -j 4
 
 Run over one file at a time. Eighty mutants take two minutes; the whole crate
 would be hours, which is why **only the diff** is in CI. The `mutants` job in
-`.github/workflows/ci.yml` runs `--in-diff` against the pull request's base, so
-lines a change touches must be covered by a test that notices them changing.
+`.github/workflows/ci.yml` runs `--in-diff` against a pull request's merge base
+or, on a push, `event.before..HEAD` — **only the range that push carried** —
+so lines a change touches must be covered by a test that notices them changing.
 That job asserts nothing about the rest of the tree, and the `T13.2` row in each
 conformance matrix says so — do not cite it as though it did (`W0.3`).
+
+Two consequences of that range, both measured on 2026-09-03 (run
+33775455452, 14 missed and 3 timeouts in `openehr::am`):
+
+- **A survivor is never re-checked by CI.** Once the push that carried a line
+  is past, no later push mutates it again unless the line itself changes.
+  Reproduce the job's own report locally with the function names it printed,
+  before the fix and after:
+
+  ```sh
+  cd openehr && RUSTFLAGS="" cargo mutants -j 2 --timeout 300 \
+    -f src/am/archetype.rs --re 'assumed_value_conforms|parse_assumed_boolean'
+  # and the exact range the next push will carry:
+  git diff --relative <before>..HEAD -- '*.rs' > /tmp/push.diff
+  cargo mutants --in-diff /tmp/push.diff -j 2 --timeout 300
+  ```
+
+  Running the *whole* of a function CI only saw part of is worth the two
+  minutes: `assumed_value_conforms` had five arms CI never mutated, and every
+  one survived.
+- **A timeout is a hang, not a miss.** Deleting the `break` arm of a `loop`,
+  or replacing a sub-parser's body with a constant so it consumes nothing,
+  leaves the parser looping and the job waiting 300 s per mutant. Read
+  `TIMEOUT` lines as survivors: a parser loop must terminate on any mutation
+  of its body (`while let` over the lexer, or a "consumed no input" guard on
+  the loop), which is what `am::cadl` now does.
 
 Read the result as a question, not a score. The first run over
 `security/audit_chain.rs` missed 40 of 67 viable mutants, and the answer was not

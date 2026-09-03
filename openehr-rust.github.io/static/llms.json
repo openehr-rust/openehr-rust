@@ -75,6 +75,11 @@
           "description": "what has been found wrong in the Reference Model crate, with evidence"
         },
         {
+          "title": "Corpus runs",
+          "url": "https://openehr-rust.github.io/spec/corpus/",
+          "description": "published archetypes run through the `definition` reader: dated counts, the corpus commit, what is refused"
+        },
+        {
           "title": "Database audit register",
           "url": "https://github.com/openehr-rust/openehr-rust/blob/main/spec/databases/audit.md",
           "description": "what has been found wrong in persistence, with evidence"

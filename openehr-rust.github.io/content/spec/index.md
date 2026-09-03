@@ -93,6 +93,10 @@ departs from; an undeclared departure is a defect, not a decision.
   intent.
 - [Audit](audit.md) — the findings register: every known gap between what this
   spec requires, what the documentation claims, and what the code does.
+- [Corpus](corpus.md) — what happened when archetypes nobody here wrote were
+  run through the `definition` reader: dated counts per refusal, the corpus
+  commit, and the candidate findings each run left. A discovery record, not
+  a gate.
 
 ## The rules that cost nothing to keep and cannot be repaired once broken
 

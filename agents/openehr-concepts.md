@@ -39,7 +39,7 @@ substitution.
 | FHIR | openEHR | Note |
 | --- | --- | --- |
 | Resource | `COMPOSITION`, `EHR_STATUS`, `FOLDER`, … | openEHR has ~90 RM classes, not resource types |
-| Profile / StructureDefinition | **Archetype** (ADL), **Template** | partly implemented: the object model, and validating an instance against one already in memory, are (`openehr::am`); no ADL parser, flattening, or template expansion (`lib:A-40`) |
+| Profile / StructureDefinition | **Archetype** (ADL), **Template** | partly implemented: the object model, validating an instance against one already in memory, and a reader for an archetype's `definition` section that parses 774 of 1,379 published ADL 2 files as of 2026-09-03 (`openehr::am`, `openehr/spec/corpus.md`); no whole-archetype parser, flattening, or template expansion (`lib:A-40`) |
 | FHIRPath | **openEHR path**, and **AQL** for query | paths are implemented; AQL parses but does not execute (`lib:S1.5`) |
 | Search parameter | — | the composition index, filtered as an AQL `FROM` would |
 | `meta.versionId` | `OBJECT_VERSION_ID` — `object::system::tree` | carries the *creating system*, which is what keeps two offline systems' "version 2" distinct |
@@ -115,9 +115,13 @@ own README.
 **Archetypes and templates are a different case: not a permanent exclusion,
 an open one.** `S1.4` — the decision to exclude the Archetype Model
 outright — was withdrawn 2026-08-26, and `openehr::am` now implements the
-object model and validating an instance against an archetype already in
-memory or resolved through a repository you supply. No ADL parser, no
-flattening, no template expansion — that gap is real and tracked as `A-40`
+object model, validating an instance against an archetype already in
+memory or resolved through a repository you supply, and (`openehr::am::cadl`)
+reading an archetype's `definition` section — 774 of the 1,379 ADL 2 files
+in `openEHR/adl-archetypes` as of 2026-09-03, the rest refused by name
+([`../openehr/spec/corpus.md`](../openehr/spec/corpus.md)). No
+whole-archetype parser, no ADL 1.4 body, no flattening, no template
+expansion — that gap is real and tracked as `A-40`
 in [`../openehr/spec/audit.md`](../openehr/spec/audit.md), not asserted as a
 permanent decision the way the four rows above are.
 

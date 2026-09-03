@@ -23,6 +23,7 @@ This project is not affiliated with, endorsed by, or certified by openEHR Intern
 - [Conformance matrix - library](https://github.com/openehr-rust/openehr-rust/blob/main/openehr/spec/conformance-matrix.md): what the Reference Model crate actually satisfies today
 - [Conformance matrix - databases](https://github.com/openehr-rust/openehr-rust/blob/main/spec/databases/conformance-matrix.md): per-engine status; the single owner of every crate's conformance level
 - [Library audit register](https://github.com/openehr-rust/openehr-rust/blob/main/openehr/spec/audit.md): what has been found wrong in the Reference Model crate, with evidence
+- [Corpus runs](https://github.com/openehr-rust/openehr-rust/blob/main/openehr/spec/corpus.md): published archetypes run through the `definition` reader: dated counts, the corpus commit, what is refused
 - [Database audit register](https://github.com/openehr-rust/openehr-rust/blob/main/spec/databases/audit.md): what has been found wrong in persistence, with evidence
 
 ## Crates

@@ -96,6 +96,19 @@ zero warnings.
 - **Read the last CI run before believing a claim about CI** (`gh run list`).
   A red job on the default branch is as visible as a signal gets, and it has
   been missed here before.
+- **The mutation job re-checks only the lines a push carried**
+  (`event.before..HEAD`). A survivor in earlier code is never seen again by
+  CI; before pushing, run `cargo mutants --in-diff` over the exact range
+  and `--re '<function>'` over any function you touched. A `TIMEOUT` is a
+  hang, and counts as a survivor.
+- **An unstated `occurrences` is `None`, never a default** (`lib:A-71`,
+  `K15.32`). Every `C_OBJECT` constructor takes an `Option`; the effective
+  value comes from `CObject::effective_occurrences(owner)`, and a parser must
+  not fill it in.
+- **The archetype corpus is never vendored** — `openEHR/adl-archetypes`
+  carries no licence. `openehr/tests/adl_corpus.rs` reads it from
+  `OPENEHR_ADL_CORPUS`; results, with the corpus commit and date, go in
+  `openehr/spec/corpus.md`.
 
 ## Where to go deeper
 

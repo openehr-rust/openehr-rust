@@ -71,7 +71,8 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         survivors found by mutating the whole of `assumed_value_conforms`
         rather than its changed lines. Run 33781305464 on `e461b99`: 33
         of 33 jobs green. `A-70` and the corpus runner went in the same
-        push.
+        push; `A-71` (breaking, a third reason the next release is 0.10.0)
+        followed in `caccca1`/`4725d8c`, run 33785547358 green.
 - [x] **Correct the claims the last two weeks made false.**
       `COMPARISONS.md:43` still says "**no validation of data against an
       archetype**" and "28 of those 32 requirements have no code";
@@ -217,6 +218,19 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       - [ ] The regression job. Blocked on a corpus this tree may carry:
         `adl-archetypes` has no licence file, so it is read where it is,
         never vendored (see `corpus.md` §Licence).
+- [ ] **Close the corpus's open candidates, largest first** (`corpus.md`
+      §Candidates; each needs its test and grammar reading before an `A-`
+      number, `W0.19`). (4) An unwrapped interval's kind: `odin_values.g4`
+      builds `integer_interval_value` from `INTEGER` tokens and
+      `real_interval_value` from `REAL`, so `|0..100|` is a `C_INTEGER` and
+      `A-67`'s "cannot be told apart" is wrong — 184 files, 120 of them
+      CKM/NEHTA clinical archetypes. (5) Unwrapped temporal literals and
+      `*_CONSTRAINT_PATTERN`s taken for RM type names — 36 files; needs a
+      `CPrimitive` pattern form first (`A-63` modelled the value forms
+      only). (1) `DATE_CONSTRAINT_PATTERN` refused under the wrong name —
+      24 files. Then the Reference Model multiplicity decision in
+      `plan.md`. *Evidence:* run 3 in `corpus.md`, dated, with the counts.
+      — **M**
 
 ### P2 — operability and evidence
 
@@ -354,10 +368,13 @@ All verified on the dates given; none is re-asserted here without the source.
       with reasons; the coverage floor script written, its finding filed as
       `db:D-11` (P2 above).
 - [x] Archetype Model: `S1.4` withdrawn, §15 in force, `A-40` open and its
-      status line current as of 2026-09-02 (`A-58`–`A-69` closed: tuple
+      status line current as of 2026-09-03 (`A-58`–`A-71` closed: tuple
       evaluation, slots, `ARCHETYPED` on `Node`, `use_archetype`/`use_node`/
       `allow_archetype`, assumed values, ISO8601 literals, `CONTAINED_REGEXP`,
-      `C_ATTRIBUTE_TUPLE`, `ArchetypeHrid` as the archetype's own identity).
+      `C_ATTRIBUTE_TUPLE`, `ArchetypeHrid` as the archetype's own identity,
+      differential-form attributes, an unstated `occurrences` carried and
+      inferred by AOM2's rule under the new `K15.32`). 16 of 33 ids remain
+      `spec`.
 
 ## Trademarks
 

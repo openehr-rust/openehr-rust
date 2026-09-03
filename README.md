@@ -488,8 +488,13 @@ a `C_ARCHETYPE_ROOT` filler through a repository the caller supplies
 (`openehr::am::repository`; this crate performs no I/O itself); and since
 2026-09-02, `openehr::am::cadl` reads an archetype's `definition` section
 (`lib:A-62`–`A-67`) and a filled `ARCHETYPE_SLOT` is checked against its own
-`is_closed` rule (`lib:A-60`). **Sixteen of the thirty-three requirements have
-no code**: no parser for a whole ADL archetype (the `definition` section and
+`is_closed` rule (`lib:A-60`). On 2026-09-03 that reader met archetypes
+nobody here wrote: 774 of the 1,379 ADL 2 files in `openEHR/adl-archetypes`
+parse and the rest are refused by name, up from 178 that morning through two
+findings the run produced (`lib:A-70`, `lib:A-71`;
+[`openehr/spec/corpus.md`](openehr/spec/corpus.md) has the counts, the
+corpus commit, and what is still refused). **Sixteen of the thirty-three
+requirements have no code**: no parser for a whole ADL archetype (the `definition` section and
 the header are read; they do not compose into an `Archetype`), no ADL 1.4
 body, no flattening, no template expansion, no operational template, and no
 evaluation of a slot's own `include`/`exclude` assertions. So this crate

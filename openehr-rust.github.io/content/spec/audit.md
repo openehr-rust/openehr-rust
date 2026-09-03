@@ -15,14 +15,14 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**41 findings, 41 in the table below: 6 High, 25 Medium, 10 Low. 35 fixed or
+**71 findings, 71 in the table below: 7 High, 38 Medium, 26 Low. 65 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
 verified), and the check should have failed. Every one of the 6 open findings
-is open by a stated reason rather than by omission — **A-40** is the newest and
-the largest, an entire specification section in force with no code behind it —
-and the rest: **A-02**, **A-08** and
+is open by a stated reason rather than by omission — **A-40** is the largest,
+an entire specification section in force with no code behind it — and the
+rest: **A-02**, **A-08** and
 **A-19** are declared departures the crate does not intend to close; **A-05**, **A-10**,
 **A-30** are recorded limitations or residuals with the reasoning
 for leaving them written beside them — **A-38** is a defect in `serde_json`
@@ -128,6 +128,36 @@ in the documentation, which is the class this register most exists to catch.
 | A-17 | Medium | The first property tests passed vacuously | **fixed**, mutation-verified |
 | A-40 | Medium | The Archetype Model is specified and mostly not implemented: §15 and `S1.21` are in force, 18 of 32 requirements with no code | open — object model, in-memory-archetype validation, and repository resolution of a filled slot built 2026-08-26/30; no parser, flattening, or template expansion |
 | A-41 | Low | The conformance matrix's own totals went stale a second time — 291 claimed, 300 in one sentence, 311 in the rows | **fixed** — re-derived mechanically to 344 on 2026-08-26 |
+| A-42 | Medium | Three invariants checked at construction and nowhere else: `AUDIT_DETAILS.System_id_valid`/`Change_type_valid` on a `VERSION`'s own `commit_audit`, `ISM_TRANSITION.Transition_valid`, `INTERVAL_EVENT.Math_function_validity` — `A-23`'s exact shape, recurring | **fixed** — a shared `check_audit_details` helper, and one group-membership check each beside the sibling check already there |
+| A-43 | Low | `base::Interval<T>` had only the BASE foundation type's element-membership function (`has`, named `contains` here); `intersects` and interval-vs-interval `contains` did not exist | **fixed** — `contains_interval` and `intersects`, both checked exactly at shared open/closed boundaries rather than approximated |
+| A-44 | Low | `C_ATTRIBUTE.container` checked children's occurrences lower-bound sum against the cardinality but not any child's own occurrences upper bound (`VACMCU`); `C_ATTRIBUTE.single` checked nothing about its children's occurrences at all (`VACSO`) | **fixed** — both added; `single`'s check required splitting out a shared `new_raw` constructor so `container`, built on `single`, would not inherit a rule that belongs only to single-valued attributes |
+| A-45 | Medium | `C_DATE`/`C_TIME`/`C_DATE_TIME`/`C_DURATION` had no `CPrimitive` variant at all — every node they governed was `Unchecked`, which on most real archetypes (nearly all constrain at least one date or time field) meant `is_conformant()` was `false` far more often than the disclosure's wording suggested | **fixed** — `SemanticOrd` implemented for the four `base` temporal types (previously blocked on nothing implementing it, not a choice to skip it), then the four `CPrimitive` variants, each a list of ranges matching AOM2's own shape |
+| A-46 | Low | `C_PRIMITIVE_OBJECT` could not carry a `node_id` at all, though `CObject::node_id`'s dispatcher already read the field — it just stayed `None` forever, since nothing could set it | **fixed** — `with_node_id`/`node_id()` added, plus a `PRIMITIVE_NODE_ID` constant for AOM2's own inline-form sentinel, which is a literal string rather than coded syntax |
+| A-47 | Low | `Terminology_code`/`Terminology_term`, the BASE foundation types `AUTHORED_RESOURCE.original_language`, `RESOURCE_DESCRIPTION_ITEM.language`, and `TRANSLATION_DETAILS.language` are typed as, did not exist in this crate at all | **fixed** — both added to `openehr::base`; a standalone prerequisite, not a claim that any of the three classes that use them is now modelled |
+| A-48 | Low | `C_PRIMITIVE_OBJECT.assumed_value` had no field at all — a default value could not be attached to a primitive constraint under any representation | **fixed** — `PrimitiveValue` and `with_assumed_value`/`assumed_value()` added; residual (`Inv_valid_assumed_value` unchecked) closed by **A-56** |
+| A-49 | Medium | `parse_adl14_header`/`parse_adl2_header` used `ArchetypeId` for the header's own identifier — narrower than the grammar both cite in their own error messages, `ARCHETYPE_HRID`, which allows a namespace prefix and a prerelease version suffix neither reader accepted | **fixed**, residual documented — `ArchetypeHrid` added and both readers corrected to use it for the archetype's own identifier; the `specialize` line's identifier is unchanged and remains narrower than its own grammar allows |
+| A-50 | Medium | `C_COMPLEX_OBJECT` had no `attribute_tuples` field — `C_ATTRIBUTE_TUPLE`/`C_PRIMITIVE_TUPLE` did not exist under any name, so a `{units, magnitude}` or `{value, symbol}` co-varying constraint (AOM2's replacement for ADL 1.4's `C_DV_QUANTITY`/`C_DV_ORDINAL`) could not be represented at all, not even as `CPrimitive::Unsupported` | **fixed** — `CAttributeTuple`/`CPrimitiveTuple` added, wired onto `CComplexObject` via a builder; the tree walk reports a node governed by one as `Unchecked` rather than silently passing it; residual (tuple constraints carried but never evaluated against instance data) closed by **A-58** |
+| A-51 | Medium | `CPrimitive::TerminologyCode` had no `constraint_status` field, so an `extensible`/`preferred`/`example` (non-`Required`) terminology constraint could not be distinguished from a required one — `am::validate` reported a violation for conformant data whenever the actual code did not match the list or value set, which AOM2 states plainly is not a violation for a soft constraint | **fixed**; residual (`code_list` had no AOM2 counterpart) closed by **A-55** |
+| A-52 | Low | `ARCHETYPE.rm_overlay` had no counterpart at all — visibility and aliasing statements for RM attributes outside the constrained structure could not be attached to an `Archetype`, silently vanishing on JSON read the same way `A-50`/`A-46` found elsewhere | **fixed** — `RmOverlay`/`RmAttributeVisibility`/`VisibilityType` added in a new `am::rm_overlay` module, attached via `Archetype::with_rm_overlay`; `Inv_alias_validity` checked at construction |
+| A-53 | Medium | `C_COMPLEX_OBJECT_PROXY` had no counterpart under any name — an archetype using a proxy node to reference a constraint defined elsewhere in the same archetype, rather than repeating it, could not be represented at all, the same shape of gap `A-50` found for tuple constraints | **fixed**; residual (`use_target_occurrences()` unmodelled) closed by **A-54** |
+| A-54 | Low | **BREAKING.** `CComplexObjectProxy` could not represent AOM2's `use_target_occurrences()` — `A-53`'s own residual — because `CObject::occurrences()` returned `&MultiplicityInterval`, a shape every other `C_OBJECT` variant already committed to as published API | **fixed** — `occurrences()` widened to `Option<&MultiplicityInterval>`; the four other variants are unaffected (always `Some`), and `CAttribute::single`/`container`'s own construction-time checks treat a deferred child per AOM2's own stated default (lower bound `0`, upper bound unchecked) rather than guessing |
+| A-55 | Low | **BREAKING.** `CPrimitive::TerminologyCode::code_list: Vec<String>` — `A-51`'s own residual — had no counterpart in AOM2's actual single-valued `constraint: String` | **fixed** — `code_list` removed; multiple alternative codes are now expressed as sibling `C_OBJECT`s, matching every other node kind's own alternative-matching shape; `constraint`'s `at`-code/`ac`-code kind is now distinguished by AOM2's own `"ac"` leader convention rather than by which of two fields it was written into |
+| A-56 | Low | `C_PRIMITIVE_OBJECT.assumed_value` conforming to its own `constraint` (`Inv_valid_assumed_value`) — `A-48`'s own residual — was never checked; a kind-mismatched or out-of-range assumed value was accepted silently all the way to a caller who never suspected one | **fixed** — checked in `Archetype::check`, not at `CPrimitiveObject::with_assumed_value` (which builds a node in isolation, before the terminology a `C_TERMINOLOGY_CODE` `ac`-code needs is in scope); `C_UNSUPPORTED` is excluded rather than guessed at |
+| A-57 | High | `adl_lexer::Lexer::skip_parenthesised` put a side-effecting `self.next()` call inside `debug_assert!`, whose argument is not evaluated at all in a release build — every ADL 2/1.4 archetype header with a `meta_data` clause failed to parse in any release-profile build, silently, since the header readers were first added | **fixed** — the token consumed unconditionally into a binding, `debug_assert!` checking only the value; caught by `cargo bench --benches -- --test` (a release-profile run), invisible to `cargo test` (always debug profile) and to CI's own `test` job for the same reason |
+| A-58 | Low | `walk_complex` visited a `C_ATTRIBUTE_TUPLE` and reported it `Unchecked` unconditionally — `A-50`'s own residual — never resolving the instance's actual values and comparing them against a row, so a co-varying `{units, magnitude}`/`{value, symbol}` constraint was never actually enforced no matter what the data said | **fixed** — `walk_attribute_tuple` resolves each co-varying attribute to its one instance value, evaluates every row's every column by delegating to `walk_primitive` itself, and combines the three-valued result (`Conforms`/`Violates`/`Unchecked`) across a row by AND and across the tuple by OR; a column that cannot be resolved to exactly one value, or a `tuples` list with no rows at all, stays `Unchecked` rather than being guessed at |
+| A-59 | Low | `ArchetypeSlot` had no `is_closed` field — AOM2's `ARCHETYPE_SLOT.is_closed` and its `any_allowed()` function could not be represented at all, so an archetype that closes a slot to further filling could not say so under any representation | **fixed** — `is_closed`/`closed()`/`is_closed()`/`any_allowed()` added, defaulting `false` per AOM2's own stated default; residual (`crate::path::Node` did not expose `ARCHETYPED.archetype_id`, so nothing could be checked) closed by **A-60** |
+| A-60 | Medium | `am::validate::walk_object`'s `CObject::Slot` arm reported every `ARCHETYPE_SLOT` `Unchecked` unconditionally, including a slot closed with `is_closed()` (`A-59`) that the instance filled anyway — a defect this crate could state (`A-59` gave it somewhere to put `is_closed`) but never actually catch, because `crate::path::Node` had no way to tell whether a position was filled by another archetype at all | **fixed** — `Node::archetype_details()` added, exposing `ARCHETYPED` at an archetype root; `walk_object`'s slot handling now reports a real violation when a closed slot was filled regardless, needs no further check when an open, unrestricted slot was filled or any slot was correctly left open, and stays `Unchecked` only for the one case this crate genuinely cannot resolve — a restricted open slot's filler, since `includes`/`excludes` assertions are not parsed (`K15.10`) |
+| A-61 | Low | `TermDefinition` had no `other_items` field — AOM2's `ARCHETYPE_TERM.other_items`, a hash of extra keyed items "e.g. provenance", could not be represented at all, the same silent-loss shape `A-46`/`A-48`/`A-50`/`A-52`/`A-59` each found in a different class | **fixed** — `other_items`/`with_other_item()`/`other_items()` added, defaulting to an empty map and `#[serde(default)]` on the wire; carried, not interpreted, the same position this crate already takes on `ArchetypeTerminology`'s own external bindings — no fixed list of recognised keys exists to check against |
+| A-62 | Medium | `am::cadl` (`A-40`'s own "smallest real slice") refused `use_archetype`, `use_node`, and `allow_archetype` outright, though `C_ARCHETYPE_ROOT`, `C_COMPLEX_OBJECT_PROXY`, and `ArchetypeSlot` all already existed as types (`A-50`, `A-53`) — the blanket refusal overstated what stood in the way: only `allow_archetype`'s own `matches { include ... }` form genuinely needs the `K15.10` assertion grammar this parser does not lex | **fixed** — `use_archetype`/`use_node` fully implemented (`archetype_ref` reconstructed by slicing the source between token boundaries, `ADL_PATH` read as raw text to the next whitespace — two new `Lexer` primitives, since neither lexes atomically as a `Word`); `allow_archetype` implemented for its unrestricted form only, with `closed` and `matches {...}` each refused by name for a distinct, real reason (the former's own grammar carries no occurrences to build `ArchetypeSlot` from; the latter genuinely needs `K15.10`) |
+| A-63 | Low | **BREAKING.** `CPrimitive::String::pattern: Option<String>` had no counterpart in AOM2's actual single-`List<String>` `constraint` — the same shape `A-51`'s second pass fixed for `TerminologyCode::code_list`, found while researching `A-62`'s own `CONTAINED_REGEXP` boundary | **fixed** — `pattern` removed; a regex is now a `/…/`- or `^…^`-delimited element of `list` itself, matching `C_STRING`'s real AOM2 shape; `is_c_string_pattern` is the one place that recognises the delimiter convention, called from both `am::validate::walk_primitive` and `am::archetype::assumed_value_conforms` (`lib:A-33`) |
+| A-64 | Low | `am::cadl` could not parse a primitive constraint's own assumed value — `'; ' <value>`, a shape every primitive kind's grammar production states (`cadl2_primitives.g4`), and `[ac3; at5]` for `Terminology_code` specifically — though `CPrimitiveObject::with_assumed_value` (`A-48`) has existed to receive one since before this parser did | **fixed** — a shared assumed-value reader per kind (five direct, four more through the existing `temporal_primitive!` macro) plus a dedicated `[ac3; at5]` reader refusing the grammar's own stated case (an assumed at-code after a bare at-code), all wired into both call sites `parse_inline_primitive` has |
+| A-65 | Medium | No ISO8601 date, time, date-time, or duration literal can be lexed by `am::cadl` at all — found writing `A-64`'s own tests, not by a fuzzer or a report — because `cadl_lexer::Lexer`'s word-scanner treats `-`/`:` as `Symbol`s (needed for archetype identifiers elsewhere), splitting every such literal into several tokens before `expect_temporal`'s `expect_word` ever sees one | **fixed** — `Lexer::read_iso8601`, a dedicated scan reached only from `expect_temporal` (where a temporal literal is grammatically expected, so there is no ambiguity with a plain `INTEGER`/`REAL` for it to resolve), reads a maximal run of ISO8601-shaped characters and hands it to `T::from_str`, the same validation-not-lexing split `expect_word`-based parsing already used; a `.` is only consumed when followed by a digit, so a `..` range separator is never swallowed |
+| A-66 | Medium | `am::cadl` refused every `ARCHETYPE_SLOT` `matches { include ... exclude ... }` block outright, and every `C_STRING` regex, though only the full BEOM `boolean_expr` grammar genuinely needs work this parser has not done — `constraint_expr` (`bound_path SYM_MATCHES CONTAINED_REGEXP`) is the one assertion shape every real `ARCHETYPE_SLOT` assertion this repository has found actually uses, and `CONTAINED_REGEXP` is the same lexical token `C_STRING`'s own regex form needs (`A-63`) | **fixed** — `Lexer::try_read_contained_regexp` reads a `CONTAINED_REGEXP`'s delimited body (raw-scanned, since it may contain almost any character); `parse_slot_assertion` implements exactly `bound_path SYM_MATCHES CONTAINED_REGEXP` for `include`/`exclude`, refusing anything richer by name; `c_attribute`'s own `SYM_MATCHES CONTAINED_REGEXP` shorthand builds an unwrapped `C_STRING` whose `list` holds the pattern (`A-63`'s single-list shape); `closed` and a richer assertion remain the two real refusals left in `am::cadl`'s own `ARCHETYPE_SLOT` support |
+| A-67 | Medium | `am::cadl` refused `C_ATTRIBUTE_TUPLE` (`[units, magnitude] matches {...}`) outright, though `crate::am::CAttributeTuple`/`CPrimitiveTuple` have existed since `A-50` and `am::validate` has evaluated them since `A-58` — nothing in the parser could ever produce one to evaluate | **fixed** — `c_attribute_def` dispatches to a leading `[` (nothing in `c_attribute` starts with one); `c_attribute_tuple`/`c_primitive_tuple`/`c_primitive_tuple_item` build the type directly, the latter sharing `A-66`'s own `CONTAINED_REGEXP` handling and a new `unwrapped_primitive` helper with `c_objects`'/`c_attribute`'s own unwrapped-primitive shorthands (`lib:A-33`); a tuple row's own items are always unwrapped, with no room in the grammar for a wrapping `rm_type_id`, so a row using an interval (AOM2's own canonical `{units, magnitude}` example among them) still hits the pre-existing, separate unwrapped-interval ambiguity — a discrete-valued row parses cleanly |
+| A-68 | Low | `CPrimitiveObject` had no `is_enumerated_type_constraint` field — AOM2's own `C_PRIMITIVE_OBJECT.is_enumerated_type_constraint`, "True if this object represents a constraint on an enumerated type from the reference model" — could not be represented at all, the same silent-loss shape `A-46`/`A-59`/`A-61` each found in a different class, noticed in passing while re-reading `C_PRIMITIVE_OBJECT`'s own class definition for `A-63` | **fixed** — `is_enumerated_type_constraint`/`with_is_enumerated_type_constraint()`/`is_enumerated_type_constraint()` added, `None` by default (AOM2's own `Void`, not `false`) and `#[serde(default)]` on the wire; carried, not derived — this crate has no Reference Model enumeration table to check it against |
+| A-69 | Low | **BREAKING.** `Archetype.archetype_id` was `base::ArchetypeId`, but AOM2 states `ARCHETYPE.archetype_id: ARCHETYPE_HRID` — the richer, authoring-time identifier `A-49` built `ArchetypeHrid` for, never propagated to the one field it was actually for; `ArchetypeId::from_str` rejects a namespace prefix and a prerelease suffix `ARCHETYPE_HRID`'s own grammar allows (`A-49`), so a real archetype using either could not be held by `Archetype::new` at all | **fixed** — `archetype_id`/`Archetype::new`/`Archetype::archetype_id()`/`ArchetypeViolation.archetype_id` all retyped to `ArchetypeHrid`; `ArchetypeHrid::specialisations()` added (the same `-`-splitting rule applied to `concept_id`) so `specialisation_depth()` needed no logic change; the one place an `ArchetypeHrid` and an `ArchetypeId` now meet — verifying a repository answered the identifier a `C_ARCHETYPE_ROOT` asked for (`K15.26`) — compares by text, both types sharing one textual convention for exactly this reason; `parent_archetype_id`, `ArchetypeRepository::resolve`, and `CArchetypeRoot.archetype_ref` are unchanged, since those are reference/lookup forms, correctly `ArchetypeId`-shaped already (`A-52`'s own residual already confirmed `parent_archetype_id`) |
+| A-70 | Medium | `am::cadl` accepted the lexer's fallback one-character "word" `/` as an attribute name, so an attribute in differential form — `/data/events cardinality matches {2..8; ordered}`, `c_attribute`'s `ADL_PATH` alternative, the way every specialised ADL 2 archetype states what it redefines — mis-parsed into several attributes and was refused later as a `VOKU` duplicate with the name `""`: a valid archetype refused, and refused naming the wrong thing (`K15.6`). Found by the first external-corpus run (`openehr/spec/corpus.md`), not by reading; `C_ATTRIBUTE.differential_path` itself had no counterpart in `CAttribute` | **fixed** — `CAttribute.differential_path`/`with_differential_path()`/`differential_path()` added (`#[serde(default)]`, absent on the wire when `None`); `Lexer::peek_raw_path` lets `c_attribute_def` tell an `ADL_PATH` (contains `/`) from a bare name before reading either; the path is split at its last `/` into parent and attribute; a name that is not an `IDENTIFIER` is refused by name; `VOKU` keyed on (parent, name); `am::validate` reports a differential attribute *unchecked* naming its parent path, since resolving it is flattening (`K15.11`) — never read under the wrong object |
+| A-71 | Medium | **BREAKING.** AOM2's `C_OBJECT.occurrences` is `0..1` — "only set if it overrides the parent archetype … or else the occurrences inferred from the underlying reference model existence and/or cardinality of the containing attribute" — but `CComplexObject`, `CPrimitiveObject`, `ArchetypeSlot`, and `CArchetypeRoot` each required a `MultiplicityInterval`, so the model could not represent an unstated `occurrences` at all (`K15.1`, `K15.3`) and `am::cadl` refused every non-root node that omitted one. The first external corpus run (`corpus.md`) measured that refusal at 1,197 of 1,739 refusals over 1,972 real files: two thirds of everything the parser turned away, on the construct most published archetype nodes use | **fixed** — `occurrences: Option<MultiplicityInterval>` on all four types (constructors take `Option`; `#[serde(default, skip_serializing_if)]`, absent on the wire when unstated); `CObject::effective_occurrences(owner)` implements AOM2's rule (lower `0`; upper the owner's cardinality upper bound, else `1` for an attribute built single-valued), `None` only for a proxy deferring to its target; `MultiplicityInterval::from_zero_to`; the parser carries an omitted one as `None` (the root still defaults to exactly one); `am::validate` checks the effective value — `K15.32` states the rule and the one assumption. **Residual:** the single-or-container decision is still syntactic (`cadl`'s own module documentation), so a real `items matches {` with no cardinality clause is built single-valued and its unstated children infer `0..1`, not `0..*` |
 
 ---
 
@@ -2199,7 +2229,12 @@ depth. A finding is not deleted when it is fixed; it is marked.
 
 **Severity: Medium. Status: open — object model built 2026-08-26; validation
 against an in-memory archetype, and repository resolution of a filled slot,
-built 2026-08-30; no parser, flattening, or template expansion.**
+built 2026-08-30; a bounded `definition`-only cADL parser (`am::cadl`, not
+`K15.5` — see its own module documentation for the exact boundary) built
+2026-09-02, covering most `C_OBJECT`/`C_PRIMITIVE_OBJECT` shapes and their
+assumed values (`A-62`, `A-64`); still no header/specialisation/
+terminology/rules/annotations parsing, no flattening, and no template
+expansion.**
 
 **What happened.** `S1.4` — *the crate MUST NOT implement the Archetype Model* —
 was withdrawn on 2026-08-26 and replaced by `S1.21` and
@@ -2230,19 +2265,33 @@ caller to opt in before validating against a result with no established
 provenance (`K15.26`), and never treating a retrieval failure as a pass
 (`K15.27`).
 
-**Eighteen requirements have no code.** No ADL 2 parser (`K15.5`–`K15.7`), no
-ADL 1.4 ingestion (`K15.8`–`K15.10`), no flattening (`K15.11`–`K15.13`), and no
-template expansion or operational template (`K15.14`–`K15.17`). For a caller,
-the practically important sentence is now narrower still: this crate can tell
-you whether a `COMPOSITION` conforms to an archetype it already holds in
-memory or can retrieve through a repository it is given, and still cannot tell
-you whether it conforms to the *published* archetype named on the instance,
-because nothing here reads ADL or merges a specialisation's inherited
-constraints in first. A bare `ARCHETYPE_SLOT` stays unchecked regardless of a
-repository: which archetype fills it lives on the instance's own
-`ARCHETYPED.archetype_id`, which `crate::path::Node` does not expose — a
-residual named in its own right below, not folded into this count because it
-is a gap in `crate::path`, not in §15.
+**Sixteen requirements have no code, as re-counted 2026-09-03 (eighteen on
+2026-08-30).** No *complete* ADL 2 parser (`K15.5`) — `am::cadl`, built
+2026-09-02 (`A-40`'s own status line above), reads `definition`'s own
+`c_complex_object` grammar rule for every node kind but a `closed` slot and
+`SIBLING_ORDER` (`A-62`–`A-67`), not the header, specialisation,
+terminology, rules, or annotations `K15.5` itself requires, and does not
+build an `Archetype`. `K15.6`–`K15.7` — that an unimplemented construct is
+refused by name at its offset, never skipped or returned as a partial tree —
+moved to **•** on 2026-09-03: they are properties of a parser, `am::cadl`
+and the two header readers are the parsers this crate has, and each is
+tested for exactly that discipline (the matrix names the tests). Still fully
+absent: ADL 1.4 ingestion (`K15.8`–`K15.10`),
+flattening (`K15.11`–`K15.13`), and template expansion or operational
+template (`K15.14`–`K15.17`). For a caller, the practically important
+sentence is now narrower still: this crate can tell you whether a
+`COMPOSITION` conforms to an archetype it already holds in memory or can
+retrieve through a repository it is given, and still cannot tell you whether
+it conforms to the *published* archetype named on the instance, because
+nothing here reads a whole ADL source into an `Archetype` or merges a
+specialisation's inherited constraints in first. A filled `ARCHETYPE_SLOT`
+is checked against `is_closed`/`any_allowed()` since `A-60`, which closed
+the `crate::path` residual this paragraph used to name (`Node` did not
+expose `ARCHETYPED.archetype_id` at all); a *restricted* slot's filler —
+`includes`/`excludes` — still is not, because those are `K15.10`'s own
+assertion grammar, a residual named in its own right below and not folded
+into this sixteen-requirement count because it is a gap in `am::cadl` and
+`am::validate`, not an unbuilt requirement of §15 itself.
 
 **Why this is a finding rather than a plan.** `C0.9` — a gap that is not written
 down reads as a pass. A specification section with no code is the most flattering
@@ -2284,17 +2333,41 @@ does not change, and a mass rewrite during a specification change is how a
 citation stops meaning anything. They are re-pointed when the code they describe
 changes, and this paragraph is the record that they are known.
 
-**Residual, added 2026-08-30.** `validate_with_repository` resolves a
-`C_ARCHETYPE_ROOT`, but a bare `ARCHETYPE_SLOT` stays unchecked with or
-without a repository, and this is a gap in a different module than the one
-this finding is about: which archetype fills a slot is recorded on the
-instance's `ARCHETYPED.archetype_id`, and `crate::path::Node` — built for AQL
-and path resolution, before archetype support existed — exposes only
-`archetype_node_id`, the short code, never that attribute. Closing it means
-adding a variant or a method to `crate::path::Node`, which is `path.rs`'s
-surface, not `am`'s; `openehr::am::validate`'s own module documentation states
-the gap rather than working around it with something that looks like a
-resolution and is not one.
+**Residual, added 2026-08-30, closed 2026-09-02.** `validate_with_repository`
+resolves a `C_ARCHETYPE_ROOT`, but a bare `ARCHETYPE_SLOT` stayed unchecked
+with or without a repository, because `crate::path::Node` — built for AQL and
+path resolution, before archetype support existed — exposed only
+`archetype_node_id`, the short code, never `ARCHETYPED.archetype_id`, which
+is where the identity of whatever fills a slot actually lives. `A-60` added
+`Node::archetype_details()` and rewired `am::validate`'s slot handling
+(`walk_slot`) around it: a closed slot filled anyway is now a real
+violation, an unrestricted slot's filler needs no further check, and a slot
+correctly left open needs none either — only a *restricted* slot's filler
+(`includes`/`excludes`) remains unchecked, and that residual is `K15.10`'s
+own, tracked below rather than here.
+
+**Residual, added 2026-09-02, narrowed 2026-09-02.** `K15.10` itself — the
+full BEOM assertion grammar — remains unimplemented, but `A-66` closed the
+part of it that mattered in practice: `am::cadl` now parses `matches
+{ include ... exclude ... }` for the one assertion shape every real
+`ARCHETYPE_SLOT` this repository has found actually uses,
+`constraint_expr`'s own `bound_path SYM_MATCHES CONTAINED_REGEXP`
+alternative, refusing anything richer by name. `A-60`'s own `walk_slot`
+is unchanged and still cannot evaluate what it now parses: carrying an
+assertion's text (`ArchetypeSlot::including`/`excluding`) is not the same
+as evaluating it, and nothing here compiles a regex or resolves a
+`bound_path` against instance data. That gap — turning a carried
+assertion into a real `Conforms`/`Violates` verdict — is what remains of
+`K15.10`, not the parsing this residual originally described.
+
+**Residual, added 2026-09-02, closed 2026-09-02.** `am::cadl` could not
+parse any ISO8601 date, time, date-time, or duration literal at all,
+discovered while extending assumed-value parsing (`A-64`) and tracked
+separately as `A-65`: a lexer defect, not a grammar-coverage gap, affecting
+every use of the four temporal `CPrimitive` kinds this parser's own
+dispatch table already named, not merely their assumed values. `A-65`
+added a dedicated lexer scan for the shape and closed it the same day it
+was found.
 
 ## A-41 — the matrix's totals went stale, again
 
@@ -2321,3 +2394,1883 @@ the `spec` and `withdrawn` statuses this reversal introduced.
 statement is in the matrix itself — it names the method, so the next reader can
 re-run it — and mechanising the tally the way coverage is mechanised is the
 better fix, not yet done.
+
+## A-42 — three more invariants checked at construction and nowhere else
+
+**Severity: Medium. Status: fixed.**
+
+Found by re-reading the canonical RM's own invariant list against what
+`Validate` actually walks, the same method `A-23` used — not by a fuzzer or a
+bug report, and not restating `A-23` itself: this is three fresh instances of
+its exact shape, in three different classes.
+
+**Found.**
+
+1. `AUDIT_DETAILS.System_id_valid` and `Change_type_valid`. `AuditDetails::new`
+   checks both, but `impl Validate for Version<T>` (the fix `A-23` added)
+   never visited `self.commit_audit()` — it covered the version's own
+   envelope invariants and stopped short of the audit record every commit
+   carries. `check_attestation` was no better: it checked an attestation's
+   committer (`Committer_valid`) but not the same `AUDIT_DETAILS`'s
+   `system_id`/`change_type`. Measured: a `VERSION` deserialized from JSON with
+   `"system_id":""` and a `change_type` code outside `audit_change_type`
+   reported no violation for either.
+2. `ISM_TRANSITION.Transition_valid`. `IsmTransition::with_transition` checks
+   that `transition` is from the `instruction_transitions` group; the `Action`
+   arm of `impl Validate for Entry` checked `current_state` and never
+   `transition`, immediately beside it in the same struct.
+3. `INTERVAL_EVENT.Math_function_validity`. `IntervalEvent::new` checks that
+   `math_function` is from the `event_math_function` group; the `Interval` arm
+   of `impl Validate for Event` called `check_coded_text` on it (the
+   `DV_CODED_TEXT`-level rubric check) but never the group-membership check
+   that is `Math_function_validity` itself.
+
+All three are `A-23`'s shape exactly: a rule a constructor enforces, on a type
+that also derives `Deserialize`, which writes the field straight in and calls
+no constructor (`db:V9.8`, `lib` side).
+
+**Fixed.** A shared `check_audit_details` helper (checking all three
+`AUDIT_DETAILS` invariants, including `Committer_valid`) is called from both
+`impl Validate for Version<T>` and `check_attestation`, replacing the
+narrower, duplicated `check_party` call the latter used alone. `Transition_valid`
+and `Math_function_validity` are each a direct group-membership check beside
+the sibling check already there, matching that sibling's own style rather
+than introducing a new one.
+
+`openehr/tests/canonical_json.rs`'s `kitchen_sink()` fixture already builds a
+real `ISM_TRANSITION` and `INTERVAL_EVENT` through their checked constructors;
+a new test corrupts each in a serialized copy and confirms `validate()`
+reports it, then confirms the unmodified fixture stays clean — a check strict
+enough to fail only on the corrupted copy, not the original. A second new
+test extends the existing `a_version_envelope_is_checked_on_data_that_arrived_as_json`
+JSON-literal test (the one `A-23` added) with a bad `system_id` and a bad
+`change_type`, the same way that test already covers `Lifecycle_state_valid`
+and `Data_valid`.
+
+**Residual.** None found in this pass. The method — re-reading invariants
+against `Validate`'s actual walk rather than trusting a prior fix's scope —
+is the same one that found `A-23`'s two other invariants inside itself; it was
+not re-run over the rest of the RM exhaustively, so more instances of this
+shape may remain uncounted.
+
+## A-43 — `INTERVAL<T>` had no interval-vs-interval operations
+
+**Severity: Low. Status: fixed.**
+
+Found while cross-checking `openehr::base` against the canonical BASE
+foundation types (`openEHR/specifications-BASE`,
+`org.openehr.base.foundation_types.interval.adoc`), which declares three
+abstract functions on `INTERVAL`: `has(e: T)` (element membership),
+`intersects(other: INTERVAL)`, and `contains(other: INTERVAL)`. This crate's
+`Interval<T>` had only the first, under the name `contains` — a name already
+public and not renamed to make room for the other two, since a rename is a
+breaking change for a method that already does what it says.
+
+**Why this is Low rather than Medium.** Nothing in this crate calls for
+either missing operation yet: `am::multiplicity::MultiplicityInterval::narrows`
+hand-rolls the same interval-vs-interval logic for a different type, because
+`base::Interval` offered it nowhere generically — a duplicated rule waiting to
+diverge, in the shape CLAUDE.md's Gregorian-leap-rule note warns about, but not
+yet a defect anyone has hit.
+
+**Fixed.** `contains_interval` (all points of `other` are points of `self`)
+and `intersects` (at least one limit of `other` falls strictly inside `self`).
+Both compare bounds directly through `SemanticOrd` rather than reusing
+`contains` on `other`'s raw bound values, which gets one case wrong: `self =
+(0, 10)`, `other = (0, 5)` share the excluded point `0`; neither interval
+contains it, so `self.contains(0)` alone answers `false` and a check built on
+it would wrongly conclude `other` is not contained, when every point `other`
+actually has (everything strictly between `0` and `5`) is a point of `self`.
+Worked through by hand before writing the implementation, not found by a
+failing test — the naive approach was never committed — and then confirmed
+by a test built for exactly this shape.
+
+Six new tests, including the shared-excluded-boundary case above, an
+open-vs-closed-at-the-same-point case, one-sided-unbounded intervals (both
+directions), and `intersects`'s "touching but not overlapping" case
+(`(0, 10)` and `(10, 20)`, open at the shared point on at least one side, so
+neither interval contains it and they do not intersect).
+
+**Residual.** `MultiplicityInterval::narrows` was not rewritten to use the new
+methods — it operates on a different type (`am::multiplicity`'s own interval,
+not `base::Interval`), so there is no direct duplication to remove, only a
+parallel implementation that could in principle be expressed the same way if
+the two types were ever unified. Not attempted here.
+
+## A-44 — two cardinality/occurrences agreement rules `C_ATTRIBUTE` did not check
+
+**Severity: Low. Status: fixed.**
+
+Found by diffing `openehr::am`'s implemented surface against AOM2's own
+class definitions (`openEHR/specifications-AM`,
+`docs/AOM2/master04.5-constraint_model-class_definitions.adoc`), not against
+anything the crate's own documentation had flagged — `am/mod.rs` and
+`spec/15-archetypes.md` already disclose the large gaps (no parser, no
+flattening, `VASID`/`VACSD` unchecked) accurately; these two were not among
+them.
+
+**Found.**
+
+1. `VACMCU`. Where a container attribute's cardinality states a finite upper
+   bound, every child's own occurrences, where finite, must have an upper
+   bound no greater than it. `CAttribute::container` already summed the
+   children's *lower* bounds against the cardinality's upper bound
+   (`a_cardinality_that_cannot_hold_its_children_is_refused`), but never
+   compared an individual child's *upper* bound against it — so a cardinality
+   of `0..2` accepted a single child declared `0..10` without complaint,
+   which no runtime resolving that constraint against real data could
+   satisfy.
+2. `VACSO`. A single-valued attribute's child occurrences must not have a
+   finite upper bound greater than `1`. `CAttribute::single` validated only
+   that the attribute name was non-empty; a child declared `0..3` under a
+   single-valued attribute — which by definition holds at most one object —
+   was accepted.
+
+**Fixed.** `CAttribute::container` gains the `VACMCU` check alongside its
+existing lower-bound-sum one. `CAttribute::single` gains the `VACSO` check —
+which required extracting a private `new_raw` constructor shared by both
+`single` and `container`, since `container` had been built *on* `single`:
+adding `VACSO` inside `single` directly would have made every container
+attribute's children subject to a rule that exists specifically because a
+single-valued attribute cannot hold more than one object, wrongly refusing
+container children that legitimately occur more than once. Caught before it
+shipped, by reasoning through what `container`'s existing delegation to
+`single` implied for the new check, not by a failing test.
+
+Four new tests, including one confirming a child `VACSO` refuses under
+`single` is accepted unchanged under `container` — the case that would have
+silently broken had the two checks not been separated.
+
+**Residual.** The AM object model's other agreement rules between
+`C_ATTRIBUTE`'s cardinality and its children's constraints — `VACMLB` (the
+existing lower-bound-sum check) already accounted for — were the two checked
+here. This pass did not re-derive the full AOM2 validity-rule list
+exhaustively against every `C_ATTRIBUTE`/`C_OBJECT` construction path;
+`A-40`'s residual (specialisation, `VASID`/`VACSD`, flattening) remains the
+larger, already-declared gap this finding does not touch.
+
+## A-45 — the four temporal primitive constraint kinds were entirely unmodelled
+
+**Severity: Medium. Status: fixed.**
+
+Found while cross-checking `openehr::am::CPrimitive` against AOM2's own
+constraint-kind list: `C_DATE`, `C_TIME`, `C_DATE_TIME`, and `C_DURATION`
+had no variant at all. A node governed by any of the four fell into
+`CPrimitive::Unsupported` and was always reported `Unchecked` — disclosed
+accurately (`CPrimitive::Unsupported`'s own doc comment names this as
+deliberate, and `K15.20` requires exactly this rather than a silent pass),
+but with a practical cost the disclosure did not size: most realistic
+clinical archetypes constrain at least one date or time field (event time,
+onset, therapeutic frequency), so `validate_against_archetype` reported at
+least one `Unchecked` node — and therefore `is_conformant() == false` — on
+nearly every real archetype, not an edge case.
+
+**Why it had not been done already.** `base::Interval<T>` requires `T:
+SemanticOrd`, and none of `base::Date`/`Time`/`DateTime`/`Duration`
+implemented it — each has its own inherent `semantic_cmp` (used internally
+by the RM's `DvDate`/`DvTime`/etc. wrappers), but no `SemanticOrd` impl, so
+`Interval<Date>` was a compile error before this, not a missing check
+someone chose to skip.
+
+**Fixed**, in two parts:
+
+1. `SemanticOrd` implemented for all four `base` temporal types, each
+   delegating to the type's own already-tested inherent `semantic_cmp` —
+   `base::interval`'s own doc comment is explicit that this trait has **no**
+   blanket impl, deliberately, so a type reaching `Interval<T>` needs this
+   decision made for it, not inherited from satisfying some other bound.
+2. `CPrimitive::Date`/`Time`/`DateTime`/`Duration` added, each `{ range:
+   Vec<Interval<T>>, pattern: Option<String> }` — a *list* of ranges, matching
+   AOM2's own `C_DATE.constraint: List<Interval<Iso8601_date>>` shape, not an
+   approximation of `C_INTEGER`/`C_REAL`'s discrete-list-plus-one-range shape.
+   `pattern` is carried and never evaluated, the same choice already made for
+   `C_STRING`'s own pattern field, for the same reason (no pattern-matching
+   implementation exists) — reported `Unchecked` rather than silently
+   ignored, same as `C_STRING`'s.
+
+No change was needed in `crate::path`: it already exposed
+`DV_DATE`/`DV_TIME`/`DV_DATE_TIME`/`DV_DURATION`'s `value` attribute as
+`Scalar::Str` of the ISO 8601 lexical text, which is exactly what the new
+`check_temporal` parses and compares.
+
+Ten new tests: four in `base::iso8601` proving `Interval` over each of the
+four types uses the semantic comparison (not a lexical one — `PartialOrd` is
+deliberately not implemented for these types, `lib:A-32`); six in
+`am::validate` — a table-driven test covering all four kinds' range checks
+in one pass, plus a dedicated pattern-is-unchecked test matching
+`C_STRING`'s own equivalent test.
+
+**Residual.** `pattern` matching itself remains unimplemented for all five
+kinds that carry one (`C_STRING` and the four here) — `valid_iso8601_date_
+constraint_pattern`-style matching is its own, separately scoped piece of
+work, not attempted in this pass.
+
+## A-46 — `C_PRIMITIVE_OBJECT` had no way to carry a `node_id`
+
+**Severity: Low. Status: fixed.**
+
+Found while cross-checking `openehr::am::CObject`'s node-id story end to end.
+Every `C_OBJECT` has a `node_id` (`org.openehr.am.aom2.c_object.adoc`:
+`1..1`), and `CObject::node_id`'s own dispatcher already read
+`CPrimitiveObject`'s field — `Self::Primitive(o) => o.node_id.as_deref()` —
+but nothing existed to ever set that field to anything but `None`.
+`CPrimitiveObject::new` always left it `None`, and there was no
+`with_node_id` to call afterwards, unlike `CArchetypeRoot`, which already had
+one.
+
+**Fixed** — `CPrimitiveObject::with_node_id`/`node_id()` added, mirroring
+`CArchetypeRoot`'s own pair. Also added: `CPrimitiveObject::PRIMITIVE_NODE_ID`,
+the constant `"Primitive_node_id"` — AOM2's own sentinel
+(`org.openehr.am.aom2.c_primitive_object.adoc`: "the `_node_id_` attribute
+will have the special value `Primitive_node_id`" for a `C_PRIMITIVE_OBJECT`
+written inline in ADL with no node id of its own). The sentinel is a literal
+string, not coded id-/at-/ac- syntax, so a bare `NodeIdSyntax::of` check
+would reject it; `with_node_id` short-circuits on an exact match against the
+constant before falling back to `NodeIdSyntax::of` for every other value.
+
+Three new tests: a real `at`-code set and read back through both
+`CPrimitiveObject::node_id` and `CObject::node_id`; the sentinel itself
+accepted (confirming `NodeIdSyntax::of` alone would have rejected it, so the
+short-circuit is doing real work, not standing in for a case that already
+passed); and a malformed value — neither a valid code nor the sentinel —
+refused with `ParseError`, the same shape as the existing malformed-node-id
+test for `CArchetypeRoot`.
+
+**Not attempted.** `C_PRIMITIVE_OBJECT.assumed_value` — the default value
+offered to template authoring and archetype-editor UIs — remains unmodelled;
+it has no bearing on the conformance-checking path this crate implements and
+was ranked below this finding in the same research pass for that reason.
+
+## A-47 — `Terminology_code`/`Terminology_term` did not exist
+
+**Severity: Low. Status: fixed.**
+
+Found while researching BASE for classes this crate had never checked
+against its own source, rather than assuming coverage from the identifiers
+and foundation types it already has. `Terminology_code`
+(`org.openehr.base.foundation_types.terminology_code.adoc`) is not
+`CODE_PHRASE`: `CODE_PHRASE.terminology_id` is a structured
+`TerminologyId`, while `Terminology_code.terminology_id` is a bare
+namespace `String`, and `Terminology_code` additionally carries an optional
+`terminology_version` and an optional `uri`. Neither it nor
+`Terminology_term` — the term-text/concept-reference pairing built on it —
+existed in this crate under any name.
+
+**Why this one, on its own.** `Terminology_code` is the declared type of
+`AUTHORED_RESOURCE.original_language`, `RESOURCE_DESCRIPTION_ITEM.language`,
+and `TRANSLATION_DETAILS.language` (`org.openehr.base.resource.*.adoc`) —
+three classes this crate does not model, and `S1.1`'s own package list
+(`RM Data Types, Data Structures, Common, EHR, and Demographic`) does not
+name the `resource` package they belong to, so building the three of them is
+a separate scope decision this finding does not make. `Terminology_code`
+itself is independently well-formed and useful on its own terms — it is a
+correct, small addition regardless of whether the three classes above are
+ever built — which is why it is recorded here rather than held back until
+they are.
+
+**Fixed** — `openehr::base::TerminologyCode` and `TerminologyTerm` added.
+Neither class declares an invariant in its own BASE class definition (unlike
+`CODE_PHRASE`'s `Code_string_valid`), so both constructors are infallible —
+adding a non-empty-string check by analogy with `CODE_PHRASE` without a
+cited invariant to require it would be exactly the kind of unverified claim
+`W0.3` exists to catch. `uri` is carried as a plain, unvalidated `String`:
+this crate has no BASE-level `Uri` type distinct from the Reference Model's
+`DV_URI`, and building one was out of scope for this finding.
+
+Five new tests: construction with and without the optional fields, a
+`TerminologyTerm` pairing, and canonical-JSON round-tripping including that
+absent optional fields are omitted from the JSON rather than written `null`.
+
+**Not attempted.** `AUTHORED_RESOURCE`, `RESOURCE_DESCRIPTION`,
+`RESOURCE_DESCRIPTION_ITEM`, and `TRANSLATION_DETAILS` remain entirely
+unmodelled. Whether this crate should model them at all is an open scope
+question this finding does not resolve, since `S1.1` does not commit the
+crate to the `resource` package the way it does to Data Types, Data
+Structures, Common, EHR, and Demographic.
+
+## A-48 — `C_PRIMITIVE_OBJECT.assumed_value` had no field
+
+**Severity: Low. Status: fixed.**
+
+Found in the same AM research pass that produced `A-46`, and ranked below it
+there for the reason repeated in this crate's own module documentation:
+`assumed_value` — the default a template author or a form generator would
+offer when data supplies none — has no bearing on
+`validate_against_archetype`'s tree walk, which checks values *present* in a
+real instance and never looks at an archetype's own defaults. It remained
+unaddressed until now for that reason, not because it was forgotten.
+
+`assumed_value: Any` (`org.openehr.am.aom2.c_primitive_object.adoc`) also
+carries its own invariant, `Inv_valid_assumed_value: valid_value
+(assumed_value)` — the value must conform to the same node's `constraint`.
+
+**Fixed, with the invariant explicitly not enforced.** `PrimitiveValue`
+added — `Boolean`, `Integer`, `Real` (via `base::Real`, not `f64`, for the
+`D3.18d` reason), and one `Text` variant standing in for `C_STRING`,
+`C_DATE`, `C_TIME`, `C_DATE_TIME`, `C_DURATION`, and `C_TERMINOLOGY_CODE`
+alike, the same collapsing `crate::path::Scalar::Str` already makes for the
+corresponding `DataValue`s. `CPrimitiveObject::with_assumed_value`/
+`assumed_value()` attach and read it. `Inv_valid_assumed_value` is carried
+unchecked, the same choice already made for `C_STRING`'s `pattern`
+(`A-45`'s residual) — a `Boolean` assumed value attached to a `C_INTEGER`
+constraint is accepted exactly as given, not refused. Checking it for real
+would need the same per-kind conformance logic `am::validate`'s
+`walk_primitive`/`check_temporal` already have, decoupled from the
+`Ctx`/reporting machinery those are built around — a larger piece of work
+than this finding's own scope, and not attempted here.
+
+Five new tests: a matching-kind assumed value attached and read back; a
+mismatched-kind one accepted rather than refused, confirming the
+non-enforcement is real and not accidental; canonical-JSON round-tripping,
+including that an absent `assumed_value` is omitted rather than written
+`null`; and the untagged-enum ordering that lets a whole-number JSON literal
+read as `Integer` rather than falling through to `Real`.
+
+**Not attempted.** `Inv_valid_assumed_value` itself, as above. AOM2's other
+`C_PRIMITIVE_OBJECT` function, `has_assumed_value()`, is not added — a
+caller can already ask `assumed_value().is_some()`, and a second, redundant
+accessor would be exactly the kind of duplicated logic this repository's own
+history (`lib:A-33`) warns against maintaining in two places.
+
+## A-49 — the ADL header readers used the wrong archetype-identifier grammar
+
+**Severity: Medium. Status: fixed, residual documented.**
+
+Found while implementing `ARCHETYPE_HRID` as its own type (AOM2's
+`org.openehr.am.aom2.archetype_hrid.adoc`) and checking it against
+`openEHR/adl-antlr`'s real grammar files, rather than assuming the type this
+crate already had — `base::ArchetypeId` — was what the header actually
+names. It is not. Both `adl14.g4`'s `archetype` rule and `adl2.g4`'s
+`authored_archetype` rule name the header's own identifier `ARCHETYPE_HRID`,
+a lexer token distinct from and richer than `ArchetypeId`'s grammar:
+
+```text
+ARCHETYPE_HRID       : ARCHETYPE_HRID_ROOT '.v' ARCHETYPE_VERSION_ID ;
+ARCHETYPE_HRID_ROOT  : (NAMESPACE '::')? IDENTIFIER '-' IDENTIFIER '-' IDENTIFIER '.' LABEL ;
+ARCHETYPE_VERSION_ID : DIGIT+ ('.' DIGIT+ ('.' DIGIT+ (('-rc'|'-alpha'|'-beta') ('.' DIGIT+)?)?)?)? ;
+```
+
+`ArchetypeId::from_str` accepts neither the optional `namespace::` prefix
+nor a prerelease suffix (`-rc.4`, `-alpha`, `-beta`) on the version — both
+committed this session in `adl14.rs`/`adl2.rs` (`428dfb2`, `161a193`), both
+citing `ARCHETYPE_HRID` in their own error messages without checking the
+text actually parsed to that grammar. A real archetype header using either
+form would have been refused by a reader whose own module documentation
+already named the grammar it should have accepted.
+
+**Fixed** — `openehr::am::ArchetypeHrid` and `VersionStatus` added, parsed
+against the grammar above (including its own laxity relative to AOM2's
+class-level invariant, `Inv_release_version_validity`, which declares a
+strict three-part version the grammar itself does not require — the same
+`I2.15`-shaped departure this crate already made for `ArchetypeId`, made
+explicit in `ArchetypeHrid`'s own module documentation rather than repeated
+silently). `Adl14Header.archetype_id` and `Adl2Header.archetype_id` now hold
+an `ArchetypeHrid`; eleven new tests cover the namespace prefix, the three
+prerelease suffixes, the departure case, and four refusal shapes. All 13
+pre-existing `adl14`/`adl2` tests pass unchanged, since every fixture they
+use is plain classic-form text that both grammars accept identically.
+
+**Residual, documented rather than silently left.** `specializes` on both
+header types is unchanged — still `Option<ArchetypeId>`. ADL 1.4's
+`specialization_section` names its parent with a third, different token,
+`ARCHETYPE_REF` (namespace prefix allowed, no prerelease suffix, an
+unbounded chain of `.DIGIT+` version segments); ADL 2's own
+`specialize_section` allows *either* `ARCHETYPE_HRID` or `ARCHETYPE_REF`
+(`cadl2.g4`: `archetype_ref: ARCHETYPE_HRID | ARCHETYPE_REF`).
+`ArchetypeId` is closer to `ARCHETYPE_REF` than to `ARCHETYPE_HRID` but is
+not exactly either — it lacks the namespace prefix both allow, and caps the
+version at three parts where `ARCHETYPE_REF` does not. Reconciling
+`ArchetypeId` itself against `ARCHETYPE_REF`, or building a true union type
+for ADL 2's `archetype_ref` parser rule, is a separate piece of work: unlike
+the header's own identifier, `ArchetypeId` is a `base` type used pervasively
+across Reference Model data (`ARCHETYPED.archetype_id`), so widening it
+is a larger, more consequential change than adding a new, narrowly-scoped
+type was, and was not undertaken in this pass.
+
+## A-50 — `C_COMPLEX_OBJECT` had nowhere to put a tuple constraint
+
+**Severity: Medium. Status: fixed.**
+
+Found while comparing this crate's `am::constraint` module against the full
+class list `openEHR/specifications-AM`'s `docs/UML/classes/` directory names,
+rather than against the subset of AOM2 this crate already claimed to model.
+Several `am.aom2.constraint_model` classes have no counterpart here —
+`SIBLING_ORDER`, `C_COMPLEX_OBJECT_PROXY`, `CONSTRAINT_STATUS`, and the
+`C_SECOND_ORDER` family among them — and this finding is about one member of
+that family specifically: `C_SECOND_ORDER`'s two concrete children,
+`C_ATTRIBUTE_TUPLE` and `C_PRIMITIVE_TUPLE`, ranked above the others because
+of what they attach to, not because they were the only gap found.
+
+**Why this one, and why it ranks above `SIBLING_ORDER` or `RM_OVERLAY`,
+the AOM2 research pass's other candidates.** `C_ATTRIBUTE_TUPLE` is not a rare
+corner of the model. AOM2's own second-order-constraints section states
+plainly that it "replaces all domain-specific constraint types defined in
+ADL/AOM 1.4, including `C_DV_QUANTITY` and `C_DV_ORDINAL`"
+(`openEHR/specifications-AM`,
+`docs/AOM2/master04.3-constraint_model-second_order.adoc`) — the mechanism
+every `DV_QUANTITY` archetype node uses to pair a unit with the magnitude
+range that unit implies (`"deg F"` with `32.0..212.0`, `"deg C"` with
+`0.0..100.0`, never the two crossed), and every `DV_ORDINAL` node uses to
+pair a numeric value with its coded symbol. `DV_QUANTITY` and `DV_ORDINAL`
+are two of the most common leaf types in the published archetype corpus.
+Without this field, an archetype using the tuple form for either one could
+not be represented in this crate's object model at all: not accepted and
+checked, not accepted and reported unchecked, not even round-tripped through
+JSON — `CComplexObject` had no field to deserialize the constraint into, so
+it silently vanished on read, the same silent-loss shape `A-46` and `A-48`
+each found in `C_PRIMITIVE_OBJECT`. `SIBLING_ORDER` by contrast only matters
+inside a specialised archetype (`K15.11`–`K15.13`, not implemented) — a real
+gap, but not reachable by anything this crate can build yet. `RM_OVERLAY` is
+reachable today (it is an attribute of `ARCHETYPE` itself, not gated on
+templates), but is a gap in a different class — `Archetype`, not
+`CComplexObject` — and closing it is not this finding's scope; see **Not
+attempted** below.
+
+**Fixed.** `openehr::am::CPrimitiveTuple` and `CAttributeTuple` added to
+`am::constraint`, and `CComplexObject::with_attribute_tuples` attaches them —
+a builder rather than a `new` parameter, the same choice `A-46` and `A-48`
+made for `C_PRIMITIVE_OBJECT`'s own late-added fields, since most callers
+never use this attribute and `#[serde(default)]` on the new field keeps
+JSON written before this existed readable. One structural invariant is
+checked at construction: every row in `CAttributeTuple`'s `tuples` must
+supply exactly as many values as `members` names attributes, cited directly
+from AOM2's own text — `C_PRIMITIVE_TUPLE.members`' description states "each
+member... corresponds to one of the `C_ATTRIBUTEs` referred to by the owning
+`C_ATTRIBUTE_TUPLE`" (`openEHR/specifications-AM`,
+`docs/UML/classes/org.openehr.am.aom2.c_primitive_tuple.adoc`) — a row naming
+three values for a two-attribute tuple has a value with nothing to
+correspond to. `CPrimitiveTuple::members` is refused empty for a
+narrower reason: AOM2 marks it `1..1` where `C_ATTRIBUTE_TUPLE.members` and
+`.tuples` are both `0..1`, and a Rust `Vec` has no `Void` to carry that
+distinction, so the mandatory case is translated the way
+`ArchetypeTerminology::new` already translates one elsewhere in this module —
+refusing empty rather than letting it silently stand in for absent.
+
+`am::validate::walk_complex` now visits `CComplexObject::attribute_tuples`
+and reports each one `Unchecked`, naming the attributes it covers, rather
+than the two other options: silently ignoring it (what happened before this
+finding, by omission) or silently treating it as satisfied (what `K15.20`
+forbids). Checking it for real would mean picking the one `C_PRIMITIVE_TUPLE`
+row whose values match the instance's actual values across every named
+attribute *at once* — a different shape of check than `walk_attribute`'s
+per-attribute walk, and a larger piece of work than this finding's own scope.
+
+Eight new tests: the units/magnitude example from AOM2's own
+second-order-constraints document built and read back; the arity-mismatch
+invariant refused, naming the reason; the `1..1` empty-members case refused;
+the `0..1` empty-tuples case accepted; the builder's default (absent unless
+attached) checked through both `CComplexObject` and `CObject`;
+canonical-JSON round-tripping; and a fixture written as though from before
+this field existed — literal JSON with no `attribute_tuples` key at all —
+still deserializing, confirming `#[serde(default)]` is doing real work and
+not merely present. `am::validate` gained one more: the units/magnitude
+example wired into a real `EVALUATION`/`ELEMENT`/`DV_QUANTITY` walk,
+confirming the report names
+`"C_ATTRIBUTE_TUPLE co-varying constraint is not evaluated"` with
+`"units, magnitude"` as the detail, and that no violation is raised for data
+the tuple was never consulted against.
+
+**Not attempted.** `C_ARCHETYPE_ROOT` does not gain the field, though AOM2
+declares it a `C_COMPLEX_OBJECT` subtype and so inherits `attribute_tuples`
+formally. This crate's own `CArchetypeRoot` already carries the matching
+asymmetry for `attributes` — always empty, with no builder to populate it,
+matching AOM2's own note that "In all uses within source archetypes and
+templates, the `_children_` attribute is `Void`" (`openEHR/specifications-AM`,
+`docs/UML/classes/org.openehr.am.aom2.c_archetype_root.adoc`) — so adding
+`attribute_tuples` there alone, with no way to populate `attributes` either,
+would model an inheritance relationship this crate does not otherwise
+represent. `SIBLING_ORDER` remains unmodelled and, unlike this finding, is
+genuinely gated on specialisation: its own class documentation states it
+applies only "on a `C_OBJECT` within a container attribute in a specialised
+archetype", which is `K15.11`–`K15.13`, not implemented. `RM_OVERLAY` is a
+different shape of gap and this finding does not close it either: it is an
+optional attribute of `ARCHETYPE` itself, the same level as `rules`
+(`EXPR_CONSTRAINT`, also unmodelled) — reachable today, not gated on
+specialisation or templates — and `Archetype` in `am::archetype` has no field
+for either one. That is a separate, `ARCHETYPE`-level gap, not a
+`C_COMPLEX_OBJECT`-level one, and is left for its own finding rather than
+folded into this one. Actually evaluating a tuple constraint during
+validation — matching an instance's values to one row — is deferred for the
+same reason `Inv_valid_assumed_value` was in `A-48`: a larger piece of work,
+decoupled from `walk_complex`'s existing per-attribute shape, and not
+attempted here.
+
+## A-51 — a soft terminology constraint was checked as though it were required
+
+**Severity: Medium. Status: fixed, residual documented.**
+
+Found while reading `C_TERMINOLOGY_CODE`'s own primary source
+(`openEHR/specifications-AM`,
+`docs/UML/classes/org.openehr.am.aom2.c_terminology_code.adoc`) to compare
+this crate's `CPrimitive::TerminologyCode` variant against it — the same
+per-class comparison that found `A-50` — rather than assuming the variant
+already committed to this repository's history was complete because it had a
+name and a citation-free existence.
+
+**What was missing, and what it did in the meantime.** AOM2's
+`C_TERMINOLOGY_CODE` carries a `constraint_status` attribute
+(`CONSTRAINT_STATUS`: `required`, `extensible`, `preferred`, `example`) that
+this crate had no field for at all. `openEHR/specifications-AM`,
+`docs/ADL2/master04.5-cadl_primitive_types.adoc` states plainly what the
+three non-`required` values mean: "Formally, all three of these statuses are
+the same as a value constraint specifying only the RM type as being a
+terminology code... which is to say, at the archetype level, validity of the
+data instance is achieved by supplying *any terminology code*." An
+`extensible`, `preferred`, or `example` terminology constraint is satisfied
+by any coded value whatsoever — the whole reason ADL offers the three
+statuses is to let an archetype suggest a value set without binding the
+instance to it. With no field to carry `constraint_status`, `am::validate`'s
+`walk_primitive` had no way to know a constraint was soft, and checked every
+`C_TERMINOLOGY_CODE` as though it were `required`: a real archetype using
+`extensible [ac2]` — the openEHR specification's own recommended pattern for
+handling terminology gaps in a novel condition, named explicitly in
+`master04.5-cadl_primitive_types.adoc`'s own soft-constraint section — would
+have every conformant instance whose code is not already in the value set
+reported as a `C_TERMINOLOGY_CODE` violation. That is a false verdict on
+conformant clinical data, the same class of defect `A-01` found in three
+quantity rules, not merely an absent field.
+
+**Fixed.** `openehr::am::ConstraintStatus` added — `Required`, `Extensible`,
+`Preferred`, `Example` — with `is_required()` mirroring AOM2's own
+`constraint_required()` for the non-`Void` case (`Void`/`None` is read as
+`Required` at the call site, matching AOM2's own stated default "in a
+top-level archetype", the only kind this crate builds). `CPrimitive
+::TerminologyCode` gained a `constraint_status: Option<ConstraintStatus>`
+field, additive and `#[serde(default)]` so JSON written before this existed
+still deserializes. `walk_primitive`'s `C_TERMINOLOGY_CODE` arm now checks
+`constraint_status` first: anything but `Required` skips the `code_list`/
+`ac`-code check entirely rather than reporting a violation, matching AOM2's
+own stated semantics exactly rather than approximating them — and, per that
+same semantics, is not reported `Unchecked` either, since a soft constraint's
+outcome is fully determined (always satisfied by any code), not merely
+unevaluated.
+
+Four new tests: `ConstraintStatus::is_required` true only for `Required`;
+canonical-JSON round-tripping including the field's omission when absent;
+a fixture written as though from before `constraint_status` existed —
+literal JSON with no such key — still deserializing; and, in `am::validate`,
+an `extensible` constraint naming one code accepting an instance carrying a
+completely different one, with neither a violation nor an unchecked entry,
+confirming the fix is a real behavioural change to `walk_primitive` and not
+merely a field that round-trips.
+
+**Not attempted — the residual named in `CPrimitive::TerminologyCode`'s own
+module documentation.** AOM2's `constraint` attribute is a single `String` —
+one `at`-code, or one `ac`-code naming a value set — never a list; ADL's own
+way of offering several alternative codes is several sibling `C_OBJECT`s
+under one attribute, the same alternative-matching shape every other node
+kind already uses via `CAttribute::children`. This variant's own
+`code_list: Vec<String>` field has no counterpart in AOM2 at all, was not
+re-derived from the primary source when it was first written, and predates
+this pass. Correcting the shape — most likely removing `code_list` in favour
+of the sibling-alternative pattern — is a breaking change to a type that
+shipped in a published version (`openehr` 0.7.0 brought the Archetype Model
+into scope), and deciding how to land a breaking AM change is `agents
+/publishing.md`'s process, not a decision this finding makes unilaterally.
+Recorded here rather than fixed silently or left for a future reader to
+rediscover (`C0.9`).
+
+## A-52 — `ARCHETYPE.rm_overlay` did not exist
+
+**Severity: Low. Status: fixed.**
+
+Found immediately after `A-51`, reading `ARCHETYPE`'s own class definition
+(`openEHR/specifications-AM`,
+`docs/UML/classes/org.openehr.am.aom2.archetype.adoc`) while checking the
+`Archetype` struct against it attribute by attribute rather than assuming
+the four attributes this crate already modelled — `archetype_id`,
+`parent_archetype_id`, `definition`, `terminology` — were the whole class.
+`rm_overlay: RM_OVERLAY` (`0..1`) had no counterpart at all: `RM_OVERLAY`,
+`RM_ATTRIBUTE_VISIBILITY`, and `VISIBILITY_TYPE` did not exist in this crate
+under any name, so an archetype declaring visibility or an alias for an
+RM attribute outside its constrained structure would lose that information
+silently on JSON read, the same shape of loss `A-46` and `A-50` each found —
+`Archetype` had no field to deserialize it into.
+
+**What this is not.** `rm_overlay` carries no conformance meaning: hiding an
+attribute from an authoring tool, or aliasing it, does not change whether an
+instance conforms, and `org.openehr.am.aom2.rm_overlay.adoc` names no
+invariant connecting the two. This is authoring-tool metadata, and
+`am::validate::validate_against_archetype` does not read it — the new
+module's own documentation says so before it says anything else, the same
+discipline `am::validate`'s own module header already applies to what it
+does and does not check.
+
+**Fixed.** `openehr::am::RmOverlay`, `RmAttributeVisibility`, and
+`VisibilityType` added in a new `am::rm_overlay` module. `RmAttributeVisibility
+::new` checks AOM2's own `Inv_alias_validity` (`alias /= Void implies
+visibility /= Void`) — an alias with no stated visibility names an attribute
+without saying anything a tool can act on. `RmAttributeVisibility::alias` is
+typed `openehr::base::TerminologyCode`, matching AOM2's own attribute type
+exactly rather than approximating it with a bare `String` — the first
+consumer of the type `A-47` added for exactly this reason, since `A-47`
+itself noted the three classes it was building the type *for*
+(`AUTHORED_RESOURCE`, `RESOURCE_DESCRIPTION_ITEM`, `TRANSLATION_DETAILS`)
+remained unmodelled; `RM_ATTRIBUTE_VISIBILITY` reaches it first.
+`Archetype::with_rm_overlay` attaches one, `#[serde(default,
+skip_serializing_if = "Option::is_none")]` keeping JSON written before this
+existed both readable and unchanged in shape when the field is unused.
+
+Six new tests: `Inv_alias_validity` refused and then satisfied once a
+visibility accompanies the same alias; a visibility with no alias needing no
+alias check at all; one overlay carrying two independent path statements;
+canonical-JSON round-tripping; the builder's default (absent unless
+attached) on `Archetype` itself; and a fixture written as though from before
+`rm_overlay` existed — an `Archetype`'s own JSON with no such key — still
+deserializing.
+
+**Not attempted.** `rm_visibility`'s path keys are carried as written and not
+checked against `crate::path::Node` or resolved in any way — the class's own
+description says a path may be "at deeper non-constrained RM paths from an
+object or the root", which by definition are paths this crate's own
+constraint tree does not describe, so there is nothing in an `Archetype` to
+validate a path against even in principle.
+
+**A residual noticed in passing, checked in the next pass and cleared.**
+`parent_archetype_id` is typed `Option<ArchetypeId>` here, but AOM2's own
+attribute is a bare `String`, described as "may take the form of an
+archetype interface identifier, i.e. the identifier up to the major version
+only, or may be a full archetype identifier". Checked against
+`openEHR/adl-antlr`'s own grammar (`src/main/antlr/adl/base_lexer.g4`):
+`ARCHETYPE_REF: ARCHETYPE_HRID_ROOT '.v' INTEGER ('.' DIGIT+)*` — every form
+of an archetype reference, "interface" included, requires `.v` followed by
+at least the major version digit; there is no version-less form to be
+narrower than. "Up to the major version only" means exactly what
+`ArchetypeId::from_str` already accepts — one to three numeric version
+components, one being the minimum — so `parent_archetype_id`'s typing is not
+a new defect. The one real gap in the same identifier is already on record:
+`ARCHETYPE_HRID_ROOT` allows an optional `NAMESPACE '::'` prefix
+`ArchetypeId::from_str` does not, which is `A-49`'s own residual, not a new
+one this parent-identifier check adds.
+
+## A-53 — `C_COMPLEX_OBJECT_PROXY` did not exist under any name
+
+**Severity: Medium. Status: fixed, residual documented.**
+
+Found continuing the same per-class sweep of `am.aom2.constraint_model`
+`A-50` started: `SIBLING_ORDER`, `CONSTRAINT_STATUS`, and
+`C_COMPLEX_OBJECT_PROXY` were the classes that finding named as having no
+counterpart here. `CONSTRAINT_STATUS` is closed — `A-51`'s own
+`ConstraintStatus` is exactly it, confirmed by checking that AOM2 uses the
+enumeration nowhere but `C_TERMINOLOGY_CODE.constraint_status`, so nothing
+further is missing on that account. This finding is the second of the
+remaining two, and the only one of them buildable without specialisation
+support this crate does not have — `SIBLING_ORDER` remains open for the
+reason `A-50` already gave it.
+
+**What was missing.** `C_COMPLEX_OBJECT_PROXY` is `C_OBJECT`'s fourth
+concrete descendant alongside `C_COMPLEX_OBJECT`, `C_PRIMITIVE_OBJECT`, and
+`ARCHETYPE_SLOT` — a node that, instead of stating its own constraint tree,
+names another node in the same archetype by path and means "the same
+constraint as that one". `openEHR/specifications-AM`,
+`docs/UML/classes/org.openehr.am.aom2.c_complex_object_proxy.adoc`: "A
+constraint defined by proxy, using a reference to an object constraint
+defined elsewhere in the same archetype." With no counterpart at all, an
+archetype using a proxy node — the mechanism a real archetype uses to avoid
+repeating an identical subtree, the same economy `C_ATTRIBUTE_TUPLE` gives
+co-varying constraints — could not be represented, checked, or round-tripped
+through JSON: `CObject` had no variant to deserialize it into, the same
+silent-loss shape `A-50` found for `attribute_tuples`.
+
+**Fixed.** `openehr::am::CComplexObjectProxy` added as a new `CObject::Proxy`
+variant — `#[non_exhaustive]` on `CObject` means an external caller matching
+only the four existing variants keeps compiling, by design (see the enum's
+own documentation on that point), but every exhaustive match inside this
+crate itself needed a new arm, and got one: `rm_type_name`, `node_id`,
+`occurrences`, `attributes`, `attribute_tuples`, and `am::validate`'s own
+`walk_object` dispatch. A node governed by a proxy is reported `Unchecked`,
+naming `target_path`, rather than resolved — resolving it means looking up
+another node in the *same archetype's own constraint tree* by archetype
+path, a capability distinct from anything `crate::path::Node` does (that
+walks Reference Model *data*, not an `am::constraint` tree) and not
+attempted here.
+
+**Not attempted — the residual named in `CComplexObjectProxy`'s own module
+documentation.** AOM2 lets a proxy's `occurrences` be `Void`, meaning
+`use_target_occurrences()`: use the target node's own occurrences instead of
+stating any locally, the class's second defining feature alongside
+`target_path` itself. Representing that needs `CObject::occurrences()` to
+return `Option<&MultiplicityInterval>` rather than `&MultiplicityInterval`,
+and every one of the four existing variants already commits to the
+non-`Option` shape as published API. Changing it is the same kind of
+breaking change `A-51` declined to make to `code_list` without going through
+`agents/publishing.md`'s process, and is declined here for the same reason:
+`CComplexObjectProxy::occurrences` is required, not optional, so a proxy
+that would defer to its target cannot be built with this type as it stands.
+Two open, undecided breaking changes to the same enum family — this one and
+`A-51`'s — are now on record together rather than each looking like an
+isolated shape choice.
+
+Four new tests: an empty `target_path` refused; `rm_type_name`/`node_id`/
+`occurrences`/`attributes`/`attribute_tuples` all reachable identically
+through `CObject::Proxy` as they are through every other variant;
+canonical-JSON round-tripping; and, in `am::validate`, a proxy governing a
+real `ELEMENT` reported `Unchecked` with its `target_path` as the detail,
+never as a silent pass.
+
+## A-54 — `CObject::occurrences()` could not represent a deferred value
+
+**Severity: Low. Status: fixed.** Closes `A-53`'s own residual.
+
+**Deciding, rather than deferring again.** `A-51` and `A-53` each declined a
+breaking fix to already-published API and recorded the decision as a
+residual instead of making it — the same choice twice in a row, which is
+itself worth noticing: leaving both open indefinitely is itself a decision,
+just an unstated one. `agents/publishing.md`, read in full for the first
+time this pass rather than assumed to gate source changes as well as
+releases, turns out to describe only release *mechanics* — version tables,
+publish ordering, a checklist — not a design-approval process, and this
+repository's own history (`0.6.0`'s `f64`→`Real` migration, `0.4.0`'s
+`PartialOrd` removal) already establishes that a breaking API change is an
+ordinary commit here, version-bumped only when someone actually runs
+`cargo publish`. That act needs credentials and manual confirmation neither
+of these findings required; making the fix did not.
+
+**The fix.** `CObject::occurrences()` now returns `Option<&MultiplicityInterval>`.
+The four existing variants — `CComplexObject`, `CPrimitiveObject`,
+`ArchetypeSlot`, `CArchetypeRoot` — are unaffected in every other respect:
+their own struct fields stay `MultiplicityInterval`, not `Option`, and the
+dispatcher simply wraps each in `Some`. Only `CComplexObjectProxy::occurrences`
+itself becomes genuinely `Option<MultiplicityInterval>`, `None` now meaning
+AOM2's own `use_target_occurrences()` — the residual `A-53` named. Two
+construction-time checks in `CAttribute::single`/`container` read
+`child.occurrences()` and needed a rule for a deferred child: AOM2 states one
+directly, in `C_OBJECT.effective_occurrences()`'s own text — "If local
+`occurrences` not set, always assume 0 as the lower bound" — cited and
+applied to the `required`-count sum in `container`; the upper-bound checks in
+both functions (`VACSO`, `VACMCU`) exclude a deferred child entirely, since
+its effective upper bound depends on a target this crate does not resolve
+and guessing one would be exactly the kind of unverified claim `W0.3` exists
+to catch. `am::validate::walk_attribute`'s own occurrences check gained the
+matching case: a deferred alternative is reported `Unchecked`, naming
+`use_target_occurrences`, rather than causing a `match` to not compile or a
+panic to reach a caller.
+
+Two new tests: a proxy built with `None` occurrences reads
+`use_target_occurrences() == true` and `occurrences() == None` through both
+`CComplexObjectProxy` and `CObject`; and, in `am::validate`, a proxy with
+deferred occurrences governing one matched instance node is unchecked
+*twice* — once from `walk_object`'s own per-node handling (`A-53`), once
+from the separate alternative-occurrences loop — confirmed as two distinct,
+correctly-worded reports rather than one masking the other.
+
+## A-55 — `CPrimitive::TerminologyCode::code_list` had no AOM2 counterpart
+
+**Severity: Low. Status: fixed.** Closes `A-51`'s own residual, made for the
+reason `A-54`'s own opening paragraph gives.
+
+**The fix.** `code_list: Vec<String>` removed. `constraint: Option<String>`
+now carries either kind of code AOM2's own single-valued `constraint`
+attribute can — a required `at`-code or a value-set `ac`-code — distinguished
+at check time by AOM2's own leader convention, `is_value_set_code`:
+`a_code.starts_with (Value_set_code_leader)`, `Value_set_code_leader = "ac"`
+(`openEHR/specifications-AM`,
+`docs/UML/classes/org.openehr.am.aom2.adl_code_definitions.adoc`), not by
+which of two Rust fields a caller happened to populate. `am::validate`'s
+`C_TERMINOLOGY_CODE` arm was rewritten around that distinction: an `ac`-code
+checks value-set membership as before; an `at`-code now checks exact
+equality with the instance's own coded value, a check `code_list` never
+correctly performed in the first place (it checked *membership in a list*,
+which happened to coincide with equality only for a single-element list).
+`archetype.rs`'s own `VACDF` sweep (`terminology_constraints`) is narrowed to
+match: it used to treat every non-empty `constraint` as an `ac`-code needing
+a value set, which was safe only because `constraint` was never anything
+else; now that an `at`-code can appear there too, the sweep filters on the
+same `"ac"` leader before demanding a value set for it, so an `at`-code
+constraint is no longer wrongly refused for lacking one.
+
+`AOM2`'s own convention for "no constraint" is an empty string, not `Void`
+— this crate keeps translating that to `None` for the idiomatic reason
+`constraint: Option<String>` already gave, but now also accepts `Some("")`
+as the same case, defensively: `Deserialize` does not run this crate's own
+constructors, so a foreign or hand-written payload may use either spelling
+and both must be read the same way.
+
+**Multiple alternative codes are unaffected in what they can express, only
+in how.** `code_list: ["at1", "at2"]` on one node is now two sibling
+`CObject::Primitive` alternatives under the same `C_ATTRIBUTE`, each with
+its own single-code `constraint` — the shape `CAttribute::children` already
+gives every other node kind for exactly this purpose (`A-50`'s own tuple
+alternatives are a second instance of the same pattern). No expressive power
+is lost; what changes is which part of the tree carries the alternation.
+
+Two new tests: an `at`-code constraint checked for exact equality, both
+directions (the matching code passes, a different one violates); and
+`constraint: None` and AOM2's own `Some(String::new())` spelling both
+reported unchecked with the same reason, proving the two are read as one
+case rather than one being silently favoured.
+
+## A-56 — `Inv_valid_assumed_value` was never checked
+
+**Severity: Low. Status: fixed.** Closes `A-48`'s own residual.
+
+**Why this one, now.** `A-48` deferred `Inv_valid_assumed_value` — AOM2's
+own validity condition that `C_PRIMITIVE_OBJECT.assumed_value` conforms to
+the same node's `constraint` — reasoning that "nothing calls this before a
+template author or a form generator would, and neither exists in this
+crate." That reasoning was about *runtime* consumers of an assumed value,
+which is correct and remains true; it did not consider that the archetype
+*itself* can be checked for internal consistency independent of any
+consumer, the same way `VARDT`/`VATDF`/`VACDF`/`VATCD` already are. An
+archetype whose own stated default cannot satisfy its own stated constraint
+is malformed on its own terms, whether or not anything downstream ever asks
+for the default.
+
+**Where the check lives, and why not at the leaf.** `CPrimitiveObject
+::with_assumed_value` builds one node in isolation and has no terminology in
+scope — `Inv_valid_assumed_value` for a `C_TERMINOLOGY_CODE` naming an
+`ac`-code needs the archetype's own value set, which only exists once a
+`CComplexObject` and an `ArchetypeTerminology` are assembled together. So
+the check is in `Archetype::check` (`am::archetype`), the same place
+`VACDF` already needed the terminology for the same reason.
+`CPrimitiveObject::with_assumed_value` itself is unchanged — still
+infallible, still carries a mismatched value exactly as given, exactly as
+its own documentation already said — because that is correct in isolation,
+not merely undone.
+
+**The check itself.** `assumed_value_conforms` — AOM2's own `valid_value`
+— matches `(CPrimitive, PrimitiveValue)` pairs: `Boolean` against
+`allow_true`/`allow_false`; `String` against `list` (empty means
+unconstrained, matching every other kind's own convention); `Integer`/`Real`
+against `list`/`range`, `Real` compared by `semantic_cmp` for the `D3.18d`
+reason every other numeric comparison in this crate already gives;
+`Terminology_code` against an exact `at`-code or, for an `ac`-code, the
+terminology's own value set (`A-55`'s `"ac"`-leader convention, reused
+rather than re-derived); the four temporal kinds by parsing
+`PrimitiveValue::Text` via the relevant `base` type's own `FromStr` and
+checking it against `range`. A kind mismatch — `PrimitiveValue::Boolean`
+paired with `CPrimitive::Integer`, say — does not conform, full stop:
+AOM2's `valid_value` has no notion of "close enough".
+
+**`C_UNSUPPORTED` is excluded, not guessed at.** This crate cannot interpret
+a constraint kind it does not model, so it makes no claim about whether an
+assumed value conforms to one — neither "passes" (which would be
+unverified) nor "fails" (which would refuse an archetype for a reason this
+crate cannot actually establish). The same reasoning `VASID`/`VACSD` already
+state for the two conditions this crate cannot check at all.
+
+Five new tests: a matching, in-range assumed value accepted; an
+out-of-range one refused, naming `Inv_valid_assumed_value`; a
+kind-mismatched one — `Boolean` on `C_INTEGER` — refused at the archetype
+even though `CPrimitiveObject` alone still carries it unchecked, confirming
+the two levels genuinely disagree on purpose rather than one silently
+overriding the other; a `Terminology_code` assumed value checked against a
+real value set, both directions; and a `C_UNSUPPORTED` constraint's assumed
+value building a conformant archetype regardless of what the value actually
+is, confirming the exclusion is real rather than an accidental pass.
+
+## A-57 — a side-effecting `debug_assert!` broke header parsing in release builds
+
+**Severity: High. Status: fixed.**
+
+**Found by the release process itself, not by a research pass.** Preparing
+0.9.0 for publication, `agents/publishing.md`'s own checklist — `cargo test`
+and `cargo clippy` clean, then CI on the actual commit — ran green on
+everything except one job: `benchmarks still run / openehr`
+(`cargo bench --benches -- --test`, `W0.35`'s smoke-test-only run). Two
+tests failed there and nowhere else: `am::adl2::tests
+::reads_meta_data_and_specialisation` and `am::adl14::tests
+::skips_archetype_header_metadata`, both refusing a well-formed `(adl_version
+=2.4.0; ...)` `meta_data` clause as `"unterminated (...) metadata"`.
+Reproduced locally with the identical command before touching any code, per
+`W0.3` — the failure was real, not a shared-runner artefact of the kind
+`agents/publishing.md` already warns benchmark jobs can produce.
+
+**The bug.** `adl_lexer::Lexer::skip_parenthesised` — used by both ADL 2 and
+ADL 1.4's header readers (`am::adl2::parse_header`, `am::adl14::parse_header`,
+`A-49`) to skip an optional `meta_data` block — opened with:
+
+```rust
+debug_assert!(matches!(self.next(), Some(Token::Symbol('('))));
+```
+
+`self.next()` advances the lexer — a side effect this function's own
+correctness depends on, consuming the opening `(` before the loop below
+starts counting nested parens. `debug_assert!`'s argument **is not evaluated
+at all** when `debug-assertions` is off, which `cargo bench`'s profile — like
+`cargo build --release`, and like any downstream consumer's own release
+build — sets by default. In that build, `self.next()` is never called, the
+opening `(` is never consumed, and the loop reads it again as a *nested*
+paren — one extra level of depth with no closing paren to match it, so a
+perfectly well-formed `meta_data` clause is refused as unterminated.
+
+**Why nothing had caught it.** `cargo test` — every invocation of it in this
+repository's own history, and CI's own `test` job — always builds in the
+`dev` profile, where `debug_assert!` is live and the bug is invisible: the
+side effect happens, the assertion passes, the function works. Only a
+release-profile build exercises the broken path, and the only CI job that
+builds one is `benchmarks still run`, which `W0.35`/`W0.36` deliberately do
+not gate merges on ("run, never gated on") — so this had been red, unnoticed,
+since the header readers were first added (`428dfb2`, `161a193`), through
+every commit and every green `test` run since.
+
+**Severity.** Both header readers are the only ADL entry points this crate
+has (`K15.5`/`K15.8`, both still otherwise unimplemented, `A-40`), and
+`meta_data` is not a rare clause — real published archetypes carry an
+`adl_version`/`uid` block routinely (`openEHR-EHR-CLUSTER.device.v1.0.0.adls`,
+cited in `am::cadl`'s own tests, opens with exactly this shape). A caller
+building this crate into a release binary — the normal way to ship Rust —
+would have every such header refused, silently, with no `test`-profile
+signal ever suggesting a problem. Rated `High`: a defeated control, not a
+gap in coverage — the function's own doctests and unit tests all pass, and
+still do, in the one profile that does not exercise the bug.
+
+**Fixed.** The opening token is consumed into a binding unconditionally;
+`debug_assert!` checks only the already-computed value, which has no side
+effect of its own to elide:
+
+```rust
+let opening = self.next();
+debug_assert!(matches!(opening, Some(Token::Symbol('('))));
+```
+
+Verified both ways: `cargo bench --benches -- --test` (release profile) and
+`cargo test` (dev profile) both pass, 389 of 389, where before the fix the
+former failed exactly the two tests above and the latter passed all along —
+confirming the fix closes the actual gap between the two rather than
+changing behaviour either build already had right.
+
+**No residual.** `grep -rl debug_assert --include="*.rs"` across all eighteen
+crates returns exactly one file: `adl_lexer.rs`, the one fixed here. This
+was not one instance of a pattern repeated elsewhere — it was the only
+`debug_assert!` in the entire tree.
+
+## A-58 — a `C_ATTRIBUTE_TUPLE` was carried but never evaluated
+
+**Severity: Low. Status: fixed.** Closes `A-50`'s own residual.
+
+**The gap.** `A-50` gave `CComplexObject` somewhere to put a
+`C_ATTRIBUTE_TUPLE`/`C_PRIMITIVE_TUPLE` constraint and made `walk_complex`
+visit it — but only to report it `Unchecked`, unconditionally, naming the
+attributes it covers. Nothing resolved the instance's actual `units` and
+`magnitude` (or `value`/`symbol`) and asked whether any permitted row
+accepted them together. `A-50`'s own text named this explicitly as deferred:
+"a larger piece of work, decoupled from `walk_complex`'s existing
+per-attribute shape, and not attempted here." Left as it stood, a
+`C_ATTRIBUTE_TUPLE` constraint could not fail — every instance, conformant or
+not, produced the same unchecked report, which `K15.20` requires this crate
+to never let read as a pass.
+
+**Fixed.** `walk_complex` now calls a new `walk_attribute_tuple` for each
+`CAttributeTuple` it visits. It:
+
+1. Resolves each co-varying attribute (`tuple.members()`) to exactly one
+   instance value via `Node::children`. An attribute that is not
+   single-valued in the instance — absent, or repeating — cannot be resolved
+   to one value to compare, so the whole tuple is reported `Unchecked`
+   there, naming the unresolved attribute's own path and how many values it
+   actually had. AOM2's own tuple examples (`units`/`magnitude`,
+   `value`/`symbol`) are always single-valued attributes; this is not a
+   shape the check guesses at.
+2. Evaluates every row's every column by calling `walk_primitive` itself —
+   the same function `walk_attribute` already uses for an ordinary
+   `C_PRIMITIVE_OBJECT` — against a scratch `Ctx` whose result is inspected
+   and discarded, rather than re-implementing the six primitive kinds'
+   comparison rules a second time. `lib:A-33` is the standing reason a rule
+   stays in exactly one place in this crate; a tuple's row is nothing more
+   than several ordinary primitive constraints evaluated together.
+3. Combines each column's three-valued outcome (`Conforms`/`Violates`/
+   `Unchecked` — a new, function-local `TupleVerdict`, not `ConstraintStatus`,
+   which is AOM2's own carried-in-the-archetype status rather than a computed
+   verdict) into a row verdict by AND (`Violates` anywhere wins; `Unchecked`
+   anywhere else keeps the row open), then into a tuple verdict by OR
+   (`Conforms` anywhere wins; `Unchecked` anywhere else keeps the tuple open).
+   Only when every row definitely violates does the tuple itself become a
+   violation — the instance's values do not match any permitted combination.
+4. An empty `tuples` list (AOM2 declares it `0..1`, so absence is legal) has
+   no row to compare against at all, and stays `Unchecked` rather than
+   becoming a guessed `Conforms` or `Violates` — this crate has no stated
+   reading of what a tuple naming zero rows means for conformance, and is
+   not inventing one here.
+
+**Tests.** Four in `am::validate`, replacing the single always-unchecked test
+`A-50` added: the zero-rows edge case (renamed
+`an_attribute_tuple_with_no_rows_is_unchecked`, asserting the new message and
+detail — the old test's doc comment described the pre-fix "nothing walks
+into a tuple's own rows" behaviour, which this fix makes false in general,
+true only for this specific degenerate input); a real matching row
+(`an_attribute_tuple_matching_a_row_is_conformant`, `140 mm[Hg]` against
+`mm[Hg]`/`kPa` rows — no violation, nothing unchecked); a real non-matching
+set of rows (`an_attribute_tuple_matching_no_row_is_a_violation`, `120
+cm[H2O]` against the same two rows — exactly one violation naming
+`C_ATTRIBUTE_TUPLE`); and an unresolvable column
+(`an_attribute_tuple_column_that_does_not_resolve_is_unchecked`, an
+`accuracy` attribute `DV_QUANTITY` has no children for — unchecked, naming
+the column's own path and `"0 value(s)"`).
+
+**No residual.** Every branch `walk_attribute_tuple` can take — unresolvable
+column, definite match, definite non-match, and the zero-rows edge case — has
+a test exercising it.
+
+## A-59 — `ARCHETYPE_SLOT.is_closed` had no counterpart
+
+**Severity: Low. Status: fixed.**
+
+Found while comparing this crate's `am::constraint` module against
+`org.openehr.am.aom2.archetype_slot.adoc` directly, the same method `A-50`,
+`A-52`, and `A-53` each used to find their own gaps, rather than assuming
+this crate's existing `ArchetypeSlot` — added before this pass, and already
+carrying `includes`/`excludes` — was complete because it had a name and two
+of its three fields.
+
+**The gap.** AOM2 declares `ARCHETYPE_SLOT` with three attributes —
+`includes: List<ASSERTION> [0..1]`, `excludes: List<ASSERTION> [0..1]`, and
+`is_closed: Boolean [1..1]` — plus one function, `any_allowed(): Boolean`,
+`"True if no constraints stated, and slot is not closed."` This crate's
+`ArchetypeSlot` had the first two and neither the third nor the function. An
+archetype closing a slot — `"closed to further filling either in further
+specialisations or at runtime"`, the class's own words for `is_closed` —
+could not say so under any representation: not accepted and checked, not
+accepted and carried unchecked, not even round-tripped through JSON, the
+same silent-loss shape `A-46`/`A-48`/`A-50`/`A-52` each found in a different
+class.
+
+**Fixed.** `is_closed: bool` added, defaulting `false` — AOM2's own stated
+default, so a slot left alone stays open, matching every existing fixture
+and caller without change. `closed()` is a builder, one-directional like
+`CComplexObjectProxy`'s own occurrence builder: there is no `open()`,
+because `false` is already what building a slot and calling nothing extra
+produces. `is_closed()` reads it back, and `any_allowed()` is `AOM2`'s own
+function verbatim: `includes.is_empty() && excludes.is_empty() &&
+!is_closed`. `#[serde(default)]` on the new field keeps JSON written before
+this pass existed readable, the same choice `A-46`/`A-48`/`A-50` made for
+their own late-added fields.
+
+**Not enforced, and not able to be from where this crate currently
+validates.** `am::validate::walk_object`'s existing `CObject::Slot` arm
+reports every slot `Unchecked` regardless — added before this finding, for
+a reason `is_closed` does not touch: which archetype, if any, fills a slot
+is recorded on the *instance's* own `ARCHETYPED.archetype_id`, and
+`crate::path::Node` — the interface every walk function in `am::validate`
+reads instance data through — does not expose it at all. `is_closed`
+answers a different question (is filling permitted here, at authoring or
+specialisation time) than a filler check would (what, if anything, actually
+filled it, at instance-validation time), so even resolving the `Node` gap
+would not make this field enforceable by itself; the two are separate
+pieces of work. Carrying it unchecked, rather than not representing it at
+all, is the same choice `A-48` made for `assumed_value` before `A-56`
+checked its own invariant three findings later.
+
+**Tests.** Four, in `am::constraint`: the default-open case and each of the
+three ways `any_allowed()` can become false — `closed()`, one inclusion
+assertion, one exclusion assertion — checked separately, since folding them
+into one assertion would hide which restriction actually flipped the
+result; canonical-JSON round-tripping with the field set; and a fixture
+written as though from before `is_closed` existed — literal JSON with no
+such key at all — still deserialising, and reading as the AOM2-stated
+default.
+
+## A-60 — `ARCHETYPE_SLOT` could state `is_closed` and still never catch a violation of it
+
+**Severity: Medium. Status: fixed.**
+
+**The gap.** `A-59` gave `ArchetypeSlot` an `is_closed` field and its
+`any_allowed()` function, but its own "Not enforced" section was explicit
+about why that alone changed nothing observable: `am::validate::walk_object`
+reports every `CObject::Slot` `Unchecked`, unconditionally, because which
+archetype — if any — fills a slot is recorded on the *instance's* own
+`ARCHETYPED.archetype_id`, and `crate::path::Node`, the interface every walk
+function in `am::validate` reads instance data through, exposed no way to
+read it. A closed slot the instance data filled anyway — the one case
+`is_closed` exists to forbid — produced exactly the same report as an empty
+one: `Unchecked`. Rated `Medium`, not `Low` like `A-59` itself, because this
+is not a missing representation but a missing *check*: real non-conformant
+data (a closed slot filled regardless) passed through
+`validate_against_archetype` reported no differently from data this crate
+genuinely cannot evaluate, which is the same understating-of-`false`
+direction `A-45` was rated `Medium` for.
+
+**Fixed, in two parts.**
+
+1. **`Node::archetype_details()`**, in `crate::path`, added alongside the
+   existing `Node::archetype_node_id()` it is modelled on — same match arms,
+   same reasoning about which `Node` variants can answer and which cannot
+   (a bare data value never can; `Locatable::archetype_details` already
+   states `None` for the same reason on the RM side). `Entry`,
+   `ItemStructure`, and `Event` — the three `Node` variants that wrap an enum
+   rather than a `Locatable`-implementing struct directly — gained their own
+   inherent `archetype_details()` dispatcher next to the `locatable()`
+   dispatcher they already had, rather than routing through
+   `.locatable().archetype_details()` as the existing `archetype_node_id()`
+   code does: `archetype_details` is a [`Locatable`]-*provided* trait
+   method, with no inherent counterpart on `LocatableAttrs` the way
+   `archetype_node_id` has, so going through `.locatable()` does not resolve
+   it. Caught by the compiler, not by a review — `E0599`, three times, one
+   per enum.
+2. **`walk_object`'s `CObject::Slot` arm** replaced with a new
+   `walk_slot`, which resolves what filled the position (if anything) via
+   the new accessor and reasons over the three constraints AOM2 actually
+   states, without parsing a single assertion:
+   - No filler at all (`archetype_details()` is `None`): the slot was left
+     open. `is_closed`, `includes`, and `excludes` all restrict what may
+     fill a slot; none of them restricts leaving it unfilled, which is
+     occurrences' own job, checked separately by the attribute the slot
+     sits under. Nothing to violate and nothing to leave unchecked.
+   - A filler is present and `is_closed()`: definite violation, naming
+     `ARCHETYPE_SLOT.is_closed`, regardless of what the filler is or
+     whether `includes`/`excludes` might otherwise have allowed it — a
+     closed slot forbids filling outright, so presence alone settles it.
+   - A filler is present and `any_allowed()` (open, nothing stated):
+     definite pass — an unrestricted slot's filler needs no further check,
+     whatever it turns out to be.
+   - A filler is present, open, but `includes` and/or `excludes` name an
+     assertion: `Unchecked`, naming the filler's own archetype id as
+     detail — this crate does not parse `ASSERTION` expressions (`K15.10`),
+     so whether *this* filler actually satisfies *this* assertion remains
+     genuinely unknown, and stays reported that way rather than guessed at
+     either direction.
+
+**Not attempted.** `includes`/`excludes` themselves remain unparsed strings;
+this finding does not touch `K15.10`. A slot whose only restriction is
+`is_closed` — the one AOM2 attribute expressible without any assertion
+grammar at all — is now checked exactly as fully as `any_allowed()` already
+let a fully open slot be; a slot restricted by `includes`/`excludes` is no
+better checked than before `A-59`, only correctly distinguished from the
+closed and unrestricted cases rather than folded into the same `Unchecked`
+report all three used to share.
+
+**Tests.** The single pre-existing slot test asserted a fixture — a plain
+`ELEMENT` with no `archetype_details` at all — that this fix reveals was
+never actually a *filled* slot to begin with, only ever the open-and-empty
+case; it is replaced with four, one per outcome above:
+`an_open_slot_left_unfilled_is_fully_conformant`,
+`a_closed_slot_that_was_filled_anyway_is_a_violation`,
+`an_unrestricted_open_slots_filler_is_fully_conformant`, and
+`a_restricted_open_slots_filler_is_unchecked_not_silently_passed` — the last
+of these is the only one still carrying the `K15.20` discipline the old,
+single test's name claimed for all four cases at once. A shared `filled()`
+helper in `am::validate`'s own test module builds an `Element` with
+`archetype_details` set, the shape every "was this slot actually filled"
+question in this finding turns on.
+
+## A-61 — `ARCHETYPE_TERM.other_items` had no counterpart
+
+**Severity: Low. Status: fixed.**
+
+Found comparing `am::terminology` against
+`org.openehr.am.aom2.archetype_term.adoc` directly, the same method
+`A-50`/`A-52`/`A-53`/`A-59` each used to find their own gaps — this crate's
+`TermDefinition` already modelled `code` (as the enclosing map's own key,
+not a duplicated field — a reasonable choice, not a gap), `text`, and
+`description`, and had for as long as the type existed, so it read as
+complete. It was not: AOM2 states a fourth attribute, `other_items:
+Hash<String, String> [0..1]`, described as a "Hash of keys and
+corresponding values for other items in a term, e.g. provenance." Nothing
+in this crate could hold one — not accepted and checked, not accepted and
+carried unchecked, not even round-tripped through JSON — the same
+silent-loss shape every one of the findings above found in a different
+class.
+
+**Fixed.** `other_items: BTreeMap<String, String>` added, defaulting empty.
+`with_other_item(key, value)` is a builder, matching
+`ArchetypeTerminology::with_binding`'s own one-entry-at-a-time shape for its
+external bindings; `other_items()` reads the whole map back.
+`#[serde(skip_serializing_if = "BTreeMap::is_empty", default)]` keeps JSON
+written before this field existed both readable and unchanged in shape when
+unused, the same choice `A-46`/`A-48`/`A-50`/`A-59` made for their own
+late-added fields.
+
+**Not enforced, deliberately.** AOM2 does not name a fixed set of
+recognised keys for `other_items` — "e.g. provenance" is one example, not
+an enumeration — so there is nothing to validate a key or value against.
+This is the same position `am::terminology`'s own module documentation
+already states for `ArchetypeTerminology`'s external bindings: "A binding
+to SNOMED CT or LOINC names a terminology this crate cannot reach... those
+are carried, reported as unchecked, and never reported as satisfied"
+(`S1.10`, `K15.22`). `other_items` is carried on the same terms.
+
+**Tests.** Three: absent by default and carried once attached via the
+builder; canonical-JSON round-tripping, both bare and with entries, and
+confirming `other_items` is omitted from the JSON entirely when empty
+rather than written as `{}`; and a fixture written as though from before
+this field existed — literal JSON with no `other_items` key at all — still
+deserialising, reading as an empty map.
+
+## A-62 — `am::cadl` refused three constructs its own types already modelled
+
+**Severity: Medium. Status: fixed.**
+
+**The gap.** `am::cadl`'s own module documentation grouped `ARCHETYPE_SLOT`
+(`allow_archetype`), `C_ARCHETYPE_ROOT` (`use_archetype`), and
+`C_COMPLEX_OBJECT_PROXY` (`use_node`) under one blanket refusal, reasoning
+that `allow_archetype`'s own `include`/`exclude` clauses need the assertion
+language `K15.10` covers and this parser does not — true, but stated as the
+reason for refusing all three, when only one of them actually touches an
+assertion at all. `c_archetype_root`'s own grammar
+(`archetype_ref: ARCHETYPE_HRID | ARCHETYPE_REF`) and
+`c_complex_object_proxy`'s (`ADL_PATH`, a single trailing token) need
+nothing from `K15.10` — both types already existed in this crate (`A-50`,
+`A-53`), already had constructors ready to take exactly what the grammar
+offers, and archetypes using either construct were refused for a reason
+that, on inspection, did not apply to them.
+
+**Fixed, in three parts.**
+
+1. **`use_archetype` → `C_ARCHETYPE_ROOT`**, fully. The only real obstacle
+   was lexical, not grammatical: `ARCHETYPE_HRID`/`ARCHETYPE_REF` do not
+   lex as one `Word` token in `cadl_lexer::Lexer` — its word-scanner stops
+   at `-` (needed elsewhere, so `at`/`id`-codes and RM type names tokenize
+   correctly), which splits `openEHR-EHR-CLUSTER.device.v1` into five
+   tokens. Rather than adding a second, `-`-tolerant scanning rule only
+   this one construct would use, `Lexer::text_since(start)` slices the
+   original source between two offsets a caller has already bounded —
+   `c_archetype_root`'s own grammar puts nothing but the reference between
+   its leading `,` and the closing `]`, so "everything up to `]`" is exact
+   for this call site, not a guess. `CArchetypeRoot::new` takes the
+   reconstructed text as a plain `String` (it was never typed narrower
+   than that — `A-49`'s own `ARCHETYPE_REF`-vs-`ArchetypeId` residual does
+   not apply here), so no further validation is invented.
+2. **`use_node` → `C_COMPLEX_OBJECT_PROXY`**, fully, including the case its
+   own `occurrences` is absent. `Lexer::read_raw_path()` reads raw,
+   un-tokenized text to the next whitespace — `ADL_PATH`'s own grammar
+   (`base_lexer.g4`) contains no unescaped whitespace, so this is exact,
+   not approximate, and simpler than tokenizing `/`-separated segments only
+   to immediately re-join them. A new `parse_optional_occurrences`, distinct
+   from the existing `parse_occurrences`, builds `None` rather than
+   refusing an absent `occurrences` here specifically:
+   `C_COMPLEX_OBJECT_PROXY.occurrences` is the one field in this crate an
+   absence is *meaningful* for (`use_target_occurrences()`, `A-53`), not
+   something to guess a value for or treat as an omission.
+3. **`allow_archetype` → `ARCHETYPE_SLOT`**, for its unrestricted form only
+   — occurrences stated or not, no `matches` clause. Two narrower refusals
+   remain, each real: `closed` is refused because its own grammar
+   production (`archetype_slot: ... (( c_occurrences? (...)? ) |
+   SYM_CLOSED )`) carries no `c_occurrences` at all alongside `closed`, and
+   `ArchetypeSlot` — unlike `CComplexObjectProxy` (`A-54`'s own scope
+   decision) — stores occurrences as a plain, non-deferrable
+   `MultiplicityInterval`, so there is no value to build one from without
+   inventing one; `matches { include ... exclude ... }` is refused because
+   `K15.10` genuinely applies there — each assertion is the full BEOM
+   `boolean_expr` grammar (quantifiers, arithmetic, function calls), and
+   this parser lexes no part of it.
+
+**Not attempted.** `K15.10` itself — the BEOM expression grammar
+`allow_archetype`'s `matches` clause needs — remains out of scope, as does
+`closed`'s own occurrences gap; both are refused by name, not silently
+accepted with an empty assertion list or a guessed multiplicity, exactly
+the discipline the module documentation already states for every other
+refusal in this parser.
+
+**Tests.** The one pre-existing `allow_archetype` test asserted a fixture
+that, under this fix, hits a different (also correct) refusal first —
+"occurrences omitted" fires before the parser ever reaches the `matches`
+clause it was written to exercise, since occurrences precedes `matches` in
+the grammar and the old fixture stated neither. It is renamed and given
+occurrences so the refusal it actually names fires. Five new tests:
+`use_archetype` parsed into a `C_ARCHETYPE_ROOT`, using exactly the
+`-`-split fixture that proves the slice reconstruction is exact;
+`use_node` with no stated `occurrences`, confirming it builds `None`
+rather than refusing; an unrestricted `allow_archetype` parsed into an
+`ArchetypeSlot` with `any_allowed()` true — the case `A-60`'s
+`walk_slot` can now fully check on data reached through real ADL text, not
+only through direct Rust construction; and the `closed` and `matches`
+refusals, each naming its own reason. Two more in `cadl_lexer`:
+`text_since` reconstructing a `-`-split archetype reference, and
+`read_raw_path` stopping at whitespace after skipping trivia, plus its
+end-of-input case.
+
+## A-63 — `CPrimitive::String::pattern` had no AOM2 counterpart
+
+**Severity: Low. Status: fixed.**
+
+Found while researching `A-62`: confirming exactly what `CONTAINED_REGEXP`
+governs meant reading `org.openehr.am.aom2.c_string.adoc` directly rather
+than assuming this crate's existing `pattern: Option<String>` field, sitting
+beside `list: Vec<String>`, already matched it. It does not. `C_STRING`'s
+own `constraint` attribute is a single `List<String>`: "a list of literal
+strings and/or regular expression strings delimited by the '/' character."
+There is no second attribute — `C_PRIMITIVE_OBJECT`, `C_STRING`'s direct
+parent, declares only `assumed_value`, `is_enumerated_type_constraint`, and
+`constraint` itself. This is exactly the shape `A-51`'s second pass found
+in `TerminologyCode::code_list`: a field this crate invented alongside the
+real one, with nothing in AOM2 to correspond to it.
+
+**Why this one stayed hidden as long as it did.** `C_TEMPORAL.pattern_constraint`
+— the four temporal `CPrimitive` variants' own `pattern` field — genuinely
+*is* a separate AOM2 attribute, distinct from `constraint`
+(`org.openehr.am.aom2.c_temporal.adoc`, with its own
+`Pattern_validity` invariant). `CPrimitive::String`'s `pattern` was added
+alongside those four, in the same finding, and inherited their shape by
+resemblance rather than by checking `C_STRING`'s own class definition
+separately — the four temporal types being right made the fifth read as
+right too.
+
+**Fixed.** `pattern` removed from `CPrimitive::String`; `list` now carries
+literal and regex elements together, exactly as AOM2 states. `is_c_string_pattern`
+(`am::constraint`) recognises the delimiter convention — `/…/` or `^…^`,
+at least one character between them, matching `CONTAINED_REGEXP`'s own
+grammar (`openEHR/adl-antlr`, `base_lexer.g4`) — and is the *only* place
+that does: `am::validate::walk_primitive` and
+`am::archetype::assumed_value_conforms` both call it rather than
+re-deriving the rule (`lib:A-33`). Conformance behaviour is unchanged, not
+merely the representation: a value matching a literal element still leaves
+the node `Unchecked` if a pattern element is also present in the same
+list, the same choice this crate already made when the two lived in
+separate fields, not silently upgraded to `Conforms` now that they share
+one.
+
+**Not attempted.** Actually compiling and applying a regex element remains
+`K15.18`, unaffected by this finding — a pattern element is still carried,
+not evaluated. `am::cadl` does not gain the ability to *write* a pattern
+element into `list`: `CONTAINED_REGEXP` lexing is still unimplemented
+there, listed in the parser's own module documentation with corrected
+wording rather than removed, since the gap it names is real and unchanged
+by this fix.
+
+**Tests.** The one existing `C_STRING` pattern test is renamed and its
+fixture folded (`list: vec![r"/\d+/".to_owned()]` in place of a separate
+`pattern: Some(...)`), proving the same outcome. Two new: a literal element
+that matches leaves the node unchecked anyway when a pattern element sits
+beside it in the same list (the behavioural continuity claim above,
+checked rather than asserted); and a literal-only list with no regex
+element rejects an unmatched value as a definite violation, exactly as
+before this finding, confirming the ordinary case is untouched.
+
+## A-64 — `am::cadl` could not parse a primitive's own assumed value
+
+**Severity: Low. Status: fixed.**
+
+Found continuing `A-40`'s own residual — extending `am::cadl`'s coverage
+— by reading `cadl2_primitives.g4` directly rather than assuming the
+parser's existing eight primitive readers were complete because each
+already handled its own list/range shape. They were not: every one of
+`c_boolean`, `c_string`, `c_integer`, `c_real`, `c_date`, `c_time`,
+`c_date_time`, and `c_duration` states an optional `'; ' <value>` suffix in
+its own grammar production (`assumed_boolean_value`, `assumed_string_value`,
+…), and `c_terminology_code` states its own distinct form, `[ac3; at5]`.
+`am::cadl` recognised none of the nine — the eight generic ones were never
+attempted, and the ac-code form was refused explicitly, naming exactly what
+was missing. `CPrimitiveObject::with_assumed_value` (`A-48`) has existed to
+receive one since before this parser's own primitive readers did.
+
+**Fixed.** `parse_inline_primitive` and its nine per-kind readers now
+return the constraint *and* an `Option<PrimitiveValue>` together. Eight
+kinds share one shape: `parse_assumed_boolean`/`_string`/`_integer`/`_real`
+each read the trailing `';' <value>` directly, and `parse_assumed_temporal`
+does the same generically for all four temporal kinds through the existing
+`temporal_primitive!` macro — one new function reused four times, not four
+new ones (`lib:A-33`). `c_terminology_code`'s own `[ac3; at5]` is read
+inside `parse_terminology_code_primitive` itself, since it is a second code
+*inside* the brackets rather than a value trailing them, and the grammar's
+own note — "can only occur after an ac-code not after the single at-code" —
+is enforced as a refusal, not silently accepted or left for
+`Inv_valid_assumed_value` (`A-56`) to catch three findings later. Both call
+sites `parse_inline_primitive` has (the wrapped `rm_type_id[id] matches
+{...}` form and the unwrapped shorthand under `c_objects`) attach the
+returned value via `with_assumed_value` when present.
+
+**Tests.** Six: one table-driven test covering the five kinds that are
+actually reachable end-to-end (`Boolean`, `String`, `Integer`, `Real`, and
+the wrapped form generally) plus a matching test for the unwrapped
+shorthand, confirming the second call site reaches the same code; the
+`[ac3; at5]` case attaching the assumed at-code; and the grammar's own
+refusal — an assumed value after a bare at-code — confirmed refused rather
+than silently accepted with the second code ignored.
+
+**Residual, found while writing this finding's own tests, not fixed here.**
+The four temporal kinds could not be included in the table-driven test:
+every attempt to parse a plain `Date`/`Time`/`Date_time`/`Duration` literal
+— with or without an assumed value — failed to lex at all. Tracked
+separately as `A-65`, since it is a distinct, pre-existing defect this
+finding's own changes do not cause and do not fix; `parse_assumed_temporal`
+is added to the temporal macro on the same terms as its five working
+siblings, correct by the same reasoning, but genuinely untestable
+end-to-end until `A-65` is closed.
+
+## A-65 — no ISO8601 literal can be lexed by `am::cadl` at all
+
+**Severity: Medium. Status: fixed.**
+
+**Found while writing `A-64`'s own tests**, not by a fuzzer or a report: a
+plain `Date[id2] occurrences matches {1} matches {2024-01-01}`, no assumed
+value involved, fails with `"expected ISO8601_DATE, found `2024`"`.
+Reproduced directly against `parse_definition`, isolated from every other
+change in `A-64`'s own commit, and confirmed the same failure predates it —
+this is not a regression `A-64` introduced.
+
+**The bug.** `cadl_lexer::Lexer::next`'s word-scanner stops at the first
+character that is neither alphanumeric, `_`, nor a mid-word `.` — `-` and
+`:` fall through to `SYMBOLS` (needed for archetype identifiers and
+interval/negative-number syntax elsewhere in this same lexer) rather than
+continuing a word. An ISO8601 date (`2024-01-01`), time (`12:30:00`), or
+duration (`P1Y2M`) all contain at least one of those two characters, and a
+date additionally *starts* with a digit, so `Lexer::next` never reaches the
+word-scanning branch at all for one — it lexes `"2024"` as `Token::Integer`
+via `read_number`, then `-` as `Token::Symbol('-')`, splitting one literal
+into several tokens. `expect_temporal`'s `expect_word` call — the single
+point every temporal reader goes through — fails on the very first token of
+any real literal, unconditionally.
+
+**Severity.** Rated `Medium`, not `Low`: this is total, not partial, and
+`A-45`'s own reasoning for rating the *absence* of temporal `CPrimitive`
+variants `Medium` applies again here — "nearly all [real archetypes]
+constrain at least one date or time field." The four temporal kinds'
+dispatch table, macro-generated readers, and now (`A-64`) their
+assumed-value handling all exist and compile, giving every appearance of
+support that has never once actually parsed a real literal.
+
+**Why nothing had caught it before now.** No test in this crate ever
+constructed a `Date`/`Time`/`Date_time`/`Duration` cADL fixture and called
+`parse_definition` on it — `A-64`'s own table-driven assumed-value test is
+the first to have tried, and it failed immediately, before ever reaching
+the assumed-value code the test was written to exercise.
+
+**Fixed.** `Lexer::read_iso8601` — comparable in shape to `A-62`'s own
+`text_since`/`read_raw_path` additions, not a patch to the existing
+word-scanner — reads a maximal run of ISO8601-shaped characters (digits,
+`-:+?,`, and the letters `TZPYMWDHS` in either case, folding every
+temporal fragment's own alphabet into one character class since the real
+grammar validation happens in `T::from_str` regardless) directly from the
+source, bypassing the ordinary tokenizer entirely. A `.` is consumed only
+when immediately followed by a digit — never when followed by a second
+`.` — so a `..` range separator is left for the ordinary tokenizer rather
+than swallowed into the literal, the same ambiguity this lexer's own
+`REAL`-vs-`DotDot` number-scanning already resolves for plain numbers.
+`expect_temporal` and `parse_assumed_temporal` (`A-64`) both call it in
+place of `expect_word`; `T::from_str` still does 100% of the actual
+grammar validation, exactly as before — this is a lexical boundary fix,
+not a new parser.
+
+There is no ambiguity for `read_iso8601` to get wrong that `Self::next`
+would also face: it is reached only from `expect_temporal`, itself called
+only where AOM2's own grammar already says a temporal literal comes next
+(`c_date`/`c_time`/`c_date_time`/`c_duration`'s own productions), never
+from the ordinary token stream a plain `C_INTEGER`/`C_REAL` also flows
+through.
+
+**Tests.** Five in `cadl_lexer`: all four literal shapes (plus a
+partial/unknown date, `19??-01`) read whole in one call; the `..`
+boundary; the `;`/`}` boundary; and end-of-input. Two in `am::cadl`: the
+`a_wrapped_primitives_assumed_value_is_attached` table (`A-64`) gains its
+previously-excluded `Date` case back, and a new
+`a_temporal_primitive_of_each_kind_is_parsed` exercises `Time` (a
+discrete value), `Date_time` (a ranged `|lower..upper|`), and `Duration`
+end-to-end through `parse_definition`, so every one of the four kinds the
+shared `temporal_primitive!` macro generates has been proven to parse a
+real literal at least once.
+
+## A-66 — `am::cadl` refused every `ARCHETYPE_SLOT` assertion and `C_STRING` regex
+
+**Severity: Medium. Status: fixed.**
+
+**Found continuing `A-40`'s own residual**, the same afternoon `A-63`
+found `CPrimitive::String::pattern` had no AOM2 counterpart: `A-62` had
+scoped `am::cadl`'s own `allow_archetype` support around the boundary
+`K15.10`'s own residual states — "each assertion is the full BEOM
+`boolean_expr` grammar, and this parser lexes none of it" — which is true,
+but overstates what actually stands in the way of the one assertion shape
+every real `ARCHETYPE_SLOT` this repository has found in the wild
+actually uses: `constraint_expr`'s own `bound_path SYM_MATCHES
+CONTAINED_REGEXP` alternative (`base_expressions.g4`), not the full
+`boolean_expr` recursive grammar (quantifiers, arithmetic, function
+calls). `CONTAINED_REGEXP` is a single lexical token — `{/…/}` or
+`{^…^}` — not a grammar this parser would need to parse in any richer
+sense than "find the matching delimiter." The same token is also, per
+`A-63`'s own finding, the one thing standing between `am::cadl` and
+writing a regex element into `CPrimitive::String::list` at all: nothing
+in the parser could produce one, so every `C_STRING` constraint this
+parser built was necessarily literal-only.
+
+**Fixed, in three parts.**
+
+1. **`Lexer::try_read_contained_regexp`**, a new raw scan alongside
+   `A-65`'s own `read_iso8601`: peeks for a `'{'` whose next non-trivia
+   character is `/` or `^` (the only shape `CONTAINED_REGEXP` can be —
+   nothing else in this grammar starts a brace-delimited block that way,
+   so the dispatch is exact, not a guess), then scans the delimited body
+   honouring `\/`/`\^` escapes, stopping at the matching unescaped
+   delimiter or refusing (`Err(())`) at a newline or the end of input
+   first. Returns `Ok(None)`, consuming nothing, for an ordinary `'{'` —
+   the caller falls back to its own `{c_objects}`/`{"literal"}` handling.
+   Positioned right after the closing delimiter, not after the outer `}`:
+   `CONTAINED_REGEXP`'s own optional `'; ' STRING` assumed value and its
+   mandatory closing `'}'` are both ordinary tokens, left for the caller's
+   own tokenizer (`finish_contained_regexp`) rather than more raw
+   scanning.
+2. **`parse_slot_assertion`** implements exactly `bound_path SYM_MATCHES
+   CONTAINED_REGEXP` — `read_raw_path` (`A-62`) for the path, `expect
+   "matches"`, then the regexp — and reconstructs the whole assertion's
+   own source text by slicing (`Lexer::text_since`, `A-62`'s own choice
+   for `use_archetype`'s reference) rather than re-serialising the parsed
+   pieces, since `ArchetypeSlot::including`/`excluding` still only carry
+   an assertion, never evaluate it (`K15.10`'s own residual, untouched by
+   this finding). `archetype_slot` itself now parses `matches { include
+   ... exclude ... }`, correctly handling `assertion+` — one or more per
+   keyword, not exactly one — by looping until the next `include`,
+   `exclude`, or the closing `}`.
+3. **`c_attribute_def`** gains the other half of `constraint_expr`'s own
+   alternative: `c_attribute`'s `SYM_MATCHES CONTAINED_REGEXP` shorthand,
+   built as an unwrapped `C_PRIMITIVE_OBJECT` (`CPrimitiveObject
+   ::PRIMITIVE_NODE_ID`) whose `CPrimitive::String::list` holds the
+   pattern with its own delimiters intact — the same single-list shape
+   `A-63` gave the type, and the same unwrapped-primitive construction
+   `c_objects`'s own shorthand already used, now shared through a new
+   `unwrapped_primitive_object` helper rather than duplicated a second
+   time (`lib:A-33`).
+
+**Not attempted.** The full BEOM `boolean_expr` grammar remains
+unimplemented; an assertion using `and`/`or`/`not`, a quantifier, a
+function call, or even `constraint_expr`'s own `'{'
+c_inline_primitive_object '}'` alternative (a quoted string in place of a
+regex) is refused by name, not silently accepted or guessed at. `closed`
+remains refused for the reason `A-62` already gave. `am::validate`'s own
+`walk_slot` (`A-60`) is unchanged: a restricted slot's filler is still
+`Unchecked`, since carrying an assertion's text is not the same as
+evaluating it.
+
+**Tests.** Five in `cadl_lexer` for `try_read_contained_regexp` directly:
+both delimiter forms; an escaped delimiter kept inside the body; a plain
+`{` correctly returning `None` with nothing consumed; no closing
+delimiter (including one hidden behind a real newline) refused; and an
+empty body refused. Six in `am::cadl`: the attribute shorthand building an
+unwrapped `C_STRING`; its own assumed value attached; the `^…^` delimiter
+form; an unterminated regex refused, naming the malformation; an
+`ARCHETYPE_SLOT` with two `include` assertions and one `exclude` (proving
+`assertion+`, not exactly one, and the keyword switch, in one fixture);
+and the renamed `a_slot_assertion_using_a_quoted_string_instead_of_a_regex_is_refused`
+— the pre-existing "restricted slot refused" test, whose old fixture
+(`matches {}`, empty) now parses successfully under this fix and so no
+longer demonstrates a real boundary, replaced with a fixture that
+genuinely still is one.
+
+## A-67 — `am::cadl` refused `C_ATTRIBUTE_TUPLE` outright
+
+**Severity: Medium. Status: fixed.**
+
+**Found continuing `A-40`'s own residual**, the same pass that closed
+`A-66`: `am::cadl`'s own module documentation already named
+`C_ATTRIBUTE_TUPLE` as a real, deliberate gap — "this crate's own
+`crate::am::CAttributeTuple` exists (`A-50`), but wiring ADL's own tuple
+syntax into it is separate parser work not attempted here" — and `A-58`
+had gone further still, giving `am::validate::walk_complex` real
+conformance evaluation for a tuple an archetype *already held in memory*
+carried. Between the two, nothing in this crate could ever produce a
+`CAttributeTuple` by reading ADL text: the type existed, the evaluator
+existed, and the one thing missing was the parser to connect them.
+
+**Fixed.** `cadl2.g4`'s own grammar:
+
+```text
+c_attribute_def: c_attribute | c_attribute_tuple ;
+c_attribute_tuple : '[' rm_attribute_id (',' rm_attribute_id)* ']'
+    SYM_MATCHES '{' c_primitive_tuple (',' c_primitive_tuple)* '}' ;
+c_primitive_tuple : '[' c_primitive_tuple_item (',' c_primitive_tuple_item)* ']' ;
+c_primitive_tuple_item: '{' c_inline_primitive_object '}' | CONTAINED_REGEXP ;
+```
+
+`c_attribute_def` dispatches on a leading `[` — nothing in `c_attribute`
+(`ADL_PATH | rm_attribute_id`) starts with one, so the choice is exact,
+not a guess — to a new `c_attribute_tuple`, which reads the co-varying
+attribute names (each built `CAttribute::single`, `MANDATORY`: the
+grammar states no `c_existence`/`c_cardinality` of its own for one, and
+every AOM2 tuple example is single, mandatory values, which is the whole
+reason a tuple exists rather than two independent attributes) and each
+row via `c_primitive_tuple`. A row's own items
+(`c_primitive_tuple_item`) reuse `A-66`'s own `CONTAINED_REGEXP` handling
+for the bare-regex alternative, and `parse_inline_primitive(lexer, None)`
+— already built for `c_objects`'s own unwrapped shorthand — for the
+`'{' c_inline_primitive_object '}'` alternative, since a tuple row item
+is always unwrapped: the grammar gives it no room for a wrapping
+`rm_type_id` at all. Both now share one `unwrapped_primitive` helper
+with `c_objects`'s own inline shorthand and `c_attribute`'s own
+`CONTAINED_REGEXP` shorthand, rather than three separate constructions of
+the same `PRIMITIVE_NODE_ID`-tagged `CPrimitiveObject` (`lib:A-33`).
+`c_complex_object` and its own duplicated tail in `c_regular_object`
+(already an acknowledged, pre-existing duplication, not one this finding
+introduces or removes) both now collect `attribute_tuples` alongside
+`attributes` from the same `c_attribute_def+` loop, attaching them via
+`CComplexObject::with_attribute_tuples`.
+
+**Not attempted, and a real limitation left by the grammar itself, not by
+this parser's own scope.** A tuple row's items are always the unwrapped
+shorthand, and `parse_inline_primitive(lexer, None)`'s own dispatch
+cannot tell a `C_INTEGER` interval from a `C_REAL` one without a wrapping
+`rm_type_id` to ask (a limitation this parser already states and refuses
+by name elsewhere, not new here). AOM2's own canonical `{units,
+magnitude}` example pairs a unit string with a magnitude *range*
+(`"deg F"` with `32.0..212.0`) — exactly the shape that hits this
+ambiguity — so that specific example still cannot be parsed end to end,
+not because tuple syntax is unimplemented, but because of a separate,
+pre-existing, and correctly-still-refused limitation. A tuple pairing a
+unit with a discrete magnitude *value* instead parses cleanly.
+
+**Tests.** Six: the pre-existing refusal test is retitled and its
+assertion corrected to name the real reason it now fails
+(`a_c_attribute_tuple_with_an_unwrapped_interval_item_hits_a_different_refusal`
+— the interval ambiguity above, not "tuple syntax not implemented", which
+is no longer true); a genuinely successful two-row, discrete-valued tuple
+parsed end to end and its shape inspected
+(`a_c_attribute_tuple_with_discrete_values_is_parsed`); a `CONTAINED_REGEXP`
+tuple item; and a malformed tuple (wrong row arity) refused by name, not
+silently accepted or dropped.
+
+## A-68 — `CPrimitiveObject.is_enumerated_type_constraint` had no counterpart
+
+**Severity: Low. Status: fixed.**
+
+Noticed in passing while re-reading `C_PRIMITIVE_OBJECT`'s own class
+definition for `A-63` (confirming what `Inv_valid_assumed_value` and
+`assumed_value`'s own shape actually were) rather than assuming this
+crate's existing `CPrimitiveObject` — `node_id`, `assumed_value`, all
+already present — had every attribute the class declares. It did not:
+`is_enumerated_type_constraint: Boolean [0..1]`, "True if this object
+represents a constraint on an enumerated type from the reference model,
+where the latter is assumed to be based on a primitive type, generally
+Integer or String," had no counterpart under any name. An archetype
+stating it — common for RM attributes like `ACTION.state`'s own coded
+state machine, exactly the "enumerated type... based on... String" case
+the class's own description names — could not carry that fact through
+this crate at all: not accepted and checked, not accepted and carried
+unchecked, not even round-tripped through JSON.
+
+**Fixed.** `is_enumerated_type_constraint: Option<bool>` added, defaulting
+`None` — AOM2's own `Void`, not `false`, since `0..1` means the attribute
+may be entirely unstated, and collapsing that into a boolean default would
+assert something no archetype actually said.
+`with_is_enumerated_type_constraint()`/`is_enumerated_type_constraint()`
+attach and read it, the same builder shape `with_assumed_value` already
+uses; `#[serde(skip_serializing_if = "Option::is_none", default)]` keeps
+JSON written before this field existed both readable and unchanged in
+shape when unused, the same choice `A-46`/`A-59`/`A-61` made for their own
+late-added fields.
+
+**Not enforced, deliberately.** Nothing in this crate checks the flag
+against anything, because nothing here has a Reference Model enumeration
+table to check it against — the same position already taken for
+`assumed_value`'s own `Inv_valid_assumed_value`, until `A-56` built one
+specifically for that invariant. No comparable invariant exists for
+`is_enumerated_type_constraint` to close the same way.
+
+**Tests.** Three: absent by default and carried once attached via the
+builder; canonical-JSON round-tripping, both bare and set, confirming the
+field is omitted entirely when unset rather than written as `null`; and a
+fixture written as though from before this field existed — literal JSON
+with no `is_enumerated_type_constraint` key at all — still deserialising
+to `None`.
+
+## A-69 — `Archetype.archetype_id` was the wrong identifier type
+
+**Severity: Low. Status: fixed.**
+
+**Found continuing the AOM2 class-by-class comparison** that found `A-59`,
+`A-61`, and `A-68` — `ARCHETYPE`'s own class definition
+(`org.openehr.am.aom2.archetype.adoc`) states `archetype_id:
+ARCHETYPE_HRID [1..1]`. This crate's `Archetype.archetype_id` was
+`base::ArchetypeId` instead: "the classic `rm_originator-rm_name-rm_entity
+.domain_concept.version` form... what `ARCHETYPED.archetype_id` carries on
+Reference Model data" (`ArchetypeHrid`'s own module documentation) — the
+*runtime* identifier a `C_ARCHETYPE_ROOT` or `ARCHETYPED` attribute
+references an archetype BY, not the *authoring-time* identifier an
+archetype states about ITSELF in its own header. `A-49` built
+`ArchetypeHrid` specifically because `ArchetypeId::from_str` rejects two
+things `ARCHETYPE_HRID`'s own grammar allows — a `namespace::` prefix and
+a `-rc`/`-alpha`/`-beta` prerelease suffix — and fixed the ADL header
+readers (`Adl14Header`/`Adl2Header`) to use it. `Archetype` itself, the
+actual AOM2 object model type `am::cadl` and the header readers both feed
+into eventually, was never updated to match: a real archetype using
+either a namespace or a prerelease version in its own header could be
+*read* by this crate (the header parses) but never *held* — nothing past
+the header could represent what was just read.
+
+**Fixed.** `archetype_id: ArchetypeHrid` (was `ArchetypeId`) on
+`Archetype`; `Archetype::new`'s own parameter and `archetype_id()`'s
+return type follow. `ArchetypeHrid::specialisations()` — the same
+`-`-splitting `ArchetypeId::specialisations` already does for its own
+`domain_concept`, applied to `concept_id` instead, since `LABEL`'s own
+grammar admits `-` in a concept id on the same terms — means
+`specialisation_depth()` needed no logic change at all, only the type it
+delegates to. `am::validate`'s own `ArchetypeViolation.archetype_id` and
+every walk function's `archetype_id` parameter (nine signatures) are
+retyped the same way — mechanical, not a behaviour change: none of them
+ever called an `ArchetypeId`-specific method on the value, only stored or
+re-passed it. `check()`'s `VARDT` check moves from `ArchetypeId::rm_entity`
+to `ArchetypeHrid::rm_class`, the same field under AOM2's own name for it.
+
+**The one real design question this surfaced.** `walk_archetype_root`
+verifies a repository answered the identifier a `C_ARCHETYPE_ROOT` asked
+for (`K15.26`) by comparing `resolved.archetype().archetype_id()` — now an
+`ArchetypeHrid` — against `filler_id`, an `ArchetypeId` parsed from
+`CArchetypeRoot.archetype_ref` (a reference, correctly `ArchetypeId`-shaped
+and left untouched — `ArchetypeRepository::resolve` still takes
+`&ArchetypeId`, since a repository lookup is keyed by the runtime
+reference form, not the resolved archetype's own richer identity). The two
+types no longer compare directly. Fixed by comparing text:
+`ArchetypeHrid::physical_id` (what `Display` already uses) and
+`ArchetypeId`'s own `Display` share one textual convention —
+`rm_publisher-rm_package-rm_class.concept_id.vVERSION` — by construction
+(`ArchetypeHrid`'s grammar is a strict superset of `ArchetypeId`'s), so the
+comparison is exact for every identifier `ArchetypeId::from_str` could
+have accepted in the first place, which `filler_id` is guaranteed to be
+(the parse two lines above already refused anything richer). Not a new
+approximation — the same equality the two-`ArchetypeId` comparison already
+expressed, now spelled out because the types differ instead of matching by
+construction.
+
+**Not touched, and confirmed rather than assumed unnecessary.**
+`parent_archetype_id` stays `Option<ArchetypeId>` — `A-52`'s own residual
+already checked this specifically ("`parent_archetype_id`'s typing is not
+a new defect") against `ARCHETYPE_REF`'s grammar, a third, narrower form
+than `ARCHETYPE_HRID`, and found `ArchetypeId` adequate but for the same
+namespace-prefix gap `A-49` already tracks. `ArchetypeRepository::resolve`
+and `CArchetypeRoot.archetype_ref` (a plain `String`, `A-62`) are
+reference forms, not the archetype's own declared identity, and stay as
+they are.
+
+**Tests.** Two: an archetype built with a namespaced identifier and one
+built with a prerelease-suffixed identifier — both refused outright before
+this fix, since `Archetype::new` could not even accept the parsed value —
+now held and read back correctly; and `specialisation_depth` counting
+`concept_id` segments for both an unspecialised and a specialised
+identifier, confirming the delegation still works with the new type.
+Every pre-existing test in `am::archetype` and `am::validate` — 437 unit
+tests across the whole crate — passed unchanged, with no fixture edits
+needed anywhere: the refactor was type-checked end to end by the compiler
+rather than discovered incomplete by a failing assertion.
+
+## A-70 — a differential-form attribute was refused as a `VOKU` duplicate named `""`
+
+**Severity: Medium. Status: fixed.**
+
+**Found by running, not reading.** The first run of an external corpus
+through `am::cadl::parse_definition` (`openehr/spec/corpus.md`; the
+`openEHR/adl-archetypes` repository at `093c77ea`, 1,379 `.adls` files)
+refused `openEHR-EHR-OBSERVATION.redefine_cardinality.v1.0.0.adls` — a
+valid, reference-suite archetype — with `invalid C_COMPLEX_OBJECT:
+VOKU (got "")`. Its whole definition is one line:
+
+```
+OBSERVATION[id1.1] matches {
+    /data/events cardinality matches {2..8; ordered}
+}
+```
+
+That is `c_attribute`'s `ADL_PATH` alternative (`cadl2.g4`: `c_attribute:
+(ADL_PATH | rm_attribute_id) c_existence? c_cardinality? …`), and AOM2's
+`C_ATTRIBUTE.differential_path` — "path to the parent object of this
+attribute (i.e. doesn't include the name of this attribute). Used only for
+attributes in differential form, specialised archetypes"
+(`org.openehr.am.aom2.c_attribute.adoc`). It is how every specialised ADL 2
+archetype states only what it redefines. `c_attribute_def`'s own
+documentation said `ADL_PATH` "is not implemented; every attribute name
+this parser accepts is a plain word" — true, but the parser did not
+*refuse* a path. `Lexer::next`'s fallback arm turns any unrecognised
+character into a one-character `Word`, `expect_word` accepted `/` as an
+attribute name, `data` became a second attribute, `/` a third — and
+`CComplexObject::new` reported the two `/`s as a `VOKU` duplicate. A valid
+archetype refused, and refused naming a rule it did not break, which is
+the exact shape `K15.6` (refuse by name) exists to prevent. `CAttribute`
+had no `differential_path` field at all, so even a correct parse had
+nowhere to put the parent path.
+
+**Fixed.** `CAttribute.differential_path: Option<String>`, with
+`with_differential_path()` (refusing an empty path or one ending in `/`,
+except `/` itself, which names the root object) and `differential_path()`;
+`#[serde(default, skip_serializing_if = "Option::is_none")]`, so an
+attribute written directly under its owner serialises exactly as before.
+`Lexer::peek_raw_path` — `read_raw_path` without consuming — lets
+`c_attribute_def` look at the whitespace-bounded text ahead and choose
+exactly: it contains `/` (an `ADL_PATH` never has whitespace inside it, a
+bare `rm_attribute_id` never has `/`), or it is a word. A path is split at
+its last `/`: the tail is the attribute, the head the parent
+(`items[id2]/value` keeps its predicate in the parent part; `/events`
+has parent `/`). Either way the name must be an `IDENTIFIER`
+(`archetype_hrid::is_identifier`, now `pub(super)` so the rule has one
+home), or the attribute is refused *as* a bad name — the lexer's fallback
+can no longer reach `CAttribute`. `C_COMPLEX_OBJECT`'s `VOKU` check is
+keyed on (parent, name): `/data[id2]/events` and `/data[id3]/events` are
+attributes of two objects, not one attribute twice.
+
+**Carried, not resolved.** A differential attribute belongs to the object
+its parent path names, not to the one it is written under; walking there
+is flattening (`K15.11`), which does not exist here. `am::validate` now
+reports such an attribute *unchecked*, naming the parent path as its
+detail, and returns before reading `rm_attribute_name` under the enclosing
+node — where `items` under an EVALUATION finds nothing and would report an
+`Existence` violation that is not there. The alternative, silently
+checking the wrong object, is the class of defect `A-36` and `A-28`
+already record for the RM side.
+
+**Effect on the corpus.** `.adls` files parsed: 178 before, 206 after; the
+`VOKU` category disappeared entirely rather than shrinking, which is the
+number that says the diagnosis was complete. The run also found four
+Latin-1 files that `read_to_string` had reported as "no definition
+section" — a runner defect, not a parser one — now decoded lossily and
+counted as their own line; and it left three candidate findings recorded in
+`openehr/spec/corpus.md`, not here, because each needs the grammar read
+first (`W0.19`).
+
+**Tests.** Nine: `CAttribute`'s default, round trip, and refusals;
+`VOKU` distinguishing and still catching duplicates under one parent;
+`peek_raw_path` leaving the text in place; the corpus file's own shape,
+a relative path with a predicate, a root-level path, and a non-identifier
+name refused by name; and `am::validate` reporting the differential
+attribute unchecked with no violation.
+
+## A-71 — the model could not carry an unstated `occurrences`, so the parser refused most real nodes
+
+**Severity: Medium. Status: fixed. BREAKING.**
+
+**Found by the numbers, not by reading.** The first external corpus run
+(`corpus.md`, run 1) refused 1,739 of 1,972 real archetype definitions,
+and 1,197 of those refusals — two thirds — were one stated limitation:
+"occurrences omitted; this parser does not implement AOM2's
+`effective_occurrences()` inference for a non-root node". The limitation
+was documented, refused by name (`K15.6`), and counted in `A-40`; what the
+count showed is that it is not a corner. Omitting `occurrences` is what a
+published archetype node normally does.
+
+**The defect is in the model, not only the parser.** AOM2's
+`C_OBJECT.occurrences` is `0..1`: "only set if it overrides the parent
+archetype in the case of specialised archetypes, or else the occurrences
+inferred from the underlying reference model existence and/or cardinality
+of the containing attribute" (`org.openehr.am.aom2.c_object.adoc`), with
+`effective_occurrences()` defined for the unset case. This crate's
+`CComplexObject`, `CPrimitiveObject`, `ArchetypeSlot`, and `CArchetypeRoot`
+each required a `MultiplicityInterval` — only `CComplexObjectProxy` could
+carry `None`, and only because `A-54` needed it for
+`use_target_occurrences()`. So an AOM2 instance with an unstated
+`occurrences` could not be built at all (`K15.1`, `K15.4`), and a round
+trip through this crate would have had to invent one (`K15.3`) — which is
+also why the parser refused rather than inferred: there was nowhere to put
+"not stated", and filling in a value would have destroyed the distinction
+specialisation conformance depends on (`K15.13`: "set" means "overrides").
+
+**Fixed.** `occurrences: Option<MultiplicityInterval>` on all four types,
+`#[serde(default, skip_serializing_if = "Option::is_none")]` so an unstated
+one is absent on the wire and JSON written before this change still reads;
+the four constructors take `Option` (**breaking**, the same shape `A-54`
+gave the proxy; wrap an existing argument in `Some`), and
+`CComplexObject::occurrences()` returns `Option<&MultiplicityInterval>`.
+`CObject::effective_occurrences(owner)` implements AOM2's rule: the stated
+value if any; else lower `0` and upper the owner's cardinality upper bound
+if the owner has one; else the Reference Model multiplicity — which this
+crate has no table of, so it applies the rule its `CAttribute` constructors
+already commit to (an attribute built without a cardinality is
+single-valued, multiplicity `1`) and `K15.32` says so. `None` only for a
+proxy that states nothing, whose value lives at a target this crate does
+not resolve. `MultiplicityInterval::from_zero_to` builds the inferred
+interval infallibly. `am::cadl` carries an omitted `occurrences` as `None`
+(the root still defaults to exactly one: AOM2 fixes it there, and it has
+no owning attribute); `am::validate` checks the effective value, so an
+unstated node under a `0..2` container that appears three times is an
+`Occurrences` violation and one that appears never is not. `K15.32` is
+the requirement, written before the code (`W0.19`).
+
+**Effect on the corpus** is recorded in `corpus.md`, run 2, not here.
+
+**Residual, stated rather than hidden.** The single-or-container decision
+is still syntactic (`am::cadl`'s own module documentation): a real
+`items matches {` with no `cardinality` clause is built as a single-valued
+attribute, so its unstated children infer `0..1` where AOM2, with the
+Reference Model in hand, would infer `0..*`. That was already true of the
+`Cardinality` check before this finding; it now also shapes an inferred
+`occurrences`. The fix is a Reference Model multiplicity table, which is
+the same missing piece, and is tracked as this residual, not as a new
+finding.
+
+**Tests.** Six: `effective_occurrences` arm by arm, including the proxy's
+`None`; the wire form absent when unstated and present when stated, for
+all four types; the parser carrying an omitted value and the root's
+default; the real `openEHR-EHR-CLUSTER.device.v1.0.0` definition — the
+fixture that had asserted a named refusal since `A-62` — now parsed whole;
+and validation against the inferred value.

@@ -44,7 +44,10 @@ is the new one; 0.4.0 removed `PartialOrd` from every `DV_ORDERED`
 negative AQL literals (`lib:A-27`). Read
 [`agents/publishing.md`](agents/publishing.md) before touching a version
 number; it is the only file that tracks this, and four others state the version
-without tracking it (`spec/audit.md` **W-10**).
+without tracking it (`spec/audit.md` **W-10**). **Unreleased on `main` as of
+2026-09-03: three breaking changes** (`lib:A-63`, `lib:A-69`, `lib:A-71` —
+the last makes `occurrences` an `Option` on every `C_OBJECT` constructor), so
+the next release is 0.10.0, not 0.9.1.
 
 | Crate | Role | Level |
 | --- | --- | --- |
@@ -235,6 +238,27 @@ warnings — keep it there.**
   "fix" that by making `==` semantic: a canonicaliser that rewrote `1.10` as
   `1.1` would then pass its own round-trip test, which is `db:D-08` again
   (`lib:A-35`).
+- **The mutation job re-checks only what a push changed** (`event.before..HEAD`;
+  a pull request uses its merge base). A survivor in code an earlier push
+  already carried is never seen again by CI — run 33775455452 found 14 in
+  such code, and mutating the whole function locally found 14 more. Before
+  pushing a change to `openehr::am`, run `cargo mutants --in-diff` over the
+  exact range and, for a function you touched, `--re '<fn name>'` over the
+  whole of it (`agents/auditing.md`). A mutant that hangs is a **timeout**,
+  not a miss, and a parser loop must end on any mutation of its body.
+- **An unstated `occurrences` is `None`, not a default** (`lib:A-71`,
+  `K15.32`). Every `C_OBJECT` constructor takes `Option<MultiplicityInterval>`;
+  `None` is AOM2's `Void`, inferred by `CObject::effective_occurrences(owner)`
+  — never fill it in at parse time (a round trip must not invent what the
+  author omitted) and never read `occurrences()` where the effective value is
+  meant. Only a proxy answers `None` from `effective_occurrences`.
+- **The archetype corpus is read where it is, never vendored.**
+  `openEHR/adl-archetypes` has no licence file. `openehr/tests/adl_corpus.rs`
+  is `#[ignore]`d and takes `OPENEHR_ADL_CORPUS`; results go in
+  `openehr/spec/corpus.md` with the corpus commit and the date. Two findings
+  (`lib:A-70`, `lib:A-71`) came from it in one day; the next candidates are
+  listed there. Quote a file name and the one line that reproduces a finding,
+  nothing more.
 - **Every RM invariant is accounted for.** `openehr-assets` fails the build if
   one is neither cited by the crate nor dispositioned with a reason, and also if
   a disposition outlives the rule it explains (`lib:A-24`). Cite an invariant as

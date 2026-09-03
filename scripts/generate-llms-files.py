@@ -160,6 +160,9 @@ def build_sections() -> list[dict[str, object]]:
                 link("Library audit register", "openehr/spec/audit.md",
                      "what has been found wrong in the Reference Model crate, "
                      "with evidence"),
+                link("Corpus runs", "openehr/spec/corpus.md",
+                     "published archetypes run through the `definition` "
+                     "reader: dated counts, the corpus commit, what is refused"),
                 link("Database audit register", "spec/databases/audit.md",
                      "what has been found wrong in persistence, with evidence"),
             ],
