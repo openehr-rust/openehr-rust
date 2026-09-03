@@ -1388,6 +1388,28 @@ mod tests {
         assert!(plain.with_differential_path("/data/").is_err());
     }
 
+    /// `is_c_string_pattern` is the one place that recognises the
+    /// `CONTAINED_REGEXP` convention, so each half of its rule is checked
+    /// on its own: both delimiters, a delimiter on one side only, and the
+    /// two-character `//` that `SLASH_REGEXP_CHAR+` forbids. The
+    /// mutation-testing job (CI run 33775455452) could turn one of its
+    /// `&&`s into `||` unnoticed.
+    #[test]
+    fn a_c_string_pattern_needs_both_delimiters_and_something_between() {
+        assert!(is_c_string_pattern("/a/"));
+        assert!(is_c_string_pattern("^a^"));
+        assert!(is_c_string_pattern("/.*/"));
+        assert!(!is_c_string_pattern("//"));
+        assert!(!is_c_string_pattern("^^"));
+        assert!(!is_c_string_pattern("/abc"));
+        assert!(!is_c_string_pattern("abc/"));
+        assert!(!is_c_string_pattern("^abc"));
+        assert!(!is_c_string_pattern("abc^"));
+        assert!(!is_c_string_pattern("/a^"));
+        assert!(!is_c_string_pattern("abc"));
+        assert!(!is_c_string_pattern(""));
+    }
+
     #[test]
     fn a_cardinality_that_cannot_hold_its_children_is_refused() {
         let err = CAttribute::container(

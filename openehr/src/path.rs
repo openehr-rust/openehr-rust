@@ -935,6 +935,60 @@ mod tests {
         .with_content(observation.into())
     }
 
+    /// `A-60`'s three hand-written `archetype_details` dispatchers —
+    /// `Entry`, `ItemStructure`, and `Event` each match on their own
+    /// variants rather than going through `Locatable` — were reachable by
+    /// no test with details actually present: the mutation-testing job (CI
+    /// run 33775455452) replaced each with `None` unnoticed. Presence and
+    /// absence through each of the three.
+    #[test]
+    fn the_three_hand_written_archetype_details_dispatchers_answer_present_and_absent() {
+        use crate::rm::data_structures::{Event, History, ItemStructure};
+        use crate::rm::ehr::Entry;
+        let details = || Archetyped::new("openEHR-EHR-OBSERVATION.blood_pressure.v2", "1.1.0").unwrap();
+        let structure = |a: LocatableAttrs| ItemStructure::from(ItemTree::new(a, vec![]));
+        assert!(structure(attrs("d", "at0003").with_archetype_details(details()))
+            .archetype_details()
+            .is_some());
+        assert!(structure(attrs("d", "at0003")).archetype_details().is_none());
+
+        let event = |a: LocatableAttrs| {
+            Event::from(PointEvent::new(
+                a,
+                DvDateTime::new("2026-07-31T09:15:00Z").unwrap(),
+                structure(attrs("d", "at0003")),
+            ))
+        };
+        assert!(event(attrs("e", "at0006").with_archetype_details(details()))
+            .archetype_details()
+            .is_some());
+        assert!(event(attrs("e", "at0006")).archetype_details().is_none());
+
+        let entry = |a: LocatableAttrs| {
+            let history = History::new(
+                attrs("Event Series", "at0001"),
+                DvDateTime::new("2026-07-31T09:00:00Z").unwrap(),
+                vec![event(attrs("e", "at0006"))],
+                None,
+            )
+            .unwrap();
+            Entry::from(Observation::new(
+                a,
+                EntryAttrs::about_subject(
+                    CodePhrase::new("ISO_639-1", "en").unwrap(),
+                    CodePhrase::new("IANA_character-sets", "UTF-8").unwrap(),
+                ),
+                history,
+            ))
+        };
+        assert!(entry(attrs("o", "openEHR-EHR-OBSERVATION.blood_pressure.v2").with_archetype_details(details()))
+            .archetype_details()
+            .is_some());
+        assert!(entry(attrs("o", "openEHR-EHR-OBSERVATION.blood_pressure.v2"))
+            .archetype_details()
+            .is_none());
+    }
+
     #[test]
     fn a_full_path_reaches_a_magnitude() {
         let c = blood_pressure();

@@ -506,21 +506,43 @@ enum AttributeDef {
 /// `VOKU` duplicate — a refusal naming the wrong thing (`K15.6`). Now a
 /// name that is not an `IDENTIFIER` is refused by name here.
 fn c_attribute_def(lexer: &mut Lexer<'_>) -> Result<AttributeDef, CadlError> {
+    let before = lexer.offset();
+    let def = c_attribute_def_inner(lexer)?;
+    // Every attribute definition consumes at least its name, so this is
+    // unreachable for real input; it exists because both callers loop on
+    // this function until `}`, and a loop over a sub-parser that did not
+    // advance is an infinite loop. cargo-mutants reached exactly that by
+    // replacing `Lexer::read_raw_path`'s body with a constant, and the run
+    // hung for its full timeout instead of failing — the same shape the
+    // `ARCHETYPE_SLOT` assertion loop guards against.
+    if lexer.offset() == before {
+        return Err(CadlError::at(before, "a C_ATTRIBUTE definition consumed no input"));
+    }
+    Ok(def)
+}
+
+fn c_attribute_def_inner(lexer: &mut Lexer<'_>) -> Result<AttributeDef, CadlError> {
     if matches!(lexer.peek(), Some(Token::Symbol('['))) {
         return c_attribute_tuple(lexer).map(AttributeDef::Tuple);
     }
     let offset = lexer.offset();
-    let (differential_path, attr_name) = match lexer.peek_raw_path() {
-        Some(raw) if raw.contains('/') => {
-            let raw = lexer.read_raw_path().unwrap_or_default();
-            let (parent, name) = raw.rsplit_once('/').unwrap_or(("", raw));
+    // The split *is* the test for a path: `rsplit_once('/')` answers `None`
+    // for a bare name, so there is no separate "contains `/`" guard that a
+    // mutation could turn into `true` and quietly give every plain
+    // attribute a differential path of `/` (found by cargo-mutants on the
+    // first shape of this code).
+    let (differential_path, attr_name) = match lexer.peek_raw_path().and_then(|raw| raw.rsplit_once('/')) {
+        Some((parent, name)) => {
+            let (parent, name) = (parent.to_owned(), name.to_owned());
+            // Consume what was peeked: the whole whitespace-bounded run.
+            let _ = lexer.read_raw_path();
             // `/events` is an attribute of the root object itself, whose
             // path is `/`; `items[id2]/value` is relative to the enclosing
             // object and keeps its predicates in the parent part.
-            let parent = if parent.is_empty() { "/" } else { parent };
-            (Some(parent.to_owned()), name.to_owned())
+            let parent = if parent.is_empty() { "/".to_owned() } else { parent };
+            (Some(parent), name)
         }
-        _ => (None, expect_word(lexer, "an attribute name")?),
+        None => (None, expect_word(lexer, "an attribute name")?),
     };
     if !is_identifier(&attr_name) {
         return Err(CadlError::at(
@@ -832,13 +854,17 @@ fn c_regular_object(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
 /// reference naming nothing.
 fn expect_archetype_ref(lexer: &mut Lexer<'_>) -> Result<String, CadlError> {
     let start = lexer.offset();
-    loop {
-        match lexer.peek() {
-            Some(Token::Symbol(']')) | None => break,
-            _ => {
-                lexer.next();
-            }
+    // `while let`, not `loop`/`match`: end of input ends this loop by the
+    // loop's own shape, not by an arm that can be deleted. cargo-mutants
+    // deleted the `']' | None => break` arm of the previous `loop` and the
+    // test run hung for its full 300 s timeout instead of failing (CI run
+    // 33775455452) — a parser loop must terminate on *any* mutation of its
+    // body, or a survivor shows up as a timeout nobody reads.
+    while let Some(token) = lexer.peek() {
+        if matches!(token, Token::Symbol(']')) {
+            break;
         }
+        lexer.next();
     }
     let text = lexer.text_since(start).trim();
     if text.is_empty() {
@@ -1036,7 +1062,18 @@ fn archetype_slot(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
             // `assertion+`: one or more, stopping only at the next keyword
             // or the closing `}` — not at a fixed count.
             loop {
+                let before = lexer.offset();
                 let assertion = parse_slot_assertion(lexer)?;
+                // A sub-parser that returned `Ok` without consuming anything
+                // would make this loop infinite: nothing below advances the
+                // lexer, so the same text would be "parsed" forever. Real
+                // `parse_slot_assertion` always consumes at least a path, so
+                // this is unreachable today — cargo-mutants reached it by
+                // replacing that function's body with a constant, and the
+                // job timed out rather than failed (CI run 33775455452).
+                if lexer.offset() == before {
+                    return Err(CadlError::at(before, "an ARCHETYPE_SLOT assertion consumed no input"));
+                }
                 slot = if including { slot.including(assertion) } else { slot.excluding(assertion) };
                 if peek_keyword(lexer, "include")
                     || peek_keyword(lexer, "exclude")
@@ -1840,6 +1877,19 @@ mod tests {
         assert!(attr.children().is_empty());
     }
 
+    /// The other way round: a bare name has no differential path at all.
+    /// cargo-mutants turned the first shape's "is this a path?" guard into
+    /// `true`, giving every plain attribute a parent of `/`, and nothing
+    /// asserted the absence.
+    #[test]
+    fn a_plain_attribute_has_no_differential_path() {
+        let root = parse_definition("CLUSTER[id1] matches { items cardinality matches {0..*} matches { \
+                                     ELEMENT[id2] occurrences matches {0..1} } }")
+        .unwrap();
+        assert_eq!(root.attributes()[0].rm_attribute_name(), "items");
+        assert_eq!(root.attributes()[0].differential_path(), None);
+    }
+
     #[test]
     fn a_relative_differential_path_keeps_its_predicates_in_the_parent_part() {
         let source = "CLUSTER[id1.1] matches { items[id2]/value matches { \
@@ -1870,6 +1920,78 @@ mod tests {
         assert!(err.reason.contains("is not an attribute name"), "{err}");
         let err = parse_definition("CLUSTER[id1] matches { /data/ matches {} }").unwrap_err();
         assert!(err.reason.contains("is not an attribute name"), "{err}");
+    }
+
+    /// One wrapped primitive under `ELEMENT[id1]/value`, for the tests
+    /// below that need the parsed `C_PRIMITIVE_OBJECT` itself.
+    fn wrapped(kind: &str, body: &str) -> Result<CPrimitiveObject, CadlError> {
+        let source = format!(
+            "ELEMENT[id1] matches {{ value matches {{ {kind}[id2] occurrences matches {{1}} \
+             matches {{{body}}} }} }}"
+        );
+        let root = parse_definition(&source)?;
+        let CObject::Primitive(p) = &root.attributes()[0].children()[0] else {
+            panic!("expected a C_PRIMITIVE_OBJECT");
+        };
+        Ok(p.clone())
+    }
+
+    /// The mutation-testing job (CI run 33775455452) found both of
+    /// `parse_assumed_boolean`'s match guards reachable by no test: only
+    /// `; false` was ever parsed, so `; true` refused, or `; maybe`
+    /// accepted as `false`, went unnoticed.
+    #[test]
+    fn an_assumed_boolean_is_read_either_way_and_anything_else_is_refused() {
+        assert_eq!(
+            wrapped("Boolean", "true, false; true").unwrap().assumed_value(),
+            Some(&PrimitiveValue::Boolean(true))
+        );
+        assert_eq!(
+            wrapped("Boolean", "true, false; false").unwrap().assumed_value(),
+            Some(&PrimitiveValue::Boolean(false))
+        );
+        let err = wrapped("Boolean", "true; maybe").unwrap_err();
+        assert!(err.reason.contains("expected `true` or `false`"), "{err}");
+    }
+
+    /// Same run: no test parsed an integer *list*, so the `,` loop in
+    /// `parse_integer_primitive` could be inverted unnoticed.
+    #[test]
+    fn an_integer_list_is_read_whole() {
+        assert_eq!(
+            wrapped("Integer", "1, 2, 3").unwrap().constraint(),
+            &CPrimitive::Integer { list: vec![1, 2, 3], range: None }
+        );
+        assert_eq!(
+            wrapped("Integer", "7").unwrap().constraint(),
+            &CPrimitive::Integer { list: vec![7], range: None }
+        );
+    }
+
+    /// Same run: `use_node`'s stated occurrences were only ever tested
+    /// absent, so `parse_optional_occurrences` returning `None` for a
+    /// stated one went unnoticed.
+    #[test]
+    fn a_use_nodes_stated_occurrences_are_kept() {
+        let source = "CLUSTER[id1] matches { items cardinality matches {0..*} matches { \
+                       use_node ELEMENT[id2] occurrences matches {0..3} /items[id9] } }";
+        let root = parse_definition(source).unwrap();
+        let CObject::Proxy(proxy) = &root.attributes()[0].children()[0] else {
+            panic!("expected a C_COMPLEX_OBJECT_PROXY");
+        };
+        assert_eq!(
+            proxy.occurrences(),
+            Some(&MultiplicityInterval::new(0, Some(3)).unwrap())
+        );
+    }
+
+    /// Same run: an assumed code that is well-formed but an `ac`-code, not
+    /// an `at`-code — the second half of the check, which the malformed
+    /// case alone never exercised.
+    #[test]
+    fn an_assumed_code_that_is_an_ac_code_is_refused_as_not_an_at_code() {
+        let err = parse_definition("ELEMENT[id1] matches { value matches { [ac1; ac2] } }").unwrap_err();
+        assert!(err.reason.contains("is not a valid at-code"), "{err}");
     }
 
     /// `A-67`: `C_ATTRIBUTE_TUPLE` syntax itself is now implemented, but a

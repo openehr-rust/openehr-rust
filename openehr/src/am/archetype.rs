@@ -651,6 +651,192 @@ mod tests {
         assert_eq!(err.reason, "Inv_valid_assumed_value");
     }
 
+    /// `assumed_value_conforms`'s `Boolean` arm, both ways. The
+    /// mutation-testing job (CI run 33775455452) found this arm and the
+    /// `String` arm below reachable by no test: only `Integer` and
+    /// `TerminologyCode` assumed values were ever built.
+    #[test]
+    fn a_boolean_assumed_value_is_checked_against_its_allowed_values() {
+        let build = |allow_true: bool, allow_false: bool, assumed: bool| {
+            let leaf = CPrimitiveObject::new(
+                "DV_BOOLEAN",
+                MultiplicityInterval::MANDATORY,
+                CPrimitive::Boolean { allow_true, allow_false },
+            )
+            .with_assumed_value(crate::am::PrimitiveValue::Boolean(assumed));
+            Archetype::new(
+                "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
+                observation(&[], vec![CObject::Primitive(leaf)]),
+                ArchetypeTerminology::new("en", terms(&["id1"])).unwrap(),
+            )
+        };
+        assert!(build(true, false, true).is_ok());
+        assert!(build(false, true, false).is_ok());
+        assert_eq!(build(true, false, false).unwrap_err().reason, "Inv_valid_assumed_value");
+        assert_eq!(build(false, true, true).unwrap_err().reason, "Inv_valid_assumed_value");
+    }
+
+    /// The `String` arm: a literal must be in the list, a regex element
+    /// neither admits nor refuses (carried, not evaluated), and a list of
+    /// regexes alone constrains nothing this function can see.
+    #[test]
+    fn a_string_assumed_value_is_checked_against_the_literals_and_not_the_regexes() {
+        let build = |list: &[&str], assumed: &str| {
+            let leaf = CPrimitiveObject::new(
+                "DV_TEXT",
+                MultiplicityInterval::MANDATORY,
+                CPrimitive::String {
+                    list: list.iter().map(|s| (*s).to_owned()).collect(),
+                },
+            )
+            .with_assumed_value(crate::am::PrimitiveValue::Text(assumed.to_owned()));
+            Archetype::new(
+                "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
+                observation(&[], vec![CObject::Primitive(leaf)]),
+                ArchetypeTerminology::new("en", terms(&["id1"])).unwrap(),
+            )
+        };
+        assert!(build(&["a"], "a").is_ok());
+        assert_eq!(build(&["a"], "c").unwrap_err().reason, "Inv_valid_assumed_value");
+        assert_eq!(build(&["a", "b"], "c").unwrap_err().reason, "Inv_valid_assumed_value");
+        assert!(build(&["/x.*/", "a"], "a").is_ok());
+        assert_eq!(build(&["/x.*/", "a"], "c").unwrap_err().reason, "Inv_valid_assumed_value");
+        assert!(build(&["/x.*/"], "anything").is_ok());
+    }
+
+    /// One leaf with the given constraint and assumed value, under the
+    /// usual root, for the per-kind tests below.
+    fn with_assumed(constraint: CPrimitive, assumed: crate::am::PrimitiveValue) -> Result<Archetype, ParseError> {
+        let leaf = CPrimitiveObject::new("DV_ANY", MultiplicityInterval::MANDATORY, constraint)
+            .with_assumed_value(assumed);
+        Archetype::new(
+            "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
+            observation(&[], vec![CObject::Primitive(leaf)]),
+            ArchetypeTerminology::new("en", terms(&["id1", "at0010"])).unwrap(),
+        )
+    }
+
+    /// `assumed_value_conforms`'s `Real` arm: list and range each apply,
+    /// and the list compares by `semantic_cmp`, so `1.50` is in a list
+    /// naming `1.5`. Running cargo-mutants over the whole function (not
+    /// only CI's changed lines) found this arm and the five temporal ones
+    /// below reachable by no test.
+    #[test]
+    fn a_real_assumed_value_is_checked_against_list_and_range() {
+        use crate::am::PrimitiveValue;
+        let real = |s: &str| PrimitiveValue::Real(s.parse().unwrap());
+        let constraint = |list: &[&str], range: Option<(&str, &str)>| CPrimitive::Real {
+            list: list.iter().map(|s| s.parse().unwrap()).collect(),
+            range: range.map(|(lo, hi)| {
+                crate::base::Interval::closed(
+                    lo.parse::<crate::base::Real>().unwrap(),
+                    hi.parse::<crate::base::Real>().unwrap(),
+                )
+                .unwrap()
+            }),
+        };
+        assert!(with_assumed(constraint(&["1.5"], None), real("1.5")).is_ok());
+        assert!(with_assumed(constraint(&["1.5"], None), real("1.50")).is_ok());
+        assert!(with_assumed(constraint(&["1.5"], None), real("2.5")).is_err());
+        assert!(with_assumed(constraint(&[], Some(("0.0", "10.0"))), real("5.0")).is_ok());
+        assert!(with_assumed(constraint(&[], Some(("0.0", "10.0"))), real("50.0")).is_err());
+        assert!(with_assumed(constraint(&["5.0"], Some(("0.0", "10.0"))), real("5.0")).is_ok());
+        assert!(with_assumed(constraint(&["50.0"], Some(("0.0", "10.0"))), real("50.0")).is_err());
+    }
+
+    /// The `TerminologyCode` arm's second branch: a constraint that is an
+    /// `at`-code, not an `ac`-code, admits exactly that code — no value
+    /// set is consulted.
+    #[test]
+    fn an_at_code_constraints_assumed_value_must_be_that_code() {
+        use crate::am::PrimitiveValue;
+        let constraint = |c: &str| CPrimitive::TerminologyCode {
+            constraint: Some(c.to_owned()),
+            constraint_status: None,
+        };
+        assert!(with_assumed(constraint("at0010"), PrimitiveValue::Text("at0010".to_owned())).is_ok());
+        assert!(with_assumed(constraint("at0010"), PrimitiveValue::Text("at0011".to_owned())).is_err());
+        assert!(with_assumed(constraint(""), PrimitiveValue::Text("anything".to_owned())).is_ok());
+    }
+
+    /// The four temporal arms: the assumed text must parse as the kind,
+    /// an empty range constrains nothing, and a non-empty range must
+    /// contain it.
+    #[test]
+    fn a_temporal_assumed_value_must_parse_and_fall_in_a_stated_range() {
+        use crate::am::PrimitiveValue;
+        let text = |s: &str| PrimitiveValue::Text(s.to_owned());
+        let date = |range: &[(&str, &str)]| CPrimitive::Date {
+            range: range
+                .iter()
+                .map(|(lo, hi)| {
+                    crate::base::Interval::closed(Date::from_str(lo).unwrap(), Date::from_str(hi).unwrap()).unwrap()
+                })
+                .collect(),
+            pattern: None,
+        };
+        assert!(with_assumed(date(&[]), text("2024-06-15")).is_ok());
+        assert!(with_assumed(date(&[]), text("not-a-date")).is_err());
+        assert!(with_assumed(date(&[("2024-01-01", "2024-12-31")]), text("2024-06-15")).is_ok());
+        assert!(with_assumed(date(&[("2024-01-01", "2024-12-31")]), text("2025-06-15")).is_err());
+
+        let time = |range: &[(&str, &str)]| CPrimitive::Time {
+            range: range
+                .iter()
+                .map(|(lo, hi)| {
+                    crate::base::Interval::closed(Time::from_str(lo).unwrap(), Time::from_str(hi).unwrap()).unwrap()
+                })
+                .collect(),
+            pattern: None,
+        };
+        assert!(with_assumed(time(&[]), text("12:30:00")).is_ok());
+        assert!(with_assumed(time(&[]), text("not-a-time")).is_err());
+        assert!(with_assumed(time(&[("09:00:00", "17:00:00")]), text("12:30:00")).is_ok());
+        assert!(with_assumed(time(&[("09:00:00", "17:00:00")]), text("23:00:00")).is_err());
+
+        let date_time = |range: &[(&str, &str)]| CPrimitive::DateTime {
+            range: range
+                .iter()
+                .map(|(lo, hi)| {
+                    crate::base::Interval::closed(DateTime::from_str(lo).unwrap(), DateTime::from_str(hi).unwrap())
+                        .unwrap()
+                })
+                .collect(),
+            pattern: None,
+        };
+        assert!(with_assumed(date_time(&[]), text("2024-06-15T12:30:00Z")).is_ok());
+        assert!(with_assumed(date_time(&[]), text("not-a-date-time")).is_err());
+        assert!(
+            with_assumed(
+                date_time(&[("2024-01-01T00:00:00Z", "2024-12-31T23:59:59Z")]),
+                text("2024-06-15T12:30:00Z")
+            )
+            .is_ok()
+        );
+        assert!(
+            with_assumed(
+                date_time(&[("2024-01-01T00:00:00Z", "2024-12-31T23:59:59Z")]),
+                text("2025-06-15T12:30:00Z")
+            )
+            .is_err()
+        );
+
+        let duration = |range: &[(&str, &str)]| CPrimitive::Duration {
+            range: range
+                .iter()
+                .map(|(lo, hi)| {
+                    crate::base::Interval::closed(Duration::from_str(lo).unwrap(), Duration::from_str(hi).unwrap())
+                        .unwrap()
+                })
+                .collect(),
+            pattern: None,
+        };
+        assert!(with_assumed(duration(&[]), text("PT1H")).is_ok());
+        assert!(with_assumed(duration(&[]), text("not-a-duration")).is_err());
+        assert!(with_assumed(duration(&[("PT0S", "PT2H")]), text("PT1H")).is_ok());
+        assert!(with_assumed(duration(&[("PT0S", "PT2H")]), text("PT5H")).is_err());
+    }
+
     /// `CPrimitiveObject::with_assumed_value`'s own documentation says a
     /// mismatched kind is "accepted exactly as given" — true of that
     /// function alone. `Archetype::new` sees the whole tree and the
