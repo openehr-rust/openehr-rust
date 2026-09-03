@@ -36,13 +36,15 @@ this afternoon, one of the projects below is the better answer.
   publishes one embeddable store and five schema dialects — the server around
   them is yours to write.
 - **…you need archetypes, templates, or ADL.** This crate has the AOM2 object
-  model (`openehr::am`) and nothing above it. Until 2026-08-26 the Archetype
-  Model was excluded by decision (`lib:S1.4`); it is now specified by
-  `lib:S1.21` and `openehr/spec/15-archetypes.md`, and 28 of those 32
-  requirements have no code (`lib:A-40`) — no ADL parser, no flattening, no
-  template expansion, and **no validation of data against an archetype**. Archie
-  is the library for that work today, and every CDR above does template
-  validation this project does not.
+  model (`openehr::am`), validation of data against an archetype already held
+  in memory (`openehr::am::validate`), and a reader for an archetype's
+  `definition` section (`openehr::am::cadl`) — and nothing above those. Until
+  2026-08-26 the Archetype Model was excluded by decision (`lib:S1.4`); it is
+  now specified by `lib:S1.21` and `openehr/spec/15-archetypes.md`, and 16 of
+  those 32 requirements have no code (`lib:A-40`): no parser for a whole ADL
+  archetype, no ADL 1.4, no OPT, no flattening, no template expansion. Archie
+  is the library for that work today, and every CDR above validates a
+  composition against an uploaded template, which this project does not.
 - **…you need the openEHR REST API as a supported product.** `openehr-loco` is
   an HTTP service over the SQLite store, it is `publish = false`, and it sits
   outside the conformance ladder entirely (`W0.32`) because every rung on that

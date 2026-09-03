@@ -15,7 +15,8 @@
 //! | Capability | Requirement | State |
 //! | --- | --- | --- |
 //! | AOM2 as types, with construction-time checking | `K15.1`–`K15.4` | **here** |
-//! | ADL 2 parsing | `K15.5`–`K15.7` | not implemented — [`adl2::parse_header`](self::parse_adl2_header) reads the header only, and [`cadl::parse_definition`](self::parse_definition) reads `definition`'s own `c_complex_object` grammar rule for a real but bounded subset of node kinds and primitive constraints (see its own module docs for the exact boundary); neither builds an [`Archetype`], and together they are still not a step toward `K15.5`'s full parse — no `language`, `description`, `rules`, `terminology`, or `annotations` |
+//! | ADL 2 parsing | `K15.5` | not implemented — [`adl2::parse_header`](self::parse_adl2_header) reads the header only, and [`cadl::parse_definition`](self::parse_definition) reads `definition`'s own `c_complex_object` grammar rule for every node kind but a `closed` slot and `SIBLING_ORDER` (see its own module docs for the exact boundary); neither builds an [`Archetype`], and together they are still not a step toward `K15.5`'s full parse — no `language`, `description`, `rules`, `terminology`, or `annotations` |
+//! | Refusal discipline: an unimplemented construct is refused by name at its offset, never skipped or returned as a partial tree | `K15.6`–`K15.7` | **here**, for the parsers that exist (`cadl`, `adl2`, `adl14`) and binding on any `K15.5` adds |
 //! | ADL 1.4 ingestion and conversion | `K15.8`–`K15.10` | not implemented — [`adl14::parse_header`](self::parse_adl14_header) reads the header and concept line only, and is not a step toward `K15.8`'s conversion (see its own module docs) |
 //! | Specialisation and flattening | `K15.11`–`K15.13` | not implemented |
 //! | Template expansion, operational templates | `K15.14`–`K15.17` | not implemented |
@@ -29,8 +30,9 @@
 //! merged in.** [`validate::validate_against_archetype`] and
 //! [`validate::validate_with_repository`] validate the definition as given,
 //! without flattening (`K15.11`, not implemented) or template expansion
-//! (`K15.14`, not implemented) first; a construct they cannot check — a bare
-//! slot, an unresolved filler, an unmodelled primitive kind — is reported
+//! (`K15.14`, not implemented) first; a construct they cannot check — a
+//! restricted slot's filler, an unresolved filler, an unmodelled primitive
+//! kind — is reported
 //! *unchecked*, never as a silent pass (`K15.20`). [`crate::validation`]
 //! remains Reference-Model-level and separate (`K15.19`); `K15.30` requires
 //! that said wherever validation is offered rather than left for a reader to

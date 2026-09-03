@@ -156,6 +156,18 @@ posture. Open items for each are in `tasks.md`.
   wrong shape here), and the recommended path is in `db:D-11`: assess in
   batches by section, `M3` and `S1` first.
 
+- **A regex engine for `K15.10`** — opened 2026-09-03, awaiting a call.
+  `openehr/Cargo.toml` has never carried one, and every dependency there is
+  justified in its own comment. `lib:A-66` parses an `ARCHETYPE_SLOT`'s
+  `include`/`exclude` assertions and carries them; `am::validate` reports the
+  filler *unchecked* because nothing evaluates the regex. Three honest
+  options: add `regex` (safe Rust, well audited, several transitive crates
+  — the first genuinely new architectural dependency since the crate's
+  audit chain), hand-roll a documented subset (smaller, and a second thing
+  to get wrong), or decide that assertions stay carried-not-evaluated and
+  say so in the matrix. `tasks.md` P0 names it; nothing is blocked on it but
+  the last slice of `K15.10`.
+
 ## Non-goals (for now)
 
 - No claim of openEHR conformance beyond the project's own ladder, ever.

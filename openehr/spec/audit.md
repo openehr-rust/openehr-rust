@@ -2263,15 +2263,18 @@ caller to opt in before validating against a result with no established
 provenance (`K15.26`), and never treating a retrieval failure as a pass
 (`K15.27`).
 
-**Eighteen requirements have no code, as counted 2026-08-30; still true today,
-though "no code" is no longer the accurate word for one of them.** No
-*complete* ADL 2 parser (`K15.5`–`K15.7`) — `am::cadl`, built 2026-09-02
-(`A-40`'s own status line above), reads `definition`'s own `c_complex_object`
-grammar rule for a real but bounded subset of node kinds, not the header,
-specialisation, terminology, rules, or annotations `K15.5` itself requires,
-and does not build an `Archetype`; the eighteen-requirement count is
-unchanged because none of `K15.5`–`K15.7` is satisfied by a partial reader of
-one grammar rule. Still fully absent: ADL 1.4 ingestion (`K15.8`–`K15.10`),
+**Sixteen requirements have no code, as re-counted 2026-09-03 (eighteen on
+2026-08-30).** No *complete* ADL 2 parser (`K15.5`) — `am::cadl`, built
+2026-09-02 (`A-40`'s own status line above), reads `definition`'s own
+`c_complex_object` grammar rule for every node kind but a `closed` slot and
+`SIBLING_ORDER` (`A-62`–`A-67`), not the header, specialisation,
+terminology, rules, or annotations `K15.5` itself requires, and does not
+build an `Archetype`. `K15.6`–`K15.7` — that an unimplemented construct is
+refused by name at its offset, never skipped or returned as a partial tree —
+moved to **•** on 2026-09-03: they are properties of a parser, `am::cadl`
+and the two header readers are the parsers this crate has, and each is
+tested for exactly that discipline (the matrix names the tests). Still fully
+absent: ADL 1.4 ingestion (`K15.8`–`K15.10`),
 flattening (`K15.11`–`K15.13`), and template expansion or operational
 template (`K15.14`–`K15.17`). For a caller, the practically important
 sentence is now narrower still: this crate can tell you whether a
@@ -2285,7 +2288,7 @@ the `crate::path` residual this paragraph used to name (`Node` did not
 expose `ARCHETYPED.archetype_id` at all); a *restricted* slot's filler —
 `includes`/`excludes` — still is not, because those are `K15.10`'s own
 assertion grammar, a residual named in its own right below and not folded
-into this eighteen-requirement count because it is a gap in `am::cadl` and
+into this sixteen-requirement count because it is a gap in `am::cadl` and
 `am::validate`, not an unbuilt requirement of §15 itself.
 
 **Why this is a finding rather than a plan.** `C0.9` — a gap that is not written

@@ -3,6 +3,26 @@
 Release notes with their reasoning live in [`CHANGELOG.md`](CHANGELOG.md); this
 page is the short form, plus what is coming and how to reach a human.
 
+## Archetype Model: a `definition` reader and slot checking, 2026-09-03
+
+Twelve findings closed in one pass (`lib:A-58`–`A-69`), unreleased as of
+this entry. `openehr::am::cadl` now reads an archetype's `definition`
+section — every node kind but a `closed` slot and `SIBLING_ORDER`; every
+primitive form including ISO 8601 literals, assumed values, and
+`C_STRING` regexes; `C_ATTRIBUTE_TUPLE`; and an `ARCHETYPE_SLOT`'s own
+`include`/`exclude` regex assertions — refusing anything else by name at
+its offset, never returning a partial tree. `openehr::am::validate` now
+evaluates a tuple's rows against instance data and a slot's `is_closed`
+rule against whatever actually filled it, which `crate::path::Node` can
+finally see. Two of the changes are breaking, so the next release is
+**0.10.0**, not 0.9.1: `CPrimitive::String` lost a `pattern` field AOM2
+never had, and `Archetype::archetype_id` is an `ArchetypeHrid`, AOM2's own
+type for it. **Sixteen of §15's thirty-two requirements now have code;
+sixteen do not** — no whole-archetype ADL parser, no ADL 1.4 body, no OPT,
+no flattening, no template expansion. The
+[matrix](openehr/spec/conformance-matrix.md), not this page, is the count
+to trust.
+
 ## GitHub Sponsors is open, 2026-08-28
 
 Under the maintainer's personal account —

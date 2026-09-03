@@ -485,11 +485,14 @@ multiplicities, terminology, with the artefact-level validity conditions checked
 at construction — and, since 2026-08-30, `openehr::am::validate` checks a
 Reference Model instance against an archetype already held in memory, resolving
 a `C_ARCHETYPE_ROOT` filler through a repository the caller supplies
-(`openehr::am::repository`; this crate performs no I/O itself). **Eighteen of
-the thirty-two requirements have no code**: no ADL parser, no flattening, no
-template expansion, no operational template, and no way to resolve a bare
-`ARCHETYPE_SLOT` — which archetype fills one is recorded on the instance itself,
-an attribute this crate's path machinery does not yet expose. So this crate
+(`openehr::am::repository`; this crate performs no I/O itself); and since
+2026-09-02, `openehr::am::cadl` reads an archetype's `definition` section
+(`lib:A-62`–`A-67`) and a filled `ARCHETYPE_SLOT` is checked against its own
+`is_closed` rule (`lib:A-60`). **Sixteen of the thirty-two requirements have
+no code**: no parser for a whole ADL archetype (the `definition` section and
+the header are read; they do not compose into an `Archetype`), no ADL 1.4
+body, no flattening, no template expansion, no operational template, and no
+evaluation of a slot's own `include`/`exclude` assertions. So this crate
 can tell you whether a composition conforms to an archetype you built, already
 have, or can retrieve, and still cannot tell you whether it conforms to the
 *published* archetype it names unless whatever produced or retrieved that

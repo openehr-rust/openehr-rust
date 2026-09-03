@@ -28,16 +28,20 @@
 //! id), resolves it and validates the same subtree against the filler's own
 //! `definition` and terminology.
 //!
-//! A bare `ARCHETYPE_SLOT` is different in kind and stays unchecked even with
-//! a repository supplied: **which** archetype filled it is recorded on the
-//! *instance*'s `ARCHETYPED.archetype_id`, an attribute [`crate::path::Node`]
-//! does not expose (only `archetype_node_id`, the short code), so nothing in
-//! this crate can name what to resolve. That is a gap in `crate::path`, not
-//! in this module, and it is stated here rather than worked around.
+//! A bare `ARCHETYPE_SLOT` is different in kind: **which** archetype filled it
+//! is recorded on the *instance*'s `ARCHETYPED.archetype_id`, which
+//! [`crate::path::Node::archetype_details`] exposes (`A-60`). That alone
+//! settles two of the three cases — a closed slot filled anyway is a
+//! violation, an unrestricted open slot has nothing left to check — and the
+//! third, a slot restricted by `include`/`exclude` assertions, carries them
+//! (`A-66`) without evaluating them (`K15.10`'s remainder), so its filler is
+//! reported unchecked, naming the filler's own archetype id.
 //!
 //! # `K15.20`: no partial pass
 //!
-//! A construct this module cannot check — a bare `ARCHETYPE_SLOT`; a
+//! A construct this module cannot check — a restricted `ARCHETYPE_SLOT`'s
+//! filler, against `include`/`exclude` assertions it carries but does not
+//! evaluate; a
 //! `C_ARCHETYPE_ROOT` when no repository is supplied, or when retrieval
 //! fails (`K15.27`), or when the caller has not opted into an
 //! unestablished-provenance result (`K15.26`); a `C_UNSUPPORTED` primitive

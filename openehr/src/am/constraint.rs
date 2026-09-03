@@ -963,14 +963,13 @@ pub struct ArchetypeSlot {
     /// before this field existed readable, the same choice `A-46`/`A-48`
     /// made for `C_PRIMITIVE_OBJECT`'s own late-added fields.
     ///
-    /// Carried, not enforced: [`crate::am::validate::walk_object`] reports
-    /// every slot `Unchecked` regardless, for a reason this field does not
-    /// change — which archetype, if any, fills a slot is recorded on the
-    /// instance's own `ARCHETYPED.archetype_id`, and `crate::path::Node`
-    /// does not expose it. `is_closed` says whether filling is permitted at
-    /// all, not what a particular filler was, so even a full fix for that
-    /// gap would still need this field read at authoring/specialisation
-    /// time, not at this crate's own instance-validation time.
+    /// Enforced since `A-60`: `crate::am::validate`'s slot walk reads which
+    /// archetype, if any, filled the slot from the instance's own
+    /// `ARCHETYPED.archetype_id` through
+    /// [`crate::path::Node::archetype_details`], so a closed slot that was
+    /// filled anyway is a real violation, not a carried flag. What
+    /// `is_closed` cannot say is *which* fillers an open slot admits — that
+    /// is `includes`/`excludes`, carried and not evaluated (`K15.10`).
     #[serde(default)]
     is_closed: bool,
 }
