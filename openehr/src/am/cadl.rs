@@ -137,6 +137,7 @@
 //! this module that can produce a *wrong* tree rather than an honest
 //! refusal, and a reader needs to know that going in.
 
+use super::archetype_hrid::is_identifier;
 use super::cadl_lexer::{Lexer, Token};
 use super::{
     ArchetypeSlot, CArchetypeRoot, CAttribute, CAttributeTuple, CComplexObject,
@@ -491,16 +492,42 @@ enum AttributeDef {
 /// is exact, not a guess.
 ///
 /// `c_attribute: (ADL_PATH | rm_attribute_id) c_existence? c_cardinality?
-/// ( SYM_MATCHES ( '{' c_objects '}' | CONTAINED_REGEXP) )? ;` — `ADL_PATH`
-/// (an attribute named by an absolute or relative path rather than a bare
-/// name) is not implemented; every attribute name this parser accepts is a
-/// plain word.
+/// ( SYM_MATCHES ( '{' c_objects '}' | CONTAINED_REGEXP) )? ;`. An
+/// `ADL_PATH` is an attribute in differential form — `/data/events
+/// cardinality matches {2..8; ordered}` in a specialised archetype — and is
+/// one whitespace-bounded run containing `/`, which a bare
+/// `rm_attribute_id` never is; so the choice is exact. The path is split at
+/// its last `/`: the tail is the attribute, the head is AOM2's
+/// `differential_path` (`A-70`).
+///
+/// Before `A-70` the lexer's own fallback made `/` a one-character "word"
+/// and this parser accepted it as an attribute name, so a differential
+/// path mis-parsed into several attributes and was refused later as a
+/// `VOKU` duplicate — a refusal naming the wrong thing (`K15.6`). Now a
+/// name that is not an `IDENTIFIER` is refused by name here.
 fn c_attribute_def(lexer: &mut Lexer<'_>) -> Result<AttributeDef, CadlError> {
     if matches!(lexer.peek(), Some(Token::Symbol('['))) {
         return c_attribute_tuple(lexer).map(AttributeDef::Tuple);
     }
     let offset = lexer.offset();
-    let attr_name = expect_word(lexer, "an attribute name")?;
+    let (differential_path, attr_name) = match lexer.peek_raw_path() {
+        Some(raw) if raw.contains('/') => {
+            let raw = lexer.read_raw_path().unwrap_or_default();
+            let (parent, name) = raw.rsplit_once('/').unwrap_or(("", raw));
+            // `/events` is an attribute of the root object itself, whose
+            // path is `/`; `items[id2]/value` is relative to the enclosing
+            // object and keeps its predicates in the parent part.
+            let parent = if parent.is_empty() { "/" } else { parent };
+            (Some(parent.to_owned()), name.to_owned())
+        }
+        _ => (None, expect_word(lexer, "an attribute name")?),
+    };
+    if !is_identifier(&attr_name) {
+        return Err(CadlError::at(
+            offset,
+            format!("`{attr_name}` is not an attribute name (an identifier: a letter, then letters, digits, `_`)"),
+        ));
+    }
 
     let existence = if peek_keyword(lexer, "existence") {
         lexer.next();
@@ -562,6 +589,10 @@ fn c_attribute_def(lexer: &mut Lexer<'_>) -> Result<AttributeDef, CadlError> {
         None => CAttribute::single(attr_name.clone(), existence, children),
     };
     result
+        .and_then(|attribute| match differential_path {
+            Some(parent) => attribute.with_differential_path(parent),
+            None => Ok(attribute),
+        })
         .map(AttributeDef::Attribute)
         .map_err(|e| CadlError::at(offset, format!("invalid C_ATTRIBUTE `{attr_name}`: {e}")))
 }
@@ -1791,6 +1822,54 @@ mod tests {
         assert_eq!(proxy.node_id(), Some("id2"));
         assert_eq!(proxy.target_path(), "/items[id9]");
         assert_eq!(proxy.occurrences(), None);
+    }
+
+    /// `A-70`: `c_attribute`'s `ADL_PATH` alternative — an attribute in
+    /// differential form, the way a specialised archetype states only what
+    /// it redefines. The corpus file that surfaced this
+    /// (`openEHR-EHR-OBSERVATION.redefine_cardinality.v1.0.0.adls`) has
+    /// exactly this shape: a path, a cardinality, no children.
+    #[test]
+    fn a_differential_path_attribute_is_parsed_with_its_parent_path_split_off() {
+        let source = "OBSERVATION[id1.1] matches { /data/events cardinality matches {2..8; ordered} }";
+        let root = parse_definition(source).unwrap();
+        let attr = &root.attributes()[0];
+        assert_eq!(attr.rm_attribute_name(), "events");
+        assert_eq!(attr.differential_path(), Some("/data"));
+        assert!(attr.cardinality().is_some());
+        assert!(attr.children().is_empty());
+    }
+
+    #[test]
+    fn a_relative_differential_path_keeps_its_predicates_in_the_parent_part() {
+        let source = "CLUSTER[id1.1] matches { items[id2]/value matches { \
+                       DV_QUANTITY[id0.16] occurrences matches {0..1} } }";
+        let root = parse_definition(source).unwrap();
+        let attr = &root.attributes()[0];
+        assert_eq!(attr.rm_attribute_name(), "value");
+        assert_eq!(attr.differential_path(), Some("items[id2]"));
+        assert_eq!(attr.children().len(), 1);
+    }
+
+    #[test]
+    fn a_root_level_differential_path_names_the_root_as_its_parent() {
+        let root = parse_definition("CLUSTER[id1.1] matches { /items cardinality matches {1..*} }").unwrap();
+        assert_eq!(root.attributes()[0].differential_path(), Some("/"));
+        assert_eq!(root.attributes()[0].rm_attribute_name(), "items");
+    }
+
+    /// Before `A-70` the lexer's fallback made `/` a one-character "word"
+    /// and this parser accepted it as an attribute name, so `/data/events`
+    /// became three attributes and failed later as a `VOKU` duplicate — a
+    /// refusal naming the wrong thing (`K15.6`). A name that is not an
+    /// identifier is now refused as one, and a path ending in `/` names no
+    /// attribute at all.
+    #[test]
+    fn a_name_that_is_not_an_identifier_is_refused_by_name() {
+        let err = parse_definition("CLUSTER[id1] matches { : matches {} }").unwrap_err();
+        assert!(err.reason.contains("is not an attribute name"), "{err}");
+        let err = parse_definition("CLUSTER[id1] matches { /data/ matches {} }").unwrap_err();
+        assert!(err.reason.contains("is not an attribute name"), "{err}");
     }
 
     /// `A-67`: `C_ATTRIBUTE_TUPLE` syntax itself is now implemented, but a

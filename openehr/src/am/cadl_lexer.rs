@@ -100,14 +100,23 @@ impl<'a> Lexer<'a> {
     /// the only construct this parser reads this way; everything else it
     /// parses is well served by `Self::next`'s own token boundaries.
     pub(super) fn read_raw_path(&mut self) -> Option<&'a str> {
+        let text = self.peek_raw_path()?;
+        self.rest = &self.rest[text.len()..];
+        Some(text)
+    }
+
+    /// [`Self::read_raw_path`] without consuming: the same whitespace-bounded
+    /// slice, left in place, so `c_attribute` can decide whether the text
+    /// ahead is an `ADL_PATH` (it contains `/`) or a bare attribute name
+    /// before committing to reading it either way (`A-70`). Leading trivia
+    /// *is* consumed, as `Self::peek` consumes it.
+    pub(super) fn peek_raw_path(&mut self) -> Option<&'a str> {
         self.skip_trivia();
         if self.rest.is_empty() {
             return None;
         }
         let end = self.rest.find(char::is_whitespace).unwrap_or(self.rest.len());
-        let text = &self.rest[..end];
-        self.rest = &self.rest[end..];
-        Some(text)
+        Some(&self.rest[..end])
     }
 
     /// Reads a maximal run of ISO8601 date/time/date-time/duration
@@ -460,6 +469,15 @@ mod tests {
     fn read_raw_path_returns_none_at_end_of_input() {
         let mut lexer = Lexer::new("   ");
         assert_eq!(lexer.read_raw_path(), None);
+    }
+
+    #[test]
+    fn peek_raw_path_leaves_the_text_in_place() {
+        let mut lexer = Lexer::new("  /data/events cardinality");
+        assert_eq!(lexer.peek_raw_path(), Some("/data/events"));
+        assert_eq!(lexer.peek_raw_path(), Some("/data/events"));
+        assert_eq!(lexer.read_raw_path(), Some("/data/events"));
+        assert_eq!(lexer.peek_raw_path(), Some("cardinality"));
     }
 
     /// `A-65`: before `read_iso8601` existed, none of these lexed as one

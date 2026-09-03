@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**69 findings, 69 in the table below: 7 High, 36 Medium, 26 Low. 63 fixed or
+**70 findings, 70 in the table below: 7 High, 37 Medium, 26 Low. 64 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -156,6 +156,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-67 | Medium | `am::cadl` refused `C_ATTRIBUTE_TUPLE` (`[units, magnitude] matches {...}`) outright, though `crate::am::CAttributeTuple`/`CPrimitiveTuple` have existed since `A-50` and `am::validate` has evaluated them since `A-58` — nothing in the parser could ever produce one to evaluate | **fixed** — `c_attribute_def` dispatches to a leading `[` (nothing in `c_attribute` starts with one); `c_attribute_tuple`/`c_primitive_tuple`/`c_primitive_tuple_item` build the type directly, the latter sharing `A-66`'s own `CONTAINED_REGEXP` handling and a new `unwrapped_primitive` helper with `c_objects`'/`c_attribute`'s own unwrapped-primitive shorthands (`lib:A-33`); a tuple row's own items are always unwrapped, with no room in the grammar for a wrapping `rm_type_id`, so a row using an interval (AOM2's own canonical `{units, magnitude}` example among them) still hits the pre-existing, separate unwrapped-interval ambiguity — a discrete-valued row parses cleanly |
 | A-68 | Low | `CPrimitiveObject` had no `is_enumerated_type_constraint` field — AOM2's own `C_PRIMITIVE_OBJECT.is_enumerated_type_constraint`, "True if this object represents a constraint on an enumerated type from the reference model" — could not be represented at all, the same silent-loss shape `A-46`/`A-59`/`A-61` each found in a different class, noticed in passing while re-reading `C_PRIMITIVE_OBJECT`'s own class definition for `A-63` | **fixed** — `is_enumerated_type_constraint`/`with_is_enumerated_type_constraint()`/`is_enumerated_type_constraint()` added, `None` by default (AOM2's own `Void`, not `false`) and `#[serde(default)]` on the wire; carried, not derived — this crate has no Reference Model enumeration table to check it against |
 | A-69 | Low | **BREAKING.** `Archetype.archetype_id` was `base::ArchetypeId`, but AOM2 states `ARCHETYPE.archetype_id: ARCHETYPE_HRID` — the richer, authoring-time identifier `A-49` built `ArchetypeHrid` for, never propagated to the one field it was actually for; `ArchetypeId::from_str` rejects a namespace prefix and a prerelease suffix `ARCHETYPE_HRID`'s own grammar allows (`A-49`), so a real archetype using either could not be held by `Archetype::new` at all | **fixed** — `archetype_id`/`Archetype::new`/`Archetype::archetype_id()`/`ArchetypeViolation.archetype_id` all retyped to `ArchetypeHrid`; `ArchetypeHrid::specialisations()` added (the same `-`-splitting rule applied to `concept_id`) so `specialisation_depth()` needed no logic change; the one place an `ArchetypeHrid` and an `ArchetypeId` now meet — verifying a repository answered the identifier a `C_ARCHETYPE_ROOT` asked for (`K15.26`) — compares by text, both types sharing one textual convention for exactly this reason; `parent_archetype_id`, `ArchetypeRepository::resolve`, and `CArchetypeRoot.archetype_ref` are unchanged, since those are reference/lookup forms, correctly `ArchetypeId`-shaped already (`A-52`'s own residual already confirmed `parent_archetype_id`) |
+| A-70 | Medium | `am::cadl` accepted the lexer's fallback one-character "word" `/` as an attribute name, so an attribute in differential form — `/data/events cardinality matches {2..8; ordered}`, `c_attribute`'s `ADL_PATH` alternative, the way every specialised ADL 2 archetype states what it redefines — mis-parsed into several attributes and was refused later as a `VOKU` duplicate with the name `""`: a valid archetype refused, and refused naming the wrong thing (`K15.6`). Found by the first external-corpus run (`openehr/spec/corpus.md`), not by reading; `C_ATTRIBUTE.differential_path` itself had no counterpart in `CAttribute` | **fixed** — `CAttribute.differential_path`/`with_differential_path()`/`differential_path()` added (`#[serde(default)]`, absent on the wire when `None`); `Lexer::peek_raw_path` lets `c_attribute_def` tell an `ADL_PATH` (contains `/`) from a bare name before reading either; the path is split at its last `/` into parent and attribute; a name that is not an `IDENTIFIER` is refused by name; `VOKU` keyed on (parent, name); `am::validate` reports a differential attribute *unchecked* naming its parent path, since resolving it is flattening (`K15.11`) — never read under the wrong object |
 
 ---
 
@@ -4124,3 +4125,82 @@ Every pre-existing test in `am::archetype` and `am::validate` — 437 unit
 tests across the whole crate — passed unchanged, with no fixture edits
 needed anywhere: the refactor was type-checked end to end by the compiler
 rather than discovered incomplete by a failing assertion.
+
+## A-70 — a differential-form attribute was refused as a `VOKU` duplicate named `""`
+
+**Severity: Medium. Status: fixed.**
+
+**Found by running, not reading.** The first run of an external corpus
+through `am::cadl::parse_definition` (`openehr/spec/corpus.md`; the
+`openEHR/adl-archetypes` repository at `093c77ea`, 1,379 `.adls` files)
+refused `openEHR-EHR-OBSERVATION.redefine_cardinality.v1.0.0.adls` — a
+valid, reference-suite archetype — with `invalid C_COMPLEX_OBJECT:
+VOKU (got "")`. Its whole definition is one line:
+
+```
+OBSERVATION[id1.1] matches {
+    /data/events cardinality matches {2..8; ordered}
+}
+```
+
+That is `c_attribute`'s `ADL_PATH` alternative (`cadl2.g4`: `c_attribute:
+(ADL_PATH | rm_attribute_id) c_existence? c_cardinality? …`), and AOM2's
+`C_ATTRIBUTE.differential_path` — "path to the parent object of this
+attribute (i.e. doesn't include the name of this attribute). Used only for
+attributes in differential form, specialised archetypes"
+(`org.openehr.am.aom2.c_attribute.adoc`). It is how every specialised ADL 2
+archetype states only what it redefines. `c_attribute_def`'s own
+documentation said `ADL_PATH` "is not implemented; every attribute name
+this parser accepts is a plain word" — true, but the parser did not
+*refuse* a path. `Lexer::next`'s fallback arm turns any unrecognised
+character into a one-character `Word`, `expect_word` accepted `/` as an
+attribute name, `data` became a second attribute, `/` a third — and
+`CComplexObject::new` reported the two `/`s as a `VOKU` duplicate. A valid
+archetype refused, and refused naming a rule it did not break, which is
+the exact shape `K15.6` (refuse by name) exists to prevent. `CAttribute`
+had no `differential_path` field at all, so even a correct parse had
+nowhere to put the parent path.
+
+**Fixed.** `CAttribute.differential_path: Option<String>`, with
+`with_differential_path()` (refusing an empty path or one ending in `/`,
+except `/` itself, which names the root object) and `differential_path()`;
+`#[serde(default, skip_serializing_if = "Option::is_none")]`, so an
+attribute written directly under its owner serialises exactly as before.
+`Lexer::peek_raw_path` — `read_raw_path` without consuming — lets
+`c_attribute_def` look at the whitespace-bounded text ahead and choose
+exactly: it contains `/` (an `ADL_PATH` never has whitespace inside it, a
+bare `rm_attribute_id` never has `/`), or it is a word. A path is split at
+its last `/`: the tail is the attribute, the head the parent
+(`items[id2]/value` keeps its predicate in the parent part; `/events`
+has parent `/`). Either way the name must be an `IDENTIFIER`
+(`archetype_hrid::is_identifier`, now `pub(super)` so the rule has one
+home), or the attribute is refused *as* a bad name — the lexer's fallback
+can no longer reach `CAttribute`. `C_COMPLEX_OBJECT`'s `VOKU` check is
+keyed on (parent, name): `/data[id2]/events` and `/data[id3]/events` are
+attributes of two objects, not one attribute twice.
+
+**Carried, not resolved.** A differential attribute belongs to the object
+its parent path names, not to the one it is written under; walking there
+is flattening (`K15.11`), which does not exist here. `am::validate` now
+reports such an attribute *unchecked*, naming the parent path as its
+detail, and returns before reading `rm_attribute_name` under the enclosing
+node — where `items` under an EVALUATION finds nothing and would report an
+`Existence` violation that is not there. The alternative, silently
+checking the wrong object, is the class of defect `A-36` and `A-28`
+already record for the RM side.
+
+**Effect on the corpus.** `.adls` files parsed: 178 before, 206 after; the
+`VOKU` category disappeared entirely rather than shrinking, which is the
+number that says the diagnosis was complete. The run also found four
+Latin-1 files that `read_to_string` had reported as "no definition
+section" — a runner defect, not a parser one — now decoded lossily and
+counted as their own line; and it left three candidate findings recorded in
+`openehr/spec/corpus.md`, not here, because each needs the grammar read
+first (`W0.19`).
+
+**Tests.** Nine: `CAttribute`'s default, round trip, and refusals;
+`VOKU` distinguishing and still catching duplicates under one parent;
+`peek_raw_path` leaving the text in place; the corpus file's own shape,
+a relative path with a predicate, a root-level path, and a non-identifier
+name refused by name; and `am::validate` reporting the differential
+attribute unchecked with no violation.

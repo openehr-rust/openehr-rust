@@ -194,6 +194,17 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       from it. *Evidence:* a committed results table with dated counts, and
       a CI job that fails when a previously-parsing file stops parsing.
       — **M**
+      - [x] 2026-09-03: the archetype half, first run.
+        `openehr/tests/adl_corpus.rs` (ignored; `OPENEHR_ADL_CORPUS`) over
+        `openEHR/adl-archetypes` at `093c77ea`, results in
+        [`openehr/spec/corpus.md`](openehr/spec/corpus.md). First finding
+        from it fixed the same day (`A-70`, differential-form attributes);
+        three candidates recorded there for the next runs.
+      - [ ] The JSON half (SDK examples, web-template compositions).
+      - [ ] `spec_refs` per conformance case, and the index.
+      - [ ] The regression job. Blocked on a corpus this tree may carry:
+        `adl-archetypes` has no licence file, so it is read where it is,
+        never vendored (see `corpus.md` §Licence).
 
 ### P2 — operability and evidence
 

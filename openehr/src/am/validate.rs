@@ -522,8 +522,21 @@ fn walk_attribute(
     path: &str,
     ctx: &mut Ctx<'_>,
 ) {
-    let children = node.children(attribute.rm_attribute_name());
     let attr_path = format!("{path}/{}", attribute.rm_attribute_name());
+    if let Some(parent) = attribute.differential_path() {
+        // Differential form (`A-70`): the attribute belongs to the object
+        // `parent` names, not to `node`. Resolving that is flattening
+        // (`K15.11`), which does not exist here; reading `rm_attribute_name`
+        // under `node` would check the wrong object and could report a
+        // pass for it.
+        ctx.unchecked_detail(
+            &attr_path,
+            "C_ATTRIBUTE differential_path is not resolved (flattening, K15.11)",
+            parent,
+        );
+        return;
+    }
+    let children = node.children(attribute.rm_attribute_name());
 
     if children.is_empty() {
         if attribute.existence().lower() > 0 {
@@ -1398,6 +1411,48 @@ mod tests {
             report.unchecked()[0].detail(),
             Some("openEHR-EHR-CLUSTER.device.v1")
         );
+    }
+
+    /// `A-70`: an attribute in differential form belongs to the object its
+    /// `differential_path` names, not to the one it is written under.
+    /// Resolving that is flattening (`K15.11`); until then it is reported
+    /// unchecked, naming the parent path, and never read under the wrong
+    /// object — where `items` under an EVALUATION would find nothing and
+    /// report an `Existence` violation that is not there.
+    #[test]
+    fn a_differential_path_attribute_is_unchecked_not_read_under_the_wrong_object() {
+        let items = CAttribute::single(
+            "items",
+            MultiplicityInterval::MANDATORY,
+            vec![element_alt("at0004", MultiplicityInterval::MANDATORY)],
+        )
+        .unwrap()
+        .with_differential_path("/data[id2]")
+        .unwrap();
+        let definition = CComplexObject::new(
+            "EVALUATION",
+            Some("id1".to_owned()),
+            MultiplicityInterval::MANDATORY,
+            vec![items],
+        )
+        .unwrap();
+        let archetype = Archetype::new(
+            "openEHR-EHR-EVALUATION.test.v1".parse().unwrap(),
+            definition,
+            ArchetypeTerminology::new("en", terms(&[("id1", "Test"), ("at0004", "Systolic")])).unwrap(),
+        )
+        .unwrap();
+        let entry = build_evaluation(vec![]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(!report.is_conformant());
+        assert!(report.violations().is_empty(), "{:?}", report.violations());
+        assert_eq!(report.unchecked().len(), 1);
+        assert_eq!(report.unchecked()[0].archetype_path(), "/items");
+        assert_eq!(
+            report.unchecked()[0].reason(),
+            "C_ATTRIBUTE differential_path is not resolved (flattening, K15.11)"
+        );
+        assert_eq!(report.unchecked()[0].detail(), Some("/data[id2]"));
     }
 
     /// `C_COMPLEX_OBJECT_PROXY`: resolving `target_path` against the

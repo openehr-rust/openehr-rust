@@ -96,6 +96,17 @@ pub struct CAttribute {
     /// Present only for container attributes.
     cardinality: Option<Cardinality>,
     children: Vec<CObject>,
+    /// `C_ATTRIBUTE.differential_path`: "Path to the parent object of this
+    /// attribute (i.e. doesn't include the name of this attribute). Used
+    /// only for attributes in differential form, specialised archetypes"
+    /// (`org.openehr.am.aom2.c_attribute.adoc`). `None` for an attribute
+    /// written directly under its owning object — every attribute this
+    /// crate built before `A-70`. Carried, not resolved: walking to the
+    /// object it names is flattening (`K15.11`), so `am::validate` reports
+    /// an attribute carrying one *unchecked* rather than reading
+    /// `rm_attribute_name` under the wrong object.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    differential_path: Option<String>,
 }
 
 impl CAttribute {
@@ -121,6 +132,7 @@ impl CAttribute {
             existence,
             cardinality: None,
             children,
+            differential_path: None,
         })
     }
 
@@ -234,6 +246,36 @@ impl CAttribute {
     #[must_use]
     pub fn children(&self) -> &[CObject] {
         &self.children
+    }
+
+    /// Records the differential path — the path to this attribute's parent
+    /// object, without the attribute's own name — for an attribute written
+    /// in differential form inside a specialised archetype (`A-70`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseError`] if the path is empty or ends in `/`: a
+    /// differential path names a parent object, and `/data/events/` names
+    /// none. `/` alone is accepted — it names the root object.
+    pub fn with_differential_path(mut self, path: impl Into<String>) -> Result<Self, ParseError> {
+        let path = path.into();
+        if path.is_empty() || (path != "/" && path.ends_with('/')) {
+            return Err(ParseError::new(
+                "C_ATTRIBUTE",
+                "differential_path must name a parent object",
+                &path,
+            ));
+        }
+        self.differential_path = Some(path);
+        Ok(self)
+    }
+
+    /// The path to this attribute's parent object, present only when the
+    /// attribute was written in differential form. See the field's own
+    /// documentation for why nothing here resolves it.
+    #[must_use]
+    pub fn differential_path(&self) -> Option<&str> {
+        self.differential_path.as_deref()
     }
 }
 
@@ -387,12 +429,15 @@ impl CComplexObject {
                 code,
             ));
         }
-        let mut seen: Vec<&str> = Vec::with_capacity(attributes.len());
+        // Keyed on (parent, name): in differential form `/data[id2]/events`
+        // and `/data[id3]/events` are attributes of two objects (`A-70`).
+        let mut seen: Vec<(Option<&str>, &str)> = Vec::with_capacity(attributes.len());
         for attribute in &attributes {
-            if seen.contains(&attribute.rm_attribute_name()) {
+            let key = (attribute.differential_path(), attribute.rm_attribute_name());
+            if seen.contains(&key) {
                 return Err(ParseError::invariant("C_COMPLEX_OBJECT", "VOKU"));
             }
-            seen.push(attribute.rm_attribute_name());
+            seen.push(key);
         }
         Ok(Self {
             rm_type_name,
@@ -1297,6 +1342,50 @@ mod tests {
             ],
         );
         assert_eq!(dup.unwrap_err().reason, "VOKU");
+    }
+
+    /// `A-70`: `VOKU` is keyed on the parent as well as the name. In
+    /// differential form `/data[id2]/events` and `/data[id3]/events` are
+    /// attributes of two different objects, not one attribute twice.
+    #[test]
+    fn same_named_attributes_at_different_differential_paths_are_distinct() {
+        let events = |parent: &str| {
+            CAttribute::single("events", MultiplicityInterval::MANDATORY, Vec::new())
+                .unwrap()
+                .with_differential_path(parent)
+                .unwrap()
+        };
+        assert!(
+            CComplexObject::new(
+                "OBSERVATION",
+                Some("id1.1".to_owned()),
+                MultiplicityInterval::MANDATORY,
+                vec![events("/data[id2]"), events("/data[id3]")],
+            )
+            .is_ok()
+        );
+        let dup = CComplexObject::new(
+            "OBSERVATION",
+            Some("id1.1".to_owned()),
+            MultiplicityInterval::MANDATORY,
+            vec![events("/data[id2]"), events("/data[id2]")],
+        );
+        assert_eq!(dup.unwrap_err().reason, "VOKU");
+    }
+
+    #[test]
+    fn a_differential_path_is_absent_by_default_round_trips_and_must_name_a_parent() {
+        let plain = CAttribute::single("events", MultiplicityInterval::MANDATORY, Vec::new()).unwrap();
+        assert_eq!(plain.differential_path(), None);
+        let json = serde_json::to_value(&plain).unwrap();
+        assert!(!json.as_object().unwrap().contains_key("differential_path"));
+        let differential = plain.clone().with_differential_path("/data").unwrap();
+        assert_eq!(differential.differential_path(), Some("/data"));
+        let back: CAttribute =
+            serde_json::from_value(serde_json::to_value(&differential).unwrap()).unwrap();
+        assert_eq!(back, differential);
+        assert!(plain.clone().with_differential_path("").is_err());
+        assert!(plain.with_differential_path("/data/").is_err());
     }
 
     #[test]

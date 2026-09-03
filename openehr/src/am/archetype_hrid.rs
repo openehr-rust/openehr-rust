@@ -296,7 +296,9 @@ impl fmt::Display for ArchetypeHrid {
 }
 
 /// An `IDENTIFIER`: starts with a letter, then letters, digits, or `_`.
-fn is_identifier(text: &str) -> bool {
+/// `IDENTIFIER: ALPHA_CHAR WORD_CHAR*` (`base_lexer.g4`), shared with
+/// `am::cadl`'s attribute-name check (`A-70`) so the one rule has one home.
+pub(super) fn is_identifier(text: &str) -> bool {
     let mut bytes = text.bytes();
     bytes.next().is_some_and(|b| b.is_ascii_alphabetic())
         && bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')

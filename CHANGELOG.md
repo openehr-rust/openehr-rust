@@ -7,6 +7,22 @@ together.
 
 ## Unreleased
 
+- `am::CAttribute` gains `differential_path`/`with_differential_path()`/
+  `differential_path()`, AOM2's `C_ATTRIBUTE.differential_path`, and
+  `am::cadl` now parses `c_attribute`'s `ADL_PATH` form — `/data/events
+  cardinality matches {2..8; ordered}`, the way a specialised archetype
+  states what it redefines. Before, the lexer's fallback let `/` through as
+  an attribute name and a valid archetype was refused as a `VOKU` duplicate
+  named `""`; a name that is not an identifier is now refused by name. See
+  `A-70` in `openehr/spec/audit.md`, found by the first external-corpus run
+  (`openehr/spec/corpus.md`). Not a breaking change: an additive field,
+  absent on the wire when unset, and `am::validate` reports a differential
+  attribute *unchecked* rather than reading it under the wrong object —
+  resolving one is flattening (`K15.11`).
+- `openehr/tests/adl_corpus.rs`: an `#[ignore]`d discovery run over an
+  external directory of `.adls`/`.adl` files (`OPENEHR_ADL_CORPUS`), giving
+  every file's `definition` section a verdict; results are recorded, dated
+  and with the corpus commit, in `openehr/spec/corpus.md`.
 - `am::validate` now actually evaluates a `C_ATTRIBUTE_TUPLE` constraint
   against instance data, rather than reporting every one of them `Unchecked`
   unconditionally — closes `A-50`'s own residual. See `A-58` in
