@@ -54,7 +54,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
 
 ### P0 — land what exists, and stop saying stale things
 
-- [ ] **Push the twelve unpushed commits and read the CI run.** Local `main`
+- [x] **Push the twelve unpushed commits and read the CI run.** Local `main`
       is twelve commits ahead of `origin/main` (`A-58`–`A-69`, 2026-09-02);
       `gh run list` shows CI last ran on the 0.9.0 publication commits. Two
       of the twelve are **breaking** (`A-63`, `A-69`), so the next release is
@@ -62,6 +62,16 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       status -sb` shows no `ahead`; `gh run list --limit 1` green on the
       pushed head; `agents/publishing.md` untouched until the release is
       actually cut. — **S**
+      - Done 2026-09-03. The first push (`bd17de3`, run 33775455452) was
+        **red** on one job: `changed lines are mutation-tested (openehr)`,
+        14 missed mutants and 3 timeouts, every one a test gap in the
+        `A-58`–`A-69` code. Fixed in `e461b99`, with the survivors re-run
+        locally by name (a push is mutated against `event.before..HEAD`
+        only, so CI would not have re-checked them) and 14 further
+        survivors found by mutating the whole of `assumed_value_conforms`
+        rather than its changed lines. Run 33781305464 on `e461b99`: 33
+        of 33 jobs green. `A-70` and the corpus runner went in the same
+        push.
 - [x] **Correct the claims the last two weeks made false.**
       `COMPARISONS.md:43` still says "**no validation of data against an
       archetype**" and "28 of those 32 requirements have no code";
