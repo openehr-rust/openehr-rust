@@ -1560,6 +1560,23 @@ mod tests {
         ] {
             assert!(!value.as_object().unwrap().contains_key("occurrences"), "{kind}");
         }
+
+        // Each type's own accessor answers a stated value as stated —
+        // cargo-mutants replaced all three with `None` unnoticed until
+        // this was asserted.
+        let stated = Some(MultiplicityInterval::OPTIONAL);
+        assert_eq!(
+            CPrimitiveObject::new("DV_TEXT", stated.clone(), CPrimitive::String { list: Vec::new() }).occurrences(),
+            Some(&MultiplicityInterval::OPTIONAL)
+        );
+        assert_eq!(
+            ArchetypeSlot::new("CLUSTER", "id5", stated.clone()).unwrap().occurrences(),
+            Some(&MultiplicityInterval::OPTIONAL)
+        );
+        assert_eq!(
+            CArchetypeRoot::new("CLUSTER", "openEHR-EHR-CLUSTER.x.v1", stated).unwrap().occurrences(),
+            Some(&MultiplicityInterval::OPTIONAL)
+        );
     }
 
     #[test]
