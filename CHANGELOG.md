@@ -75,6 +75,14 @@ together.
   cover (a tuple row using an interval still hits a separate, pre-existing
   ambiguity; a discrete-valued row parses cleanly). Not a breaking change:
   `parse_definition` accepts strictly more input than before.
+- `am::CPrimitiveObject` gains `is_enumerated_type_constraint`/
+  `with_is_enumerated_type_constraint()`/`is_enumerated_type_constraint()`,
+  AOM2's own `C_PRIMITIVE_OBJECT.is_enumerated_type_constraint`, which had
+  no counterpart at all before now. See `A-68` in
+  `openehr/spec/audit.md`. Not a breaking change: an additive field
+  defaulting to `None`, `#[serde(default)]` on the wire. Carried, not
+  enforced — this crate has no Reference Model enumeration table to check
+  it against.
 
 ## 0.9.0 — 2026-09-02
 

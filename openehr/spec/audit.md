@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**67 findings, 67 in the table below: 7 High, 36 Medium, 24 Low. 61 fixed or
+**68 findings, 68 in the table below: 7 High, 36 Medium, 25 Low. 62 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -154,6 +154,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-65 | Medium | No ISO8601 date, time, date-time, or duration literal can be lexed by `am::cadl` at all — found writing `A-64`'s own tests, not by a fuzzer or a report — because `cadl_lexer::Lexer`'s word-scanner treats `-`/`:` as `Symbol`s (needed for archetype identifiers elsewhere), splitting every such literal into several tokens before `expect_temporal`'s `expect_word` ever sees one | **fixed** — `Lexer::read_iso8601`, a dedicated scan reached only from `expect_temporal` (where a temporal literal is grammatically expected, so there is no ambiguity with a plain `INTEGER`/`REAL` for it to resolve), reads a maximal run of ISO8601-shaped characters and hands it to `T::from_str`, the same validation-not-lexing split `expect_word`-based parsing already used; a `.` is only consumed when followed by a digit, so a `..` range separator is never swallowed |
 | A-66 | Medium | `am::cadl` refused every `ARCHETYPE_SLOT` `matches { include ... exclude ... }` block outright, and every `C_STRING` regex, though only the full BEOM `boolean_expr` grammar genuinely needs work this parser has not done — `constraint_expr` (`bound_path SYM_MATCHES CONTAINED_REGEXP`) is the one assertion shape every real `ARCHETYPE_SLOT` assertion this repository has found actually uses, and `CONTAINED_REGEXP` is the same lexical token `C_STRING`'s own regex form needs (`A-63`) | **fixed** — `Lexer::try_read_contained_regexp` reads a `CONTAINED_REGEXP`'s delimited body (raw-scanned, since it may contain almost any character); `parse_slot_assertion` implements exactly `bound_path SYM_MATCHES CONTAINED_REGEXP` for `include`/`exclude`, refusing anything richer by name; `c_attribute`'s own `SYM_MATCHES CONTAINED_REGEXP` shorthand builds an unwrapped `C_STRING` whose `list` holds the pattern (`A-63`'s single-list shape); `closed` and a richer assertion remain the two real refusals left in `am::cadl`'s own `ARCHETYPE_SLOT` support |
 | A-67 | Medium | `am::cadl` refused `C_ATTRIBUTE_TUPLE` (`[units, magnitude] matches {...}`) outright, though `crate::am::CAttributeTuple`/`CPrimitiveTuple` have existed since `A-50` and `am::validate` has evaluated them since `A-58` — nothing in the parser could ever produce one to evaluate | **fixed** — `c_attribute_def` dispatches to a leading `[` (nothing in `c_attribute` starts with one); `c_attribute_tuple`/`c_primitive_tuple`/`c_primitive_tuple_item` build the type directly, the latter sharing `A-66`'s own `CONTAINED_REGEXP` handling and a new `unwrapped_primitive` helper with `c_objects`'/`c_attribute`'s own unwrapped-primitive shorthands (`lib:A-33`); a tuple row's own items are always unwrapped, with no room in the grammar for a wrapping `rm_type_id`, so a row using an interval (AOM2's own canonical `{units, magnitude}` example among them) still hits the pre-existing, separate unwrapped-interval ambiguity — a discrete-valued row parses cleanly |
+| A-68 | Low | `CPrimitiveObject` had no `is_enumerated_type_constraint` field — AOM2's own `C_PRIMITIVE_OBJECT.is_enumerated_type_constraint`, "True if this object represents a constraint on an enumerated type from the reference model" — could not be represented at all, the same silent-loss shape `A-46`/`A-59`/`A-61` each found in a different class, noticed in passing while re-reading `C_PRIMITIVE_OBJECT`'s own class definition for `A-63` | **fixed** — `is_enumerated_type_constraint`/`with_is_enumerated_type_constraint()`/`is_enumerated_type_constraint()` added, `None` by default (AOM2's own `Void`, not `false`) and `#[serde(default)]` on the wire; carried, not derived — this crate has no Reference Model enumeration table to check it against |
 
 ---
 
@@ -3996,3 +3997,47 @@ parsed end to end and its shape inspected
 (`a_c_attribute_tuple_with_discrete_values_is_parsed`); a `CONTAINED_REGEXP`
 tuple item; and a malformed tuple (wrong row arity) refused by name, not
 silently accepted or dropped.
+
+## A-68 — `CPrimitiveObject.is_enumerated_type_constraint` had no counterpart
+
+**Severity: Low. Status: fixed.**
+
+Noticed in passing while re-reading `C_PRIMITIVE_OBJECT`'s own class
+definition for `A-63` (confirming what `Inv_valid_assumed_value` and
+`assumed_value`'s own shape actually were) rather than assuming this
+crate's existing `CPrimitiveObject` — `node_id`, `assumed_value`, all
+already present — had every attribute the class declares. It did not:
+`is_enumerated_type_constraint: Boolean [0..1]`, "True if this object
+represents a constraint on an enumerated type from the reference model,
+where the latter is assumed to be based on a primitive type, generally
+Integer or String," had no counterpart under any name. An archetype
+stating it — common for RM attributes like `ACTION.state`'s own coded
+state machine, exactly the "enumerated type... based on... String" case
+the class's own description names — could not carry that fact through
+this crate at all: not accepted and checked, not accepted and carried
+unchecked, not even round-tripped through JSON.
+
+**Fixed.** `is_enumerated_type_constraint: Option<bool>` added, defaulting
+`None` — AOM2's own `Void`, not `false`, since `0..1` means the attribute
+may be entirely unstated, and collapsing that into a boolean default would
+assert something no archetype actually said.
+`with_is_enumerated_type_constraint()`/`is_enumerated_type_constraint()`
+attach and read it, the same builder shape `with_assumed_value` already
+uses; `#[serde(skip_serializing_if = "Option::is_none", default)]` keeps
+JSON written before this field existed both readable and unchanged in
+shape when unused, the same choice `A-46`/`A-59`/`A-61` made for their own
+late-added fields.
+
+**Not enforced, deliberately.** Nothing in this crate checks the flag
+against anything, because nothing here has a Reference Model enumeration
+table to check it against — the same position already taken for
+`assumed_value`'s own `Inv_valid_assumed_value`, until `A-56` built one
+specifically for that invariant. No comparable invariant exists for
+`is_enumerated_type_constraint` to close the same way.
+
+**Tests.** Three: absent by default and carried once attached via the
+builder; canonical-JSON round-tripping, both bare and set, confirming the
+field is omitted entirely when unset rather than written as `null`; and a
+fixture written as though from before this field existed — literal JSON
+with no `is_enumerated_type_constraint` key at all — still deserialising
+to `None`.

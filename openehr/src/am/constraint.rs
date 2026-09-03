@@ -589,6 +589,8 @@ pub struct CPrimitiveObject {
     constraint: CPrimitive,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     assumed_value: Option<PrimitiveValue>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    is_enumerated_type_constraint: Option<bool>,
 }
 
 impl CPrimitiveObject {
@@ -605,6 +607,7 @@ impl CPrimitiveObject {
             occurrences,
             constraint,
             assumed_value: None,
+            is_enumerated_type_constraint: None,
         }
     }
 
@@ -691,6 +694,31 @@ impl CPrimitiveObject {
     #[must_use]
     pub fn assumed_value(&self) -> Option<&PrimitiveValue> {
         self.assumed_value.as_ref()
+    }
+
+    /// Records whether this node constrains a Reference Model enumerated
+    /// type (`org.openehr.am.aom2.c_primitive_object.adoc`'s own
+    /// `is_enumerated_type_constraint`: "True if this object represents a
+    /// constraint on an enumerated type from the reference model, where the
+    /// latter is assumed to be based on a primitive type, generally
+    /// Integer or String"). `0..1` in AOM2 itself — `None` here is that
+    /// attribute's own `Void`, not `false`; this crate has no RM
+    /// enumeration table to derive the answer from on its own, so a caller
+    /// states it or leaves it unstated, the same choice already made for
+    /// [`Self::with_assumed_value`].
+    #[must_use]
+    pub const fn with_is_enumerated_type_constraint(mut self, value: bool) -> Self {
+        self.is_enumerated_type_constraint = Some(value);
+        self
+    }
+
+    /// Whether this node constrains a Reference Model enumerated type, if
+    /// [`Self::with_is_enumerated_type_constraint`] recorded an answer.
+    /// Carried, not derived: nothing in this crate checks it against
+    /// anything.
+    #[must_use]
+    pub const fn is_enumerated_type_constraint(&self) -> Option<bool> {
+        self.is_enumerated_type_constraint
     }
 }
 
@@ -1678,6 +1706,60 @@ mod tests {
             !json.as_object().unwrap().contains_key("assumed_value"),
             "an absent assumed_value was written as null instead of omitted"
         );
+    }
+
+    /// `is_enumerated_type_constraint` is absent by default (AOM2's own
+    /// `Void`, not `false`), attached with the builder, and — since it is
+    /// `0..1` and this crate never derives it on its own — carried exactly
+    /// as given.
+    #[test]
+    fn is_enumerated_type_constraint_is_absent_by_default_and_carried_once_attached() {
+        let bare = CPrimitiveObject::new(
+            "DV_CODED_TEXT",
+            MultiplicityInterval::MANDATORY,
+            CPrimitive::Integer { list: vec![1, 2, 3], range: None },
+        );
+        assert_eq!(bare.is_enumerated_type_constraint(), None);
+
+        let marked = bare.with_is_enumerated_type_constraint(true);
+        assert_eq!(marked.is_enumerated_type_constraint(), Some(true));
+    }
+
+    #[test]
+    fn is_enumerated_type_constraint_round_trips_through_canonical_json_and_omits_when_absent() {
+        let bare = CPrimitiveObject::new(
+            "DV_CODED_TEXT",
+            MultiplicityInterval::MANDATORY,
+            CPrimitive::Integer { list: vec![1, 2, 3], range: None },
+        );
+        let bare_json = serde_json::to_value(&bare).unwrap();
+        assert!(
+            !bare_json.as_object().unwrap().contains_key("is_enumerated_type_constraint"),
+            "an absent is_enumerated_type_constraint was written as null instead of omitted"
+        );
+        assert_eq!(
+            serde_json::from_value::<CPrimitiveObject>(bare_json).unwrap(),
+            bare
+        );
+
+        let marked = bare.with_is_enumerated_type_constraint(true);
+        let json = serde_json::to_value(&marked).unwrap();
+        assert_eq!(json["is_enumerated_type_constraint"], true);
+        assert_eq!(serde_json::from_value::<CPrimitiveObject>(json).unwrap(), marked);
+    }
+
+    #[test]
+    fn a_primitive_object_serialised_before_is_enumerated_type_constraint_existed_still_deserialises() {
+        // `#[serde(default)]`: a C_PRIMITIVE_OBJECT written by an earlier
+        // version of this crate, before this field existed, carries no
+        // such key at all — it must still read, as `None`.
+        let json = serde_json::json!({
+            "rm_type_name": "DV_CODED_TEXT",
+            "occurrences": { "lower": 1, "upper": 1 },
+            "constraint": { "_type": "C_INTEGER", "list": [1, 2, 3] },
+        });
+        let back: CPrimitiveObject = serde_json::from_value(json).unwrap();
+        assert_eq!(back.is_enumerated_type_constraint(), None);
     }
 
     #[test]
