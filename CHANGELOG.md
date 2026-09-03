@@ -83,6 +83,16 @@ together.
   defaulting to `None`, `#[serde(default)]` on the wire. Carried, not
   enforced — this crate has no Reference Model enumeration table to check
   it against.
+- **Breaking.** `am::Archetype::archetype_id()` returns `&am::ArchetypeHrid`
+  now, not `&base::ArchetypeId` — AOM2 states `ARCHETYPE.archetype_id:
+  ARCHETYPE_HRID`, and `ArchetypeId::from_str` rejects a namespace prefix
+  and a prerelease suffix `ARCHETYPE_HRID`'s own grammar allows, which a
+  real archetype using either could previously not even be held by
+  `Archetype::new`. `Archetype::new`'s own first parameter and
+  `am::validate::ArchetypeViolation::archetype_id()` change the same way.
+  See `A-69` in `openehr/spec/audit.md`. `parent_archetype_id`,
+  `ArchetypeRepository::resolve`, and `CArchetypeRoot.archetype_ref` are
+  unchanged — reference forms, not the archetype's own declared identity.
 
 ## 0.9.0 — 2026-09-02
 

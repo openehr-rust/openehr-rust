@@ -21,8 +21,8 @@
 
 use crate::am::constraint::is_c_string_pattern;
 use crate::am::{
-    ArchetypeTerminology, CComplexObject, CObject, CPrimitive, MultiplicityInterval, NodeIdSyntax,
-    PrimitiveValue, RmOverlay,
+    ArchetypeHrid, ArchetypeTerminology, CComplexObject, CObject, CPrimitive, MultiplicityInterval,
+    NodeIdSyntax, PrimitiveValue, RmOverlay,
 };
 use crate::base::{ArchetypeId, Date, DateTime, Duration, Time};
 use crate::error::ParseError;
@@ -71,7 +71,7 @@ use serde::{Deserialize, Serialize};
 // `LINK.link_type` and `OBJECT_ID` already make here.
 #[allow(clippy::struct_field_names)]
 pub struct Archetype {
-    archetype_id: ArchetypeId,
+    archetype_id: ArchetypeHrid,
     parent_archetype_id: Option<ArchetypeId>,
     /// The AM release the artefact declares. Carried, not enforced (`K15.2`),
     /// on the same terms `S1.16` sets for `ARCHETYPED.rm_version`.
@@ -102,7 +102,7 @@ impl Archetype {
     /// - `VACDF` — a `C_TERMINOLOGY_CODE` names an `ac`-code with no value set.
     /// - `VATCD` — a code is specialised more deeply than the archetype is.
     pub fn new(
-        archetype_id: ArchetypeId,
+        archetype_id: ArchetypeHrid,
         definition: CComplexObject,
         terminology: ArchetypeTerminology,
     ) -> Result<Self, ParseError> {
@@ -161,9 +161,14 @@ impl Archetype {
         self
     }
 
-    /// The archetype identifier.
+    /// The archetype identifier — `ARCHETYPE.archetype_id: ARCHETYPE_HRID`
+    /// (`org.openehr.am.aom2.archetype.adoc`), the archetype's own declared
+    /// identity, distinct from [`crate::base::ArchetypeId`], the narrower
+    /// runtime form `ARCHETYPED.archetype_id` carries on Reference Model
+    /// data (see [`ArchetypeHrid`]'s own module documentation for exactly
+    /// what separates the two).
     #[must_use]
-    pub const fn archetype_id(&self) -> &ArchetypeId {
+    pub const fn archetype_id(&self) -> &ArchetypeHrid {
         &self.archetype_id
     }
 
@@ -233,7 +238,7 @@ impl Archetype {
     /// is.
     pub fn check(&self) -> Result<(), ParseError> {
         // VARDT: the outer type name is the class the identifier names.
-        if self.definition.rm_type_name() != self.archetype_id.rm_entity() {
+        if self.definition.rm_type_name() != self.archetype_id.rm_class() {
             return Err(ParseError::invariant("ARCHETYPE", "VARDT"));
         }
 
@@ -423,7 +428,7 @@ mod tests {
     use super::*;
     use crate::am::{
         CAttribute, CPrimitive, CPrimitiveObject, RmAttributeVisibility, RmOverlay, TermDefinition,
-        VisibilityType,
+        VersionStatus, VisibilityType,
     };
     use std::collections::{BTreeMap, BTreeSet};
 
@@ -490,6 +495,59 @@ mod tests {
         .unwrap_err();
         assert_eq!(err.reason, "VATDF");
         assert_eq!(err.input, "at0004");
+    }
+
+    /// `A-69`: `Archetype.archetype_id` is `ArchetypeHrid`
+    /// (`ARCHETYPE.archetype_id: ARCHETYPE_HRID`), not `base::ArchetypeId`
+    /// — so a namespaced or prerelease-suffixed identifier, which
+    /// `ArchetypeId::from_str` refuses (`A-49`'s own finding), is now
+    /// something `Archetype::new` can actually hold, not merely something
+    /// this crate's other readers can lex and then have nowhere to put.
+    #[test]
+    fn a_namespaced_and_a_prerelease_archetype_id_are_held_not_just_lexed() {
+        let namespaced = Archetype::new(
+            "acme.health::openEHR-EHR-OBSERVATION.blood_pressure.v1"
+                .parse()
+                .unwrap(),
+            observation(&[], Vec::new()),
+            ArchetypeTerminology::new("en", terms(&["id1"])).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(namespaced.archetype_id().namespace(), Some("acme.health"));
+
+        let prerelease = Archetype::new(
+            "openEHR-EHR-OBSERVATION.blood_pressure.v1.8.2-rc.4"
+                .parse()
+                .unwrap(),
+            observation(&[], Vec::new()),
+            ArchetypeTerminology::new("en", terms(&["id1"])).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(prerelease.archetype_id().version_status(), VersionStatus::ReleaseCandidate);
+    }
+
+    /// `specialisation_depth` is derived from `ArchetypeHrid::specialisations`
+    /// now, not `ArchetypeId::specialisations` — the same `-`-splitting
+    /// rule, applied to `concept_id` instead of `domain_concept`.
+    #[test]
+    fn specialisation_depth_counts_concept_id_segments() {
+        let unspecialised = Archetype::new(
+            "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
+            observation(&[], Vec::new()),
+            ArchetypeTerminology::new("en", terms(&["id1"])).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(unspecialised.specialisation_depth(), 0);
+
+        let specialised = Archetype::new(
+            "openEHR-EHR-OBSERVATION.blood_pressure-ambulatory.v2"
+                .parse()
+                .unwrap(),
+            observation(&[], Vec::new()),
+            ArchetypeTerminology::new("en", terms(&["id1"])).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(specialised.specialisation_depth(), 1);
     }
 
     #[test]

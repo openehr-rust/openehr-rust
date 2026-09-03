@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**68 findings, 68 in the table below: 7 High, 36 Medium, 25 Low. 62 fixed or
+**69 findings, 69 in the table below: 7 High, 36 Medium, 26 Low. 63 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -155,6 +155,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-66 | Medium | `am::cadl` refused every `ARCHETYPE_SLOT` `matches { include ... exclude ... }` block outright, and every `C_STRING` regex, though only the full BEOM `boolean_expr` grammar genuinely needs work this parser has not done — `constraint_expr` (`bound_path SYM_MATCHES CONTAINED_REGEXP`) is the one assertion shape every real `ARCHETYPE_SLOT` assertion this repository has found actually uses, and `CONTAINED_REGEXP` is the same lexical token `C_STRING`'s own regex form needs (`A-63`) | **fixed** — `Lexer::try_read_contained_regexp` reads a `CONTAINED_REGEXP`'s delimited body (raw-scanned, since it may contain almost any character); `parse_slot_assertion` implements exactly `bound_path SYM_MATCHES CONTAINED_REGEXP` for `include`/`exclude`, refusing anything richer by name; `c_attribute`'s own `SYM_MATCHES CONTAINED_REGEXP` shorthand builds an unwrapped `C_STRING` whose `list` holds the pattern (`A-63`'s single-list shape); `closed` and a richer assertion remain the two real refusals left in `am::cadl`'s own `ARCHETYPE_SLOT` support |
 | A-67 | Medium | `am::cadl` refused `C_ATTRIBUTE_TUPLE` (`[units, magnitude] matches {...}`) outright, though `crate::am::CAttributeTuple`/`CPrimitiveTuple` have existed since `A-50` and `am::validate` has evaluated them since `A-58` — nothing in the parser could ever produce one to evaluate | **fixed** — `c_attribute_def` dispatches to a leading `[` (nothing in `c_attribute` starts with one); `c_attribute_tuple`/`c_primitive_tuple`/`c_primitive_tuple_item` build the type directly, the latter sharing `A-66`'s own `CONTAINED_REGEXP` handling and a new `unwrapped_primitive` helper with `c_objects`'/`c_attribute`'s own unwrapped-primitive shorthands (`lib:A-33`); a tuple row's own items are always unwrapped, with no room in the grammar for a wrapping `rm_type_id`, so a row using an interval (AOM2's own canonical `{units, magnitude}` example among them) still hits the pre-existing, separate unwrapped-interval ambiguity — a discrete-valued row parses cleanly |
 | A-68 | Low | `CPrimitiveObject` had no `is_enumerated_type_constraint` field — AOM2's own `C_PRIMITIVE_OBJECT.is_enumerated_type_constraint`, "True if this object represents a constraint on an enumerated type from the reference model" — could not be represented at all, the same silent-loss shape `A-46`/`A-59`/`A-61` each found in a different class, noticed in passing while re-reading `C_PRIMITIVE_OBJECT`'s own class definition for `A-63` | **fixed** — `is_enumerated_type_constraint`/`with_is_enumerated_type_constraint()`/`is_enumerated_type_constraint()` added, `None` by default (AOM2's own `Void`, not `false`) and `#[serde(default)]` on the wire; carried, not derived — this crate has no Reference Model enumeration table to check it against |
+| A-69 | Low | **BREAKING.** `Archetype.archetype_id` was `base::ArchetypeId`, but AOM2 states `ARCHETYPE.archetype_id: ARCHETYPE_HRID` — the richer, authoring-time identifier `A-49` built `ArchetypeHrid` for, never propagated to the one field it was actually for; `ArchetypeId::from_str` rejects a namespace prefix and a prerelease suffix `ARCHETYPE_HRID`'s own grammar allows (`A-49`), so a real archetype using either could not be held by `Archetype::new` at all | **fixed** — `archetype_id`/`Archetype::new`/`Archetype::archetype_id()`/`ArchetypeViolation.archetype_id` all retyped to `ArchetypeHrid`; `ArchetypeHrid::specialisations()` added (the same `-`-splitting rule applied to `concept_id`) so `specialisation_depth()` needed no logic change; the one place an `ArchetypeHrid` and an `ArchetypeId` now meet — verifying a repository answered the identifier a `C_ARCHETYPE_ROOT` asked for (`K15.26`) — compares by text, both types sharing one textual convention for exactly this reason; `parent_archetype_id`, `ArchetypeRepository::resolve`, and `CArchetypeRoot.archetype_ref` are unchanged, since those are reference/lookup forms, correctly `ArchetypeId`-shaped already (`A-52`'s own residual already confirmed `parent_archetype_id`) |
 
 ---
 
@@ -4041,3 +4042,82 @@ field is omitted entirely when unset rather than written as `null`; and a
 fixture written as though from before this field existed — literal JSON
 with no `is_enumerated_type_constraint` key at all — still deserialising
 to `None`.
+
+## A-69 — `Archetype.archetype_id` was the wrong identifier type
+
+**Severity: Low. Status: fixed.**
+
+**Found continuing the AOM2 class-by-class comparison** that found `A-59`,
+`A-61`, and `A-68` — `ARCHETYPE`'s own class definition
+(`org.openehr.am.aom2.archetype.adoc`) states `archetype_id:
+ARCHETYPE_HRID [1..1]`. This crate's `Archetype.archetype_id` was
+`base::ArchetypeId` instead: "the classic `rm_originator-rm_name-rm_entity
+.domain_concept.version` form... what `ARCHETYPED.archetype_id` carries on
+Reference Model data" (`ArchetypeHrid`'s own module documentation) — the
+*runtime* identifier a `C_ARCHETYPE_ROOT` or `ARCHETYPED` attribute
+references an archetype BY, not the *authoring-time* identifier an
+archetype states about ITSELF in its own header. `A-49` built
+`ArchetypeHrid` specifically because `ArchetypeId::from_str` rejects two
+things `ARCHETYPE_HRID`'s own grammar allows — a `namespace::` prefix and
+a `-rc`/`-alpha`/`-beta` prerelease suffix — and fixed the ADL header
+readers (`Adl14Header`/`Adl2Header`) to use it. `Archetype` itself, the
+actual AOM2 object model type `am::cadl` and the header readers both feed
+into eventually, was never updated to match: a real archetype using
+either a namespace or a prerelease version in its own header could be
+*read* by this crate (the header parses) but never *held* — nothing past
+the header could represent what was just read.
+
+**Fixed.** `archetype_id: ArchetypeHrid` (was `ArchetypeId`) on
+`Archetype`; `Archetype::new`'s own parameter and `archetype_id()`'s
+return type follow. `ArchetypeHrid::specialisations()` — the same
+`-`-splitting `ArchetypeId::specialisations` already does for its own
+`domain_concept`, applied to `concept_id` instead, since `LABEL`'s own
+grammar admits `-` in a concept id on the same terms — means
+`specialisation_depth()` needed no logic change at all, only the type it
+delegates to. `am::validate`'s own `ArchetypeViolation.archetype_id` and
+every walk function's `archetype_id` parameter (nine signatures) are
+retyped the same way — mechanical, not a behaviour change: none of them
+ever called an `ArchetypeId`-specific method on the value, only stored or
+re-passed it. `check()`'s `VARDT` check moves from `ArchetypeId::rm_entity`
+to `ArchetypeHrid::rm_class`, the same field under AOM2's own name for it.
+
+**The one real design question this surfaced.** `walk_archetype_root`
+verifies a repository answered the identifier a `C_ARCHETYPE_ROOT` asked
+for (`K15.26`) by comparing `resolved.archetype().archetype_id()` — now an
+`ArchetypeHrid` — against `filler_id`, an `ArchetypeId` parsed from
+`CArchetypeRoot.archetype_ref` (a reference, correctly `ArchetypeId`-shaped
+and left untouched — `ArchetypeRepository::resolve` still takes
+`&ArchetypeId`, since a repository lookup is keyed by the runtime
+reference form, not the resolved archetype's own richer identity). The two
+types no longer compare directly. Fixed by comparing text:
+`ArchetypeHrid::physical_id` (what `Display` already uses) and
+`ArchetypeId`'s own `Display` share one textual convention —
+`rm_publisher-rm_package-rm_class.concept_id.vVERSION` — by construction
+(`ArchetypeHrid`'s grammar is a strict superset of `ArchetypeId`'s), so the
+comparison is exact for every identifier `ArchetypeId::from_str` could
+have accepted in the first place, which `filler_id` is guaranteed to be
+(the parse two lines above already refused anything richer). Not a new
+approximation — the same equality the two-`ArchetypeId` comparison already
+expressed, now spelled out because the types differ instead of matching by
+construction.
+
+**Not touched, and confirmed rather than assumed unnecessary.**
+`parent_archetype_id` stays `Option<ArchetypeId>` — `A-52`'s own residual
+already checked this specifically ("`parent_archetype_id`'s typing is not
+a new defect") against `ARCHETYPE_REF`'s grammar, a third, narrower form
+than `ARCHETYPE_HRID`, and found `ArchetypeId` adequate but for the same
+namespace-prefix gap `A-49` already tracks. `ArchetypeRepository::resolve`
+and `CArchetypeRoot.archetype_ref` (a plain `String`, `A-62`) are
+reference forms, not the archetype's own declared identity, and stay as
+they are.
+
+**Tests.** Two: an archetype built with a namespaced identifier and one
+built with a prerelease-suffixed identifier — both refused outright before
+this fix, since `Archetype::new` could not even accept the parsed value —
+now held and read back correctly; and `specialisation_depth` counting
+`concept_id` segments for both an unspecialised and a specialised
+identifier, confirming the delegation still works with the new type.
+Every pre-existing test in `am::archetype` and `am::validate` — 437 unit
+tests across the whole crate — passed unchanged, with no fixture edits
+needed anywhere: the refactor was type-checked end to end by the compiler
+rather than discovered incomplete by a failing assertion.

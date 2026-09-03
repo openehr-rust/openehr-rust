@@ -159,6 +159,17 @@ impl ArchetypeHrid {
         &self.concept_id
     }
 
+    /// The specialisation segments, outermost first — the same
+    /// `-`-splitting `base::ArchetypeId::specialisations` already does for
+    /// its own `domain_concept`, applied to [`Self::concept_id`] instead:
+    /// `LABEL`'s own grammar (this module's own documentation) admits `-`
+    /// in a concept id on the same terms `ArchetypeId` does.
+    pub fn specialisations(&self) -> impl Iterator<Item = &str> {
+        let mut parts = self.concept_id.split('-');
+        parts.next();
+        parts
+    }
+
     /// The numeric version text as written — one, two, or three
     /// dot-separated parts. See the module documentation's departure note.
     #[must_use]

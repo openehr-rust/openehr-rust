@@ -77,6 +77,7 @@
 //! is no I/O to make non-deterministic in the first place.
 
 use crate::am::archetype::Archetype;
+use crate::am::archetype_hrid::ArchetypeHrid;
 use crate::am::constraint::{
     ArchetypeSlot, CAttribute, CAttributeTuple, CComplexObject, CObject, CPrimitive,
     CPrimitiveObject, CPrimitiveTuple, ConstraintStatus, is_c_string_pattern,
@@ -96,7 +97,7 @@ use core::fmt;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchetypeViolation {
     archetype_path: String,
-    archetype_id: ArchetypeId,
+    archetype_id: ArchetypeHrid,
     constraint: &'static str,
 }
 
@@ -110,7 +111,7 @@ impl ArchetypeViolation {
 
     /// The archetype this instance was checked against.
     #[must_use]
-    pub const fn archetype_id(&self) -> &ArchetypeId {
+    pub const fn archetype_id(&self) -> &ArchetypeHrid {
         &self.archetype_id
     }
 
@@ -252,7 +253,7 @@ struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
-    fn violation(&mut self, archetype_id: &ArchetypeId, path: &str, constraint: &'static str) {
+    fn violation(&mut self, archetype_id: &ArchetypeHrid, path: &str, constraint: &'static str) {
         self.violations.push(ArchetypeViolation {
             archetype_path: path.to_owned(),
             archetype_id: archetype_id.clone(),
@@ -360,7 +361,7 @@ fn run(archetype: &Archetype, root: Node<'_>, ctx: &mut Ctx<'_>) {
 
 /// Checks every attribute constraint against the data reachable through it.
 fn walk_complex(
-    archetype_id: &ArchetypeId,
+    archetype_id: &ArchetypeHrid,
     terminology: &ArchetypeTerminology,
     constraint: &CComplexObject,
     node: Node<'_>,
@@ -398,7 +399,7 @@ enum TupleVerdict {
 /// exactly one place). The three-valued combination above it is the only
 /// logic this function adds.
 fn walk_attribute_tuple(
-    archetype_id: &ArchetypeId,
+    archetype_id: &ArchetypeHrid,
     terminology: &ArchetypeTerminology,
     tuple: &CAttributeTuple,
     node: Node<'_>,
@@ -510,7 +511,7 @@ fn walk_attribute_tuple(
 
 /// One `C_ATTRIBUTE`: existence, cardinality, and each alternative beneath it.
 fn walk_attribute(
-    archetype_id: &ArchetypeId,
+    archetype_id: &ArchetypeHrid,
     terminology: &ArchetypeTerminology,
     attribute: &CAttribute,
     node: Node<'_>,
@@ -622,7 +623,7 @@ fn match_alternative(alternatives: &[CObject], data: Node<'_>) -> Match {
 
 /// One matched `C_OBJECT`: RM class, then its own kind of constraint.
 fn walk_object(
-    archetype_id: &ArchetypeId,
+    archetype_id: &ArchetypeHrid,
     terminology: &ArchetypeTerminology,
     constraint: &CObject,
     node: Node<'_>,
@@ -682,7 +683,7 @@ fn walk_object(
 fn walk_slot(
     slot: &ArchetypeSlot,
     node: Node<'_>,
-    archetype_id: &ArchetypeId,
+    archetype_id: &ArchetypeHrid,
     path: &str,
     ctx: &mut Ctx<'_>,
 ) {
@@ -762,10 +763,19 @@ fn walk_archetype_root(
         }
     };
 
-    if resolved.archetype().archetype_id() != &filler_id {
+    if resolved.archetype().archetype_id().to_string() != filler_id.to_string() {
         // The repository is required to answer the identifier asked for
         // (`K15.26`); returning a different one is a repository defect this
         // crate refuses to build on rather than validate against silently.
+        // Compared by text, not by type: `Archetype::archetype_id` is an
+        // `ArchetypeHrid` (`ARCHETYPE.archetype_id` in AOM2 itself), and
+        // `filler_id` is an `ArchetypeId` — the narrower, namespace-free
+        // form `filled.archetype_ref().parse::<ArchetypeId>()` above
+        // already required, so nothing here loses precision the earlier
+        // parse had not already discarded; `ArchetypeHrid::physical_id`
+        // and `ArchetypeId::to_string` share one textual convention
+        // (`rm_publisher-rm_package-rm_class.concept_id.vVERSION`) for
+        // exactly this reason.
         ctx.unchecked_detail(
             path,
             "the repository returned a different archetype than the one requested",
@@ -821,7 +831,7 @@ fn check_temporal<T>(
     range: &[Interval<T>],
     pattern: Option<&String>,
     class: &'static str,
-    archetype_id: &ArchetypeId,
+    archetype_id: &ArchetypeHrid,
     path: &str,
     ctx: &mut Ctx<'_>,
 ) where
@@ -860,7 +870,7 @@ fn check_temporal<T>(
 fn walk_temporal(
     constraint: &CPrimitive,
     value: &str,
-    archetype_id: &ArchetypeId,
+    archetype_id: &ArchetypeHrid,
     path: &str,
     ctx: &mut Ctx<'_>,
 ) {
@@ -921,7 +931,7 @@ fn walk_temporal(
 
 /// A leaf primitive constraint against the scalar the path walk reached.
 fn walk_primitive(
-    archetype_id: &ArchetypeId,
+    archetype_id: &ArchetypeHrid,
     terminology: &ArchetypeTerminology,
     constraint: &CPrimitive,
     node: Node<'_>,
