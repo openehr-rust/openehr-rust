@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**70 findings, 70 in the table below: 7 High, 37 Medium, 26 Low. 64 fixed or
+**71 findings, 71 in the table below: 7 High, 38 Medium, 26 Low. 65 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -157,6 +157,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-68 | Low | `CPrimitiveObject` had no `is_enumerated_type_constraint` field — AOM2's own `C_PRIMITIVE_OBJECT.is_enumerated_type_constraint`, "True if this object represents a constraint on an enumerated type from the reference model" — could not be represented at all, the same silent-loss shape `A-46`/`A-59`/`A-61` each found in a different class, noticed in passing while re-reading `C_PRIMITIVE_OBJECT`'s own class definition for `A-63` | **fixed** — `is_enumerated_type_constraint`/`with_is_enumerated_type_constraint()`/`is_enumerated_type_constraint()` added, `None` by default (AOM2's own `Void`, not `false`) and `#[serde(default)]` on the wire; carried, not derived — this crate has no Reference Model enumeration table to check it against |
 | A-69 | Low | **BREAKING.** `Archetype.archetype_id` was `base::ArchetypeId`, but AOM2 states `ARCHETYPE.archetype_id: ARCHETYPE_HRID` — the richer, authoring-time identifier `A-49` built `ArchetypeHrid` for, never propagated to the one field it was actually for; `ArchetypeId::from_str` rejects a namespace prefix and a prerelease suffix `ARCHETYPE_HRID`'s own grammar allows (`A-49`), so a real archetype using either could not be held by `Archetype::new` at all | **fixed** — `archetype_id`/`Archetype::new`/`Archetype::archetype_id()`/`ArchetypeViolation.archetype_id` all retyped to `ArchetypeHrid`; `ArchetypeHrid::specialisations()` added (the same `-`-splitting rule applied to `concept_id`) so `specialisation_depth()` needed no logic change; the one place an `ArchetypeHrid` and an `ArchetypeId` now meet — verifying a repository answered the identifier a `C_ARCHETYPE_ROOT` asked for (`K15.26`) — compares by text, both types sharing one textual convention for exactly this reason; `parent_archetype_id`, `ArchetypeRepository::resolve`, and `CArchetypeRoot.archetype_ref` are unchanged, since those are reference/lookup forms, correctly `ArchetypeId`-shaped already (`A-52`'s own residual already confirmed `parent_archetype_id`) |
 | A-70 | Medium | `am::cadl` accepted the lexer's fallback one-character "word" `/` as an attribute name, so an attribute in differential form — `/data/events cardinality matches {2..8; ordered}`, `c_attribute`'s `ADL_PATH` alternative, the way every specialised ADL 2 archetype states what it redefines — mis-parsed into several attributes and was refused later as a `VOKU` duplicate with the name `""`: a valid archetype refused, and refused naming the wrong thing (`K15.6`). Found by the first external-corpus run (`openehr/spec/corpus.md`), not by reading; `C_ATTRIBUTE.differential_path` itself had no counterpart in `CAttribute` | **fixed** — `CAttribute.differential_path`/`with_differential_path()`/`differential_path()` added (`#[serde(default)]`, absent on the wire when `None`); `Lexer::peek_raw_path` lets `c_attribute_def` tell an `ADL_PATH` (contains `/`) from a bare name before reading either; the path is split at its last `/` into parent and attribute; a name that is not an `IDENTIFIER` is refused by name; `VOKU` keyed on (parent, name); `am::validate` reports a differential attribute *unchecked* naming its parent path, since resolving it is flattening (`K15.11`) — never read under the wrong object |
+| A-71 | Medium | **BREAKING.** AOM2's `C_OBJECT.occurrences` is `0..1` — "only set if it overrides the parent archetype … or else the occurrences inferred from the underlying reference model existence and/or cardinality of the containing attribute" — but `CComplexObject`, `CPrimitiveObject`, `ArchetypeSlot`, and `CArchetypeRoot` each required a `MultiplicityInterval`, so the model could not represent an unstated `occurrences` at all (`K15.1`, `K15.3`) and `am::cadl` refused every non-root node that omitted one. The first external corpus run (`corpus.md`) measured that refusal at 1,197 of 1,739 refusals over 1,972 real files: two thirds of everything the parser turned away, on the construct most published archetype nodes use | **fixed** — `occurrences: Option<MultiplicityInterval>` on all four types (constructors take `Option`; `#[serde(default, skip_serializing_if)]`, absent on the wire when unstated); `CObject::effective_occurrences(owner)` implements AOM2's rule (lower `0`; upper the owner's cardinality upper bound, else `1` for an attribute built single-valued), `None` only for a proxy deferring to its target; `MultiplicityInterval::from_zero_to`; the parser carries an omitted one as `None` (the root still defaults to exactly one); `am::validate` checks the effective value — `K15.32` states the rule and the one assumption. **Residual:** the single-or-container decision is still syntactic (`cadl`'s own module documentation), so a real `items matches {` with no cardinality clause is built single-valued and its unstated children infer `0..1`, not `0..*` |
 
 ---
 
@@ -4204,3 +4205,72 @@ first (`W0.19`).
 a relative path with a predicate, a root-level path, and a non-identifier
 name refused by name; and `am::validate` reporting the differential
 attribute unchecked with no violation.
+
+## A-71 — the model could not carry an unstated `occurrences`, so the parser refused most real nodes
+
+**Severity: Medium. Status: fixed. BREAKING.**
+
+**Found by the numbers, not by reading.** The first external corpus run
+(`corpus.md`, run 1) refused 1,739 of 1,972 real archetype definitions,
+and 1,197 of those refusals — two thirds — were one stated limitation:
+"occurrences omitted; this parser does not implement AOM2's
+`effective_occurrences()` inference for a non-root node". The limitation
+was documented, refused by name (`K15.6`), and counted in `A-40`; what the
+count showed is that it is not a corner. Omitting `occurrences` is what a
+published archetype node normally does.
+
+**The defect is in the model, not only the parser.** AOM2's
+`C_OBJECT.occurrences` is `0..1`: "only set if it overrides the parent
+archetype in the case of specialised archetypes, or else the occurrences
+inferred from the underlying reference model existence and/or cardinality
+of the containing attribute" (`org.openehr.am.aom2.c_object.adoc`), with
+`effective_occurrences()` defined for the unset case. This crate's
+`CComplexObject`, `CPrimitiveObject`, `ArchetypeSlot`, and `CArchetypeRoot`
+each required a `MultiplicityInterval` — only `CComplexObjectProxy` could
+carry `None`, and only because `A-54` needed it for
+`use_target_occurrences()`. So an AOM2 instance with an unstated
+`occurrences` could not be built at all (`K15.1`, `K15.4`), and a round
+trip through this crate would have had to invent one (`K15.3`) — which is
+also why the parser refused rather than inferred: there was nowhere to put
+"not stated", and filling in a value would have destroyed the distinction
+specialisation conformance depends on (`K15.13`: "set" means "overrides").
+
+**Fixed.** `occurrences: Option<MultiplicityInterval>` on all four types,
+`#[serde(default, skip_serializing_if = "Option::is_none")]` so an unstated
+one is absent on the wire and JSON written before this change still reads;
+the four constructors take `Option` (**breaking**, the same shape `A-54`
+gave the proxy; wrap an existing argument in `Some`), and
+`CComplexObject::occurrences()` returns `Option<&MultiplicityInterval>`.
+`CObject::effective_occurrences(owner)` implements AOM2's rule: the stated
+value if any; else lower `0` and upper the owner's cardinality upper bound
+if the owner has one; else the Reference Model multiplicity — which this
+crate has no table of, so it applies the rule its `CAttribute` constructors
+already commit to (an attribute built without a cardinality is
+single-valued, multiplicity `1`) and `K15.32` says so. `None` only for a
+proxy that states nothing, whose value lives at a target this crate does
+not resolve. `MultiplicityInterval::from_zero_to` builds the inferred
+interval infallibly. `am::cadl` carries an omitted `occurrences` as `None`
+(the root still defaults to exactly one: AOM2 fixes it there, and it has
+no owning attribute); `am::validate` checks the effective value, so an
+unstated node under a `0..2` container that appears three times is an
+`Occurrences` violation and one that appears never is not. `K15.32` is
+the requirement, written before the code (`W0.19`).
+
+**Effect on the corpus** is recorded in `corpus.md`, run 2, not here.
+
+**Residual, stated rather than hidden.** The single-or-container decision
+is still syntactic (`am::cadl`'s own module documentation): a real
+`items matches {` with no `cardinality` clause is built as a single-valued
+attribute, so its unstated children infer `0..1` where AOM2, with the
+Reference Model in hand, would infer `0..*`. That was already true of the
+`Cardinality` check before this finding; it now also shapes an inferred
+`occurrences`. The fix is a Reference Model multiplicity table, which is
+the same missing piece, and is tracked as this residual, not as a new
+finding.
+
+**Tests.** Six: `effective_occurrences` arm by arm, including the proxy's
+`None`; the wire form absent when unstated and present when stated, for
+all four types; the parser carrying an omitted value and the root's
+default; the real `openEHR-EHR-CLUSTER.device.v1.0.0` definition — the
+fixture that had asserted a named refusal since `A-62` — now parsed whole;
+and validation against the inferred value.

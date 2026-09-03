@@ -20,7 +20,8 @@ and never a pass. A partial constraint engine is still prohibited. What changed
 is that the refusal now lives inside an implementation instead of standing in
 for one.
 
-**Sixteen of these requirements are implemented; sixteen are not.**
+**Seventeen of these requirements are implemented; sixteen are not** (`K15.32`,
+added 2026-09-03, was satisfied the same day).
 `K15.1`–`K15.4` — the AOM2 object model — landed as `openehr::am` on
 2026-08-26; `K15.18`–`K15.23` — validating a Reference Model instance against
 an archetype, as a separate verdict from Reference-Model validation, never a
@@ -83,6 +84,27 @@ before the code does.
   A caller that builds constraints programmatically — a test, a generator, a
   tool — MUST NOT be forced through ADL text, and the parser MUST NOT be the
   only way to reach a valid model.
+- **K15.32** **An unstated `occurrences` MUST stay unstated, and MUST be
+  inferred only by AOM2's own rule.** `C_OBJECT.occurrences` is `0..1` in
+  AOM2: "only set if it overrides the parent archetype in the case of
+  specialised archetypes, or else the occurrences inferred from the
+  underlying reference model existence and/or cardinality of the containing
+  attribute" (`org.openehr.am.aom2.c_object.adoc`). Every `C_OBJECT` type
+  MUST be able to carry it absent (`K15.1`); a parser MUST NOT fill it in
+  (`K15.3`: a round trip must not invent what the author omitted; `K15.13`:
+  specialisation conformance reads "set" as "overrides") and MUST NOT refuse
+  the omission, which most published archetype nodes make. Where a value is
+  needed — validation (`K15.18`), the cardinality agreement checks of
+  `C_ATTRIBUTE` — it MUST come from `effective_occurrences()`: lower bound
+  `0`; upper bound the owning `C_ATTRIBUTE.cardinality`'s upper bound if
+  one is set, else the Reference Model multiplicity of the owning attribute.
+  The crate has no table of Reference Model multiplicities; it MUST apply
+  the same rule its `C_ATTRIBUTE` constructors already commit to — an
+  attribute built without a cardinality is single-valued, multiplicity `1`
+  — and say so, rather than consult one it does not have. Added 2026-09-03
+  (`A-71`), after the first external corpus run found the parser's refusal
+  of an omitted `occurrences` to be two thirds of every refusal it made
+  (`corpus.md`).
 
 ## 15.2 Parsing
 

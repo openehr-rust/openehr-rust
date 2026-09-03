@@ -153,6 +153,101 @@ number (`W0.19`, specification first; `W0.3`, nothing claimed unverified).
   which it was. That distinction is the whole decision, and it is the
   matrix's to make, not this file's.
 
+## Run 2 — 2026-09-03, after `A-71`
+
+- Corpus: unchanged, `093c77ea003742b9540e3dd377d615e2b26f2996`.
+- Crate: run 1's tree plus `A-71` (`K15.32`): an omitted `occurrences` is
+  carried unstated and inferred from its owning attribute, not refused.
+
+### Totals
+
+| Extension | Files | Parsed | Refused | No `definition` | Not UTF-8 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `.adls` | 1,379 | **774** (run 1: 206) | 604 | 1 | 2 |
+| `.adl` | 593 | 29 (run 1: 26) | 564 | 0 | 2 |
+
+The `.adls` count went from 15% to 56% on one change, which is what run
+1's "two thirds of every refusal" predicted. The `.adl` count barely
+moved: ADL 1.4 files are refused earlier, on syntax an ADL 2 reader
+correctly does not accept (`matches {*}`, id-less objects, `0|[local::…]`
+ordinals).
+
+### Refusals by stated reason, `.adls`
+
+| Files | Stated reason (tokens stripped) | What it is |
+| ---: | --- | --- |
+| 179 | an unwrapped interval's primitive kind (`C_INTEGER` vs `C_REAL`) cannot be told apart without a wrapping `rm_type_id` | **Candidate finding**, §Candidates 4: the grammar *does* tell them apart. 80 are `Reference/CKM_2013_12_09`, 40 `Reference/Nehta_2014_04_25` — the clinical corpus. |
+| 130 | expected `[`, found `matches` | Id-less objects (`ELEMENT matches {…}`), as in run 1; correctly refused. |
+| 66 | generic RM type parameters are not implemented by this parser | Stated limitation, refused by name. Up from 15 because 51 files that used to fail earlier on `occurrences` now reach it. |
+| 61 | `CIMI` is not a valid id-, at-, or ac-code | ADL 1.5-form `use_archetype` (60 `Development/CIMI`); correctly refused, name could be better (run 1, candidate 3). |
+| 54 | `SIBLING_ORDER` is not implemented by this parser | Stated limitation. |
+| 22 | expected `[`, found `}` | `duration_attr1 matches {PT0S}` — an **unwrapped duration literal** taken for an RM type name. §Candidates 5. |
+| 14 | `d` is not a valid `ISO8601_DATE` | `DATE_CONSTRAINT_PATTERN`, run 1's candidate 1. |
+| 14 | expected `[`, found `-` | `value matches {yyyy-??-??T??:??:??}` — `DATE_TIME_CONSTRAINT_PATTERN`, the same candidate 1, unwrapped this time. |
+| 13 | a closed `ARCHETYPE_SLOT` is not implemented by this parser | Stated limitation (`A-62`). |
+| 11 | a single-valued attribute's child occurrences upper bound exceeds 1 | **`A-71`'s residual made visible**: `items matches {` with no `cardinality` clause is built single-valued, so a child stating `0..*` is refused. 4 are CKM 2013, 2 the reference suite's own `VACSO` invalid twins (where the refusal is right). |
+| 9 | expected an attribute name, found `*` | ADL 1.4 `matches {*}`; correctly refused. |
+| 8 | expected `[`, found `/` | Not yet examined. |
+| 6 | `…` is not a valid at- or ac-code | Not yet examined. |
+| 3 each and fewer | `unexpected content after the definition's root object` (3), `expected an RM type name, found (` (3), `expected }, found \|` (2), one each of four more | Not yet examined; several are the reference suite's own invalid files. |
+
+### Refusals by stated reason, `.adl`
+
+| Files | Stated reason | What it is |
+| ---: | --- | --- |
+| 442 | expected `[`, found `matches` | ADL 1.4 id-less objects. Correctly refused. |
+| 35 | generic RM type parameters | Stated limitation. |
+| 28 | expected an attribute name, found `*` | ADL 1.4 `matches {*}`. |
+| 25 | expected `}`, found `\|` | ADL 1.4 `C_DV_ORDINAL` (`0\|[local::at0003]`). Correctly refused by an ADL 2 reader; `K15.8` is where this belongs. |
+| 13 | expected an RM type name, found `*` | ADL 1.4 `matches {*}`. |
+| 10 | `d` is not a valid `ISO8601_DATE` | Date patterns, candidate 1. |
+| 5 | unwrapped interval primitive kind | Candidate 4. |
+| 3 | expected `[`, found `occurrences` | Not yet examined. |
+| 2 | `…` is not a valid at- or ac-code | Not yet examined. |
+
+### Findings this run produced
+
+- **`A-71`** (fixed, breaking): the model itself could not carry an
+  unstated `occurrences`; `K15.32` written first, then
+  `Option<MultiplicityInterval>` on every `C_OBJECT` type,
+  `effective_occurrences`, and the parser carrying rather than refusing.
+  The test fixture that had asserted a named refusal of the real
+  `openEHR-EHR-CLUSTER.device.v1.0.0` definition since `A-62` now asserts
+  the parse.
+
+### Candidates — added by this run
+
+4. **An unwrapped interval's kind is decided by the grammar, not
+   unknowable.** `A-67` refused `integer_attr3 matches {|0..100|; 10}` on
+   the ground that `C_INTEGER` and `C_REAL` "cannot be told apart without
+   a wrapping `rm_type_id`". `odin_values.g4` says otherwise:
+   `integer_interval_value` is built from `INTEGER` tokens (`DIGIT+`) and
+   `real_interval_value` from `REAL` tokens (`DIGIT+ '.' DIGIT+`,
+   `base_lexer.g4`), so `|0..100|` *is* a `C_INTEGER` and `|0.0..100.0|`
+   *is* a `C_REAL` — the same lexical distinction this parser already
+   applies to an unwrapped single value (`Token::Integer` vs
+   `Token::Real`). 184 files across both extensions, the largest refusal
+   left, and 120 of them the clinical corpus. The fix is to read the first
+   bound's token kind and dispatch; the refusal should survive only for a
+   bound mixing the two (`|0..100.0|`), which the grammar also refuses.
+5. **Unwrapped temporal literals.** `duration_attr1 matches {PT0S}` and
+   the date-time pattern above reach `c_objects` as a `Word`, are taken
+   for an RM type name, and are refused as "expected `[`". `c_inline_primitive_object` admits every primitive kind, and `ISO8601_DURATION`,
+   `ISO8601_DATE`, `ISO8601_DATE_TIME`, and the `*_CONSTRAINT_PATTERN`
+   tokens each have a lexical shape (`base_lexer.g4`) this parser's
+   `read_iso8601` already recognises inside a typed primitive. 36 files,
+   with candidate 1's patterns in the same place.
+
+### Decisions the run asks for
+
+- **Reference Model multiplicity.** `A-71`'s residual and the 11-file row
+  above are the same fact: without a table of which RM attributes are
+  containers, `items matches {` with no `cardinality` clause is
+  single-valued here and `0..*` in AOM2. The table is small (the RM's
+  `List`/`Set`-typed attributes) and this crate already has the RM in
+  `rm::`; deriving it there, once, is the `lib:A-33` shape — one rule, one
+  home — rather than a second table in `am::cadl`. A requirement first.
+
 ## Trademarks
 
 openEHR® is the registered trademark of the openEHR Foundation and is used

@@ -221,7 +221,7 @@ mod tests {
             CComplexObject::new(
                 "EVALUATION",
                 Some("id1".to_owned()),
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 Vec::new(),
             )
             .unwrap(),

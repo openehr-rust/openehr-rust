@@ -45,12 +45,12 @@ use serde::{Deserialize, Serialize};
 ///
 /// let systolic = CObject::Complex(
 ///     CComplexObject::new("ELEMENT", Some("at0004".to_owned()),
-///         MultiplicityInterval::MANDATORY, Vec::new()).unwrap(),
+///         Some(MultiplicityInterval::MANDATORY), Vec::new()).unwrap(),
 /// );
 /// let definition = CComplexObject::new(
 ///     "OBSERVATION",
 ///     Some("id1".to_owned()),
-///     MultiplicityInterval::MANDATORY,
+///     Some(MultiplicityInterval::MANDATORY),
 ///     vec![CAttribute::single("data", MultiplicityInterval::MANDATORY, vec![systolic]).unwrap()],
 /// ).unwrap();
 ///
@@ -449,7 +449,7 @@ mod tests {
         CComplexObject::new(
             "OBSERVATION",
             Some("id1".to_owned()),
-            ROOT_OCCURRENCES,
+            Some(ROOT_OCCURRENCES),
             vec![CAttribute::single("data", MultiplicityInterval::MANDATORY, children).unwrap()],
         )
         .unwrap()
@@ -460,7 +460,7 @@ mod tests {
             CComplexObject::new(
                 "ELEMENT",
                 Some(node_id.to_owned()),
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 Vec::new(),
             )
             .unwrap(),
@@ -472,7 +472,7 @@ mod tests {
         let definition = CComplexObject::new(
             "EVALUATION",
             Some("id1".to_owned()),
-            ROOT_OCCURRENCES,
+            Some(ROOT_OCCURRENCES),
             Vec::new(),
         )
         .unwrap();
@@ -577,7 +577,7 @@ mod tests {
     fn a_terminology_constraint_naming_no_value_set_is_refused() {
         let coded = CObject::Primitive(CPrimitiveObject::new(
             "DV_CODED_TEXT",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             CPrimitive::TerminologyCode {
                 constraint: Some("ac0001".to_owned()),
                 constraint_status: None,
@@ -611,7 +611,7 @@ mod tests {
         let leaf = CObject::Primitive(
             CPrimitiveObject::new(
                 "DV_COUNT",
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 CPrimitive::Integer {
                     list: Vec::new(),
                     range: Some(crate::base::Interval::closed(0, 10).unwrap()),
@@ -634,7 +634,7 @@ mod tests {
         let leaf = CObject::Primitive(
             CPrimitiveObject::new(
                 "DV_COUNT",
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 CPrimitive::Integer {
                     list: Vec::new(),
                     range: Some(crate::base::Interval::closed(0, 10).unwrap()),
@@ -660,7 +660,7 @@ mod tests {
         let build = |allow_true: bool, allow_false: bool, assumed: bool| {
             let leaf = CPrimitiveObject::new(
                 "DV_BOOLEAN",
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 CPrimitive::Boolean { allow_true, allow_false },
             )
             .with_assumed_value(crate::am::PrimitiveValue::Boolean(assumed));
@@ -684,7 +684,7 @@ mod tests {
         let build = |list: &[&str], assumed: &str| {
             let leaf = CPrimitiveObject::new(
                 "DV_TEXT",
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 CPrimitive::String {
                     list: list.iter().map(|s| (*s).to_owned()).collect(),
                 },
@@ -707,7 +707,7 @@ mod tests {
     /// One leaf with the given constraint and assumed value, under the
     /// usual root, for the per-kind tests below.
     fn with_assumed(constraint: CPrimitive, assumed: crate::am::PrimitiveValue) -> Result<Archetype, ParseError> {
-        let leaf = CPrimitiveObject::new("DV_ANY", MultiplicityInterval::MANDATORY, constraint)
+        let leaf = CPrimitiveObject::new("DV_ANY", Some(MultiplicityInterval::MANDATORY), constraint)
             .with_assumed_value(assumed);
         Archetype::new(
             "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
@@ -849,7 +849,7 @@ mod tests {
     fn a_kind_mismatched_assumed_value_is_refused_at_the_archetype_not_the_leaf() {
         let leaf = CPrimitiveObject::new(
             "DV_COUNT",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             CPrimitive::Integer {
                 list: Vec::new(),
                 range: None,
@@ -875,7 +875,7 @@ mod tests {
     fn a_terminology_code_assumed_value_is_checked_against_the_value_set() {
         let coded = CPrimitiveObject::new(
             "DV_CODED_TEXT",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             CPrimitive::TerminologyCode {
                 constraint: Some("ac0001".to_owned()),
                 constraint_status: None,
@@ -914,7 +914,7 @@ mod tests {
         let leaf = CObject::Primitive(
             CPrimitiveObject::new(
                 "DV_INTERVAL",
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 CPrimitive::Unsupported {
                     rm_type_name: "DV_INTERVAL".to_owned(),
                     source: "<unparsed>".to_owned(),

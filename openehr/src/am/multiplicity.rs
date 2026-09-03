@@ -92,6 +92,17 @@ impl MultiplicityInterval {
         Self::new(lower, None)
     }
 
+    /// `0..upper`, or `0..*` when `upper` is `None` — the shape AOM2's
+    /// `C_OBJECT.effective_occurrences()` infers for a node that states no
+    /// occurrences: "always assume 0 as the lower bound", with the upper
+    /// taken from the owning attribute (`K15.32`). Infallible by
+    /// construction, since `0` is below every upper bound, which is why this
+    /// is not [`Self::new`].
+    #[must_use]
+    pub const fn from_zero_to(upper: Option<u32>) -> Self {
+        Self { lower: 0, upper }
+    }
+
     /// The lower bound, inclusive.
     #[must_use]
     pub const fn lower(&self) -> u32 {

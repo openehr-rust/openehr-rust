@@ -207,9 +207,11 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       - [x] 2026-09-03: the archetype half, first run.
         `openehr/tests/adl_corpus.rs` (ignored; `OPENEHR_ADL_CORPUS`) over
         `openEHR/adl-archetypes` at `093c77ea`, results in
-        [`openehr/spec/corpus.md`](openehr/spec/corpus.md). First finding
-        from it fixed the same day (`A-70`, differential-form attributes);
-        three candidates recorded there for the next runs.
+        [`openehr/spec/corpus.md`](openehr/spec/corpus.md). Two findings
+        from it fixed the same day: `A-70` (differential-form attributes)
+        and `A-71` (an unstated `occurrences`, two thirds of every refusal;
+        `K15.32`), taking parsed `.adls` from 178 to 774 of 1,379. Run 2
+        recorded there with the next candidates.
       - [ ] The JSON half (SDK examples, web-template compositions).
       - [ ] `spec_refs` per conformance case, and the index.
       - [ ] The regression job. Blocked on a corpus this tree may carry:

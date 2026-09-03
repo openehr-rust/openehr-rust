@@ -30,14 +30,14 @@ fn blood_pressure() -> Archetype {
         CComplexObject::new(
             "ELEMENT",
             Some("at0004".to_owned()),
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             vec![
                 CAttribute::single(
                     "value",
                     MultiplicityInterval::MANDATORY,
                     vec![CObject::Primitive(CPrimitiveObject::new(
                         "DV_QUANTITY",
-                        MultiplicityInterval::MANDATORY,
+                        Some(MultiplicityInterval::MANDATORY),
                         CPrimitive::Real {
                             list: Vec::new(),
                             range: Some(Interval::closed("0".parse().unwrap(), "1000.0".parse().unwrap()).unwrap()),
@@ -52,7 +52,7 @@ fn blood_pressure() -> Archetype {
 
     let position = CObject::Primitive(CPrimitiveObject::new(
         "DV_CODED_TEXT",
-        MultiplicityInterval::OPTIONAL,
+        Some(MultiplicityInterval::OPTIONAL),
         CPrimitive::TerminologyCode {
             constraint: Some("ac0001".to_owned()),
             constraint_status: None,
@@ -60,7 +60,7 @@ fn blood_pressure() -> Archetype {
     ));
 
     let slot = CObject::Slot(
-        ArchetypeSlot::new("CLUSTER", "at0007", MultiplicityInterval::new(0, None).unwrap())
+        ArchetypeSlot::new("CLUSTER", "at0007", Some(MultiplicityInterval::new(0, None).unwrap()))
             .unwrap()
             .including("archetype_id/value matches {/openEHR-EHR-CLUSTER\\..*/}"),
     );
@@ -76,12 +76,12 @@ fn blood_pressure() -> Archetype {
     let definition = CComplexObject::new(
         "OBSERVATION",
         Some("id1".to_owned()),
-        MultiplicityInterval::MANDATORY,
+        Some(MultiplicityInterval::MANDATORY),
         vec![CAttribute::single("data", MultiplicityInterval::MANDATORY, vec![CObject::Complex(
             CComplexObject::new(
                 "ITEM_TREE",
                 Some("at0003".to_owned()),
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 vec![items],
             )
             .unwrap(),
@@ -157,7 +157,7 @@ fn a_constraint_this_crate_cannot_model_survives_rather_than_disappearing() {
     };
     let node = CObject::Primitive(CPrimitiveObject::new(
         "DV_DURATION",
-        MultiplicityInterval::MANDATORY,
+        Some(MultiplicityInterval::MANDATORY),
         exotic.clone(),
     ));
 
@@ -257,7 +257,7 @@ fn every_accessor_returns_what_was_constructed() {
     // --- CAttribute: the name, and the cardinality only a container has ----
     let leaf = CObject::Primitive(CPrimitiveObject::new(
         "DV_TEXT",
-        MultiplicityInterval::MANDATORY,
+        Some(MultiplicityInterval::MANDATORY),
         CPrimitive::String { list: Vec::new() },
     ));
     let single = CAttribute::single("value", MultiplicityInterval::MANDATORY, vec![leaf.clone()])
@@ -284,7 +284,7 @@ fn every_accessor_returns_what_was_constructed() {
     };
     assert_eq!(primitive.rm_type_name(), "DV_TEXT");
 
-    let slot = ArchetypeSlot::new("CLUSTER", "at0007", MultiplicityInterval::OPTIONAL)
+    let slot = ArchetypeSlot::new("CLUSTER", "at0007", Some(MultiplicityInterval::OPTIONAL))
         .unwrap()
         .including("archetype_id/value matches {/.*/}")
         .excluding("archetype_id/value matches {/nothing/}");
@@ -298,7 +298,7 @@ fn every_accessor_returns_what_was_constructed() {
     let root = CArchetypeRoot::new(
         "CLUSTER",
         "openEHR-EHR-CLUSTER.device.v1",
-        MultiplicityInterval::MANDATORY,
+        Some(MultiplicityInterval::MANDATORY),
     )
     .unwrap();
     assert_eq!(root.archetype_ref(), "openEHR-EHR-CLUSTER.device.v1");
@@ -357,7 +357,7 @@ fn children_may_fill_a_container_exactly() {
             CComplexObject::new(
                 "ELEMENT",
                 Some(code.to_owned()),
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 Vec::new(),
             )
             .unwrap(),

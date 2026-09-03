@@ -144,11 +144,13 @@ impl CAttribute {
     /// occurrences has a finite upper bound greater than `1` (`VACSO`): a
     /// single-valued attribute holds at most one object, so a child declaring
     /// it may occur more than once is a constraint this attribute shape
-    /// cannot satisfy. A child with no occurrences stated at all — only
-    /// [`CComplexObjectProxy`] can leave it unstated
-    /// (`use_target_occurrences()`) — is not checked here: its effective
-    /// upper bound depends on the target this crate does not resolve, so
-    /// `VACSO` cannot be decided from the artefact alone for that child, and
+    /// cannot satisfy. A child with no occurrences stated at all is not
+    /// checked here: for every node but a [`CComplexObjectProxy`] its
+    /// effective occurrences are inferred *from this attribute*
+    /// ([`CObject::effective_occurrences`], `K15.32`) — `0..1` under a
+    /// single-valued one — so it conforms by construction; for a proxy the
+    /// effective upper bound depends on a target this crate does not
+    /// resolve, so `VACSO` cannot be decided from the artefact alone, and
     /// is not enforced rather than guessed at.
     pub fn single(
         rm_attribute_name: impl Into<String>,
@@ -182,14 +184,15 @@ impl CAttribute {
     /// cardinality's own finite upper bound (`VACMCU`): a cardinality of
     /// `0..2` cannot hold a single child declared `0..10`, independent of
     /// how many children there are or what their lower bounds sum to. A
-    /// child with no occurrences stated at all — only [`CComplexObjectProxy`]
-    /// can leave it unstated — contributes AOM2's own stated default for
-    /// that case to `required`'s sum: "If local `occurrences` not set,
-    /// always assume 0 as the lower bound"
-    /// (`org.openehr.am.aom2.c_object.adoc`'s `effective_occurrences()`), and
-    /// is excluded from the `VACMCU` check entirely, for the same reason
-    /// [`Self::single`] excludes it: its effective upper bound depends on a
-    /// target this crate does not resolve.
+    /// child with no occurrences stated at all contributes AOM2's own
+    /// stated default for that case to `required`'s sum: "If local
+    /// `occurrences` not set, always assume 0 as the lower bound"
+    /// (`org.openehr.am.aom2.c_object.adoc`'s `effective_occurrences()`),
+    /// and is excluded from the `VACMCU` check: its inferred upper bound
+    /// *is* this cardinality's upper bound ([`CObject::effective_occurrences`],
+    /// `K15.32`), so it conforms by construction — or, for a
+    /// [`CComplexObjectProxy`], depends on a target this crate does not
+    /// resolve, the same reason [`Self::single`] gives.
     pub fn container(
         rm_attribute_name: impl Into<String>,
         existence: MultiplicityInterval,
@@ -349,12 +352,45 @@ impl CObject {
     #[must_use]
     pub const fn occurrences(&self) -> Option<&MultiplicityInterval> {
         match self {
-            Self::Complex(o) => Some(&o.occurrences),
-            Self::Primitive(o) => Some(&o.occurrences),
-            Self::Slot(o) => Some(&o.occurrences),
-            Self::ArchetypeRoot(o) => Some(&o.occurrences),
+            Self::Complex(o) => o.occurrences.as_ref(),
+            Self::Primitive(o) => o.occurrences.as_ref(),
+            Self::Slot(o) => o.occurrences.as_ref(),
+            Self::ArchetypeRoot(o) => o.occurrences.as_ref(),
             Self::Proxy(o) => o.occurrences.as_ref(),
         }
+    }
+
+    /// AOM2's `C_OBJECT.effective_occurrences()`: the stated occurrences
+    /// if there are any, else "0 as the lower bound" and, for the upper,
+    /// "if the owning `C_ATTRIBUTE.cardinality` is set, use its upper
+    /// value, else use RM multiplicity of the owning attribute"
+    /// (`org.openehr.am.aom2.c_object.adoc`). `owner` is the attribute this
+    /// node sits under (`K15.32`).
+    ///
+    /// The Reference Model multiplicity is the one part this crate has no
+    /// table for. It uses the same rule [`CAttribute::single`] and
+    /// [`CAttribute::container`] already commit to: an attribute built
+    /// without a cardinality is single-valued, so its RM multiplicity is
+    /// `1`. Where that assumption is wrong the attribute was already built
+    /// wrong, before this function was asked.
+    ///
+    /// `None` only for a [`CComplexObjectProxy`] with no stated
+    /// occurrences: AOM2's `use_target_occurrences()` defers to a target
+    /// node this crate does not resolve, so the effective value is unknown
+    /// there, not inferred.
+    #[must_use]
+    pub fn effective_occurrences(&self, owner: &CAttribute) -> Option<MultiplicityInterval> {
+        if let Some(stated) = self.occurrences() {
+            return Some(stated.clone());
+        }
+        if matches!(self, Self::Proxy(_)) {
+            return None;
+        }
+        let upper = match owner.cardinality() {
+            Some(cardinality) => cardinality.interval().upper(),
+            None => Some(1),
+        };
+        Some(MultiplicityInterval::from_zero_to(upper))
     }
 
     /// The attributes beneath this node, empty for a leaf.
@@ -389,7 +425,17 @@ impl CObject {
 pub struct CComplexObject {
     rm_type_name: String,
     node_id: Option<String>,
-    occurrences: MultiplicityInterval,
+    /// `C_OBJECT.occurrences`, `0..1` in AOM2: "only set if it overrides
+    /// the parent archetype in the case of specialised archetypes, or else
+    /// the occurrences inferred from the underlying reference model
+    /// existence and/or cardinality of the containing attribute"
+    /// (`org.openehr.am.aom2.c_object.adoc`). `None` is that inference —
+    /// [`CObject::effective_occurrences`] computes it — and is kept
+    /// distinct from a stated value (`A-71`, `K15.32`): a round trip must
+    /// not invent what an author omitted (`K15.3`), and specialisation
+    /// conformance reads "set" as "overrides" (`K15.13`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    occurrences: Option<MultiplicityInterval>,
     attributes: Vec<CAttribute>,
     /// `0..1`, like `attributes` — absent is `Vec::new()`, not a distinct
     /// state. See [`Self::with_attribute_tuples`].
@@ -410,7 +456,7 @@ impl CComplexObject {
     pub fn new(
         rm_type_name: impl Into<String>,
         node_id: Option<String>,
-        occurrences: MultiplicityInterval,
+        occurrences: Option<MultiplicityInterval>,
         attributes: Vec<CAttribute>,
     ) -> Result<Self, ParseError> {
         let rm_type_name = rm_type_name.into();
@@ -460,10 +506,11 @@ impl CComplexObject {
         self.node_id.as_deref()
     }
 
-    /// How many times this node may occur.
+    /// How many times this node may occur, if stated. `None` is AOM2's
+    /// own `Void`, meaning inferred — see [`CObject::effective_occurrences`].
     #[must_use]
-    pub const fn occurrences(&self) -> &MultiplicityInterval {
-        &self.occurrences
+    pub const fn occurrences(&self) -> Option<&MultiplicityInterval> {
+        self.occurrences.as_ref()
     }
 
     /// The attribute constraints beneath this node.
@@ -630,7 +677,10 @@ pub enum PrimitiveValue {
 pub struct CPrimitiveObject {
     rm_type_name: String,
     node_id: Option<String>,
-    occurrences: MultiplicityInterval,
+    /// See [`CComplexObject`]'s field of the same name: `None` is inferred,
+    /// not absent (`A-71`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    occurrences: Option<MultiplicityInterval>,
     constraint: CPrimitive,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     assumed_value: Option<PrimitiveValue>,
@@ -643,7 +693,7 @@ impl CPrimitiveObject {
     #[must_use]
     pub fn new(
         rm_type_name: impl Into<String>,
-        occurrences: MultiplicityInterval,
+        occurrences: Option<MultiplicityInterval>,
         constraint: CPrimitive,
     ) -> Self {
         Self {
@@ -765,6 +815,14 @@ impl CPrimitiveObject {
     pub const fn is_enumerated_type_constraint(&self) -> Option<bool> {
         self.is_enumerated_type_constraint
     }
+
+    /// How many times this leaf may occur, if stated. `None` is inferred
+    /// from the owning attribute — [`CObject::effective_occurrences`].
+    #[must_use]
+    pub const fn occurrences(&self) -> Option<&MultiplicityInterval> {
+        self.occurrences.as_ref()
+    }
+
 }
 
 /// Whether a terminology constraint is strictly binding, or a preference or
@@ -995,7 +1053,10 @@ pub(crate) fn is_c_string_pattern(item: &str) -> bool {
 pub struct ArchetypeSlot {
     rm_type_name: String,
     node_id: String,
-    occurrences: MultiplicityInterval,
+    /// See [`CComplexObject`]'s field of the same name: `None` is inferred,
+    /// not absent (`A-71`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    occurrences: Option<MultiplicityInterval>,
     /// Assertions carried as written. `K15.10`: parsed and evaluated is a later
     /// requirement, and until then a slot's fillers are unchecked, not open.
     includes: Vec<String>,
@@ -1030,7 +1091,7 @@ impl ArchetypeSlot {
     pub fn new(
         rm_type_name: impl Into<String>,
         node_id: impl Into<String>,
-        occurrences: MultiplicityInterval,
+        occurrences: Option<MultiplicityInterval>,
     ) -> Result<Self, ParseError> {
         let node_id = node_id.into();
         if NodeIdSyntax::of(&node_id).is_none() {
@@ -1080,6 +1141,13 @@ impl ArchetypeSlot {
         &self.node_id
     }
 
+    /// How many times this slot may be filled, if stated. `None` is
+    /// inferred from the owning attribute — [`CObject::effective_occurrences`].
+    #[must_use]
+    pub const fn occurrences(&self) -> Option<&MultiplicityInterval> {
+        self.occurrences.as_ref()
+    }
+
     /// The inclusion assertions, unparsed.
     #[must_use]
     pub fn includes(&self) -> &[String] {
@@ -1117,7 +1185,10 @@ pub struct CArchetypeRoot {
     /// does it, given an `ArchetypeRepository`; this type only carries the
     /// reference, since building one does not require reaching a repository.
     archetype_ref: String,
-    occurrences: MultiplicityInterval,
+    /// See [`CComplexObject`]'s field of the same name: `None` is inferred,
+    /// not absent (`A-71`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    occurrences: Option<MultiplicityInterval>,
     attributes: Vec<CAttribute>,
 }
 
@@ -1133,7 +1204,7 @@ impl CArchetypeRoot {
     pub fn new(
         rm_type_name: impl Into<String>,
         archetype_ref: impl Into<String>,
-        occurrences: MultiplicityInterval,
+        occurrences: Option<MultiplicityInterval>,
     ) -> Result<Self, ParseError> {
         let archetype_ref = archetype_ref.into();
         if archetype_ref.is_empty() {
@@ -1174,6 +1245,13 @@ impl CArchetypeRoot {
         }
         self.node_id = Some(node_id);
         Ok(self)
+    }
+
+    /// How many times this filled slot may occur, if stated. `None` is
+    /// inferred from the owning attribute — [`CObject::effective_occurrences`].
+    #[must_use]
+    pub const fn occurrences(&self) -> Option<&MultiplicityInterval> {
+        self.occurrences.as_ref()
     }
 
     /// The archetype used at this point.
@@ -1221,13 +1299,16 @@ pub struct CComplexObjectProxy {
 impl CComplexObjectProxy {
     /// Builds a proxy constraint.
     ///
-    /// `occurrences` is `Option` here, unlike every other `C_OBJECT`
-    /// descendant in this crate: `None` is AOM2's own `Void`, meaning
-    /// `use_target_occurrences()` — "the target occurrences should be used"
-    /// (`org.openehr.am.aom2.c_complex_object_proxy.adoc`) instead of stating
-    /// any locally. Resolving `target_path` to find that value is not
-    /// implemented; see [`crate::am::validate_against_archetype`]'s
-    /// treatment of [`CObject::Proxy`].
+    /// `occurrences` is `Option` here as on every `C_OBJECT` descendant
+    /// (since `A-71`; before it, only here, `A-54`), but `None` means
+    /// something different on a proxy: not an inference from the owning
+    /// attribute but `use_target_occurrences()` — "the target occurrences
+    /// should be used" (`org.openehr.am.aom2.c_complex_object_proxy.adoc`)
+    /// instead of stating any locally. Resolving `target_path` to find that
+    /// value is not implemented, so [`CObject::effective_occurrences`]
+    /// answers `None` for exactly this case; see
+    /// [`crate::am::validate_against_archetype`]'s treatment of
+    /// [`CObject::Proxy`].
     ///
     /// # Errors
     ///
@@ -1323,7 +1404,7 @@ mod tests {
             CComplexObject::new(
                 "ELEMENT",
                 Some(node_id.to_owned()),
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 Vec::new(),
             )
             .unwrap(),
@@ -1335,7 +1416,7 @@ mod tests {
         let dup = CComplexObject::new(
             "OBSERVATION",
             Some("id1".to_owned()),
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             vec![
                 CAttribute::single("data", MultiplicityInterval::MANDATORY, Vec::new()).unwrap(),
                 CAttribute::single("data", MultiplicityInterval::MANDATORY, Vec::new()).unwrap(),
@@ -1359,7 +1440,7 @@ mod tests {
             CComplexObject::new(
                 "OBSERVATION",
                 Some("id1.1".to_owned()),
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 vec![events("/data[id2]"), events("/data[id3]")],
             )
             .is_ok()
@@ -1367,7 +1448,7 @@ mod tests {
         let dup = CComplexObject::new(
             "OBSERVATION",
             Some("id1.1".to_owned()),
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             vec![events("/data[id2]"), events("/data[id2]")],
         );
         assert_eq!(dup.unwrap_err().reason, "VOKU");
@@ -1410,6 +1491,77 @@ mod tests {
         assert!(!is_c_string_pattern(""));
     }
 
+    /// `A-71`, `K15.32`: AOM2's `effective_occurrences()`, arm by arm. A
+    /// stated value is returned as stated; an unstated one is `0..1` under
+    /// a single-valued attribute, `0..upper` under a container, `0..*`
+    /// under an open one; and a proxy that states nothing answers `None`,
+    /// because its value lives at a target this crate does not resolve.
+    #[test]
+    fn effective_occurrences_follows_aom2s_rule_and_defers_only_for_a_proxy() {
+        let unstated = || CObject::Complex(CComplexObject::new("ELEMENT", Some("id2".to_owned()), None, Vec::new()).unwrap());
+        let stated = CObject::Complex(
+            CComplexObject::new("ELEMENT", Some("id2".to_owned()), Some(MultiplicityInterval::MANDATORY), Vec::new()).unwrap(),
+        );
+        let single = CAttribute::single("value", MultiplicityInterval::MANDATORY, vec![unstated()]).unwrap();
+        assert_eq!(
+            unstated().effective_occurrences(&single),
+            Some(MultiplicityInterval::from_zero_to(Some(1)))
+        );
+        assert_eq!(stated.effective_occurrences(&single), Some(MultiplicityInterval::MANDATORY));
+
+        let bounded = CAttribute::container(
+            "items",
+            MultiplicityInterval::MANDATORY,
+            Cardinality::new(MultiplicityInterval::new(1, Some(4)).unwrap()),
+            vec![unstated()],
+        )
+        .unwrap();
+        assert_eq!(
+            unstated().effective_occurrences(&bounded),
+            Some(MultiplicityInterval::from_zero_to(Some(4)))
+        );
+        let open = CAttribute::container(
+            "items",
+            MultiplicityInterval::MANDATORY,
+            Cardinality::new(MultiplicityInterval::at_least(0).unwrap()),
+            vec![unstated()],
+        )
+        .unwrap();
+        assert_eq!(unstated().effective_occurrences(&open), Some(MultiplicityInterval::from_zero_to(None)));
+
+        let proxy = CObject::Proxy(CComplexObjectProxy::new("ELEMENT", Some("id3".to_owned()), None, "/items[id2]").unwrap());
+        assert_eq!(proxy.effective_occurrences(&open), None);
+        let proxy = CObject::Proxy(
+            CComplexObjectProxy::new("ELEMENT", Some("id3".to_owned()), Some(MultiplicityInterval::OPTIONAL), "/items[id2]").unwrap(),
+        );
+        assert_eq!(proxy.effective_occurrences(&open), Some(MultiplicityInterval::OPTIONAL));
+    }
+
+    /// `K15.3` with `A-71`: an unstated `occurrences` is absent on the wire,
+    /// a stated one present, both ways round — and JSON written before the
+    /// field was optional, with it always present, still reads.
+    #[test]
+    fn an_unstated_occurrences_is_absent_on_the_wire_and_a_stated_one_round_trips() {
+        let unstated = CComplexObject::new("ELEMENT", Some("id2".to_owned()), None, Vec::new()).unwrap();
+        let json = serde_json::to_value(&unstated).unwrap();
+        assert!(!json.as_object().unwrap().contains_key("occurrences"));
+        assert_eq!(serde_json::from_value::<CComplexObject>(json).unwrap(), unstated);
+
+        let stated =
+            CComplexObject::new("ELEMENT", Some("id2".to_owned()), Some(MultiplicityInterval::OPTIONAL), Vec::new()).unwrap();
+        let json = serde_json::to_value(&stated).unwrap();
+        assert!(json.as_object().unwrap().contains_key("occurrences"));
+        assert_eq!(serde_json::from_value::<CComplexObject>(json).unwrap(), stated);
+
+        for (kind, value) in [
+            ("primitive", serde_json::to_value(CPrimitiveObject::new("DV_TEXT", None, CPrimitive::String { list: Vec::new() })).unwrap()),
+            ("slot", serde_json::to_value(ArchetypeSlot::new("CLUSTER", "id5", None).unwrap()).unwrap()),
+            ("root", serde_json::to_value(CArchetypeRoot::new("CLUSTER", "openEHR-EHR-CLUSTER.x.v1", None).unwrap()).unwrap()),
+        ] {
+            assert!(!value.as_object().unwrap().contains_key("occurrences"), "{kind}");
+        }
+    }
+
     #[test]
     fn a_cardinality_that_cannot_hold_its_children_is_refused() {
         let err = CAttribute::container(
@@ -1427,7 +1579,7 @@ mod tests {
 
     fn element_with_occurrences(node_id: &str, occurrences: MultiplicityInterval) -> CObject {
         CObject::Complex(
-            CComplexObject::new("ELEMENT", Some(node_id.to_owned()), occurrences, Vec::new())
+            CComplexObject::new("ELEMENT", Some(node_id.to_owned()), Some(occurrences), Vec::new())
                 .unwrap(),
         )
     }
@@ -1537,7 +1689,7 @@ mod tests {
             CComplexObject::new(
                 "ELEMENT",
                 Some("node-4".to_owned()),
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 Vec::new()
             )
             .is_err()
@@ -1548,11 +1700,11 @@ mod tests {
         // citation (`lib:A-25`), deliberately, and a test that reads like
         // `SECTION.banana` would enter the invariant-coverage report as one.
         let malformed = "banana";
-        assert!(ArchetypeSlot::new("SECTION", malformed, MultiplicityInterval::OPTIONAL).is_err());
+        assert!(ArchetypeSlot::new("SECTION", malformed, Some(MultiplicityInterval::OPTIONAL)).is_err());
         let root = CArchetypeRoot::new(
             "SECTION",
             "openEHR-EHR-SECTION.x.v1",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
         )
         .unwrap();
         assert!(root.with_node_id(malformed).is_err());
@@ -1566,7 +1718,7 @@ mod tests {
     /// flipped it.
     #[test]
     fn a_slot_defaults_open_and_any_allowed_tracks_all_three_restrictions() {
-        let open = ArchetypeSlot::new("CLUSTER", "at0001", MultiplicityInterval::OPTIONAL).unwrap();
+        let open = ArchetypeSlot::new("CLUSTER", "at0001", Some(MultiplicityInterval::OPTIONAL)).unwrap();
         assert!(!open.is_closed());
         assert!(open.any_allowed());
 
@@ -1585,7 +1737,7 @@ mod tests {
 
     #[test]
     fn a_slot_round_trips_through_canonical_json() {
-        let slot = ArchetypeSlot::new("CLUSTER", "at0001", MultiplicityInterval::OPTIONAL)
+        let slot = ArchetypeSlot::new("CLUSTER", "at0001", Some(MultiplicityInterval::OPTIONAL))
             .unwrap()
             .including("archetype_id/value matches {/openEHR-EHR-CLUSTER\\.device\\..*/}")
             .closed();
@@ -1618,7 +1770,7 @@ mod tests {
         let root = CArchetypeRoot::new(
             "SECTION",
             "openEHR-EHR-SECTION.medications.v1",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
         )
         .unwrap();
         assert!(root.node_id().is_none());
@@ -1703,7 +1855,7 @@ mod tests {
     fn a_primitive_object_can_carry_a_node_id_readable_through_either_accessor() {
         let leaf = CPrimitiveObject::new(
             "DV_BOOLEAN",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             CPrimitive::Boolean {
                 allow_true: true,
                 allow_false: true,
@@ -1722,7 +1874,7 @@ mod tests {
     fn a_primitive_object_written_inline_carries_the_aom2_sentinel_node_id() {
         let leaf = CPrimitiveObject::new(
             "DV_BOOLEAN",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             CPrimitive::Boolean {
                 allow_true: true,
                 allow_false: true,
@@ -1742,7 +1894,7 @@ mod tests {
     fn a_primitive_object_refuses_a_node_id_that_is_neither_coded_nor_the_sentinel() {
         let leaf = CPrimitiveObject::new(
             "DV_BOOLEAN",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             CPrimitive::Boolean {
                 allow_true: true,
                 allow_false: true,
@@ -1759,7 +1911,7 @@ mod tests {
     fn a_primitive_object_carries_an_assumed_value_of_the_matching_kind() {
         let leaf = CPrimitiveObject::new(
             "DV_COUNT",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             CPrimitive::Integer {
                 list: Vec::new(),
                 range: None,
@@ -1779,7 +1931,7 @@ mod tests {
         // rejected.
         let leaf = CPrimitiveObject::new(
             "DV_COUNT",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             CPrimitive::Integer {
                 list: Vec::new(),
                 range: None,
@@ -1793,7 +1945,7 @@ mod tests {
     fn an_assumed_value_round_trips_through_canonical_json_and_omits_when_absent() {
         let with_value = CPrimitiveObject::new(
             "DV_TEXT",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             CPrimitive::String {
                 list: Vec::new(),
             },
@@ -1806,7 +1958,7 @@ mod tests {
 
         let without_value = CPrimitiveObject::new(
             "DV_TEXT",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             CPrimitive::String {
                 list: Vec::new(),
             },
@@ -1826,7 +1978,7 @@ mod tests {
     fn is_enumerated_type_constraint_is_absent_by_default_and_carried_once_attached() {
         let bare = CPrimitiveObject::new(
             "DV_CODED_TEXT",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             CPrimitive::Integer { list: vec![1, 2, 3], range: None },
         );
         assert_eq!(bare.is_enumerated_type_constraint(), None);
@@ -1839,7 +1991,7 @@ mod tests {
     fn is_enumerated_type_constraint_round_trips_through_canonical_json_and_omits_when_absent() {
         let bare = CPrimitiveObject::new(
             "DV_CODED_TEXT",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             CPrimitive::Integer { list: vec![1, 2, 3], range: None },
         );
         let bare_json = serde_json::to_value(&bare).unwrap();
@@ -1896,14 +2048,14 @@ mod tests {
         CPrimitiveTuple::new(vec![
             CPrimitiveObject::new(
                 "String",
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 CPrimitive::String {
                     list: vec![units.to_owned()],
                 },
             ),
             CPrimitiveObject::new(
                 "Real",
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 CPrimitive::Real {
                     list: Vec::new(),
                     range: Some(
@@ -1949,7 +2101,7 @@ mod tests {
         ];
         let one_value_row = CPrimitiveTuple::new(vec![CPrimitiveObject::new(
             "String",
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             CPrimitive::String {
                 list: vec!["deg F".to_owned()],
             },
@@ -1988,7 +2140,7 @@ mod tests {
         let bare = CComplexObject::new(
             "DV_QUANTITY",
             Some("id14".to_owned()),
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             Vec::new(),
         )
         .unwrap();
@@ -2019,7 +2171,7 @@ mod tests {
         let complex = CComplexObject::new(
             "DV_QUANTITY",
             Some("id14".to_owned()),
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             Vec::new(),
         )
         .unwrap()

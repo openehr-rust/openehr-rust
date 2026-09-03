@@ -488,7 +488,7 @@ a `C_ARCHETYPE_ROOT` filler through a repository the caller supplies
 (`openehr::am::repository`; this crate performs no I/O itself); and since
 2026-09-02, `openehr::am::cadl` reads an archetype's `definition` section
 (`lib:A-62`–`A-67`) and a filled `ARCHETYPE_SLOT` is checked against its own
-`is_closed` rule (`lib:A-60`). **Sixteen of the thirty-two requirements have
+`is_closed` rule (`lib:A-60`). **Sixteen of the thirty-three requirements have
 no code**: no parser for a whole ADL archetype (the `definition` section and
 the header are read; they do not compose into an `Archetype`), no ADL 1.4
 body, no flattening, no template expansion, no operational template, and no

@@ -596,7 +596,10 @@ fn walk_attribute(
             Some(id) => format!("{attr_path}[{id}]"),
             None => attr_path.clone(),
         };
-        match alternative.occurrences() {
+        // `effective_occurrences`, not `occurrences`: an unstated value is
+        // AOM2's `Void`, inferred from this attribute (`K15.32`), and most
+        // real archetype nodes leave it unstated (`A-71`).
+        match alternative.effective_occurrences(attribute) {
             Some(occurrences) => {
                 if !occurrences.contains(count) {
                     ctx.violation(archetype_id, &node_path, "Occurrences");
@@ -1156,7 +1159,7 @@ mod tests {
         let data_object = CComplexObject::new(
             "ITEM_LIST",
             Some("id2".to_owned()),
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             vec![items_attr],
         )
         .unwrap();
@@ -1169,7 +1172,7 @@ mod tests {
         let definition = CComplexObject::new(
             "EVALUATION",
             Some("id1".to_owned()),
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             vec![data_attr],
         )
         .unwrap();
@@ -1189,7 +1192,7 @@ mod tests {
     /// value.
     fn element_alt(node_id: &str, occurrences: MultiplicityInterval) -> CObject {
         CObject::Complex(
-            CComplexObject::new("ELEMENT", Some(node_id.to_owned()), occurrences, Vec::new())
+            CComplexObject::new("ELEMENT", Some(node_id.to_owned()), Some(occurrences), Vec::new())
                 .unwrap(),
         )
     }
@@ -1215,7 +1218,7 @@ mod tests {
             MultiplicityInterval::MANDATORY,
             vec![CObject::Primitive(CPrimitiveObject::new(
                 "primitive",
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 primitive,
             ))],
         )
@@ -1223,7 +1226,7 @@ mod tests {
         let value_object = CComplexObject::new(
             value_rm_type,
             None,
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             vec![inner_attr],
         )
         .unwrap();
@@ -1237,7 +1240,7 @@ mod tests {
             CComplexObject::new(
                 "ELEMENT",
                 Some(node_id.to_owned()),
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 vec![value_attr],
             )
             .unwrap(),
@@ -1334,7 +1337,7 @@ mod tests {
     #[test]
     fn an_open_slot_left_unfilled_is_fully_conformant() {
         let slot = CObject::Slot(
-            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, MultiplicityInterval::OPTIONAL).unwrap(),
+            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, Some(MultiplicityInterval::OPTIONAL)).unwrap(),
         );
         let archetype = evaluation_archetype(slot);
         let entry = build_evaluation(vec![Element::new(
@@ -1354,7 +1357,7 @@ mod tests {
     #[test]
     fn a_closed_slot_that_was_filled_anyway_is_a_violation() {
         let slot = CObject::Slot(
-            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, MultiplicityInterval::OPTIONAL)
+            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, Some(MultiplicityInterval::OPTIONAL))
                 .unwrap()
                 .closed(),
         );
@@ -1376,7 +1379,7 @@ mod tests {
     #[test]
     fn an_unrestricted_open_slots_filler_is_fully_conformant() {
         let slot = CObject::Slot(
-            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, MultiplicityInterval::OPTIONAL).unwrap(),
+            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, Some(MultiplicityInterval::OPTIONAL)).unwrap(),
         );
         let archetype = evaluation_archetype(slot);
         let entry = build_evaluation(vec![filled("Systolic", SLOT_NODE_ID)]);
@@ -1393,7 +1396,7 @@ mod tests {
     #[test]
     fn a_restricted_open_slots_filler_is_unchecked_not_silently_passed() {
         let slot = CObject::Slot(
-            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, MultiplicityInterval::OPTIONAL)
+            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, Some(MultiplicityInterval::OPTIONAL))
                 .unwrap()
                 .including("archetype_id/value matches {/.*device.*/}"),
         );
@@ -1432,7 +1435,7 @@ mod tests {
         let definition = CComplexObject::new(
             "EVALUATION",
             Some("id1".to_owned()),
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             vec![items],
         )
         .unwrap();
@@ -1453,6 +1456,57 @@ mod tests {
             "C_ATTRIBUTE differential_path is not resolved (flattening, K15.11)"
         );
         assert_eq!(report.unchecked()[0].detail(), Some("/data[id2]"));
+    }
+
+    /// `A-71`, `K15.32`: an alternative that states no `occurrences` is
+    /// checked against the value AOM2 infers — `0..upper` of the owning
+    /// container — not reported unchecked and not given a guessed value.
+    /// Under `items cardinality 0..2`: absent is fine (lower `0`), twice is
+    /// fine, three times is an `Occurrences` violation.
+    #[test]
+    fn an_unstated_occurrences_is_checked_against_the_value_aom2_infers() {
+        let element = CObject::Complex(
+            CComplexObject::new("ELEMENT", Some("at0004".to_owned()), None, Vec::new()).unwrap(),
+        );
+        // `existence` optional too, so an absent `items` is judged by
+        // occurrences alone and not by `Existence` first.
+        let items = CAttribute::container(
+            "items",
+            MultiplicityInterval::OPTIONAL,
+            Cardinality::new(MultiplicityInterval::new(0, Some(2)).unwrap()),
+            vec![element],
+        )
+        .unwrap();
+        let data = CComplexObject::new("ITEM_LIST", Some("id2".to_owned()), Some(MultiplicityInterval::MANDATORY), vec![items])
+            .unwrap();
+        let definition = CComplexObject::new(
+            "EVALUATION",
+            Some("id1".to_owned()),
+            Some(MultiplicityInterval::MANDATORY),
+            vec![CAttribute::single("data", MultiplicityInterval::MANDATORY, vec![CObject::Complex(data)]).unwrap()],
+        )
+        .unwrap();
+        let archetype = Archetype::new(
+            "openEHR-EHR-EVALUATION.test.v1".parse().unwrap(),
+            definition,
+            ArchetypeTerminology::new("en", terms(&[("id1", "Test"), ("id2", "Data"), ("at0004", "Systolic")])).unwrap(),
+        )
+        .unwrap();
+        let systolic = || Element::new(attrs("Systolic", "at0004"), placeholder_value());
+
+        for count in [0, 2] {
+            let entry = build_evaluation((0..count).map(|_| systolic()).collect());
+            let report = validate_against_archetype(&archetype, entry.as_node());
+            assert!(report.is_conformant(), "{count} elements: {:?}", report.violations());
+        }
+        let entry = build_evaluation(vec![systolic(), systolic(), systolic()]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(report.unchecked().is_empty());
+        assert!(
+            report.violations().iter().any(|v| v.constraint() == "Occurrences"),
+            "{:?}",
+            report.violations()
+        );
     }
 
     /// `C_COMPLEX_OBJECT_PROXY`: resolving `target_path` against the
@@ -1649,7 +1703,7 @@ mod tests {
         let value_object = CComplexObject::new(
             "DV_QUANTITY",
             None,
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             Vec::new(),
         )
         .unwrap()
@@ -1664,7 +1718,7 @@ mod tests {
             CComplexObject::new(
                 "ELEMENT",
                 Some("at0004".to_owned()),
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 vec![value_attr],
             )
             .unwrap(),
@@ -1681,14 +1735,14 @@ mod tests {
         CPrimitiveTuple::new(vec![
             CPrimitiveObject::new(
                 "String",
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 CPrimitive::String {
                     list: vec![units.to_owned()],
                 },
             ),
             CPrimitiveObject::new(
                 "Real",
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 CPrimitive::Real {
                     list: Vec::new(),
                     range: Some(Interval::closed(low.into(), high.into()).unwrap()),
@@ -1784,7 +1838,7 @@ mod tests {
         let value_object = CComplexObject::new(
             "DV_QUANTITY",
             None,
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             Vec::new(),
         )
         .unwrap()
@@ -1799,7 +1853,7 @@ mod tests {
             CComplexObject::new(
                 "ELEMENT",
                 Some("at0004".to_owned()),
-                MultiplicityInterval::MANDATORY,
+                Some(MultiplicityInterval::MANDATORY),
                 vec![value_attr],
             )
             .unwrap(),
@@ -1964,7 +2018,7 @@ mod tests {
         let data_object = CComplexObject::new(
             "ITEM_LIST",
             Some("id2".to_owned()),
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             vec![items_attr],
         )
         .unwrap();
@@ -1977,7 +2031,7 @@ mod tests {
         let definition = CComplexObject::new(
             "EVALUATION",
             Some("id1".to_owned()),
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             vec![data_attr],
         )
         .unwrap();
@@ -2166,7 +2220,7 @@ mod tests {
         let definition = CComplexObject::new(
             "ELEMENT",
             Some("id1".to_owned()),
-            MultiplicityInterval::MANDATORY,
+            Some(MultiplicityInterval::MANDATORY),
             vec![
                 CAttribute::single(
                     "value",
@@ -2175,14 +2229,14 @@ mod tests {
                         CComplexObject::new(
                             "DV_BOOLEAN",
                             None,
-                            MultiplicityInterval::MANDATORY,
+                            Some(MultiplicityInterval::MANDATORY),
                             vec![
                                 CAttribute::single(
                                     "value",
                                     MultiplicityInterval::MANDATORY,
                                     vec![CObject::Primitive(CPrimitiveObject::new(
                                         "Boolean",
-                                        MultiplicityInterval::MANDATORY,
+                                        Some(MultiplicityInterval::MANDATORY),
                                         CPrimitive::Boolean {
                                             allow_true: true,
                                             allow_false: false,
@@ -2210,7 +2264,7 @@ mod tests {
     /// An `EVALUATION[id1]/data[id2 ITEM_LIST]/items` archetype whose sole
     /// alternative is a `C_ARCHETYPE_ROOT[at0004]` naming `filler_id`.
     fn evaluation_archetype_with_filled_slot(filler_id: &str) -> Archetype {
-        let root = CArchetypeRoot::new("ELEMENT", filler_id, MultiplicityInterval::MANDATORY)
+        let root = CArchetypeRoot::new("ELEMENT", filler_id, Some(MultiplicityInterval::MANDATORY))
             .unwrap()
             .with_node_id("at0004")
             .unwrap();

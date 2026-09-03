@@ -101,25 +101,26 @@
 //! `try_`, not `expect_`, only because a bare `{` is ambiguous with an
 //! ordinary `{c_objects}` block until the character after it is seen.
 //!
-//! # Occurrences: stated, or refused — never guessed
+//! # Occurrences: stated, or carried unstated — never guessed
 //!
 //! AOM2's `C_OBJECT.occurrences` is `0..1`; `Void` means
-//! `effective_occurrences()` — the owning `C_ATTRIBUTE`'s cardinality upper
-//! bound if it has one, else the Reference Model's own multiplicity for that
-//! attribute, which this crate has no table of. Every [`crate::am::CObject`]
-//! variant this parser builds stores `occurrences` as a plain
-//! `MultiplicityInterval`, not `Option`, **except**
-//! [`crate::am::CComplexObjectProxy`] (`A-54`'s own scope decision: `Void`
-//! there is a real, distinct meaning, `use_target_occurrences()`, not an
-//! omission to guess at). So: the definition's own
-//! root may omit `occurrences` — AOM2 fixes it at exactly one
-//! ([`crate::am::ROOT_OCCURRENCES`]) — a `use_node` may omit it with `None`
-//! built rather than refused, and every other node must state it
-//! explicitly, refused by name if it does not. Real archetypes omit it
-//! often, relying on inference this parser does not implement; this is a
-//! real, narrowing limitation, not an oversight, and is why the "real
-//! corpus" test below is a snippet that states it throughout rather than
-//! the unmodified source of the archetype it is drawn from.
+//! `effective_occurrences()` — lower bound `0`, upper bound the owning
+//! `C_ATTRIBUTE`'s cardinality upper bound if it has one, else the
+//! Reference Model's own multiplicity for that attribute. Every
+//! [`crate::am::CObject`] variant stores `occurrences` as
+//! `Option<MultiplicityInterval>` (`A-71`, `K15.32`; before it, only
+//! [`crate::am::CComplexObjectProxy`] could, `A-54`), and this parser
+//! carries an omitted one as `None` — neither refused, as it was before
+//! `A-71`, nor filled in, since a round trip must not invent what the
+//! author omitted (`K15.3`) and specialisation reads "set" as "overrides"
+//! (`K15.13`). [`crate::am::CObject::effective_occurrences`] infers the
+//! value from the owning attribute when asked. Two nodes are different: the
+//! definition's own root, which AOM2 fixes at exactly one and which has no
+//! owning attribute, is stated as [`crate::am::ROOT_OCCURRENCES`] when
+//! omitted; and a `use_node`'s `None` means `use_target_occurrences()`, a
+//! deferral to a target this crate does not resolve, not an inference.
+//! The corpus run that motivated this (`openehr/spec/corpus.md`) found the
+//! old refusal to be two thirds of every refusal over 1,972 real files.
 //!
 //! # Container or single: decided by whether `cardinality` was written
 //!
@@ -359,25 +360,18 @@ fn c_complex_object(lexer: &mut Lexer<'_>, is_root: bool) -> Result<CComplexObje
 }
 
 /// Reads `c_occurrences?`, applying the rule the module documentation
-/// states: the root defaults to [`ROOT_OCCURRENCES`] when absent; any other
-/// node with it absent is refused rather than inferred.
-fn parse_occurrences(lexer: &mut Lexer<'_>, is_root: bool) -> Result<MultiplicityInterval, CadlError> {
-    if peek_keyword(lexer, "occurrences") {
-        lexer.next();
-        expect_keyword(lexer, "matches")?;
-        expect_symbol(lexer, '{')?;
-        let m = parse_multiplicity(lexer)?;
-        expect_symbol(lexer, '}')?;
-        Ok(m)
-    } else if is_root {
-        Ok(ROOT_OCCURRENCES)
-    } else {
-        Err(CadlError::at(
-            lexer.offset(),
-            "occurrences omitted; this parser does not implement AOM2's effective_occurrences() \
-             inference for a non-root node (see the module documentation)",
-        ))
-    }
+/// states: the root defaults to [`ROOT_OCCURRENCES`] when absent — AOM2
+/// fixes it at exactly one and there is no owning attribute to infer from
+/// — and any other node with it absent is carried as `None`, AOM2's own
+/// `Void`, for [`crate::am::CObject::effective_occurrences`] to infer from
+/// the owning attribute when asked (`A-71`, `K15.32`). Nothing is guessed
+/// here: the stated/unstated distinction survives the parse.
+fn parse_occurrences(lexer: &mut Lexer<'_>, is_root: bool) -> Result<Option<MultiplicityInterval>, CadlError> {
+    let stated = parse_optional_occurrences(lexer)?;
+    Ok(match (stated, is_root) {
+        (None, true) => Some(ROOT_OCCURRENCES),
+        (stated, _) => stated,
+    })
 }
 
 /// `multiplicity: INTEGER | '*' | INTEGER '..' ( INTEGER | '*' ) ;`
@@ -713,7 +707,7 @@ fn c_primitive_tuple_item(lexer: &mut Lexer<'_>) -> Result<CPrimitiveObject, Cad
 /// `c_primitive_tuple_item` in a `C_ATTRIBUTE_TUPLE` row (`lib:A-33`: one
 /// place, not three, for a repeated construction).
 fn unwrapped_primitive(constraint: CPrimitive, assumed: Option<PrimitiveValue>) -> CPrimitiveObject {
-    let mut object = CPrimitiveObject::new("primitive", MultiplicityInterval::MANDATORY, constraint)
+    let mut object = CPrimitiveObject::new("primitive", Some(MultiplicityInterval::MANDATORY), constraint)
         .with_node_id(CPrimitiveObject::PRIMITIVE_NODE_ID)
         .expect("PRIMITIVE_NODE_ID is always accepted by with_node_id");
     if let Some(value) = assumed {
@@ -1772,11 +1766,35 @@ mod tests {
         assert!(!slot.is_closed());
     }
 
+    /// `A-71`, `K15.32`: an omitted `occurrences` is AOM2's own `Void`,
+    /// carried as `None` — not refused (the rule before `A-71`), and not
+    /// filled in by the parser either, since a round trip must not invent
+    /// what the author omitted. `effective_occurrences` infers it from the
+    /// owning attribute when asked: `0..1` under a single-valued attribute,
+    /// `0..upper` under a container.
     #[test]
-    fn occurrences_omitted_on_a_non_root_node_is_refused_naming_it() {
-        let source = "CLUSTER[id1] matches { items matches { ELEMENT[id2] matches { } } }";
-        let err = parse_definition(source).unwrap_err();
-        assert!(err.reason.contains("occurrences omitted"), "{err}");
+    fn occurrences_omitted_on_a_non_root_node_is_carried_unstated_and_inferred_from_its_owner() {
+        let root = parse_definition("CLUSTER[id1] matches { items matches { ELEMENT[id2] matches { } } }").unwrap();
+        let items = &root.attributes()[0];
+        assert_eq!(items.children()[0].occurrences(), None);
+        assert_eq!(
+            items.children()[0].effective_occurrences(items),
+            Some(MultiplicityInterval::from_zero_to(Some(1)))
+        );
+
+        let root = parse_definition(
+            "CLUSTER[id1] matches { items cardinality matches {0..3} matches { ELEMENT[id2] matches { } } }",
+        )
+        .unwrap();
+        let items = &root.attributes()[0];
+        assert_eq!(items.children()[0].occurrences(), None);
+        assert_eq!(
+            items.children()[0].effective_occurrences(items),
+            Some(MultiplicityInterval::from_zero_to(Some(3)))
+        );
+        // The root itself: AOM2 fixes it at exactly one, and there is no
+        // owning attribute to infer from, so the parser states it.
+        assert_eq!(root.occurrences(), Some(&ROOT_OCCURRENCES));
     }
 
     /// The one assertion shape this parser still refuses: `constraint_expr`
@@ -2092,14 +2110,16 @@ mod tests {
 
     /// A real, published archetype's own `definition` bytes
     /// (`openEHR/adl-archetypes`, `openEHR-EHR-CLUSTER.device.v1.0.0.adls`),
-    /// not an invented fixture — this parser cannot consume the whole file
-    /// (it uses `allow_archetype`'s own `matches { include ... }` form,
-    /// which this pass does not implement, and omits `occurrences` on
-    /// several nodes this pass requires it for), so this confirms the real,
-    /// honest outcome K15.6/K15.7 require: a named refusal at the first
-    /// construct out of scope, never a silent partial tree.
+    /// not an invented fixture. When this test was written the parser could
+    /// not consume it — `allow_archetype`'s `matches { include ... }` form
+    /// (`A-66`) and omitted `occurrences` (`A-71`) were each refused by
+    /// name — and the test asserted that named refusal, as `K15.6`/`K15.7`
+    /// require. Both are implemented now, so it asserts the parse instead:
+    /// three alternatives under `items`, the two that state no
+    /// `occurrences` carried unstated, and the slot's own assertion carried
+    /// as written.
     #[test]
-    fn a_real_published_archetypes_definition_is_refused_by_name_not_mis_parsed() {
+    fn a_real_published_archetypes_definition_is_parsed_whole() {
         let source = r"
             CLUSTER[id1] matches {	-- Medical Device
                 items matches {
@@ -2120,11 +2140,16 @@ mod tests {
                 }
             }
         ";
-        let err = parse_definition(source).unwrap_err();
-        // `ELEMENT[id2]` has no `occurrences` clause, so this parser's own
-        // refusal fires before it ever reaches `allow_archetype` — the
-        // correct outcome under this pass's own stated rule, not a weaker
-        // one chosen to make this test pass.
-        assert!(err.reason.contains("occurrences omitted"), "{err}");
+        let root = parse_definition(source).unwrap();
+        let items = &root.attributes()[0];
+        assert_eq!(items.children().len(), 3);
+        assert_eq!(items.children()[0].node_id(), Some("id2"));
+        assert_eq!(items.children()[0].occurrences(), None);
+        assert_eq!(items.children()[1].occurrences(), Some(&MultiplicityInterval::OPTIONAL));
+        let CObject::Slot(slot) = &items.children()[2] else {
+            panic!("expected an ARCHETYPE_SLOT");
+        };
+        assert_eq!(slot.occurrences(), None);
+        assert_eq!(slot.includes().len(), 1);
     }
 }

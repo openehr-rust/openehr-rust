@@ -79,13 +79,13 @@
 //! terms.insert("at0004".to_owned(), TermDefinition::new("Weight", None).unwrap());
 //!
 //! let weight = CObject::Complex(CComplexObject::new(
-//!     "ELEMENT", Some("at0004".to_owned()), MultiplicityInterval::MANDATORY, Vec::new(),
+//!     "ELEMENT", Some("at0004".to_owned()), Some(MultiplicityInterval::MANDATORY), Vec::new(),
 //! ).unwrap());
 //!
 //! let archetype = Archetype::new(
 //!     "openEHR-EHR-OBSERVATION.body_weight.v2".parse().unwrap(),
 //!     CComplexObject::new(
-//!         "OBSERVATION", Some("id1".to_owned()), MultiplicityInterval::MANDATORY,
+//!         "OBSERVATION", Some("id1".to_owned()), Some(MultiplicityInterval::MANDATORY),
 //!         vec![CAttribute::single("data", MultiplicityInterval::MANDATORY, vec![weight]).unwrap()],
 //!     ).unwrap(),
 //!     ArchetypeTerminology::new("en", terms).unwrap(),

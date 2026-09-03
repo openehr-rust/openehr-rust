@@ -7,6 +7,21 @@ together.
 
 ## Unreleased
 
+- **Breaking.** `am::CComplexObject::new`, `am::CPrimitiveObject::new`,
+  `am::ArchetypeSlot::new`, and `am::CArchetypeRoot::new` take
+  `Option<MultiplicityInterval>` for `occurrences`, and
+  `CComplexObject::occurrences()` returns `Option<&MultiplicityInterval>`,
+  because AOM2's `C_OBJECT.occurrences` is `0..1` and this crate could not
+  represent an unstated one (only `CComplexObjectProxy` could, since
+  0.9.0). `am::cadl` now carries an omitted `occurrences` as `None` instead
+  of refusing the node, and `CObject::effective_occurrences(owner)` plus
+  `MultiplicityInterval::from_zero_to` implement AOM2's own inference rule;
+  `am::validate` checks the effective value. Wrap an existing argument in
+  `Some(...)` to migrate. See `A-71` in `openehr/spec/audit.md` and the new
+  `K15.32`; the first external corpus run found the old refusal to be two
+  thirds of every refusal the parser made (`openehr/spec/corpus.md`).
+  Serialised form: `occurrences` is now absent, not required, when
+  unstated; JSON written before this change still reads.
 - `am::CAttribute` gains `differential_path`/`with_differential_path()`/
   `differential_path()`, AOM2's `C_ATTRIBUTE.differential_path`, and
   `am::cadl` now parses `c_attribute`'s `ADL_PATH` form — `/data/events
