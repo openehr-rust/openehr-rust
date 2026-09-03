@@ -154,7 +154,10 @@ account with no history is the weakest possible version of the same content.
 openEHR-CLI threads actually contained and what they were asked afterwards:
 
 1. One sentence on what it is and what it is not (libraries and dialects, not a
-   CDR; no Archetype Model).
+   CDR; the AOM2 object model, validation against an archetype already in
+   memory, and a `definition`-section reader — no whole-archetype parser, no
+   OPT, no flattening; `openehr/spec/15-archetypes.md` is the count to
+   quote, and it changes).
 2. The conformance table, levels included, with the matrix linked.
 3. A runnable thing in under five minutes — the SQLite store, a `cargo run`
    tutorial, the DDL example.
@@ -380,7 +383,11 @@ response latency *is* the reputation.
 > Short version: eight crates on crates.io implementing the openEHR Reference
 > Model — validation, paths, AQL parsing, change-control security — plus an
 > engine-agnostic persistence layer and DDL for six SQL engines. It is not a
-> CDR, and it does not implement the Archetype Model.
+> CDR. The Archetype Model is partly there — the AOM2 object model, validation
+> of a composition against an archetype already in memory, and a reader for
+> an archetype's `definition` section — with no whole-archetype ADL parser,
+> no OPT, and no flattening; the exact count is in
+> `openehr/spec/15-archetypes.md` and moves.
 >
 > Conformance, stated by level rather than by feature: SQLite is Verified (full
 > store, re-checked in CI); PostgreSQL, MySQL, and MariaDB are at Schema (a real
