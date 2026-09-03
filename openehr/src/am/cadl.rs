@@ -1160,19 +1160,25 @@ fn parse_inline_primitive(
     rm_type_hint: Option<&str>,
 ) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
     match rm_type_hint {
-        Some(kind) if kind.eq_ignore_ascii_case("boolean") => parse_boolean_primitive(lexer),
-        Some(kind) if kind.eq_ignore_ascii_case("string") => parse_string_primitive(lexer),
-        Some(kind) if kind.eq_ignore_ascii_case("integer") => parse_integer_primitive(lexer),
-        Some(kind) if kind.eq_ignore_ascii_case("real") => parse_real_primitive(lexer),
-        Some(kind) if kind.eq_ignore_ascii_case("date") => parse_date_primitive(lexer),
-        Some(kind) if kind.eq_ignore_ascii_case("time") => parse_time_primitive(lexer),
-        Some(kind) if kind.eq_ignore_ascii_case("date_time") => parse_date_time_primitive(lexer),
-        Some(kind) if kind.eq_ignore_ascii_case("duration") => parse_duration_primitive(lexer),
-        Some(kind) if kind.eq_ignore_ascii_case("terminology_code") => parse_terminology_code_primitive(lexer),
-        Some(other) => Err(CadlError::at(
-            lexer.offset(),
-            format!("`{other}` is not a primitive kind this parser recognises"),
-        )),
+        // A `match` on the lowered name, not a chain of `if` guards: a
+        // guard can be mutated to `true` and route every kind to one
+        // parser, and the last guard's mutant was reachable by no test
+        // because `primitive_kind` only ever hands over these nine names.
+        Some(kind) => match kind.to_ascii_lowercase().as_str() {
+            "boolean" => parse_boolean_primitive(lexer),
+            "string" => parse_string_primitive(lexer),
+            "integer" => parse_integer_primitive(lexer),
+            "real" => parse_real_primitive(lexer),
+            "date" => parse_date_primitive(lexer),
+            "time" => parse_time_primitive(lexer),
+            "date_time" => parse_date_time_primitive(lexer),
+            "duration" => parse_duration_primitive(lexer),
+            "terminology_code" => parse_terminology_code_primitive(lexer),
+            other => Err(CadlError::at(
+                lexer.offset(),
+                format!("`{other}` is not a primitive kind this parser recognises"),
+            )),
+        },
         None => match lexer.peek() {
             Some(Token::Str(_)) => parse_string_primitive(lexer),
             Some(Token::Symbol('[')) => parse_terminology_code_primitive(lexer),
@@ -2155,12 +2161,24 @@ mod tests {
         assert!(matches!(real.constraint(), CPrimitive::Real { range: Some(_), .. }), "{real:?}");
         let negative = parse("|-5..5|");
         assert!(matches!(negative.constraint(), CPrimitive::Integer { range: Some(_), .. }));
+        // Bounds that share a prefix with an ISO 8601 shape — four digits,
+        // or two — are numbers all the same: `looks_iso8601` needs the
+        // `-` or `:` too. cargo-mutants turned each `&&` and `==` in it
+        // and nothing noticed until these two.
+        assert!(matches!(parse("|1000..2000|").constraint(), CPrimitive::Integer { range: Some(_), .. }));
+        assert!(matches!(parse("|10..20|").constraint(), CPrimitive::Integer { range: Some(_), .. }));
+        // And the bare unwrapped value, which the same dispatcher reads
+        // by the same token — never tested unwrapped before this.
+        assert_eq!(parse("5").constraint(), &CPrimitive::Integer { list: vec![5], range: None });
+        assert!(matches!(parse("5.5").constraint(), CPrimitive::Real { range: None, .. }));
 
         let err = parse_definition("WHOLE[id1] matches { attr matches {|0..100.0|} }").unwrap_err();
         assert!(err.reason.contains("expected an integer"), "{err}");
         let err = parse_definition("WHOLE[id1] matches { attr matches {|2024-01-01..2024-12-31|} }").unwrap_err();
         assert!(err.reason.contains("unwrapped temporal interval"), "{err}");
         let err = parse_definition("WHOLE[id1] matches { attr matches {|PT0S..PT1H|} }").unwrap_err();
+        assert!(err.reason.contains("unwrapped temporal interval"), "{err}");
+        let err = parse_definition("WHOLE[id1] matches { attr matches {|09:00:00..17:00:00|} }").unwrap_err();
         assert!(err.reason.contains("unwrapped temporal interval"), "{err}");
         let err = parse_definition(r#"WHOLE[id1] matches { attr matches {|"a".."b"|} }"#).unwrap_err();
         assert!(err.reason.contains("expected an integer or real bound"), "{err}");
@@ -2200,6 +2218,37 @@ mod tests {
         assert!(err.reason.contains("relop interval"), "{err}");
         let err = parse_definition("WHOLE[id1] matches { attr matches {|5 +/- 1|} }").unwrap_err();
         assert!(err.reason.contains("+/-"), "{err}");
+    }
+
+    /// The unwrapped boolean shorthand, reached through a tuple row —
+    /// the one path that hands `parse_inline_primitive` a token its
+    /// `c_objects` gate has not already screened. `{true}` is a
+    /// `C_BOOLEAN`; a bare word that is not a boolean is refused as "not a
+    /// primitive value", not mis-read as one. cargo-mutants could turn the
+    /// boolean guard to `true`, to `false`, or its `||` to `&&` unnoticed.
+    #[test]
+    fn an_unwrapped_boolean_in_a_tuple_row_is_a_c_boolean_and_a_bare_word_is_not() {
+        let source = "
+            SOME_TYPE[id1] matches {
+                [flag, magnitude] matches {
+                    [{true}, {5}],
+                    [{false}, {6}]
+                }
+            }
+        ";
+        let root = parse_definition(source).unwrap();
+        let rows = root.attribute_tuples()[0].tuples();
+        assert_eq!(
+            rows[0].members()[0].constraint(),
+            &CPrimitive::Boolean { allow_true: true, allow_false: false }
+        );
+        assert_eq!(
+            rows[1].members()[0].constraint(),
+            &CPrimitive::Boolean { allow_true: false, allow_false: true }
+        );
+        let err = parse_definition("SOME_TYPE[id1] matches { [flag, magnitude] matches { [{xyz}, {5}] } }")
+            .unwrap_err();
+        assert!(err.reason.contains("expected a primitive value"), "{err}");
     }
 
     /// The tuple mechanism itself, proven end-to-end: two rows, each
