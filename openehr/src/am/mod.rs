@@ -15,7 +15,7 @@
 //! | Capability | Requirement | State |
 //! | --- | --- | --- |
 //! | AOM2 as types, with construction-time checking | `K15.1`–`K15.4` | **here** |
-//! | ADL 2 parsing | `K15.5` | not implemented — [`adl2::parse_header`](self::parse_adl2_header) reads the header only, and [`cadl::parse_definition`](self::parse_definition) reads `definition`'s own `c_complex_object` grammar rule for every node kind but a `closed` slot and `SIBLING_ORDER` (see its own module docs for the exact boundary); neither builds an [`Archetype`], and together they are still not a step toward `K15.5`'s full parse — no `language`, `description`, `rules`, `terminology`, or `annotations` |
+//! | ADL 2 parsing | `K15.5` | not implemented — [`adl2::parse_header`](self::parse_adl2_header) reads the header only, and [`cadl::parse_definition`](self::parse_definition) reads `definition`'s own `c_complex_object` grammar rule for every node kind but `SIBLING_ORDER` (see its own module docs for the exact boundary); neither builds an [`Archetype`], and together they are still not a step toward `K15.5`'s full parse — no `language`, `description`, `rules`, `terminology`, or `annotations` |
 //! | Refusal discipline: an unimplemented construct is refused by name at its offset, never skipped or returned as a partial tree | `K15.6`–`K15.7` | **here**, for the parsers that exist (`cadl`, `adl2`, `adl14`) and binding on any `K15.5` adds |
 //! | ADL 1.4 ingestion and conversion | `K15.8`–`K15.10` | not implemented — [`adl14::parse_header`](self::parse_adl14_header) reads the header and concept line only, and is not a step toward `K15.8`'s conversion (see its own module docs) |
 //! | Specialisation and flattening | `K15.11`–`K15.13` | not implemented |

@@ -248,6 +248,76 @@ ordinals).
   `rm::`; deriving it there, once, is the `lib:A-33` shape — one rule, one
   home — rather than a second table in `am::cadl`. A requirement first.
 
+## Run 3 — 2026-09-03, after `A-72`, `A-73`, `A-74`
+
+- Corpus: unchanged, `093c77ea003742b9540e3dd377d615e2b26f2996`.
+- Crate: run 2's tree plus `A-72` (an unwrapped interval's kind decided by
+  its first bound's token), `A-73` (`allow_archetype … closed` parsed), and
+  `A-74` (the relop interval spelling `|>=0.0|`), the last found by the
+  intermediate run between the first two and this one.
+
+### Totals
+
+| Extension | Files | Parsed | Refused | No `definition` | Not UTF-8 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `.adls` | 1,379 | **916** (run 2: 774; run 1: 206) | 462 | 1 | 2 |
+| `.adl` | 593 | 32 (run 2: 29) | 561 | 0 | 2 |
+
+By directory, the clinical corpora now lead: `Reference/CKM_2013_12_09`
+237 of 322 parsed, `Reference/Nehta_2014_04_25` 132 of 164. The reference
+suite (`ADL2-reference`) is 219, a third of it the `validity` directory,
+where a refusal is the expected answer for the invalid twins.
+
+### Refusals by stated reason, `.adls`
+
+| Files | Stated reason (tokens stripped) | What it is |
+| ---: | --- | --- |
+| 130 | expected `[`, found `matches` | Id-less objects; correctly refused (runs 1–2). |
+| 72 | generic RM type parameters are not implemented by this parser | Stated limitation, refused by name. Now the largest *limitation* left; the count rises each run as more files reach it. |
+| 61 | `CIMI` is not a valid id-, at-, or ac-code | ADL 1.5-form `use_archetype`; correctly refused (run 1, candidate 3). |
+| 54 | `SIBLING_ORDER` is not implemented by this parser | Stated limitation. |
+| 32 | expected `[`, found `}` | Unwrapped temporal literals (`{PT0S}`) taken for RM type names — candidate 5, up from 22 as more files reach it. |
+| 28 | a single-valued attribute's child occurrences upper bound exceeds 1 | **`A-71`'s residual**, 19 of them CKM/NEHTA: `items matches {` with no `cardinality` clause under a `CLUSTER`, built single-valued. The Reference Model multiplicity decision (`plan.md`) is now the largest lever on the clinical corpus. |
+| 21 | expected `[`, found `-` | `DATE_TIME_CONSTRAINT_PATTERN` unwrapped — candidate 1/5. |
+| 14 | `d` is not a valid `ISO8601_DATE` | `DATE_CONSTRAINT_PATTERN` — candidate 1. |
+| 13 | expected `[`, found `/` | Not yet examined. |
+| 9 | expected an attribute name, found `*` | ADL 1.4 `matches {*}`; correctly refused. |
+| 6 | `…` is not a valid at- or ac-code | Not yet examined. |
+| 3 | an unwrapped temporal interval … is not implemented by this parser | `A-72`'s own named refusal; the three files are the reference suite's temporal-interval features. |
+| 3 each and fewer | `unexpected content after the definition's root object` (3), `expected an RM type name, found (` (3), `expected a primitive value, found -` (2), `expected }, found \|` (2), one each of four more | Not yet examined. |
+
+The `.adl` column is unchanged in shape: 471 id-less objects and `matches
+{*}`, the rest stated limitations.
+
+### Findings this run produced
+
+- **`A-72`** (fixed): `A-67`'s "cannot be told apart" was wrong;
+  `odin_values.g4` decides by token. 184 files.
+- **`A-73`** (fixed): the closed slot stayed refused after `A-71` removed
+  the reason. 13 files.
+- **`A-74`** (fixed): the relop spelling failed on its `=`, not by name.
+  106 files, surfaced only once `A-72` let intervals reach the reader — a
+  refusal can hide another, which is why runs are recorded one at a time.
+
+### Candidates — status
+
+1. `DATE_CONSTRAINT_PATTERN` (and the date-time form): **open**, 35 files.
+2. `primitive_kind` case-insensitivity: **open**, still not reproduced.
+3. Refusal names that are correct but unhelpful: **open**.
+4. Unwrapped interval kind: **closed, `A-72`**.
+5. Unwrapped temporal literals: **open**, 32 files; shares candidate 1's
+   fix (a `CPrimitive` pattern form and unwrapped temporal dispatch by
+   lexical shape).
+6. **New — the `+/-` interval spelling** is refused by name and no corpus
+   file uses it; recorded so its absence from the numbers is not read as
+   support.
+
+### Decisions the run asks for
+
+- **Reference Model multiplicity** (run 2, restated): 28 files now, 19 of
+  them clinical, and the count will keep rising as other refusals fall.
+  The decision is in `plan.md`; a requirement first.
+
 ## Trademarks
 
 openEHR® is the registered trademark of the openEHR Foundation and is used

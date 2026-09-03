@@ -378,6 +378,40 @@ impl<'a> Lexer<'a> {
         token
     }
 
+    /// The first bound of an interval whose opening `|` is the next token,
+    /// without consuming anything: the token after `|` and any run of
+    /// relational or sign symbols (`>`, `<`, `=`, `+`, `-`), paired with the
+    /// raw text from that token onward. `None` if the next token is not `|`
+    /// or nothing follows it.
+    ///
+    /// `A-72`: `odin_values.g4` builds `integer_interval_value` from
+    /// `INTEGER` tokens and `real_interval_value` from `REAL` tokens, so the
+    /// kind of an unwrapped interval is decided by its first bound's token
+    /// — `|0..100|` is a `C_INTEGER`, `|0.0..100.0|` a `C_REAL` — and the
+    /// parser asks here before committing to either. The raw text lets it
+    /// tell an ISO 8601 bound (`|2024-01-01..2024-12-31|`, which also
+    /// begins with digits) from a number.
+    pub(super) fn peek_interval_bound(&mut self) -> Option<(Token, &'a str)> {
+        let checkpoint = self.rest;
+        let mut found = None;
+        if matches!(self.next(), Some(Token::Symbol('|'))) {
+            loop {
+                self.skip_trivia();
+                let at = self.rest;
+                match self.next() {
+                    Some(Token::Symbol('>' | '<' | '=' | '+' | '-')) => {}
+                    Some(token) => {
+                        found = Some((token, at));
+                        break;
+                    }
+                    None => break,
+                }
+            }
+        }
+        self.rest = checkpoint;
+        found
+    }
+
     /// Whether input is exhausted, after skipping trivia.
     pub(super) fn at_end(&mut self) -> bool {
         self.skip_trivia();

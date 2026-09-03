@@ -26,9 +26,9 @@
 //!   is implemented (`A-67`), wired to [`crate::am::CAttributeTuple`]
 //!   (`A-50`). Its own row items (`c_primitive_tuple_item`) are always the
 //!   unwrapped shorthand — the grammar gives a tuple row no room for a
-//!   wrapping `rm_type_id` — so an interval item like `{|0..300|}` still
-//!   hits the unwrapped-interval ambiguity a few bullets below; a tuple
-//!   using a discrete value instead parses cleanly.
+//!   wrapping `rm_type_id` — so an interval item like `{|0..300|}` relies
+//!   on the unwrapped interval's kind being decided by its first bound's
+//!   token (`A-72`, a few bullets below), which it is.
 //! - **`C_ARCHETYPE_ROOT`** (`use_archetype`) and **`C_COMPLEX_OBJECT_PROXY`**
 //!   (`use_node`) are fully implemented: the former's `archetype_ref`
 //!   (`ARCHETYPE_HRID` or `ARCHETYPE_REF`) is reconstructed by slicing the
@@ -40,12 +40,11 @@
 //!   unrestricted form and for `include`/`exclude` assertions shaped
 //!   `bound_path SYM_MATCHES CONTAINED_REGEXP` (`A-66`) — the shape every
 //!   real `ARCHETYPE_SLOT` assertion this repository has found actually
-//!   uses. One narrower refusal remains, real rather than a placeholder:
-//!   `closed` is refused because its own grammar production carries no
-//!   `c_occurrences` at all, and [`crate::am::ArchetypeSlot`] — unlike
-//!   [`crate::am::CComplexObjectProxy`] (`A-54`'s own scope decision) —
-//!   stores occurrences as a plain, non-deferrable `MultiplicityInterval`,
-//!   so there is no value to build one from without guessing. An assertion
+//!   uses, and for `closed` (`A-73`): its grammar production carries no
+//!   `c_occurrences` at all, which was a refusal while
+//!   [`crate::am::ArchetypeSlot`] could only hold a stated interval and is
+//!   a plain `None` since `A-71` made `occurrences` optional on every
+//!   `C_OBJECT`. An assertion
 //!   richer than the one shape above — a boolean operator, a quantifier, a
 //!   function call, or even the same `constraint_expr`'s own
 //!   `'{' c_inline_primitive_object '}'` alternative — is refused by name
@@ -72,9 +71,21 @@
 //!   one `Option<Interval<_>>` each, not a list of them; AOM2 itself allows
 //!   several disjoint ranges, and representing that is a shape change to
 //!   those variants this parser does not make on its own.
-//! - **A relop (`|>5|`) or `+/-` (`|5+/-1|`) interval form** — only the
-//!   plain `|lower..upper|` range (with optional `>`/`<` for an open end) is
-//!   implemented; the other two ODIN interval spellings are refused.
+//! - **An unwrapped interval's kind is decided, not refused** (`A-72`).
+//!   `A-67` refused `attr matches {|0..100|}` as undecidable between
+//!   `C_INTEGER` and `C_REAL` without a wrapping type name; `odin_values.g4`
+//!   decides it by token — `integer_interval_value` is built from `INTEGER`
+//!   bounds, `real_interval_value` from `REAL` — so this parser reads the
+//!   first bound's token ([`super::cadl_lexer::Lexer::peek_interval_bound`])
+//!   and dispatches. Two refusals remain, both by name: a bound mixing the
+//!   kinds (`|0..100.0|`, which the grammar refuses too), and an **unwrapped
+//!   temporal interval** (`|2024-01-01..2024-12-31|`, `|PT0S..PT1H|`), whose
+//!   bound begins like an ISO 8601 literal and whose kind — date, time,
+//!   date-time, or duration — this parser does not decide unwrapped.
+//! - **The `+/-` interval spelling** (`|5 +/- 1|`) is refused by name; the
+//!   range (`|lower..upper|`, either end optionally open with `>`/`<`) and
+//!   the relop form (`|>=0.0|`, `|<10|`, `|5|`; `A-74`) are both read. No
+//!   corpus file uses `+/-`; 134 use `|>=0.0|`.
 //! - **Generic RM type parameters** (`LIST<DV_TEXT>`) — `rm_type_id` accepts
 //!   only a bare `ALPHA_UC_ID` here.
 //!
@@ -146,7 +157,7 @@ use super::{
     ROOT_OCCURRENCES,
 };
 use crate::am::{CPrimitive, CPrimitiveObject, CPrimitiveTuple, PrimitiveValue};
-use crate::base::{Date, DateTime, Duration, Interval, Real, Time};
+use crate::base::{Date, DateTime, Duration, Interval, Real, SemanticOrd, Time};
 use core::str::FromStr;
 
 /// A failure to parse cADL — a construct outside this parser's scope (see
@@ -742,6 +753,21 @@ fn c_objects(lexer: &mut Lexer<'_>) -> Result<Vec<CObject>, CadlError> {
 /// Whether the next token can only begin `c_inline_primitive_object`
 /// (module documentation: the unwrapped shorthand, supported for
 /// `Boolean`/`String`/`Integer`/`Real`/`Terminology_code` only).
+/// Whether raw text begins like an ISO 8601 literal rather than a number:
+/// four digits then `-` (a date or date-time), two digits then `:` (a time),
+/// or `P`/`-P` (a duration) — the opening shapes `base_lexer.g4`'s
+/// `ISO8601_DATE`, `ISO8601_TIME`, `ISO8601_DATE_TIME`, and
+/// `ISO8601_DURATION` share. A `0..100` bound has a `.` after its digits and
+/// is a number.
+fn looks_iso8601(raw: &str) -> bool {
+    let digits = raw.bytes().take_while(u8::is_ascii_digit).count();
+    let after = raw.as_bytes().get(digits).copied();
+    (digits == 4 && after == Some(b'-'))
+        || (digits == 2 && after == Some(b':'))
+        || raw.starts_with('P')
+        || raw.starts_with("-P")
+}
+
 fn starts_inline_primitive(lexer: &mut Lexer<'_>) -> bool {
     matches!(
         lexer.peek(),
@@ -1018,13 +1044,17 @@ fn archetype_slot(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
     let node_id = expect_node_id(lexer)?;
     expect_symbol(lexer, ']')?;
 
+    // `SYM_CLOSED`: the grammar's own alternative carries no `c_occurrences`
+    // and no assertions. Refused until `A-71` made `occurrences` an
+    // `Option` on every `C_OBJECT` — there was no value to build a slot
+    // from without guessing one; now `None` is what the grammar says
+    // (`A-73`), and `effective_occurrences` infers it like any other node.
     if peek_keyword(lexer, "closed") {
-        return Err(CadlError::at(
-            lexer.offset(),
-            "a closed ARCHETYPE_SLOT (`allow_archetype ... closed`) is not implemented by this \
-             parser: its own grammar states no occurrences for this form, and ArchetypeSlot has \
-             none to default to",
-        ));
+        lexer.next();
+        let slot = ArchetypeSlot::new(rm_type_name, node_id, None)
+            .map_err(|e| CadlError::at(offset, format!("invalid ARCHETYPE_SLOT: {e}")))?
+            .closed();
+        return Ok(CObject::Slot(slot));
     }
 
     let occurrences = parse_occurrences(lexer, false)?;
@@ -1115,7 +1145,8 @@ fn primitive_kind(rm_type_name: &str) -> Option<&'static str> {
 /// dispatched by the RM type name already read), `None` for the unwrapped
 /// shorthand under `c_objects` (dispatched by token shape instead — see
 /// [`starts_inline_primitive`], which only ever calls this with `None` for
-/// `Boolean`/`String`/`Integer`/`Real`/`Terminology_code` shapes; the four
+/// `Boolean`/`String`/`Integer`/`Real`/`Terminology_code` shapes — an
+/// unwrapped interval's kind is its first bound's token, `A-72`; the four
 /// temporal kinds are not reachable unwrapped in this parser at all).
 ///
 /// The second element of the returned pair is the trailing assumed value
@@ -1147,13 +1178,27 @@ fn parse_inline_primitive(
             Some(Token::Symbol('[')) => parse_terminology_code_primitive(lexer),
             Some(Token::Real(_)) => parse_real_primitive(lexer),
             Some(Token::Integer(_)) => parse_integer_primitive(lexer),
-            Some(Token::Symbol('|')) => {
-                Err(CadlError::at(
+            // `A-72`: the kind of an unwrapped interval is its first
+            // bound's token kind — `INTEGER` for `integer_interval_value`,
+            // `REAL` for `real_interval_value` (`odin_values.g4`) — not an
+            // ambiguity a wrapping type name has to settle, which is what
+            // `A-67` wrongly stated. A bound that begins like an ISO 8601
+            // literal (digits then `-` or `:`, or `P`) is a temporal
+            // interval, whose unwrapped form is refused by name.
+            Some(Token::Symbol('|')) => match lexer.peek_interval_bound() {
+                Some((_, raw)) if looks_iso8601(raw) => Err(CadlError::at(
                     lexer.offset(),
-                    "an unwrapped interval's primitive kind (C_INTEGER vs C_REAL) cannot be told \
-                     apart without a wrapping rm_type_id; not implemented by this parser",
-                ))
-            }
+                    "an unwrapped temporal interval (a date, time, date-time, or duration bound with \
+                     no wrapping rm_type_id) is not implemented by this parser",
+                )),
+                Some((Token::Integer(_), _)) => parse_integer_primitive(lexer),
+                Some((Token::Real(_), _)) => parse_real_primitive(lexer),
+                Some((other, _)) => Err(CadlError::at(
+                    lexer.offset(),
+                    format!("expected an integer or real bound after `|`, found {other}"),
+                )),
+                None => Err(CadlError::at(lexer.offset(), "expected an interval bound after `|`, found end of input")),
+            },
             _ if peek_keyword(lexer, "true") || peek_keyword(lexer, "false") => parse_boolean_primitive(lexer),
             Some(other) => Err(CadlError::at(lexer.offset(), format!("expected a primitive value, found {other}"))),
             None => Err(CadlError::at(lexer.offset(), "expected a primitive value, found end of input")),
@@ -1258,16 +1303,63 @@ fn parse_integer_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<
 }
 
 fn parse_integer_interval(lexer: &mut Lexer<'_>) -> Result<Interval<i64>, CadlError> {
+    parse_numeric_interval(lexer, expect_signed_integer)
+}
+
+/// The integer and real interval spellings of `odin_values.g4`, which differ
+/// only in the bound's own token:
+///
+/// ```text
+/// '|' SYM_GT? v '..' SYM_LT? v '|'      a range, either end optionally open
+/// '|' relop? v '|'                      one bound (`A-74`): `|>=0.0|`, `|<10|`, or `|5|`
+/// '|' v SYM_PLUS_OR_MINUS v '|'         refused by name — not implemented
+/// ```
+///
+/// Before `A-74` only the first was read, and the second — `|>=0.0|`, the
+/// spelling 134 corpus files use for a non-negative magnitude — failed
+/// inside the range reader as "expected a real number, found `=`", a
+/// refusal naming a symptom, not the construct (`K15.6`).
+fn parse_numeric_interval<T: SemanticOrd + Clone>(
+    lexer: &mut Lexer<'_>,
+    read_bound: fn(&mut Lexer<'_>) -> Result<T, CadlError>,
+) -> Result<Interval<T>, CadlError> {
     let offset = lexer.offset();
     expect_symbol(lexer, '|')?;
-    let lower_excluded = consume_symbol_if(lexer, '>');
-    let lower = expect_signed_integer(lexer)?;
+    // `>` opens either a relop (`|>v|`, `|>=v|`) or a range's excluded
+    // lower bound (`|>v..w|`); which one is settled by what follows `v`.
+    let gt = consume_symbol_if(lexer, '>');
+    let lt = !gt && consume_symbol_if(lexer, '<');
+    let eq = (gt || lt) && consume_symbol_if(lexer, '=');
+    let first = read_bound(lexer)?;
+    let build = |interval: Result<Interval<T>, crate::error::ParseError>| {
+        interval.map_err(|e| CadlError::at(offset, e.to_string()))
+    };
+    if consume_symbol_if(lexer, '|') {
+        return build(if gt {
+            Interval::new(Some(first), None, Some(eq), None)
+        } else if lt {
+            Interval::new(None, Some(first), None, Some(eq))
+        } else {
+            Interval::new(Some(first.clone()), Some(first), Some(true), Some(true))
+        });
+    }
+    if lt || eq {
+        return Err(CadlError::at(
+            lexer.offset(),
+            "a relop interval (`|<v|`, `|<=v|`, `|>=v|`) takes exactly one bound; expected `|` after it",
+        ));
+    }
+    if matches!(lexer.peek(), Some(Token::Symbol('+'))) {
+        return Err(CadlError::at(
+            lexer.offset(),
+            "the `|v +/- w|` interval spelling is not implemented by this parser",
+        ));
+    }
     expect_dotdot(lexer)?;
     let upper_excluded = consume_symbol_if(lexer, '<');
-    let upper = expect_signed_integer(lexer)?;
+    let upper = read_bound(lexer)?;
     expect_symbol(lexer, '|')?;
-    Interval::new(Some(lower), Some(upper), Some(!lower_excluded), Some(!upper_excluded))
-        .map_err(|e| CadlError::at(offset, e.to_string()))
+    build(Interval::new(Some(first), Some(upper), Some(!gt), Some(!upper_excluded)))
 }
 
 fn parse_assumed_real(lexer: &mut Lexer<'_>) -> Result<Option<PrimitiveValue>, CadlError> {
@@ -1303,16 +1395,7 @@ fn parse_real_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<Pri
 }
 
 fn parse_real_interval(lexer: &mut Lexer<'_>) -> Result<Interval<Real>, CadlError> {
-    let offset = lexer.offset();
-    expect_symbol(lexer, '|')?;
-    let lower_excluded = consume_symbol_if(lexer, '>');
-    let lower = expect_signed_real(lexer)?;
-    expect_dotdot(lexer)?;
-    let upper_excluded = consume_symbol_if(lexer, '<');
-    let upper = expect_signed_real(lexer)?;
-    expect_symbol(lexer, '|')?;
-    Interval::new(Some(lower), Some(upper), Some(!lower_excluded), Some(!upper_excluded))
-        .map_err(|e| CadlError::at(offset, e.to_string()))
+    parse_numeric_interval(lexer, expect_signed_real)
 }
 
 /// `c_terminology_code: '[' ( AC_CODE ( ';' AT_CODE )? | AT_CODE ) ']' ;`
@@ -1813,17 +1896,23 @@ mod tests {
         assert!(err.reason.contains("CONTAINED_REGEXP"), "{err}");
     }
 
-    /// A closed slot's own grammar production carries no `c_occurrences` at
-    /// all (`archetype_slot`'s own module documentation), and
-    /// [`crate::am::ArchetypeSlot`] has no `Void` to build one from — so
-    /// this is refused, not guessed at.
+    /// A closed slot's own grammar production carries no `c_occurrences`
+    /// and no assertions. Until `A-71` gave [`crate::am::ArchetypeSlot`] an
+    /// `Option` to hold that absence, this was refused by name (`A-62`);
+    /// now (`A-73`) it is built closed, with occurrences unstated, and
+    /// nothing after `closed` is consumed.
     #[test]
-    fn a_closed_archetype_slot_is_refused_by_name() {
+    fn a_closed_archetype_slot_is_parsed_closed_with_unstated_occurrences() {
         let source = "CLUSTER[id1] matches { items matches { allow_archetype CLUSTER[id2] \
                        closed } }";
-        let err = parse_definition(source).unwrap_err();
-        assert!(err.reason.contains("closed"), "{err}");
-        assert!(err.reason.contains("ARCHETYPE_SLOT"), "{err}");
+        let root = parse_definition(source).unwrap();
+        let CObject::Slot(slot) = &root.attributes()[0].children()[0] else {
+            panic!("expected an ARCHETYPE_SLOT");
+        };
+        assert!(slot.is_closed());
+        assert_eq!(slot.occurrences(), None);
+        assert!(slot.includes().is_empty() && slot.excludes().is_empty());
+        assert_eq!(slot.node_id(), "id2");
     }
 
     /// The one `ARCHETYPE_SLOT` form this parser does build: no `matches`
@@ -2016,14 +2105,13 @@ mod tests {
     /// row's own items are always the unwrapped shorthand — the grammar
     /// gives `c_primitive_tuple_item` no room for a wrapping `rm_type_id`
     /// — so AOM2's own canonical `{units, magnitude}` example, whose
-    /// magnitude column is a *range*, still hits the pre-existing
-    /// unwrapped-interval ambiguity (`starts_inline_primitive`'s own
-    /// module documentation), not a tuple-syntax refusal.
-    /// `a_c_attribute_tuple_with_discrete_values_is_parsed` below proves
-    /// the tuple mechanism itself works once that separate ambiguity is
-    /// avoided.
+    /// magnitude column is a *range*, depends on the unwrapped interval's
+    /// kind being decidable. Until `A-72` this test asserted the refusal
+    /// `A-67` gave it; the grammar decides the kind by token
+    /// (`odin_values.g4`), so it now asserts the parse: the row's second
+    /// item is a `C_INTEGER` range.
     #[test]
-    fn a_c_attribute_tuple_with_an_unwrapped_interval_item_hits_a_different_refusal() {
+    fn a_c_attribute_tuple_with_an_unwrapped_interval_item_is_parsed() {
         let source = r#"
             DV_QUANTITY[id1] matches {
                 [units, magnitude] matches {
@@ -2031,8 +2119,87 @@ mod tests {
                 }
             }
         "#;
-        let err = parse_definition(source).unwrap_err();
-        assert!(err.reason.contains("unwrapped interval"), "{err}");
+        let root = parse_definition(source).unwrap();
+        let tuple = &root.attribute_tuples()[0];
+        let row = &tuple.tuples()[0];
+        assert_eq!(
+            row.members()[1].constraint(),
+            &CPrimitive::Integer { list: Vec::new(), range: Some(Interval::closed(0, 300).unwrap()) }
+        );
+    }
+
+    /// `A-72`: the kind of an unwrapped interval is its first bound's token
+    /// — `INTEGER` builds `integer_interval_value`, `REAL` builds
+    /// `real_interval_value` (`odin_values.g4`) — so `|0..100|` is a
+    /// `C_INTEGER` and `|0.0..100.0|` a `C_REAL`, with or without an assumed
+    /// value, and a bound mixing the two is refused by name as the grammar
+    /// refuses it. The corpus file that surfaced this
+    /// (`openehr-TEST_PKG-WHOLE.assumed_values.v1.0.0.adls`) writes
+    /// `integer_attr3 matches {|0..100|; 10}`.
+    #[test]
+    fn an_unwrapped_intervals_kind_is_decided_by_its_first_bounds_token() {
+        let parse = |body: &str| {
+            let root = parse_definition(&format!("WHOLE[id1] matches {{ attr matches {{{body}}} }}")).unwrap();
+            let CObject::Primitive(p) = &root.attributes()[0].children()[0] else {
+                panic!("expected a C_PRIMITIVE_OBJECT");
+            };
+            p.clone()
+        };
+        let integer = parse("|0..100|; 10");
+        assert_eq!(
+            integer.constraint(),
+            &CPrimitive::Integer { list: Vec::new(), range: Some(Interval::closed(0, 100).unwrap()) }
+        );
+        assert_eq!(integer.assumed_value(), Some(&PrimitiveValue::Integer(10)));
+        let real = parse("|0.0..100.0|");
+        assert!(matches!(real.constraint(), CPrimitive::Real { range: Some(_), .. }), "{real:?}");
+        let negative = parse("|-5..5|");
+        assert!(matches!(negative.constraint(), CPrimitive::Integer { range: Some(_), .. }));
+
+        let err = parse_definition("WHOLE[id1] matches { attr matches {|0..100.0|} }").unwrap_err();
+        assert!(err.reason.contains("expected an integer"), "{err}");
+        let err = parse_definition("WHOLE[id1] matches { attr matches {|2024-01-01..2024-12-31|} }").unwrap_err();
+        assert!(err.reason.contains("unwrapped temporal interval"), "{err}");
+        let err = parse_definition("WHOLE[id1] matches { attr matches {|PT0S..PT1H|} }").unwrap_err();
+        assert!(err.reason.contains("unwrapped temporal interval"), "{err}");
+        let err = parse_definition(r#"WHOLE[id1] matches { attr matches {|"a".."b"|} }"#).unwrap_err();
+        assert!(err.reason.contains("expected an integer or real bound"), "{err}");
+    }
+
+    /// `A-74`: `odin_values.g4`'s second interval spelling, one bound with
+    /// a relop — `|>=0.0|` is how 134 corpus files say "non-negative" —
+    /// read as a half-open interval; a bare `|5|` is the point `5..5`;
+    /// a relop followed by `..` and the `+/-` spelling are refused by
+    /// name, not as "expected a real number, found `=`".
+    #[test]
+    fn a_relop_interval_is_read_as_one_open_ended_bound() {
+        let range = |body: &str| {
+            let root = parse_definition(&format!("WHOLE[id1] matches {{ attr matches {{{body}}} }}")).unwrap();
+            let CObject::Primitive(p) = &root.attributes()[0].children()[0] else {
+                panic!("expected a C_PRIMITIVE_OBJECT");
+            };
+            p.constraint().clone()
+        };
+        let CPrimitive::Real { range: Some(r), .. } = range("|>=0.0|") else { panic!() };
+        assert_eq!(r.lower().map(ToString::to_string), Some("0.0".to_owned()));
+        assert_eq!(r.lower_included(), Some(true));
+        assert!(r.upper_unbounded());
+        let CPrimitive::Integer { range: Some(r), .. } = range("|>0|") else { panic!() };
+        assert_eq!((r.lower(), r.lower_included(), r.upper()), (Some(&0), Some(false), None));
+        let CPrimitive::Integer { range: Some(r), .. } = range("|<=10|") else { panic!() };
+        assert_eq!((r.lower(), r.upper(), r.upper_included()), (None, Some(&10), Some(true)));
+        let CPrimitive::Integer { range: Some(r), .. } = range("|<10|") else { panic!() };
+        assert_eq!((r.upper(), r.upper_included()), (Some(&10), Some(false)));
+        let CPrimitive::Integer { range: Some(r), .. } = range("|5|") else { panic!() };
+        assert_eq!((r.lower(), r.upper()), (Some(&5), Some(&5)));
+        // The range's own optional open lower bound is unchanged.
+        let CPrimitive::Integer { range: Some(r), .. } = range("|>0..10|") else { panic!() };
+        assert_eq!((r.lower_included(), r.upper()), (Some(false), Some(&10)));
+
+        let err = parse_definition("WHOLE[id1] matches { attr matches {|>=0..10|} }").unwrap_err();
+        assert!(err.reason.contains("relop interval"), "{err}");
+        let err = parse_definition("WHOLE[id1] matches { attr matches {|5 +/- 1|} }").unwrap_err();
+        assert!(err.reason.contains("+/-"), "{err}");
     }
 
     /// The tuple mechanism itself, proven end-to-end: two rows, each

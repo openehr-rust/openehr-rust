@@ -220,17 +220,17 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         never vendored (see `corpus.md` §Licence).
 - [ ] **Close the corpus's open candidates, largest first** (`corpus.md`
       §Candidates; each needs its test and grammar reading before an `A-`
-      number, `W0.19`). (4) An unwrapped interval's kind: `odin_values.g4`
-      builds `integer_interval_value` from `INTEGER` tokens and
-      `real_interval_value` from `REAL`, so `|0..100|` is a `C_INTEGER` and
-      `A-67`'s "cannot be told apart" is wrong — 184 files, 120 of them
-      CKM/NEHTA clinical archetypes. (5) Unwrapped temporal literals and
-      `*_CONSTRAINT_PATTERN`s taken for RM type names — 36 files; needs a
-      `CPrimitive` pattern form first (`A-63` modelled the value forms
-      only). (1) `DATE_CONSTRAINT_PATTERN` refused under the wrong name —
-      24 files. Then the Reference Model multiplicity decision in
-      `plan.md`. *Evidence:* run 3 in `corpus.md`, dated, with the counts.
-      — **M**
+      number, `W0.19`). *Done 2026-09-03, run 3 (916 of 1,379 parsed):*
+      (4) the unwrapped interval's kind, decided by token (`A-72`); the
+      closed slot `A-71` had unlocked (`A-73`); the relop interval
+      spelling `|>=0.0|` that surfaced behind it (`A-74`). *Open:* (5)
+      unwrapped temporal literals and `*_CONSTRAINT_PATTERN`s taken for RM
+      type names — needs a `CPrimitive` pattern form first (`A-63`
+      modelled the value forms only); (1) `DATE_CONSTRAINT_PATTERN`
+      refused under the wrong name; the Reference Model multiplicity
+      decision in `plan.md`, now 28 refused files and growing as more
+      reach it. *Evidence:* the next run in `corpus.md`, dated, with the
+      counts. — **M**
 
 ### P2 — operability and evidence
 

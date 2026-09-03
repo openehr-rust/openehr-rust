@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**71 findings, 71 in the table below: 7 High, 38 Medium, 26 Low. 65 fixed or
+**74 findings, 74 in the table below: 7 High, 39 Medium, 28 Low. 68 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -158,6 +158,9 @@ in the documentation, which is the class this register most exists to catch.
 | A-69 | Low | **BREAKING.** `Archetype.archetype_id` was `base::ArchetypeId`, but AOM2 states `ARCHETYPE.archetype_id: ARCHETYPE_HRID` — the richer, authoring-time identifier `A-49` built `ArchetypeHrid` for, never propagated to the one field it was actually for; `ArchetypeId::from_str` rejects a namespace prefix and a prerelease suffix `ARCHETYPE_HRID`'s own grammar allows (`A-49`), so a real archetype using either could not be held by `Archetype::new` at all | **fixed** — `archetype_id`/`Archetype::new`/`Archetype::archetype_id()`/`ArchetypeViolation.archetype_id` all retyped to `ArchetypeHrid`; `ArchetypeHrid::specialisations()` added (the same `-`-splitting rule applied to `concept_id`) so `specialisation_depth()` needed no logic change; the one place an `ArchetypeHrid` and an `ArchetypeId` now meet — verifying a repository answered the identifier a `C_ARCHETYPE_ROOT` asked for (`K15.26`) — compares by text, both types sharing one textual convention for exactly this reason; `parent_archetype_id`, `ArchetypeRepository::resolve`, and `CArchetypeRoot.archetype_ref` are unchanged, since those are reference/lookup forms, correctly `ArchetypeId`-shaped already (`A-52`'s own residual already confirmed `parent_archetype_id`) |
 | A-70 | Medium | `am::cadl` accepted the lexer's fallback one-character "word" `/` as an attribute name, so an attribute in differential form — `/data/events cardinality matches {2..8; ordered}`, `c_attribute`'s `ADL_PATH` alternative, the way every specialised ADL 2 archetype states what it redefines — mis-parsed into several attributes and was refused later as a `VOKU` duplicate with the name `""`: a valid archetype refused, and refused naming the wrong thing (`K15.6`). Found by the first external-corpus run (`openehr/spec/corpus.md`), not by reading; `C_ATTRIBUTE.differential_path` itself had no counterpart in `CAttribute` | **fixed** — `CAttribute.differential_path`/`with_differential_path()`/`differential_path()` added (`#[serde(default)]`, absent on the wire when `None`); `Lexer::peek_raw_path` lets `c_attribute_def` tell an `ADL_PATH` (contains `/`) from a bare name before reading either; the path is split at its last `/` into parent and attribute; a name that is not an `IDENTIFIER` is refused by name; `VOKU` keyed on (parent, name); `am::validate` reports a differential attribute *unchecked* naming its parent path, since resolving it is flattening (`K15.11`) — never read under the wrong object |
 | A-71 | Medium | **BREAKING.** AOM2's `C_OBJECT.occurrences` is `0..1` — "only set if it overrides the parent archetype … or else the occurrences inferred from the underlying reference model existence and/or cardinality of the containing attribute" — but `CComplexObject`, `CPrimitiveObject`, `ArchetypeSlot`, and `CArchetypeRoot` each required a `MultiplicityInterval`, so the model could not represent an unstated `occurrences` at all (`K15.1`, `K15.3`) and `am::cadl` refused every non-root node that omitted one. The first external corpus run (`corpus.md`) measured that refusal at 1,197 of 1,739 refusals over 1,972 real files: two thirds of everything the parser turned away, on the construct most published archetype nodes use | **fixed** — `occurrences: Option<MultiplicityInterval>` on all four types (constructors take `Option`; `#[serde(default, skip_serializing_if)]`, absent on the wire when unstated); `CObject::effective_occurrences(owner)` implements AOM2's rule (lower `0`; upper the owner's cardinality upper bound, else `1` for an attribute built single-valued), `None` only for a proxy deferring to its target; `MultiplicityInterval::from_zero_to`; the parser carries an omitted one as `None` (the root still defaults to exactly one); `am::validate` checks the effective value — `K15.32` states the rule and the one assumption. **Residual:** the single-or-container decision is still syntactic (`cadl`'s own module documentation), so a real `items matches {` with no cardinality clause is built single-valued and its unstated children infer `0..1`, not `0..*` |
+| A-72 | Medium | `A-67` refused every unwrapped interval (a bare `0..100` between bars under an attribute, and every `C_ATTRIBUTE_TUPLE` row with a range) on the stated ground that `C_INTEGER` and `C_REAL` "cannot be told apart without a wrapping `rm_type_id`". The ground is false: `odin_values.g4` builds `integer_interval_value` from `INTEGER` tokens and `real_interval_value` from `REAL` tokens (`base_lexer.g4`: `DIGIT+` vs `DIGIT+ '.' DIGIT+`), so the kind is lexical, the same distinction the parser already applied to an unwrapped single value. Corpus run 2 measured the refusal at 184 files, the largest left, 120 of them CKM/NEHTA clinical archetypes | **fixed** — `Lexer::peek_interval_bound` looks past the opening bar and any relop/sign symbols to the first bound's token without consuming; `parse_inline_primitive` dispatches `Integer` to `C_INTEGER`, `Real` to `C_REAL`; a bound beginning like an ISO 8601 literal is refused by name as an unwrapped temporal interval, and a bound mixing the kinds (`0..100.0`) is refused as the grammar refuses it. The tuple fixture that had asserted `A-67`'s refusal now asserts the parse |
+| A-73 | Low | `am::cadl` refused `allow_archetype … closed` by name (`A-62`) because the grammar's `SYM_CLOSED` alternative carries no `c_occurrences` and `ArchetypeSlot` could hold only a stated interval — a correct refusal that `A-71` made unnecessary the moment `occurrences` became `Option` on every `C_OBJECT`, and that nobody re-examined: 13 corpus files | **fixed** — `closed` builds `ArchetypeSlot::new(…, None).closed()`, its effective occurrences inferred from the owning attribute like any other node's; `am::validate` already enforced `is_closed` (`A-60`), so a closed slot read from ADL is now checked, not carried |
+| A-74 | Low | The relop interval spelling — one bound with `>`, `>=`, `<`, or `<=` between bars, `odin_values.g4`'s second `*_interval_value` alternative and the way 134 corpus files write a non-negative magnitude — was a stated limitation of `am::cadl`, but was not refused by name: the range reader consumed the `>` as its own optional open lower bound and then failed on the `=` as "expected a real number, found `=`", a symptom rather than the construct (`K15.6`). Visible only once `A-72` let unwrapped intervals reach the reader: 106 files in run 3 | **fixed** — one `parse_numeric_interval` reads both spellings for the integer and real kinds, deciding by what follows the first bound; a relop followed by `..` and the third, `+/-` spelling (no corpus file uses it) are refused by name |
 
 ---
 
@@ -4274,3 +4277,125 @@ all four types; the parser carrying an omitted value and the root's
 default; the real `openEHR-EHR-CLUSTER.device.v1.0.0` definition — the
 fixture that had asserted a named refusal since `A-62` — now parsed whole;
 and validation against the inferred value.
+
+## A-72 — an unwrapped interval's kind was refused as undecidable; the grammar decides it
+
+**Severity: Medium. Status: fixed.**
+
+**Found by corpus run 2** (`corpus.md`): once `A-71` let real archetypes
+past the `occurrences` refusal, the largest refusal left was `A-67`'s own:
+"an unwrapped interval's primitive kind (`C_INTEGER` vs `C_REAL`) cannot be
+told apart without a wrapping `rm_type_id`" — 184 files across both
+extensions, 120 of them the CKM 2013 and NEHTA 2014 clinical corpora, on
+constructs as ordinary as `magnitude matches {|0.0..1000.0|}`.
+
+**The stated reason was wrong.** `odin_values.g4` (the grammar
+`cadl2_primitives.g4` imports its values from) says
+
+```
+integer_interval_value : '|' SYM_GT? integer_value '..' SYM_LT? integer_value '|' | … ;
+integer_value          : ( '+' | '-' )? INTEGER ;
+real_interval_value    : '|' SYM_GT? real_value    '..' SYM_LT? real_value    '|' | … ;
+real_value             : ( '+' | '-' )? REAL ;
+```
+
+and `base_lexer.g4` makes `INTEGER : DIGIT+` and `REAL : DIGIT+ '.' DIGIT+`
+distinct tokens. `|0..100|` *is* a `C_INTEGER` and `|0.0..100.0|` *is* a
+`C_REAL`, by the same token distinction this parser had applied to an
+unwrapped single value (`Token::Integer` vs `Token::Real`) since `A-63`.
+`A-67` documented the refusal carefully and tested it; what it did not do
+was read the grammar rule it was refusing, which is the `W0.3` failure in
+its parser form — a limitation asserted rather than verified.
+
+**Fixed.** `Lexer::peek_interval_bound` looks past the opening `|` and any
+run of relop or sign symbols to the first bound's token, without consuming,
+and returns it with the raw text from that point. `parse_inline_primitive`
+dispatches an `Integer` bound to `parse_integer_primitive` and a `Real`
+bound to `parse_real_primitive`, exactly as it already did for a bare
+value. Two refusals remain and both are by name: a bound whose raw text
+begins like an ISO 8601 literal (four digits then `-`, two then `:`, or
+`P`) is an unwrapped *temporal* interval, whose kind among date, time,
+date-time, and duration this parser does not decide unwrapped; and a bound
+mixing the kinds (`|0..100.0|`) is refused by the integer parser as the
+grammar refuses it. `C_ATTRIBUTE_TUPLE` rows, which the grammar gives no
+room for a wrapping type name, get the same decision through the shared
+helper, so AOM2's canonical `[{"mm[Hg]"}, {|0..300|}]` now parses.
+
+**Effect on the corpus** is recorded in `corpus.md`, run 3.
+
+**Tests.** Two: the tuple fixture that had asserted `A-67`'s refusal now
+asserts its second item is a `C_INTEGER` range; and the corpus file's own
+`|0..100|; 10` as a `C_INTEGER` with its assumed value, `|0.0..100.0|` as a
+`C_REAL`, a negative lower bound, and the three refusals (mixed kinds, a
+date bound, a duration bound, and a string bound) each by name.
+
+## A-73 — a closed `ARCHETYPE_SLOT` stayed refused after the reason for refusing it was gone
+
+**Severity: Low. Status: fixed.**
+
+**Found by corpus run 2**, thirteen files, and by re-reading `A-62`'s own
+reason in the light of `A-71`. `allow_archetype CLUSTER[id10] closed` was
+refused by name because the grammar's `SYM_CLOSED` alternative carries no
+`c_occurrences`, and `ArchetypeSlot` could hold only a stated
+`MultiplicityInterval`: "there is no value to build one from without
+guessing" (`am::cadl`'s own module documentation, `A-62`). That was true.
+`A-71` made `occurrences` an `Option` on every `C_OBJECT`, `ArchetypeSlot`
+included, and `K15.32` says what `None` means and how it is inferred — so
+the ground for the refusal disappeared, and the refusal did not. A
+limitation whose reason has been removed is a stale claim, and the corpus
+is what noticed.
+
+**Fixed.** `closed` builds `ArchetypeSlot::new(rm_type_name, node_id,
+None).closed()` and consumes nothing further, as the grammar's alternative
+has nothing further. `am::validate` already enforces `is_closed` against
+whatever filled the slot (`A-60`), so a closed slot read from ADL text is
+now checked rather than refused before it could be. The module
+documentation's `ARCHETYPE_SLOT` bullet, which had explained the refusal
+by `ArchetypeSlot`'s non-deferrable occurrences, now explains the change.
+
+**Tests.** The test that asserted the named refusal now asserts the parse:
+closed, occurrences unstated, no assertions, the node id kept.
+
+## A-74 — the relop interval spelling failed on its `=`, not by name
+
+**Severity: Low. Status: fixed.**
+
+**Found by corpus run 3**, the run after `A-72`: with unwrapped intervals
+reaching the reader for the first time, 106 files failed as "expected a
+real number, found `=`" or "expected an integer, found `=`". The text
+behind every one is `|>=0.0|` or `|>=0|` — a `DV_QUANTITY` magnitude
+constrained to be non-negative, 263 occurrences across 134 files, the
+single most common interval in the clinical corpus. `odin_values.g4`
+gives each numeric kind three interval spellings:
+
+```
+'|' SYM_GT? v '..' SYM_LT? v '|'      a range
+'|' relop? v '|'                      one bound, or a point
+'|' v SYM_PLUS_OR_MINUS v '|'         a tolerance
+```
+
+`am::cadl` read the first, listed the other two as refused in its module
+documentation, and did not refuse the second by name: the range reader
+took the `>` as the range's own optional open lower bound, then met `=`
+where it expected a number. A true statement in the documentation and a
+refusal naming a symptom in the code — `K15.6` asks that the *construct*
+be named at its offset, and a reader of "found `=`" learns nothing about
+what the parser does not do.
+
+**Fixed.** `parse_numeric_interval`, one function for both numeric kinds,
+parameterised on the bound reader (`expect_signed_integer` or
+`expect_signed_real`), reads the opening bar, an optional `>` or `<`, an
+optional `=`, and the first bound, then decides by the next token: a
+closing bar makes it a relop form (`>` gives a lower bound open above,
+`<` an upper bound open below, `=` the inclusion, no relop a point
+`v..v`); `..` makes it the range, with `>` as before; `+` makes it the
+tolerance spelling, refused by name, as is a relop followed by `..`.
+`Interval::new` already represented a half-open interval — the parser had
+simply never asked it to.
+
+**Effect on the corpus** is in `corpus.md`, run 3, together with `A-72`
+and `A-73`.
+
+**Tests.** One, over the corpus spelling and each of its neighbours:
+`|>=0.0|`, `|>0|`, `|<=10|`, `|<10|`, `|5|`, the unchanged `|>0..10|`, and
+the two named refusals.

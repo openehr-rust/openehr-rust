@@ -7,6 +7,22 @@ together.
 
 ## Unreleased
 
+- `am::cadl` now decides an unwrapped interval's kind by its first bound's
+  token — `|0..100|` is a `C_INTEGER`, `|0.0..100.0|` a `C_REAL`, which is
+  what `odin_values.g4` says — instead of refusing every one as undecidable
+  (`A-67`'s stated reason, which was wrong). `C_ATTRIBUTE_TUPLE` rows with
+  a range parse for the same reason. An unwrapped *temporal* interval and a
+  bound mixing the kinds are still refused, by name. See `A-72` in
+  `openehr/spec/audit.md`. Not a breaking change: inputs that were refused
+  now parse; nothing that parsed changes shape.
+- `am::cadl` parses `allow_archetype … closed`, refused since `A-62` only
+  because `ArchetypeSlot` could not leave `occurrences` unstated, which
+  `A-71` changed. See `A-73`. Not a breaking change.
+- `am::cadl` reads the relop interval spelling — `|>=0.0|`, `|<10|`, `|5|`
+  — as a half-open (or point) `Interval`, for both numeric kinds. It had
+  been failing inside the range reader with a message naming the `=`, not
+  the construct. The `+/-` spelling is refused by name. See `A-74`. Not a
+  breaking change.
 - **Breaking.** `am::CComplexObject::new`, `am::CPrimitiveObject::new`,
   `am::ArchetypeSlot::new`, and `am::CArchetypeRoot::new` take
   `Option<MultiplicityInterval>` for `occurrences`, and

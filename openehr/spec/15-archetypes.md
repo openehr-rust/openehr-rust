@@ -120,12 +120,12 @@ before the code does.
   reads `definition`'s own grammar rule, `c_complex_object`
   (`openEHR/adl-antlr`, `cadl2.g4`) — the constraint tree itself, refusing
   what it does not implement by name (`K15.6`, `K15.7`). As of 2026-09-03
-  (`A-62`–`A-67`) that is every node kind but a `closed` `ARCHETYPE_SLOT`
-  and `SIBLING_ORDER`, and every primitive form but a date pattern
-  (`yyyy-mm-??`), an unwrapped interval whose kind — `C_INTEGER` or
-  `C_REAL` — no wrapping type name settles, `default_value`, and more than
-  one disjoint numeric or temporal range (see the module's own documentation
-  for the exact boundary and why each one is drawn where it is). It reads
+  (`A-62`–`A-67`, `A-72`, `A-73`) that is every node kind but
+  `SIBLING_ORDER`, and every primitive form but a date pattern
+  (`yyyy-mm-??`), an unwrapped *temporal* interval, the `+/-` interval
+  spelling, `default_value`, and more than one disjoint numeric or
+  temporal range (see the module's own documentation for the exact boundary
+  and why each one is drawn where it is). It reads
   `definition` alone, still cannot build an
   `Archetype` (no `language`, no `terminology`, so a node id it reads names
   nothing), and does not read the header either — the two additions do not
