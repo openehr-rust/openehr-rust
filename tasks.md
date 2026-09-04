@@ -218,7 +218,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       - [ ] The regression job. Blocked on a corpus this tree may carry:
         `adl-archetypes` has no licence file, so it is read where it is,
         never vendored (see `corpus.md` §Licence).
-- [ ] **Close the corpus's open candidates, largest first** (`corpus.md`
+- [x] **Close the corpus's open candidates, largest first** (`corpus.md`
       §Candidates; each needs its test and grammar reading before an `A-`
       number, `W0.19`). *Done 2026-09-03, run 3 (916 of 1,379 parsed):*
       (4) the unwrapped interval's kind, decided by token (`A-72`); the
@@ -228,11 +228,16 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       temporal patterns and unwrapped temporal literals (`A-75`); (2),
       `primitive_kind`'s case-insensitive match, reproduced for real
       chasing `A-75`'s own residual (`A-76`); (7), a negative unwrapped
-      number had no dispatch at all (`A-77`). *Open:* the Reference Model
-      multiplicity decision in `plan.md`; a `VACMCU` cardinality refusal
-      `A-76` surfaced (8 files, ISO 13606, not yet examined for which side
-      is at fault); (6), the unused `+/-` interval spelling; (3), refusal
-      names that are correct but unhelpful. *Evidence:* run 6 in
+      number had no dispatch at all (`A-77`); (8), the `VACMCU` refusal
+      `A-76` surfaced examined and closed with no code change — seven
+      files share one boilerplate `SECTION` whose own cardinality and
+      mandatory children contradict each other (the archetype's own
+      defect, correctly refused), the eighth is the reference suite's own
+      invalid fixture. *Remaining, correctly left open rather than forced*:
+      (3) refusal names correct but unhelpful, and (6) the unused `+/-`
+      spelling — neither has a next action a corpus run can supply; the
+      Reference Model multiplicity decision moved to `plan.md`'s own open
+      decisions, where a design call belongs. *Evidence:* run 6 in
       `corpus.md`, dated, with the counts. — **M**
 
 ### P2 — operability and evidence

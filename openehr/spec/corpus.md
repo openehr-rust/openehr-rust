@@ -421,7 +421,22 @@ that produced it (candidate 7) now parse.
 6. The `+/-` interval spelling: **open**, still unused in the corpus.
 7. A negative unwrapped integer in a tuple row: **closed, `A-77`**.
 8. A `VACMCU` cardinality violation surfaced by `A-76`, 8 files, all ISO
-   13606: **open**, not yet examined for which side is at fault.
+   13606: **examined and closed, no code change** — the archetype's own
+   inconsistency, not this parser's. Seven of the eight are
+   `Reference/ISO_13606/Spanish_MOH` `COMPOSITION`s that share one
+   boilerplate `SECTION`: `members cardinality matches {0..1; unordered;
+   unique} matches { allow_archetype ENTRY[…] occurrences matches {1} …
+   allow_archetype ENTRY[…] occurrences matches {1} … }` — two mandatory
+   children under an attribute whose cardinality permits at most one,
+   contradictory on its own terms and correctly refused
+   (`CAttribute::container`'s own `VACMCU` check, `A-71`'s residual
+   documentation). Present verbatim in every file examined, so it reads as
+   a systematic artefact of whatever produced these from EN13606, not a
+   one-off. The eighth, `ADL2-reference/validity/structure/
+   openEHR-EHR-OBSERVATION.WACMCL_container_items_out_of_bounds.v1.0.0.adls`,
+   is the reference suite's own deliberately invalid fixture — its name
+   says so, and refusing it is the correct answer, the same as every other
+   `validity` directory file this corpus contains.
 
 ### Decisions the run asks for
 
