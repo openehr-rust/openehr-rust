@@ -120,7 +120,7 @@ before the code does.
   reads `definition`'s own grammar rule, `c_complex_object`
   (`openEHR/adl-antlr`, `cadl2.g4`) — the constraint tree itself, refusing
   what it does not implement by name (`K15.6`, `K15.7`). As of 2026-09-04
-  (`A-62`–`A-67`, `A-72`–`A-76`) that is every node kind but
+  (`A-62`–`A-67`, `A-72`–`A-77`) that is every node kind but
   `SIBLING_ORDER`, and every primitive form but an unwrapped *temporal*
   interval, the `+/-` interval spelling, `default_value`, and more than
   one disjoint numeric or temporal range (see the module's own
@@ -128,10 +128,12 @@ before the code does.
   is). A temporal `*_CONSTRAINT_PATTERN` (`yyyy-mm-??`, `??:??:??`) is now
   read for all four kinds, wrapped or unwrapped, carried and not evaluated
   (`A-75`; `K15.18`'s own "no partial pass" governs what a governed node
-  reports), and a wrapped `rm_type_id` is matched against a primitive kind
+  reports); a wrapped `rm_type_id` is matched against a primitive kind
   name exactly, not case-insensitively, so a genuine RM class spelled like
   one — `DATE`, ISO 13606's own type — is read as the `C_COMPLEX_OBJECT`
-  it is (`A-76`). It reads
+  it is (`A-76`); and a negative unwrapped number (`{-3}`, a
+  `C_ATTRIBUTE_TUPLE` item) is read, its sign no longer undispatched
+  (`A-77`). It reads
   `definition` alone, still cannot build an
   `Archetype` (no `language`, no `terminology`, so a node id it reads names
   nothing), and does not read the header either — the two additions do not

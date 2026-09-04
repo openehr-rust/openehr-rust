@@ -43,7 +43,7 @@ this afternoon, one of the projects below is the better answer.
   now specified by `lib:S1.21` and `openehr/spec/15-archetypes.md`, and 16 of
   those 33 requirements have no code (`lib:A-40`): no parser for a whole ADL
   archetype, no ADL 1.4, no OPT, no flattening, no template expansion. The
-  `definition` reader parses 967 of the 1,379 ADL 2 files in
+  `definition` reader parses 969 of the 1,379 ADL 2 files in
   `openEHR/adl-archetypes` as of 2026-09-04 and refuses the rest by name
   (`openehr/spec/corpus.md`) — a parser, not archetype support. Archie
   is the library for that work today, and every CDR above validates a

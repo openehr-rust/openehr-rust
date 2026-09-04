@@ -430,6 +430,23 @@ impl<'a> Lexer<'a> {
         found
     }
 
+    /// Peeks past a leading `+`/`-` sign to the token after it, without
+    /// consuming either — `expect_signed_integer`/`expect_signed_real`
+    /// already know how to *read* a signed number once something has
+    /// decided it is one; this is the two-token lookahead a dispatcher
+    /// needs to make that decision first, since `-3`'s own `-` tokenizes
+    /// as `Symbol('-')` by itself (`Self::next`'s word/number scanners
+    /// only start on the digit or letter that follows a sign, never on
+    /// the sign itself). `None` if the next token is not a sign, or
+    /// nothing follows it (`A-77`).
+    pub(super) fn peek_after_sign(&mut self) -> Option<Token> {
+        let checkpoint = self.rest;
+        let signed = matches!(self.next(), Some(Token::Symbol('+' | '-')));
+        let token = if signed { self.next() } else { None };
+        self.rest = checkpoint;
+        token
+    }
+
     /// Whether input is exhausted, after skipping trivia.
     pub(super) fn at_end(&mut self) -> bool {
         self.skip_trivia();

@@ -790,6 +790,12 @@ fn starts_inline_primitive(lexer: &mut Lexer<'_>) -> bool {
     ) || peek_keyword(lexer, "true")
         || peek_keyword(lexer, "false")
         || lexer.peek_iso8601().is_some_and(|raw| classify_temporal(raw).is_some())
+        // `A-77`: a negative `integer_value`/`real_value` (`-3`, `-3.5`) —
+        // `-PT1H`, the negative duration, is already covered by the
+        // temporal check above, `classify_temporal`'s own `starts_with
+        // ("-P")` arm; this one is only reached for a genuine negative
+        // number.
+        || matches!(lexer.peek_after_sign(), Some(Token::Integer(_) | Token::Real(_)))
 }
 
 /// Which of the four temporal `c_inline_primitive_object` kinds `raw` is —
@@ -1400,6 +1406,18 @@ fn parse_inline_primitive(
                 format!("expected an integer or real bound after `|`, found {other}"),
             )),
             None => Err(CadlError::at(lexer.offset(), "expected an interval bound after `|`, found end of input")),
+        },
+        // `A-77`: a negative number's own `-` tokenizes on its own
+        // (`Symbol('-')`), so the ordinary one-token dispatch above never
+        // sees `Token::Integer`/`Token::Real` for it directly —
+        // `peek_after_sign` is the two-token lookahead that decides which
+        // one it is without consuming, mirroring `starts_inline_primitive`'s
+        // own check just above it.
+        Some(Token::Symbol('-')) => match lexer.peek_after_sign() {
+            Some(Token::Integer(_)) => parse_integer_primitive(lexer),
+            Some(Token::Real(_)) => parse_real_primitive(lexer),
+            Some(other) => Err(CadlError::at(lexer.offset(), format!("expected a number after `-`, found {other}"))),
+            None => Err(CadlError::at(lexer.offset(), "expected a number after `-`, found end of input")),
         },
         _ if peek_keyword(lexer, "true") || peek_keyword(lexer, "false") => parse_boolean_primitive(lexer),
         Some(other) => Err(CadlError::at(lexer.offset(), format!("expected a primitive value, found {other}"))),
@@ -2748,6 +2766,73 @@ mod tests {
             tuple.tuples()[0].members()[1].constraint(),
             &CPrimitive::Real { list: vec!["212.0".parse().unwrap()], range: None }
         );
+    }
+
+    /// `A-77`: `DV_ORDINAL`'s own canonical `[value, symbol]` tuple, the
+    /// corpus's own shape (`openEHR-EHR-CLUSTER.symptom.v1`, `[{-3},
+    /// {[at49]}]`) — a negative unwrapped integer item, which the parser
+    /// refused as "expected a primitive value, found `-`" before this: a
+    /// negative number's own `-` tokenizes on its own, and nothing
+    /// dispatched on it.
+    #[test]
+    fn a_c_attribute_tuple_with_a_negative_integer_item_is_parsed() {
+        let source = "
+            DV_ORDINAL[id1] matches {
+                [value, symbol] matches {
+                    [{-3}, {[at49]}],
+                    [{-2}, {[at50]}],
+                    [{0}, {[at51]}]
+                }
+            }
+        ";
+        let root = parse_definition(source).unwrap();
+        let tuple = &root.attribute_tuples()[0];
+        assert_eq!(
+            tuple.tuples()[0].members()[0].constraint(),
+            &CPrimitive::Integer { list: vec![-3], range: None }
+        );
+        assert_eq!(
+            tuple.tuples()[1].members()[0].constraint(),
+            &CPrimitive::Integer { list: vec![-2], range: None }
+        );
+        assert_eq!(
+            tuple.tuples()[2].members()[0].constraint(),
+            &CPrimitive::Integer { list: vec![0], range: None }
+        );
+    }
+
+    /// `A-77`'s other half: a negative unwrapped number under `c_objects`
+    /// itself, not only inside a tuple row — `starts_inline_primitive`'s
+    /// own new disjunct, distinct from a negative *duration*
+    /// (`-PT1H`), which the temporal check just above it already covers.
+    #[test]
+    fn a_negative_unwrapped_number_via_c_objects_is_read_as_integer_or_real() {
+        let attr = |body: &str| {
+            let root = parse_definition(&format!("WHOLE[id1] matches {{ attr matches {{{body}}} }}")).unwrap();
+            let CObject::Primitive(p) = &root.attributes()[0].children()[0] else {
+                panic!("expected a C_PRIMITIVE_OBJECT");
+            };
+            p.constraint().clone()
+        };
+        assert_eq!(attr("-3"), CPrimitive::Integer { list: vec![-3], range: None });
+        assert_eq!(attr("-3.5"), CPrimitive::Real { list: vec!["-3.5".parse().unwrap()], range: None });
+
+        // `-"x"` (a `-` followed by something that is not a number) does
+        // not *start* an inline primitive at all — `starts_inline_primitive`
+        // correctly declines it, the same way it declines a bare `-` with
+        // nothing recognisable after it, so `c_objects` reports the more
+        // general "expected an RM type name" rather than reaching
+        // `parse_inline_primitive`'s own refusal. That refusal is reached
+        // through a `C_ATTRIBUTE_TUPLE` row instead, which calls
+        // `parse_inline_primitive` unconditionally — no
+        // `starts_inline_primitive` gate to decline through first.
+        let err = parse_definition("WHOLE[id1] matches { attr matches {-\"x\"} }").unwrap_err();
+        assert!(err.reason.contains("expected an RM type name"), "{err}");
+        let err = parse_definition(
+            "SOME_TYPE[id1] matches { [flag, magnitude] matches { [{-true}, {5}] } }",
+        )
+        .unwrap_err();
+        assert!(err.reason.contains("expected a number after `-`"), "{err}");
     }
 
     /// A regex tuple item — `c_primitive_tuple_item`'s own `CONTAINED_REGEXP`

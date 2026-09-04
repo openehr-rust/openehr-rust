@@ -489,7 +489,7 @@ a `C_ARCHETYPE_ROOT` filler through a repository the caller supplies
 2026-09-02, `openehr::am::cadl` reads an archetype's `definition` section
 (`lib:A-62`–`A-67`) and a filled `ARCHETYPE_SLOT` is checked against its own
 `is_closed` rule (`lib:A-60`). Since 2026-09-03 that reader has met
-archetypes nobody here wrote, five times: 967 of the 1,379 ADL 2 files in
+archetypes nobody here wrote, five times: 969 of the 1,379 ADL 2 files in
 `openEHR/adl-archetypes` parse as of 2026-09-04 and the rest are refused by
 name, up from 178 at the first run through seven findings the runs
 produced (`lib:A-70`–`A-76`;

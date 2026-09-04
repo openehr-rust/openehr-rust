@@ -224,15 +224,16 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       (4) the unwrapped interval's kind, decided by token (`A-72`); the
       closed slot `A-71` had unlocked (`A-73`); the relop interval
       spelling `|>=0.0|` that surfaced behind it (`A-74`). *Done
-      2026-09-04, runs 4–5 (967 of 1,379 parsed):* (1) and (5) together,
+      2026-09-04, runs 4–6 (969 of 1,379 parsed):* (1) and (5) together,
       temporal patterns and unwrapped temporal literals (`A-75`); (2),
       `primitive_kind`'s case-insensitive match, reproduced for real
-      chasing `A-75`'s own residual (`A-76`). *Open:* the Reference Model
-      multiplicity decision in `plan.md`; a negative unwrapped integer in
-      a tuple row (2 files); a `VACMCU` cardinality refusal `A-76`
-      surfaced (8 files, ISO 13606, not yet examined for which side is at
-      fault). *Evidence:* run 5 in `corpus.md`, dated, with the counts.
-      — **M**
+      chasing `A-75`'s own residual (`A-76`); (7), a negative unwrapped
+      number had no dispatch at all (`A-77`). *Open:* the Reference Model
+      multiplicity decision in `plan.md`; a `VACMCU` cardinality refusal
+      `A-76` surfaced (8 files, ISO 13606, not yet examined for which side
+      is at fault); (6), the unused `+/-` interval spelling; (3), refusal
+      names that are correct but unhelpful. *Evidence:* run 6 in
+      `corpus.md`, dated, with the counts. — **M**
 
 ### P2 — operability and evidence
 

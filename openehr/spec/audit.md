@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**76 findings, 76 in the table below: 7 High, 41 Medium, 28 Low. 70 fixed or
+**77 findings, 77 in the table below: 7 High, 41 Medium, 29 Low. 71 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -163,6 +163,8 @@ in the documentation, which is the class this register most exists to catch.
 | A-74 | Low | The relop interval spelling — one bound with `>`, `>=`, `<`, or `<=` between bars, `odin_values.g4`'s second `*_interval_value` alternative and the way 134 corpus files write a non-negative magnitude — was a stated limitation of `am::cadl`, but was not refused by name: the range reader consumed the `>` as its own optional open lower bound and then failed on the `=` as "expected a real number, found `=`", a symptom rather than the construct (`K15.6`). Visible only once `A-72` let unwrapped intervals reach the reader: 106 files in run 3 | **fixed** — one `parse_numeric_interval` reads both spellings for the integer and real kinds, deciding by what follows the first bound; a relop followed by `..` and the third, `+/-` spelling (no corpus file uses it) are refused by name |
 | A-75 | Medium | `am::cadl` could not read a temporal `*_CONSTRAINT_PATTERN` (`yyyy-mm-??`, `??:??:??`, `yyyy-mm-ddThh:mm:ss`, a `PnYnMnD` letter pattern) for any of the four temporal kinds — carried as `CPrimitive::Date::pattern` and its siblings since an earlier session's modelling pass, but nothing built one — and could not read any of the four kinds *unwrapped* at all, though `c_inline_primitive_object` gives the shorthand no narrower a set than the wrapped form has (`cadl2_primitives.g4`); a bare `PT0S` under an attribute mis-tokenized as an RM type name and was refused as "expected `[`, found `}`" (corpus run 1, candidate 5) | **fixed** — `Lexer::peek_iso8601` (non-consuming) lets both the pattern check and the unwrapped dispatch look at the raw run before committing; four pattern validators (`is_date_pattern` and three siblings) check the grammar's own field shapes directly rather than through a regex engine (`plan.md`'s own reason none is a dependency); `classify_temporal` decides which of the four kinds an unwrapped run is **structurally** — `-`/`:` presence, `P`/`-P` prefix — before consulting that kind's own value or pattern check, found necessary by this finding's own test: trying all four kinds' `from_str` in a fixed order first misclassified a bare `C_DATE` value as `C_DATE_TIME`, since `DateTime::from_str` accepts a date with no time part |
 | A-76 | Medium | `primitive_kind` matched a wrapped `rm_type_id` against the nine primitive-kind names case-insensitively, so a genuine RM class spelled in capitals the same as a primitive kind — `DATE`, ISO 13606's own type — was wrongly read as `openehr::am::CPrimitive::Date`. Recorded as corpus run 1's second candidate, not reproduced there; found reproduced for real while pursuing `A-75`: `Reference/ISO_13606/Spanish_MOH/ADL_14/CEN-EN13606-CLUSTER.Muestra.v1.adls` wraps `DATE[id3]` around a `C_COMPLEX_OBJECT` with its own attribute (`date`), and the attempt to read that attribute's first word as the primitive's own value failed as "`d` is not a valid `ISO8601_DATE`" — a refusal this crate caused, not a limitation of it | **fixed** — matched exactly; no file anywhere in the corpus wraps a genuine primitive constraint in *any* casing of the nine names (every real archetype uses the unwrapped shorthand this crate already reads), so exact matching costs nothing measured |
+| A-77 | Low | A negative unwrapped `integer_value`/`real_value` (`{-3}`, a `C_ATTRIBUTE_TUPLE` row item; also a plain `attr matches {-3}`) was refused as "expected a primitive value, found `-`": the leading `-` tokenizes as `Symbol('-')` on its own, and neither `starts_inline_primitive` nor `parse_inline_primitive`'s dispatch had a case for it — found in `DV_ORDINAL`'s own canonical `[value, symbol]` tuple, `openEHR-EHR-CLUSTER.symptom.v1` (both the CKM and NEHTA copies), corpus run 5's own new candidate | **fixed** — `Lexer::peek_after_sign`, a two-token lookahead past a leading `+`/`-` to the token the ordinary tokenizer would read next, without consuming either; both call sites use it, and a negative *duration* (`-PT1H`) is unaffected, already reached through the temporal check ahead of it |
+
 
 ---
 
@@ -4514,3 +4516,53 @@ belongs at the specific name, not as a blanket case fold across all nine.
 **Tests.** One: the exact corpus construct, parsed as a `C_COMPLEX_OBJECT`
 named `DATE` with its attribute intact, alongside the correctly cased
 `Date[id]` still building the primitive.
+
+## A-77 — a negative unwrapped number had no dispatch at all
+
+**Severity: Low. Status: fixed.**
+
+**Found examining corpus run 5's own new candidate.** `DV_ORDINAL`'s
+canonical `[value, symbol]` tuple constrains an ordinal scale by pairing
+each numeric value with its coded meaning — AOM2's own worked example for
+`C_ATTRIBUTE_TUPLE` — and a scale that includes zero or a negative rank
+writes `[{-3}, {[at49]}]`. Both corpus copies of
+`openEHR-EHR-CLUSTER.symptom.v1` do exactly this, and both were refused:
+"expected a primitive value, found `-`".
+
+The cause was structural, not a missing case for negative numbers
+specifically. `Self::next`'s own tokenizer treats `-` as a `Symbol`
+(`SYMBOLS` includes it, `cadl_lexer.rs`) on its own — a negative literal's
+sign and its digits are two tokens, not one, unlike a positive literal
+(`read_number` only starts on a digit). `expect_signed_integer` and
+`expect_signed_real` already knew how to *read* one, consuming the sign
+themselves; nothing decided *whether* to call them. `c_primitive_tuple_item`
+calls `parse_inline_primitive(lexer, None)` unconditionally — no
+`starts_inline_primitive` gate at all — so the `Symbol('-')` reached
+`parse_inline_primitive`'s own `None` match with no arm for it, falling to
+"expected a primitive value". A plain `attr matches {-3}` (not in a tuple)
+would have failed one layer earlier, at `starts_inline_primitive`, as
+"expected an RM type name" — no corpus file happens to use that shape, but
+the fix covers both paths for the same reason.
+
+**Fixed.** `Lexer::peek_after_sign` peeks past a leading `+`/`-` to the
+token the ordinary tokenizer would read next — `Token::Integer`/
+`Token::Real` for a number, whatever else is there otherwise — without
+consuming either, the two-token lookahead the existing one-token `peek`
+cannot give. `starts_inline_primitive` gains a disjunct for it;
+`parse_inline_primitive`'s `None` arm gains a `Symbol('-')` case that
+dispatches to `parse_integer_primitive`/`parse_real_primitive`, which
+already consume the sign correctly via `expect_signed_integer`/
+`expect_signed_real`. A negative *duration* (`-PT1H`, `ISO8601_DURATION`'s
+own leading `-'?'` per `base_lexer.g4`) is unaffected: `classify_temporal`
+already recognises it through the temporal check both call sites run
+first, so the new `-` case is reached only for a genuine number.
+
+**Effect on the corpus** is in `corpus.md`, run 6: two files, both closed.
+
+**Tests.** Three: the corpus's own tuple shape with a negative, zero, and
+positive item across three rows; a plain negative integer and real via
+`c_objects` directly; and the two distinct refusals a genuinely malformed
+`-` still produces, depending on which of the two call sites reaches it
+first (`-"x"` never starts an inline primitive at all; `{-true}` inside a
+tuple row reaches `parse_inline_primitive`'s own "expected a number after
+`-`").

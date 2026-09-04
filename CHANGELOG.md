@@ -37,6 +37,11 @@ together.
   primitive and misparsed. See `A-76`. Not a breaking change: no
   archetype in the corpus this crate has run wraps a genuine primitive
   constraint in any casing at all.
+- `am::cadl` reads a negative unwrapped `C_INTEGER`/`C_REAL` (`{-3}`,
+  `DV_ORDINAL`'s own canonical `[value, symbol]` tuple item), refused
+  before as "expected a primitive value, found `-`" because the sign
+  tokenizes on its own and nothing dispatched on it. See `A-77`. Not a
+  breaking change.
 - **Breaking.** `am::CComplexObject::new`, `am::CPrimitiveObject::new`,
   `am::ArchetypeSlot::new`, and `am::CArchetypeRoot::new` take
   `Option<MultiplicityInterval>` for `occurrences`, and

@@ -395,6 +395,39 @@ or this parser's cardinality inference is at fault.
 - **Reference Model multiplicity** (runs 2–3, restated): still open,
   `plan.md`.
 
+## Run 6 — 2026-09-04, after `A-77`
+
+- Corpus: unchanged, `093c77ea003742b9540e3dd377d615e2b26f2996`.
+- Crate: run 5's tree plus `A-77`: a negative unwrapped number
+  (`{-3}`) is dispatched, wrapped or unwrapped.
+
+### Totals
+
+| Extension | Files | Parsed | Refused | No `definition` | Not UTF-8 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `.adls` | 1,379 | **969** (run 5: 967) | 409 | 1 | 2 |
+| `.adl` | 593 | 33 (run 5: 33) | 560 | 0 | 2 |
+
+The `expected a primitive value, found` `-`` category is gone — both files
+that produced it (candidate 7) now parse.
+
+### Candidates — status after run 6
+
+1. `DATE_CONSTRAINT_PATTERN`: **closed, `A-75`**.
+2. `primitive_kind` case-insensitivity: **closed, `A-76`**.
+3. Refusal names that are correct but unhelpful: **open**.
+4. Unwrapped interval kind: **closed, `A-72`**.
+5. Unwrapped temporal literals: **closed, `A-75`**.
+6. The `+/-` interval spelling: **open**, still unused in the corpus.
+7. A negative unwrapped integer in a tuple row: **closed, `A-77`**.
+8. A `VACMCU` cardinality violation surfaced by `A-76`, 8 files, all ISO
+   13606: **open**, not yet examined for which side is at fault.
+
+### Decisions the run asks for
+
+- **Reference Model multiplicity** (runs 2–3, restated): still open,
+  `plan.md`.
+
 ## Trademarks
 
 openEHR® is the registered trademark of the openEHR Foundation and is used
