@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**74 findings, 74 in the table below: 7 High, 39 Medium, 28 Low. 68 fixed or
+**76 findings, 76 in the table below: 7 High, 41 Medium, 28 Low. 70 fixed or
 classified, 6 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -161,6 +161,8 @@ in the documentation, which is the class this register most exists to catch.
 | A-72 | Medium | `A-67` refused every unwrapped interval (a bare `0..100` between bars under an attribute, and every `C_ATTRIBUTE_TUPLE` row with a range) on the stated ground that `C_INTEGER` and `C_REAL` "cannot be told apart without a wrapping `rm_type_id`". The ground is false: `odin_values.g4` builds `integer_interval_value` from `INTEGER` tokens and `real_interval_value` from `REAL` tokens (`base_lexer.g4`: `DIGIT+` vs `DIGIT+ '.' DIGIT+`), so the kind is lexical, the same distinction the parser already applied to an unwrapped single value. Corpus run 2 measured the refusal at 184 files, the largest left, 120 of them CKM/NEHTA clinical archetypes | **fixed** — `Lexer::peek_interval_bound` looks past the opening bar and any relop/sign symbols to the first bound's token without consuming; `parse_inline_primitive` dispatches `Integer` to `C_INTEGER`, `Real` to `C_REAL`; a bound beginning like an ISO 8601 literal is refused by name as an unwrapped temporal interval, and a bound mixing the kinds (`0..100.0`) is refused as the grammar refuses it. The tuple fixture that had asserted `A-67`'s refusal now asserts the parse |
 | A-73 | Low | `am::cadl` refused `allow_archetype … closed` by name (`A-62`) because the grammar's `SYM_CLOSED` alternative carries no `c_occurrences` and `ArchetypeSlot` could hold only a stated interval — a correct refusal that `A-71` made unnecessary the moment `occurrences` became `Option` on every `C_OBJECT`, and that nobody re-examined: 13 corpus files | **fixed** — `closed` builds `ArchetypeSlot::new(…, None).closed()`, its effective occurrences inferred from the owning attribute like any other node's; `am::validate` already enforced `is_closed` (`A-60`), so a closed slot read from ADL is now checked, not carried |
 | A-74 | Low | The relop interval spelling — one bound with `>`, `>=`, `<`, or `<=` between bars, `odin_values.g4`'s second `*_interval_value` alternative and the way 134 corpus files write a non-negative magnitude — was a stated limitation of `am::cadl`, but was not refused by name: the range reader consumed the `>` as its own optional open lower bound and then failed on the `=` as "expected a real number, found `=`", a symptom rather than the construct (`K15.6`). Visible only once `A-72` let unwrapped intervals reach the reader: 106 files in run 3 | **fixed** — one `parse_numeric_interval` reads both spellings for the integer and real kinds, deciding by what follows the first bound; a relop followed by `..` and the third, `+/-` spelling (no corpus file uses it) are refused by name |
+| A-75 | Medium | `am::cadl` could not read a temporal `*_CONSTRAINT_PATTERN` (`yyyy-mm-??`, `??:??:??`, `yyyy-mm-ddThh:mm:ss`, a `PnYnMnD` letter pattern) for any of the four temporal kinds — carried as `CPrimitive::Date::pattern` and its siblings since an earlier session's modelling pass, but nothing built one — and could not read any of the four kinds *unwrapped* at all, though `c_inline_primitive_object` gives the shorthand no narrower a set than the wrapped form has (`cadl2_primitives.g4`); a bare `PT0S` under an attribute mis-tokenized as an RM type name and was refused as "expected `[`, found `}`" (corpus run 1, candidate 5) | **fixed** — `Lexer::peek_iso8601` (non-consuming) lets both the pattern check and the unwrapped dispatch look at the raw run before committing; four pattern validators (`is_date_pattern` and three siblings) check the grammar's own field shapes directly rather than through a regex engine (`plan.md`'s own reason none is a dependency); `classify_temporal` decides which of the four kinds an unwrapped run is **structurally** — `-`/`:` presence, `P`/`-P` prefix — before consulting that kind's own value or pattern check, found necessary by this finding's own test: trying all four kinds' `from_str` in a fixed order first misclassified a bare `C_DATE` value as `C_DATE_TIME`, since `DateTime::from_str` accepts a date with no time part |
+| A-76 | Medium | `primitive_kind` matched a wrapped `rm_type_id` against the nine primitive-kind names case-insensitively, so a genuine RM class spelled in capitals the same as a primitive kind — `DATE`, ISO 13606's own type — was wrongly read as `openehr::am::CPrimitive::Date`. Recorded as corpus run 1's second candidate, not reproduced there; found reproduced for real while pursuing `A-75`: `Reference/ISO_13606/Spanish_MOH/ADL_14/CEN-EN13606-CLUSTER.Muestra.v1.adls` wraps `DATE[id3]` around a `C_COMPLEX_OBJECT` with its own attribute (`date`), and the attempt to read that attribute's first word as the primitive's own value failed as "`d` is not a valid `ISO8601_DATE`" — a refusal this crate caused, not a limitation of it | **fixed** — matched exactly; no file anywhere in the corpus wraps a genuine primitive constraint in *any* casing of the nine names (every real archetype uses the unwrapped shorthand this crate already reads), so exact matching costs nothing measured |
 
 ---
 
@@ -4399,3 +4401,116 @@ and `A-73`.
 **Tests.** One, over the corpus spelling and each of its neighbours:
 `|>=0.0|`, `|>0|`, `|<=10|`, `|<10|`, `|5|`, the unchanged `|>0..10|`, and
 the two named refusals.
+
+## A-75 — temporal `*_CONSTRAINT_PATTERN` and unwrapped temporal literals were not read
+
+**Severity: Medium. Status: fixed.**
+
+**Found continuing the corpus's own candidate list** (`corpus.md`, run 1's
+candidates 1 and 5, closed together because they share one cause): AOM2's
+`C_DATE`, `C_TIME`, `C_DATE_TIME`, and `C_DURATION` each admit a
+`*_CONSTRAINT_PATTERN` alternative — `yyyy-mm-??`, `??:??:??`,
+`yyyy-mm-ddThh:mm:ss`, a bare `PnYnMnD` letter pattern — ahead of a value,
+list, or interval in their own grammar rule
+(`cadl2_primitives.g4`/`base_lexer.g4`). An earlier session's modelling
+pass gave every `CPrimitive` temporal variant a `pattern: Option<String>`
+field for exactly this, with `am::validate` already reporting a node
+governed by one *unchecked* rather than applying it — but nothing in
+`am::cadl` ever built one. Separately, `c_inline_primitive_object` — the
+unwrapped shorthand `c_objects` reads directly, `attr matches { … }` with
+no `Date[id]` wrapper — gives all nine kinds equal standing in its own
+grammar rule, but this parser's `starts_inline_primitive` only recognised
+five of them; a real corpus file's `duration_attr1 matches {PT0S}`
+mis-tokenized "PT0S" as an RM type name and was refused as "expected `[`,
+found `}`".
+
+**Fixed.** [`Lexer::peek_iso8601`] is [`Lexer::read_iso8601`] without
+consuming — the same maximal run of ISO 8601-shaped characters
+(`is_iso8601_char`, widened to include `X`/`x` for the pattern's `XX`/`xx`
+wildcard), left in place so a caller can classify it before committing to
+reading it, mirroring [`Lexer::peek_raw_path`] (`A-70`). Four pattern
+validators (`is_date_pattern` and its three siblings) check each grammar
+rule's own field shapes directly — `is_pattern_field` for the doubled-letter
+or `??`/`XX`/`xx` fields every kind but the year shares, and
+`matches_optional_letters` for the duration pattern's ordered, each-once
+optional letters — rather than through a regex engine this crate does not
+depend on (`plan.md`'s own open decision on `K15.10` is exactly why one
+isn't reached for here either). Each `temporal_primitive!`-generated
+parser tries its own pattern first, still allowing the trailing `; <value>`
+assumed form the grammar permits after any alternative.
+
+For the unwrapped half, `classify_temporal` decides which of the four
+kinds a candidate run is — **structurally**, by `-`/`:` presence and
+`P`/`-P` prefix, before consulting that kind's own value or pattern check
+— and `starts_inline_primitive`/`parse_inline_primitive`'s `None` arm both
+consult it. This function's first shape tried each kind's `T::from_str` in
+a fixed order instead, and its own test caught the bug that shape had: a
+bare date value like `"2024-06-15"` also satisfies `DateTime::from_str`
+(a date known to the day, time part absent — `crate::base::DateTime`'s own
+partial-value reasoning, `D3.18d` one type family over), so it was silently
+reclassified as `C_DATE_TIME`. Deciding the kind from the text's own shape
+first removed the ambiguity rather than picking a priority order among
+four checks that can each be individually correct and still disagree.
+
+A genuine RM type name is not put at risk by any of this: `classify_temporal`
+requires the *whole* maximal `is_iso8601_char` run to satisfy a real value
+or pattern check, not merely to start with a temporal-shaped letter.
+`PARTICIPATION`'s own run stops at `"P"` (the next character, `A`, is not
+in the character set), and neither `Duration::from_str("P")` nor
+`is_duration_pattern("P")` accepts it — the latter by design, see `A-75`'s
+own test and `is_duration_pattern`'s documentation for why a bare `"P"` is
+excluded even though the grammar's own optional fields would otherwise
+allow it vacuously.
+
+**Effect on the corpus** is in `corpus.md`, run 4.
+
+**Tests.** Nine, including a direct table of each pattern validator against
+its own real and adjacent-but-wrong shapes, the corpus's own duration and
+date-time fixtures, `peek_iso8601` leaving text in place, and the
+`DateTime`-misclassification regression. The mutation-testing job (run
+locally; `agents/auditing.md`) found five further gaps in this same change:
+two `||`/`&&` boundary conditions reachable by no prior test, and an
+infinite-loop mutation in `matches_optional_letters`'s original
+counter-based shape that no assertion could ever catch — fixed by
+rewriting it over a single shared iterator (`Iterator::any`/`Iterator::all`)
+with no counter to mutate into a loop that never terminates, the same
+"remove the loop's ability to hang" fix `A-70` made for a parser loop.
+
+## A-76 — a genuine RM class named like a primitive kind was read as the primitive
+
+**Severity: Medium. Status: fixed.**
+
+**Found reproduced while fixing `A-75`.** Corpus run 1 recorded, as its
+second candidate, "not yet reproduced by a test": `primitive_kind` matched
+a wrapped `rm_type_id` against its nine known names —
+`Boolean`/`String`/`Integer`/`Real`/`Date`/`Time`/`Date_time`/`Duration`/
+`Terminology_code` — case-insensitively, on the stated ground that real
+archetypes are not perfectly consistent about capitalising
+`Terminology_code`. Chasing `A-75`'s own new "d is not a valid ISO8601_DATE"
+corpus refusal (still present after that fix) led to
+`Reference/ISO_13606/Spanish_MOH/ADL_14/CEN-EN13606-CLUSTER.Muestra.v1.adls`:
+`DATE[id3] occurrences matches {0..1} matches { date existence matches {1}
+matches {yyyy-mm-dd} }` — `DATE` here is ISO 13606's own RM class, a
+`C_COMPLEX_OBJECT` with one attribute, `date`. `"DATE".eq_ignore_ascii_case
+("Date")` is true, so this crate treated it as the `Date` primitive kind
+instead, tried to parse the attribute keyword `date` as that primitive's
+own value, and failed on the first character that did not fit — a refusal
+this crate caused by misreading the construct, not a limitation of an
+unimplemented one, which is exactly the distinction `K15.6` exists to
+preserve.
+
+**Fixed.** `primitive_kind` now matches exactly. Checked against the whole
+corpus first, not assumed: no file, in any casing of any of the nine
+names, wraps a genuine primitive constraint at all — every real archetype
+this parser has been run against uses the unwrapped shorthand
+(`c_inline_primitive_object`, `A-75`'s own subject) instead. The stated
+reason for case-insensitivity — inconsistent `Terminology_code` casing —
+was itself unverified against a corpus (`W0.3`) and the corpus available
+now does not support it; if a real inconsistency turns up later, the fix
+belongs at the specific name, not as a blanket case fold across all nine.
+
+**Effect on the corpus** is in `corpus.md`, run 5.
+
+**Tests.** One: the exact corpus construct, parsed as a `C_COMPLEX_OBJECT`
+named `DATE` with its attribute intact, alongside the correctly cased
+`Date[id]` still building the primitive.

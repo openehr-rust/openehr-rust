@@ -3,6 +3,30 @@
 Release notes with their reasoning live in [`CHANGELOG.md`](CHANGELOG.md); this
 page is the short form, plus what is coming and how to reach a human.
 
+## Five more corpus findings, 967 of 1,379 now parsing, 2026-09-04
+
+Continuing from the day before: three more runs against
+`openEHR/adl-archetypes`, five findings, `openehr/spec/corpus.md` updated
+after each one. `lib:A-72` — `A-67` had refused every unwrapped interval
+(`|0..100|`) as undecidable between `C_INTEGER` and `C_REAL`; the grammar
+decides by token, and refusing it was the largest single category left
+(184 files, mostly the CKM and NEHTA clinical corpora). `lib:A-73` — a
+closed `ARCHETYPE_SLOT` stayed refused after `A-71` removed the only
+reason to refuse it. `lib:A-74` — the relop interval spelling `|>=0.0|`,
+the most common interval shape in the corpus, was failing on its own `=`
+rather than being refused by name. `lib:A-75` — a temporal
+`*_CONSTRAINT_PATTERN` (`yyyy-mm-??`) could not be read for any of the
+four temporal kinds, and none of the four could be read unwrapped at all,
+though the grammar gives the unwrapped shorthand no narrower a reach than
+the wrapped form has. `lib:A-76` — a wrapped RM type name was matched
+against a primitive kind name case-insensitively, so a genuine RM class
+spelled like one in capitals (`DATE`, ISO 13606's own type) was read as
+the primitive and misparsed; reproduced for real while chasing `A-75`'s
+own residual, not merely theorized. Parsed `.adls` files: 916 at the start
+of the day, **967** by the end — `A-40`'s "sixteen of thirty-three" count
+is unchanged, since none of the five moved a requirement to done, only
+made the parser that exists correct against text nobody here wrote.
+
 ## The `definition` reader meets the published corpus, 2026-09-03
 
 Later the same day, archetypes nobody here wrote: `openEHR/adl-archetypes`

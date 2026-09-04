@@ -92,8 +92,8 @@ for what is actually verified:
   archetype fills it is recorded on the instance itself, and this crate's
   path machinery does not yet expose that attribute.
 - **Reading an archetype's `definition` section** from ADL 2 text is
-  implemented (`openehr::am::cadl`): 774 of the 1,379 ADL 2 files in
-  `openEHR/adl-archetypes` parse as of 2026-09-03 and the rest are refused by
+  implemented (`openehr::am::cadl`): 967 of the 1,379 ADL 2 files in
+  `openEHR/adl-archetypes` parse as of 2026-09-04 and the rest are refused by
   name (`openehr/spec/corpus.md`). **Parsing a whole archetype, and applying
   a specialised archetype's inherited constraints,** is not implemented yet
   — a `definition` alone does not compose into an `Archetype`. **AQL parses and is statically

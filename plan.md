@@ -23,7 +23,7 @@ Engineering status is read from `openehr/spec/conformance-matrix.md` and
 items live in [`tasks.md`](tasks.md), where a `[x]` means verified, not
 intended.
 
-## Where the repository stands (verified 2026-09-03)
+## Where the repository stands (verified 2026-09-04)
 
 Eight crates at 0.9.0 on crates.io (2026-09-02) — up from 0.6.0 on
 2026-08-26, through 0.7.0–0.7.4 (Archetype Model in scope, trademark
@@ -61,13 +61,13 @@ satisfied the same day. That leaves **16 of 33**: no whole-archetype ADL
 parser (the `definition` section and the header are read; they do not
 compose), no ADL 1.4 body, no flattening, no template expansion, no
 operational template, no evaluation of a slot's own assertions. What
-changed the picture on 2026-09-03 is evidence nobody here wrote: the first
-external corpus run (`openehr/spec/corpus.md`, `openEHR/adl-archetypes` at
-`093c77ea`) took the `definition` reader from 178 to **774 of 1,379** ADL 2
-files parsed in one day, through two findings it produced (`A-70`,
-`A-71`), and left the next three candidates and one decision written
-down. That remainder is engineering work tracked by the matrix and by
-`corpus.md`, not by this file.
+changed the picture is evidence nobody here wrote: the external corpus
+(`openehr/spec/corpus.md`, `openEHR/adl-archetypes` at `093c77ea`), run
+five times across 2026-09-03 and 2026-09-04, took the `definition` reader
+from 178 to **967 of 1,379** ADL 2 files parsed, through seven findings it
+produced (`A-70`–`A-76`), and left the remaining candidates and one
+decision written down. That remainder is engineering work tracked by the
+matrix and by `corpus.md`, not by this file.
 
 ## Workstreams — professionalization (2026-08 onward)
 
@@ -209,7 +209,7 @@ posture. Open items for each are in `tasks.md`.
   can rot against the moving tree.
 - A-40's 16 unimplemented requirements (28 on 2026-08-26) are correctly
   labeled `spec` in the matrix today; the risk is a future page summarizing
-  them as capability — a `definition` reader that parses 774 of 1,379
+  them as capability — a `definition` reader that parses 967 of 1,379
   published files is still not archetype support (`K15.31`). The matrix,
   not prose, is the status document.
 - The mutation job mutates `event.before..HEAD` on a push, so a survivor in

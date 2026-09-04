@@ -23,6 +23,20 @@ together.
   been failing inside the range reader with a message naming the `=`, not
   the construct. The `+/-` spelling is refused by name. See `A-74`. Not a
   breaking change.
+- `am::cadl` reads a temporal `*_CONSTRAINT_PATTERN` (`yyyy-mm-??`,
+  `??:??:??`, `yyyy-mm-ddThh:mm:ss`, a bare `PnYnMnD` letter pattern) for
+  `Date`/`Time`/`Date_time`/`Duration`, wrapped or unwrapped, and reads all
+  four kinds unwrapped at all (previously five of the nine
+  `c_inline_primitive_object` kinds only). See `A-75`. Not a breaking
+  change: `CPrimitive::Date::pattern` and its siblings already existed and
+  were already carried, not evaluated, by `am::validate`; this only fills
+  them from real text instead of always leaving them `None`.
+- `am::cadl`'s `primitive_kind` now matches a wrapped `rm_type_id` against
+  a primitive kind name exactly, not case-insensitively — a genuine RM
+  class spelled like one in capitals (`DATE`) was being read as the
+  primitive and misparsed. See `A-76`. Not a breaking change: no
+  archetype in the corpus this crate has run wraps a genuine primitive
+  constraint in any casing at all.
 - **Breaking.** `am::CComplexObject::new`, `am::CPrimitiveObject::new`,
   `am::ArchetypeSlot::new`, and `am::CArchetypeRoot::new` take
   `Option<MultiplicityInterval>` for `occurrences`, and

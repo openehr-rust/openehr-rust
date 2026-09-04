@@ -223,14 +223,16 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       number, `W0.19`). *Done 2026-09-03, run 3 (916 of 1,379 parsed):*
       (4) the unwrapped interval's kind, decided by token (`A-72`); the
       closed slot `A-71` had unlocked (`A-73`); the relop interval
-      spelling `|>=0.0|` that surfaced behind it (`A-74`). *Open:* (5)
-      unwrapped temporal literals and `*_CONSTRAINT_PATTERN`s taken for RM
-      type names — needs a `CPrimitive` pattern form first (`A-63`
-      modelled the value forms only); (1) `DATE_CONSTRAINT_PATTERN`
-      refused under the wrong name; the Reference Model multiplicity
-      decision in `plan.md`, now 28 refused files and growing as more
-      reach it. *Evidence:* the next run in `corpus.md`, dated, with the
-      counts. — **M**
+      spelling `|>=0.0|` that surfaced behind it (`A-74`). *Done
+      2026-09-04, runs 4–5 (967 of 1,379 parsed):* (1) and (5) together,
+      temporal patterns and unwrapped temporal literals (`A-75`); (2),
+      `primitive_kind`'s case-insensitive match, reproduced for real
+      chasing `A-75`'s own residual (`A-76`). *Open:* the Reference Model
+      multiplicity decision in `plan.md`; a negative unwrapped integer in
+      a tuple row (2 files); a `VACMCU` cardinality refusal `A-76`
+      surfaced (8 files, ISO 13606, not yet examined for which side is at
+      fault). *Evidence:* run 5 in `corpus.md`, dated, with the counts.
+      — **M**
 
 ### P2 — operability and evidence
 

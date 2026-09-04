@@ -62,10 +62,15 @@
 //!   recognised (`A-66`), both as `c_attribute`'s own shorthand — an
 //!   unwrapped `C_STRING` whose `list` holds the delimited pattern
 //!   (`A-63`'s single-list shape) — and inside an `ARCHETYPE_SLOT`
-//!   assertion above. A **date pattern** (`yyyy-mm-??`, `DATE_CONSTRAINT_PATTERN`)
-//!   is a different lexical token this parser still does not recognise, so
-//!   a source using one fails to lex as anything this parser expects
-//!   rather than being silently dropped.
+//!   assertion above.
+//! - **A temporal `*_CONSTRAINT_PATTERN`** (`yyyy-mm-??`, `??:??:??`,
+//!   `yyyy-mm-ddThh:mm:ss`, `PnYnMnD`) is now recognised for all four
+//!   kinds (`A-75`), wrapped or unwrapped, carried as
+//!   [`crate::am::CPrimitive::Date::pattern`] and its siblings —
+//!   **carried, not applied**: [`crate::am::validate`] reports a node
+//!   governed by one unchecked until a real pattern-matching
+//!   implementation exists, exactly as it already does for a `C_STRING`
+//!   regex.
 //! - **More than one `C_INTEGER`/`C_REAL`/temporal range** (`|0..10|,
 //!   |20..30|`) — [`crate::am::CPrimitive::Integer`] and its siblings hold
 //!   one `Option<Interval<_>>` each, not a list of them; AOM2 itself allows
@@ -750,9 +755,6 @@ fn c_objects(lexer: &mut Lexer<'_>) -> Result<Vec<CObject>, CadlError> {
     Ok(objects)
 }
 
-/// Whether the next token can only begin `c_inline_primitive_object`
-/// (module documentation: the unwrapped shorthand, supported for
-/// `Boolean`/`String`/`Integer`/`Real`/`Terminology_code` only).
 /// Whether raw text begins like an ISO 8601 literal rather than a number:
 /// four digits then `-` (a date or date-time), two digits then `:` (a time),
 /// or `P`/`-P` (a duration) — the opening shapes `base_lexer.g4`'s
@@ -768,12 +770,177 @@ fn looks_iso8601(raw: &str) -> bool {
         || raw.starts_with("-P")
 }
 
+/// Whether the next token can only begin `c_inline_primitive_object`
+/// (`A-75` widened this to all nine kinds `c_inline_primitive_object`
+/// actually names — `cadl2_primitives.g4`'s own grammar gives the
+/// unwrapped shorthand no narrower a set than the wrapped form has; the
+/// module documentation's older "`Boolean`/`String`/`Integer`/`Real`/
+/// `Terminology_code` only" was this parser's limitation, not the
+/// grammar's). A candidate temporal token is checked by
+/// [`classify_temporal`] against the real value and pattern grammars for
+/// all four kinds — never by prefix alone — so a `Word` that merely starts
+/// with a temporal-shaped letter (`PARTICIPATION`, `TERMINOLOGY_CODE`)
+/// still falls through to an ordinary RM type name; only `peek_iso8601`'s
+/// own maximal run is offered to it, and that run stops at the first
+/// character neither grammar could contain.
 fn starts_inline_primitive(lexer: &mut Lexer<'_>) -> bool {
     matches!(
         lexer.peek(),
         Some(Token::Str(_) | Token::Integer(_) | Token::Real(_) | Token::Symbol('[' | '|'))
     ) || peek_keyword(lexer, "true")
         || peek_keyword(lexer, "false")
+        || lexer.peek_iso8601().is_some_and(|raw| classify_temporal(raw).is_some())
+}
+
+/// Which of the four temporal `c_inline_primitive_object` kinds `raw` is —
+/// a real literal or a `*_CONSTRAINT_PATTERN` (`A-75`).
+///
+/// The kind is decided **structurally** (`P`/`-P` prefix; then whether `-`
+/// and `:` are present, present, or absent) before either the value or the
+/// pattern grammar is consulted — not by trying all four kinds' `T::from_str`
+/// in a fixed order, which was this function's first shape and was wrong: a
+/// `DateTime::from_str` accepts a bare date with no time part
+/// (`crate::base::DateTime`'s own "date known to the month, not the day"
+/// reasoning, one type family over from `D3.18d`), so a plain `C_DATE`
+/// value like `"2024-06-15"` was silently reclassified as `C_DATE_TIME` —
+/// found by this function's own test, not by the corpus. Once the shape
+/// picks a kind, that kind's own `T::from_str` (already exercised by
+/// [`expect_temporal`]) or pattern validator must still accept `raw`, so an
+/// ordinary RM type name whose maximal [`is_iso8601_char`](super::cadl_lexer)
+/// run merely looks temporal — `PARTICIPATION` truncates to `"P"` — is
+/// still refused: see [`is_duration_pattern`]'s own documentation for why a
+/// bare `"P"` in particular does not pass.
+fn classify_temporal(raw: &str) -> Option<TemporalDispatch> {
+    let has_colon = raw.contains(':');
+    let has_dash = raw.contains('-');
+    let dispatch = if raw.starts_with('P') || raw.starts_with("-P") {
+        TemporalDispatch::Duration
+    } else if has_colon && has_dash {
+        TemporalDispatch::DateTime
+    } else if has_colon {
+        TemporalDispatch::Time
+    } else if has_dash {
+        TemporalDispatch::Date
+    } else {
+        return None;
+    };
+    let recognised = match dispatch {
+        TemporalDispatch::Duration => Duration::from_str(raw).is_ok() || is_duration_pattern(raw),
+        TemporalDispatch::DateTime => DateTime::from_str(raw).is_ok() || is_date_time_pattern(raw),
+        TemporalDispatch::Time => Time::from_str(raw).is_ok() || is_time_pattern(raw),
+        TemporalDispatch::Date => Date::from_str(raw).is_ok() || is_date_pattern(raw),
+    };
+    recognised.then_some(dispatch)
+}
+
+/// [`classify_temporal`]'s answer: which unwrapped `parse_*_primitive`
+/// function actually owns `raw`.
+enum TemporalDispatch {
+    Date,
+    Time,
+    DateTime,
+    Duration,
+}
+
+/// `YEAR_PATTERN: 'yyyy' | 'YYYY' | 'yyy' | 'YYY'` (`base_lexer.g4`) — the
+/// one pattern field with no `??`/`XX`/`xx` wildcard alternative and a
+/// three-or-four-character width, unlike every other field below.
+fn is_year_pattern(s: &str) -> bool {
+    matches!(s, "yyyy" | "YYYY" | "yyy" | "YYY")
+}
+
+/// `MONTH_PATTERN`/`DAY_PATTERN`/`HOUR_PATTERN`/`MINUTE_PATTERN`/
+/// `SECOND_PATTERN` (`base_lexer.g4`) all share one shape: the field
+/// letter doubled, either case, or a generic two-character wildcard
+/// (`??`, `XX`, `xx`) — `letter` is `b'm'`, `b'd'`, `b'h'`, or `b's'`
+/// (month and minute share `b'm'`, which is the grammar's own choice, not
+/// a simplification here).
+fn is_pattern_field(s: &str, letter: u8) -> bool {
+    let lower = [letter, letter];
+    let upper = [letter.to_ascii_uppercase(); 2];
+    s.as_bytes() == lower || s.as_bytes() == upper || matches!(s, "??" | "XX" | "xx")
+}
+
+/// `DATE_CONSTRAINT_PATTERN: YEAR_PATTERN '-' MONTH_PATTERN '-' DAY_PATTERN`.
+fn is_date_pattern(s: &str) -> bool {
+    let mut parts = s.split('-');
+    let (Some(y), Some(m), Some(d), None) = (parts.next(), parts.next(), parts.next(), parts.next()) else {
+        return false;
+    };
+    is_year_pattern(y) && is_pattern_field(m, b'm') && is_pattern_field(d, b'd')
+}
+
+/// `TIME_CONSTRAINT_PATTERN: HOUR_PATTERN ':' MINUTE_PATTERN ':'
+/// SECOND_PATTERN TZ_PATTERN?`. `TZ_PATTERN`'s `'±' ('hh'|'HH') …` form is
+/// not implemented (`±` is not ASCII and no corpus file this parser has
+/// seen uses it); its `'Z'` alternative is, since [`Duration`]'s siblings
+/// already read `Z` as a bare UTC marker elsewhere in this crate.
+fn is_time_pattern(s: &str) -> bool {
+    let mut parts = s.splitn(3, ':');
+    let (Some(h), Some(mi), Some(rest)) = (parts.next(), parts.next(), parts.next()) else {
+        return false;
+    };
+    if !is_pattern_field(h, b'h') || !is_pattern_field(mi, b'm') {
+        return false;
+    }
+    let seconds = rest.strip_suffix('Z').unwrap_or(rest);
+    is_pattern_field(seconds, b's')
+}
+
+/// `DATE_TIME_CONSTRAINT_PATTERN: DATE_CONSTRAINT_PATTERN 'T'
+/// TIME_CONSTRAINT_PATTERN`.
+fn is_date_time_pattern(s: &str) -> bool {
+    s.split_once('T').is_some_and(|(date, time)| is_date_pattern(date) && is_time_pattern(time))
+}
+
+/// `DURATION_CONSTRAINT_PATTERN: 'P' [yY]?[mM]?[Ww]?[dD]? ( 'T'
+/// [hH]?[mM]?[sS]? )?` — every field optional, so validity is "each
+/// character present names a field this pattern has not already named,
+/// and the fields appear in the grammar's own order", which
+/// [`matches_optional_letters`] checks directly rather than as a regular
+/// expression this crate would need a dependency to run (`plan.md`'s own
+/// open decision on `K15.10`, the reason no regex engine is in this
+/// crate's dependency graph at all).
+fn is_duration_pattern(s: &str) -> bool {
+    let Some(rest) = s.strip_prefix('P') else {
+        return false;
+    };
+    let (date_part, time_part) = match rest.split_once('T') {
+        Some((d, t)) => (d, Some(t)),
+        None => (rest, None),
+    };
+    // A bare `P` (both parts absent) is not refused by the grammar's own
+    // productions, but is never what a real archetype means, and rejecting
+    // it is what keeps a truncated RM type name like `PARTICIPATION` —
+    // whose own maximal `is_iso8601_char` run is exactly `"P"` — from
+    // being offered to this function as a false positive at all.
+    if date_part.is_empty() && time_part.is_none() {
+        return false;
+    }
+    matches_optional_letters(date_part, &['y', 'm', 'w', 'd'])
+        && time_part.is_none_or(|t| matches_optional_letters(t, &['h', 'm', 's']))
+}
+
+/// Whether every character of `s`, lower-cased, matches one of `letters`
+/// in order — each letter available at most once, none out of sequence.
+/// `""` matches vacuously (every field in the caller's group is legally
+/// absent); a character that is not in `letters`, or repeats one already
+/// consumed, does not. This is the whole of `DURATION_CONSTRAINT_PATTERN`'s
+/// per-group grammar (`[yY]?[mM]?[Ww]?[dD]?`, or `[hH]?[mM]?[sS]?`)
+/// expressed without a regex engine.
+///
+/// One shared iterator over `letters`, advanced by `any` rather than a
+/// hand-rolled counter: the first shape of this function tracked position
+/// with a `while … { next += 1; }` skip loop, and a single mutation of
+/// that `+=` hung the mutation-testing job for its full timeout instead of
+/// failing a test (`A-70`'s own lesson about a parser loop, one level
+/// down — no test can make an *infinite* loop assert anything, so the
+/// fix has to remove the loop's ability to fail to terminate, not add a
+/// test).
+fn matches_optional_letters(s: &str, letters: &[char]) -> bool {
+    let mut remaining = letters.iter();
+    s.chars()
+        .all(|c| remaining.by_ref().any(|&letter| letter == c.to_ascii_lowercase()))
 }
 
 /// `c_regular_object_ordered: sibling_order? c_regular_object ;`
@@ -1117,9 +1284,22 @@ fn archetype_slot(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
 // ---------------------------------------------------------------------
 
 /// The `CPrimitive` kind a wrapped `rm_type_id` names, if it is one of the
-/// foundation-type names this parser recognises (`org.openehr.base
-/// .foundation_types`), case-insensitively — real archetypes are not
-/// perfectly consistent about capitalising `Terminology_code`.
+/// nine foundation-type names this parser recognises (`org.openehr.base
+/// .foundation_types`) — matched **exactly**, not case-insensitively.
+///
+/// It was case-insensitive until the corpus found why that is wrong:
+/// `Reference/ISO_13606/Spanish_MOH/ADL_14/CEN-EN13606-CLUSTER.Muestra.v1.adls`
+/// wraps a genuine RM class spelled `DATE[id3]` (ISO 13606's own type, not
+/// openEHR's) around a `C_COMPLEX_OBJECT` with its own attributes;
+/// `"DATE".eq_ignore_ascii_case("Date")` treated it as the primitive
+/// instead, and the attempt to parse its first child attribute as a
+/// `c_inline_primitive_object` value failed as "`d` is not a valid
+/// `ISO8601_DATE`" — a real corpus refusal caused by this crate, not a
+/// limitation of it (`corpus.md`'s own second candidate, open since run 1;
+/// this is what closed it). No file in the corpus wraps a genuine
+/// primitive constraint in *any* casing of these nine names at all — every
+/// real archetype uses the unwrapped shorthand — so exact matching costs
+/// nothing measured and removes a real misparse.
 fn primitive_kind(rm_type_name: &str) -> Option<&'static str> {
     const KINDS: &[&str] = &[
         "Boolean",
@@ -1134,7 +1314,7 @@ fn primitive_kind(rm_type_name: &str) -> Option<&'static str> {
     ];
     KINDS
         .iter()
-        .find(|k| k.eq_ignore_ascii_case(rm_type_name))
+        .find(|k| **k == rm_type_name)
         .copied()
 }
 
@@ -1144,10 +1324,11 @@ fn primitive_kind(rm_type_name: &str) -> Option<&'static str> {
 /// `rm_type_hint`: `Some` for the wrapped form (`c_regular_primitive_object`,
 /// dispatched by the RM type name already read), `None` for the unwrapped
 /// shorthand under `c_objects` (dispatched by token shape instead — see
-/// [`starts_inline_primitive`], which only ever calls this with `None` for
-/// `Boolean`/`String`/`Integer`/`Real`/`Terminology_code` shapes — an
-/// unwrapped interval's kind is its first bound's token, `A-72`; the four
-/// temporal kinds are not reachable unwrapped in this parser at all).
+/// [`starts_inline_primitive`], reached with `None` for any of the nine
+/// kinds `c_inline_primitive_object` names, dispatched by token shape — an
+/// unwrapped interval's kind is its first bound's token (`A-72`), an
+/// unwrapped temporal literal or pattern is [`classify_temporal`]'s own
+/// answer (`A-75`)).
 ///
 /// The second element of the returned pair is the trailing assumed value
 /// (`'; ' <value>`), every one of the eight kinds' own grammar production
@@ -1159,12 +1340,12 @@ fn parse_inline_primitive(
     lexer: &mut Lexer<'_>,
     rm_type_hint: Option<&str>,
 ) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
-    match rm_type_hint {
-        // A `match` on the lowered name, not a chain of `if` guards: a
-        // guard can be mutated to `true` and route every kind to one
-        // parser, and the last guard's mutant was reachable by no test
-        // because `primitive_kind` only ever hands over these nine names.
-        Some(kind) => match kind.to_ascii_lowercase().as_str() {
+    // A `match` on the lowered name, not a chain of `if` guards: a guard
+    // can be mutated to `true` and route every kind to one parser, and the
+    // last guard's mutant was reachable by no test because `primitive_kind`
+    // only ever hands over these nine names.
+    if let Some(kind) = rm_type_hint {
+        return match kind.to_ascii_lowercase().as_str() {
             "boolean" => parse_boolean_primitive(lexer),
             "string" => parse_string_primitive(lexer),
             "integer" => parse_integer_primitive(lexer),
@@ -1178,37 +1359,51 @@ fn parse_inline_primitive(
                 lexer.offset(),
                 format!("`{other}` is not a primitive kind this parser recognises"),
             )),
+        };
+    }
+    // `A-75`: a temporal literal or pattern is checked before any
+    // token-shaped dispatch below, since its own leading digits would
+    // otherwise already match `Token::Integer`/`Token::Real`
+    // (`Lexer::next`'s ordinary tokenizer has no notion of `-` or `:`
+    // continuing a number) and its leading letters would otherwise fall
+    // through to "expected a primitive value".
+    if let Some(dispatch) = lexer.peek_iso8601().and_then(classify_temporal) {
+        return match dispatch {
+            TemporalDispatch::Date => parse_date_primitive(lexer),
+            TemporalDispatch::Time => parse_time_primitive(lexer),
+            TemporalDispatch::DateTime => parse_date_time_primitive(lexer),
+            TemporalDispatch::Duration => parse_duration_primitive(lexer),
+        };
+    }
+    match lexer.peek() {
+        Some(Token::Str(_)) => parse_string_primitive(lexer),
+        Some(Token::Symbol('[')) => parse_terminology_code_primitive(lexer),
+        Some(Token::Real(_)) => parse_real_primitive(lexer),
+        Some(Token::Integer(_)) => parse_integer_primitive(lexer),
+        // `A-72`: the kind of an unwrapped interval is its first bound's
+        // token kind — `INTEGER` for `integer_interval_value`, `REAL` for
+        // `real_interval_value` (`odin_values.g4`) — not an ambiguity a
+        // wrapping type name has to settle, which is what `A-67` wrongly
+        // stated. A bound that begins like an ISO 8601 literal (digits
+        // then `-` or `:`, or `P`) is a temporal interval, whose unwrapped
+        // form is refused by name.
+        Some(Token::Symbol('|')) => match lexer.peek_interval_bound() {
+            Some((_, raw)) if looks_iso8601(raw) => Err(CadlError::at(
+                lexer.offset(),
+                "an unwrapped temporal interval (a date, time, date-time, or duration bound with \
+                 no wrapping rm_type_id) is not implemented by this parser",
+            )),
+            Some((Token::Integer(_), _)) => parse_integer_primitive(lexer),
+            Some((Token::Real(_), _)) => parse_real_primitive(lexer),
+            Some((other, _)) => Err(CadlError::at(
+                lexer.offset(),
+                format!("expected an integer or real bound after `|`, found {other}"),
+            )),
+            None => Err(CadlError::at(lexer.offset(), "expected an interval bound after `|`, found end of input")),
         },
-        None => match lexer.peek() {
-            Some(Token::Str(_)) => parse_string_primitive(lexer),
-            Some(Token::Symbol('[')) => parse_terminology_code_primitive(lexer),
-            Some(Token::Real(_)) => parse_real_primitive(lexer),
-            Some(Token::Integer(_)) => parse_integer_primitive(lexer),
-            // `A-72`: the kind of an unwrapped interval is its first
-            // bound's token kind — `INTEGER` for `integer_interval_value`,
-            // `REAL` for `real_interval_value` (`odin_values.g4`) — not an
-            // ambiguity a wrapping type name has to settle, which is what
-            // `A-67` wrongly stated. A bound that begins like an ISO 8601
-            // literal (digits then `-` or `:`, or `P`) is a temporal
-            // interval, whose unwrapped form is refused by name.
-            Some(Token::Symbol('|')) => match lexer.peek_interval_bound() {
-                Some((_, raw)) if looks_iso8601(raw) => Err(CadlError::at(
-                    lexer.offset(),
-                    "an unwrapped temporal interval (a date, time, date-time, or duration bound with \
-                     no wrapping rm_type_id) is not implemented by this parser",
-                )),
-                Some((Token::Integer(_), _)) => parse_integer_primitive(lexer),
-                Some((Token::Real(_), _)) => parse_real_primitive(lexer),
-                Some((other, _)) => Err(CadlError::at(
-                    lexer.offset(),
-                    format!("expected an integer or real bound after `|`, found {other}"),
-                )),
-                None => Err(CadlError::at(lexer.offset(), "expected an interval bound after `|`, found end of input")),
-            },
-            _ if peek_keyword(lexer, "true") || peek_keyword(lexer, "false") => parse_boolean_primitive(lexer),
-            Some(other) => Err(CadlError::at(lexer.offset(), format!("expected a primitive value, found {other}"))),
-            None => Err(CadlError::at(lexer.offset(), "expected a primitive value, found end of input")),
-        },
+        _ if peek_keyword(lexer, "true") || peek_keyword(lexer, "false") => parse_boolean_primitive(lexer),
+        Some(other) => Err(CadlError::at(lexer.offset(), format!("expected a primitive value, found {other}"))),
+        None => Err(CadlError::at(lexer.offset(), "expected a primitive value, found end of input")),
     }
 }
 
@@ -1489,7 +1684,7 @@ fn parse_assumed_temporal<T: FromStr>(
 }
 
 macro_rules! temporal_primitive {
-    ($fn_list:ident, $fn_interval:ident, $fn_primitive:ident, $ty:ty, $what:literal, $variant:ident) => {
+    ($fn_list:ident, $fn_interval:ident, $fn_primitive:ident, $ty:ty, $what:literal, $variant:ident, $pattern_check:path) => {
         fn $fn_interval(lexer: &mut Lexer<'_>) -> Result<Interval<$ty>, CadlError> {
             let offset = lexer.offset();
             expect_symbol(lexer, '|')?;
@@ -1504,6 +1699,25 @@ macro_rules! temporal_primitive {
         }
 
         fn $fn_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
+            // `A-75`: `c_date`'s own grammar (and its three siblings')
+            // puts `*_CONSTRAINT_PATTERN` first among its alternatives,
+            // ahead of a value, a list, or an interval — checked here on
+            // the same terms, before anything below assumes the text
+            // ahead is a value. `$pattern_check` validates the *whole*
+            // raw run this peek captures, so a genuine value like
+            // `"2024-01-01"` (digits, not the pattern's bare letters)
+            // never matches it and falls through unchanged.
+            if let Some(raw) = lexer.peek_iso8601()
+                && $pattern_check(raw)
+            {
+                let raw = raw.to_owned();
+                // Consume exactly the run just validated — `peek_iso8601`
+                // and `read_iso8601` scan identically, so this cannot come
+                // back shorter or empty.
+                let _ = lexer.read_iso8601();
+                let assumed = parse_assumed_temporal::<$ty>(lexer, $what)?;
+                return Ok((CPrimitive::$variant { range: Vec::new(), pattern: Some(raw) }, assumed));
+            }
             let constraint = if matches!(lexer.peek(), Some(Token::Symbol('|'))) {
                 let range = $fn_interval(lexer)?;
                 if matches!(lexer.peek(), Some(Token::Symbol(','))) {
@@ -1537,15 +1751,32 @@ macro_rules! temporal_primitive {
     };
 }
 
-temporal_primitive!(_unused_date_list, parse_date_interval, parse_date_primitive, Date, "ISO8601_DATE", Date);
-temporal_primitive!(_unused_time_list, parse_time_interval, parse_time_primitive, Time, "ISO8601_TIME", Time);
+temporal_primitive!(
+    _unused_date_list,
+    parse_date_interval,
+    parse_date_primitive,
+    Date,
+    "ISO8601_DATE",
+    Date,
+    is_date_pattern
+);
+temporal_primitive!(
+    _unused_time_list,
+    parse_time_interval,
+    parse_time_primitive,
+    Time,
+    "ISO8601_TIME",
+    Time,
+    is_time_pattern
+);
 temporal_primitive!(
     _unused_date_time_list,
     parse_date_time_interval,
     parse_date_time_primitive,
     DateTime,
     "ISO8601_DATE_TIME",
-    DateTime
+    DateTime,
+    is_date_time_pattern
 );
 temporal_primitive!(
     _unused_duration_list,
@@ -1553,7 +1784,8 @@ temporal_primitive!(
     parse_duration_primitive,
     Duration,
     "ISO8601_DURATION",
-    Duration
+    Duration,
+    is_duration_pattern
 );
 
 #[cfg(test)]
@@ -1726,6 +1958,36 @@ mod tests {
         assert_eq!(
             leaf.assumed_value(),
             Some(&PrimitiveValue::Text("mm[Hg]".to_owned()))
+        );
+    }
+
+    /// The unwrapped boolean shorthand reached through `c_objects` itself
+    /// (`attr matches {true}`), not through a `C_ATTRIBUTE_TUPLE` row —
+    /// the path `starts_inline_primitive`'s own `true`/`false` keyword
+    /// checks actually gate. `A-75`'s mutation run found the `||` between
+    /// them reachable by no test: every prior unwrapped-boolean test went
+    /// through a tuple row's `c_primitive_tuple_item`, which calls
+    /// `parse_inline_primitive` directly and never consults
+    /// `starts_inline_primitive` at all.
+    #[test]
+    fn an_unwrapped_boolean_via_c_objects_is_a_c_boolean() {
+        let source = "CLUSTER[id1] matches { flag matches {true} }";
+        let root = parse_definition(source).unwrap();
+        let CObject::Primitive(leaf) = &root.attributes()[0].children()[0] else {
+            panic!("expected an unwrapped primitive Boolean");
+        };
+        assert_eq!(
+            leaf.constraint(),
+            &CPrimitive::Boolean { allow_true: true, allow_false: false }
+        );
+        let source = "CLUSTER[id1] matches { flag matches {false} }";
+        let root = parse_definition(source).unwrap();
+        let CObject::Primitive(leaf) = &root.attributes()[0].children()[0] else {
+            panic!("expected an unwrapped primitive Boolean");
+        };
+        assert_eq!(
+            leaf.constraint(),
+            &CPrimitive::Boolean { allow_true: false, allow_false: true }
         );
     }
 
@@ -2218,6 +2480,212 @@ mod tests {
         assert!(err.reason.contains("relop interval"), "{err}");
         let err = parse_definition("WHOLE[id1] matches { attr matches {|5 +/- 1|} }").unwrap_err();
         assert!(err.reason.contains("+/-"), "{err}");
+    }
+
+    /// The pattern validators directly, each against its own real corpus
+    /// spelling, its uppercase and `??`/`XX`/`xx` variants, and shapes that
+    /// must fail: a genuine value (digits, not letters), a truncated
+    /// prefix, and — for duration — the bare `"P"` that
+    /// `matches_optional_letters`'s own vacuous-match risk would otherwise
+    /// accept (`is_duration_pattern`'s own documentation).
+    #[test]
+    fn each_constraint_pattern_validator_matches_only_its_own_shape() {
+        for good in ["yyyy-mm-dd", "YYYY-MM-DD", "yyyy-??-??", "yyy-XX-xx"] {
+            assert!(is_date_pattern(good), "{good}");
+        }
+        for bad in ["2024-01-01", "yyyy-mm", "yy-mm-dd", "yyyy-mm-dd-dd", ""] {
+            assert!(!is_date_pattern(bad), "{bad}");
+        }
+        for good in ["hh:mm:ss", "HH:MM:SS", "??:??:??", "hh:mm:ssZ"] {
+            assert!(is_time_pattern(good), "{good}");
+        }
+        for bad in ["10:30:00", "hh:mm", "hh:mm:ss:ss", "", "hh:30:ss", "10:mm:ss"] {
+            assert!(!is_time_pattern(bad), "{bad}");
+        }
+        assert!(is_date_time_pattern("yyyy-??-??T??:??:??"));
+        assert!(!is_date_time_pattern("2024-01-01T10:00:00"));
+        assert!(!is_date_time_pattern("yyyy-mm-dd"));
+        // Exactly one side valid — `A-75`'s mutation run found `&&`
+        // mutated to `||` here reachable by no test, since every prior
+        // case had both sides agree.
+        assert!(!is_date_time_pattern("yyyy-mm-ddT10:30:00"));
+        assert!(!is_date_time_pattern("2024-01-01T??:??:??"));
+        for good in ["PY", "PYM", "PYMWD", "PTH", "PTHMS", "PYMWDTHMS"] {
+            assert!(is_duration_pattern(good), "{good}");
+        }
+        for bad in ["PT0S", "P1Y", "P", "PDY", "PTSM"] {
+            assert!(!is_duration_pattern(bad), "{bad}");
+        }
+    }
+
+    /// `matches_optional_letters` directly: skipping past an unmatched
+    /// candidate (needs the inner loop's own advance to actually run),
+    /// consuming a match (needs the outer advance to actually run, or a
+    /// repeated letter would wrongly re-match at the same position), case
+    /// folding, an out-of-order letter, and one outside the list.
+    #[test]
+    fn matches_optional_letters_requires_strict_order_and_no_repeats() {
+        let fields = ['y', 'm', 'w', 'd'];
+        assert!(matches_optional_letters("", &fields));
+        assert!(matches_optional_letters("y", &fields));
+        assert!(matches_optional_letters("Y", &fields));
+        // Skips `y` and `m` before matching `w` — the inner loop's own
+        // advance, not the outer one, must run to reach it.
+        assert!(matches_optional_letters("w", &fields));
+        assert!(matches_optional_letters("d", &fields));
+        assert!(matches_optional_letters("ymwd", &fields));
+        assert!(!matches_optional_letters("dy", &fields));
+        assert!(!matches_optional_letters("yy", &fields));
+        assert!(!matches_optional_letters("x", &fields));
+    }
+
+    /// `A-75`: `c_date`'s (and its three siblings') own grammar puts
+    /// `*_CONSTRAINT_PATTERN` first among its alternatives. Each kind,
+    /// wrapped, with and without a trailing assumed value; a genuine value
+    /// still parses as a value, not a pattern (`is_X_pattern` requires the
+    /// letters, not digits).
+    #[test]
+    fn a_wrapped_constraint_pattern_is_carried_for_all_four_temporal_kinds() {
+        let parse = |kind: &str, body: &str| {
+            let root =
+                parse_definition(&format!("WHOLE[id1] matches {{ attr matches {{ {kind}[id2] matches {{{body}}} }} }}"))
+                    .unwrap();
+            let CObject::Primitive(p) = &root.attributes()[0].children()[0] else {
+                panic!("expected a C_PRIMITIVE_OBJECT");
+            };
+            p.clone()
+        };
+        let date = parse("Date", "yyyy-mm-??");
+        assert_eq!(
+            date.constraint(),
+            &CPrimitive::Date { range: Vec::new(), pattern: Some("yyyy-mm-??".to_owned()) }
+        );
+        assert_eq!(date.assumed_value(), None);
+
+        let time = parse("Time", "??:??:??; 10:30:00");
+        assert_eq!(
+            time.constraint(),
+            &CPrimitive::Time { range: Vec::new(), pattern: Some("??:??:??".to_owned()) }
+        );
+        assert_eq!(time.assumed_value(), Some(&PrimitiveValue::Text("10:30:00".to_owned())));
+
+        let date_time = parse("Date_time", "yyyy-??-??T??:??:??");
+        assert_eq!(
+            date_time.constraint(),
+            &CPrimitive::DateTime { range: Vec::new(), pattern: Some("yyyy-??-??T??:??:??".to_owned()) }
+        );
+
+        let duration = parse("Duration", "PYMWDTHMS");
+        assert_eq!(
+            duration.constraint(),
+            &CPrimitive::Duration { range: Vec::new(), pattern: Some("PYMWDTHMS".to_owned()) }
+        );
+
+        // A genuine value still parses as one, not swallowed by the
+        // pattern check — `is_date_pattern` requires letters, and "2024"
+        // is digits.
+        let value = parse("Date", "2024-01-01");
+        let CPrimitive::Date { range, pattern: None } = value.constraint() else {
+            panic!("expected a value, not a pattern: {:?}", value.constraint());
+        };
+        assert_eq!(range.len(), 1);
+    }
+
+    /// `A-76`: `primitive_kind` used to match case-insensitively, so a
+    /// genuine RM class spelled `DATE` (ISO 13606's own type, not
+    /// openEHR's `Date` primitive) was wrongly treated as one — the exact
+    /// shape of `Reference/ISO_13606/Spanish_MOH/ADL_14/
+    /// CEN-EN13606-CLUSTER.Muestra.v1.adls`, which this reproduces without
+    /// the corpus. `DATE[id3] matches { date existence matches {1} \
+    /// matches {yyyy-mm-dd} }` must parse as a `C_COMPLEX_OBJECT` named
+    /// `DATE` with one attribute, `date`, not as a `C_PRIMITIVE_OBJECT`
+    /// whose value parse then fails on the attribute keyword itself. The
+    /// correctly cased `Date[id]` is unaffected.
+    #[test]
+    fn an_all_caps_rm_class_named_like_a_primitive_kind_is_not_taken_for_one() {
+        let source = "CLUSTER[id1] matches { items matches { \
+                       DATE[id3] matches { date existence matches {1} matches {yyyy-mm-dd} } } }";
+        let root = parse_definition(source).unwrap();
+        let CObject::Complex(inner) = &root.attributes()[0].children()[0] else {
+            panic!(
+                "expected a C_COMPLEX_OBJECT, not a primitive: {:?}",
+                root.attributes()[0].children()[0]
+            );
+        };
+        assert_eq!(inner.rm_type_name(), "DATE");
+        assert_eq!(inner.attributes()[0].rm_attribute_name(), "date");
+
+        // The correctly cased wrapped form is unaffected.
+        let source = "CLUSTER[id1] matches { items matches { \
+                       Date[id3] occurrences matches {1} matches {yyyy-mm-dd} } }";
+        let root = parse_definition(source).unwrap();
+        let CObject::Primitive(p) = &root.attributes()[0].children()[0] else {
+            panic!(
+                "expected a C_PRIMITIVE_OBJECT: {:?}",
+                root.attributes()[0].children()[0]
+            );
+        };
+        assert_eq!(
+            p.constraint(),
+            &CPrimitive::Date { range: Vec::new(), pattern: Some("yyyy-mm-dd".to_owned()) }
+        );
+    }
+
+    /// `A-75`'s unwrapped half: `c_inline_primitive_object` gives the
+    /// shorthand no narrower a set than the wrapped form has, so a bare
+    /// pattern or value under an attribute — no `Date[id]`/`Time[id]`
+    /// wrapper — dispatches by [`classify_temporal`], the corpus files'
+    /// own shape (`openehr-TEST_PKG-WHOLE.c_duration.adls`:
+    /// `duration_attr1 matches {PT0S}`, refused as "expected `[`, found
+    /// `}`" before this).
+    #[test]
+    fn an_unwrapped_temporal_literal_or_pattern_is_dispatched_by_classify_temporal() {
+        let attr = |body: &str| {
+            let root = parse_definition(&format!("WHOLE[id1] matches {{ attr matches {{{body}}} }}")).unwrap();
+            let CObject::Primitive(p) = &root.attributes()[0].children()[0] else {
+                panic!("expected a C_PRIMITIVE_OBJECT");
+            };
+            p.clone()
+        };
+        let CPrimitive::Duration { range, pattern: None } = attr("PT0S").constraint().clone() else {
+            panic!("expected a duration value: {:?}", attr("PT0S").constraint());
+        };
+        assert_eq!(range.len(), 1);
+        // A plain date has no `:`, so structural classification keeps it a
+        // `C_DATE` even though `DateTime::from_str` would also accept it
+        // (a date known to the day, with no time part) — the bug this
+        // test found in `classify_temporal`'s first shape.
+        assert!(
+            matches!(attr("2024-06-15").constraint(), CPrimitive::Date { range, pattern: None } if range.len() == 1),
+            "{:?}",
+            attr("2024-06-15").constraint()
+        );
+        assert!(matches!(attr("10:30:00").constraint(), CPrimitive::Time { .. }));
+        assert!(matches!(attr("2024-06-15T10:30:00Z").constraint(), CPrimitive::DateTime { .. }));
+        assert_eq!(
+            attr("yyyy-mm-??").constraint(),
+            &CPrimitive::Date { range: Vec::new(), pattern: Some("yyyy-mm-??".to_owned()) }
+        );
+
+        // An ordinary RM type name is unaffected: `PARTICIPATION`'s own
+        // `is_iso8601_char` run is `"P"` alone, which `classify_temporal`
+        // refuses to call a duration (`is_duration_pattern`'s own
+        // documentation on why a bare `"P"` is excluded).
+        let root = parse_definition(
+            "CLUSTER[id1] matches { items matches { PARTICIPATION[id2] occurrences matches {0..1} } }",
+        )
+        .unwrap();
+        assert_eq!(root.attributes()[0].children()[0].node_id(), Some("id2"));
+    }
+
+    #[test]
+    fn peek_iso8601_leaves_the_text_in_place() {
+        use super::super::cadl_lexer::Lexer;
+        let mut lexer = Lexer::new("  2024-01-01 matches");
+        assert_eq!(lexer.peek_iso8601(), Some("2024-01-01"));
+        assert_eq!(lexer.peek_iso8601(), Some("2024-01-01"));
+        assert_eq!(lexer.read_iso8601(), Some("2024-01-01"));
+        assert_eq!(lexer.next(), Some(Token::Word("matches".to_owned())));
     }
 
     /// The unwrapped boolean shorthand, reached through a tuple row —

@@ -53,11 +53,21 @@ impl core::fmt::Display for Token {
 const SYMBOLS: &str = "[]{}(),;|<>*=+-";
 
 /// Whether `c` can appear in an ISO8601 date/time/date-time/duration
-/// literal — see [`Lexer::read_iso8601`]'s own documentation.
+/// literal, or in one of the four `*_CONSTRAINT_PATTERN` tokens
+/// (`base_lexer.g4`) those same four kinds also admit (`A-75`) —
+/// `read_iso8601`/`peek_iso8601` read either shape as one raw run and
+/// leave classifying it (value or pattern, and which of the four kinds)
+/// to the parser. `X`/`x` joins the letter set here for `MONTH_PATTERN`'s
+/// (and its siblings') `XX`/`xx` wildcard spelling, alongside `?` for
+/// `??`, already present for `DATE_CONSTRAINT_PATTERN`'s own placeholder
+/// digits.
 fn is_iso8601_char(c: char) -> bool {
     c.is_ascii_digit()
         || matches!(c, '-' | ':' | '+' | '?' | ',')
-        || matches!(c.to_ascii_uppercase(), 'T' | 'Z' | 'P' | 'Y' | 'W' | 'D' | 'H' | 'S' | 'M')
+        || matches!(
+            c.to_ascii_uppercase(),
+            'T' | 'Z' | 'P' | 'Y' | 'W' | 'D' | 'H' | 'S' | 'M' | 'X'
+        )
 }
 
 pub(super) struct Lexer<'a> {
@@ -139,6 +149,16 @@ impl<'a> Lexer<'a> {
     /// resolve — it hands the result straight to `T::from_str`, the same as
     /// [`Self::next`] already does for a `Word`-shaped token elsewhere.
     pub(super) fn read_iso8601(&mut self) -> Option<&'a str> {
+        let text = self.peek_iso8601()?;
+        self.rest = &self.rest[text.len()..];
+        Some(text)
+    }
+
+    /// [`Self::read_iso8601`] without consuming — the same maximal run of
+    /// [`is_iso8601_char`], left in place, so a caller can classify it (a
+    /// value, a `*_CONSTRAINT_PATTERN`, or neither) before committing to
+    /// reading it (`A-75`, mirroring [`Self::peek_raw_path`]).
+    pub(super) fn peek_iso8601(&mut self) -> Option<&'a str> {
         self.skip_trivia();
         let mut end = 0;
         let mut chars = self.rest.char_indices().peekable();
@@ -155,9 +175,7 @@ impl<'a> Lexer<'a> {
         if end == 0 {
             return None;
         }
-        let text = &self.rest[..end];
-        self.rest = &self.rest[end..];
-        Some(text)
+        Some(&self.rest[..end])
     }
 
     /// Attempts to read a `CONTAINED_REGEXP`'s own delimited pattern —

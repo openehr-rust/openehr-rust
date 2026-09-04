@@ -318,6 +318,83 @@ The `.adl` column is unchanged in shape: 471 id-less objects and `matches
   them clinical, and the count will keep rising as other refusals fall.
   The decision is in `plan.md`; a requirement first.
 
+## Run 4 — 2026-09-04, after `A-75`
+
+- Corpus: unchanged, `093c77ea003742b9540e3dd377d615e2b26f2996`.
+- Crate: run 3's tree plus `A-75`: temporal `*_CONSTRAINT_PATTERN`s read
+  for all four kinds, wrapped or unwrapped, and the four temporal kinds
+  reachable unwrapped (`c_inline_primitive_object`'s own full grammar,
+  not the five-kind subset this parser used to admit).
+
+### Totals
+
+| Extension | Files | Parsed | Refused | No `definition` | Not UTF-8 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `.adls` | 1,379 | **959** (run 3: 916) | 419 | 1 | 2 |
+| `.adl` | 593 | 32 (run 3: 32) | 561 | 0 | 2 |
+
+The `d is not a valid ISO8601_DATE` category (14 files, all
+`Reference/ISO_13606`) and its duration sibling (1 file) both dropped —
+but not to zero, which is what led straight to `A-76`: one file still
+failed the same way, for a different reason `A-75` does not touch.
+
+### Refusals by stated reason, `.adls`, that changed
+
+| Files | Stated reason | Change |
+| ---: | --- | --- |
+| 5 (was 3) | an unwrapped temporal interval … is not implemented | Up: `A-75`'s unwrapped dispatch reaches more files that then meet the one remaining named refusal `A-72` already gives temporal interval bounds. |
+| 2 (new) | expected a primitive value, found `-` | Both `Reference/CKM_2013_12_09` and `Reference/Nehta_2014_04_25` copies of `openEHR-EHR-CLUSTER.symptom.v1`: `[{-3}, {[at49]}]`, a *negative* unwrapped integer tuple item. Not yet examined — likely `expect_signed_integer`'s own reach inside a tuple row versus the plain `c_objects` dispatch path this parser takes first. |
+
+## Run 5 — 2026-09-04, after `A-76`
+
+- Corpus: unchanged, `093c77ea003742b9540e3dd377d615e2b26f2996`.
+- Crate: run 4's tree plus `A-76`: `primitive_kind` matches exactly, not
+  case-insensitively.
+
+### Totals
+
+| Extension | Files | Parsed | Refused | No `definition` | Not UTF-8 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `.adls` | 1,379 | **967** (run 4: 959) | 411 | 1 | 2 |
+| `.adl` | 593 | 33 (run 4: 32) | 560 | 0 | 2 |
+
+The `ISO8601_DATE`/`ISO8601_DURATION` categories are gone entirely. One
+category rose in their place: `children require more occurrences than the
+cardinality permits` went from 1 to 8 files (7 in `.adls`, 7 in `.adl`,
+all `Reference/ISO_13606`) — not a regression, but the files parsing
+*further* than before and meeting a real `VACMCU` check the earlier
+misparse never let them reach. Not yet examined for whether the archetype
+or this parser's cardinality inference is at fault.
+
+### Findings runs 4 and 5 produced
+
+- **`A-75`** (fixed): temporal patterns and unwrapped temporal literals,
+  corpus run 1's candidates 1 and 5, closed together.
+- **`A-76`** (fixed): `primitive_kind`'s case-insensitive match, corpus run
+  1's candidate 2 — recorded as "not yet reproduced by a test" there, and
+  reproduced for real chasing `A-75`'s own residual refusal.
+
+### Candidates — status after run 5
+
+1. `DATE_CONSTRAINT_PATTERN`: **closed, `A-75`**.
+2. `primitive_kind` case-insensitivity: **closed, `A-76`**.
+3. Refusal names that are correct but unhelpful: **open**.
+4. Unwrapped interval kind: **closed, `A-72`**.
+5. Unwrapped temporal literals: **closed, `A-75`**.
+6. The `+/-` interval spelling: **open**, refused by name, still unused
+   in the corpus.
+7. **New — a negative unwrapped integer in a `C_ATTRIBUTE_TUPLE` row**
+   (`{-3}`), 2 files, `expected a primitive value, found`-``. Not yet
+   examined.
+8. **New — a `VACMCU` cardinality violation** surfaced by `A-76`, 8 files,
+   all ISO 13606. Not yet examined; may be the corpus's own defect, not
+   this parser's.
+
+### Decisions the run asks for
+
+- **Reference Model multiplicity** (runs 2–3, restated): still open,
+  `plan.md`.
+
 ## Trademarks
 
 openEHR® is the registered trademark of the openEHR Foundation and is used

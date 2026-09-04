@@ -119,13 +119,19 @@ before the code does.
   section — and does not build an `Archetype`. `am::cadl::parse_definition`
   reads `definition`'s own grammar rule, `c_complex_object`
   (`openEHR/adl-antlr`, `cadl2.g4`) — the constraint tree itself, refusing
-  what it does not implement by name (`K15.6`, `K15.7`). As of 2026-09-03
-  (`A-62`–`A-67`, `A-72`, `A-73`) that is every node kind but
-  `SIBLING_ORDER`, and every primitive form but a date pattern
-  (`yyyy-mm-??`), an unwrapped *temporal* interval, the `+/-` interval
-  spelling, `default_value`, and more than one disjoint numeric or
-  temporal range (see the module's own documentation for the exact boundary
-  and why each one is drawn where it is). It reads
+  what it does not implement by name (`K15.6`, `K15.7`). As of 2026-09-04
+  (`A-62`–`A-67`, `A-72`–`A-76`) that is every node kind but
+  `SIBLING_ORDER`, and every primitive form but an unwrapped *temporal*
+  interval, the `+/-` interval spelling, `default_value`, and more than
+  one disjoint numeric or temporal range (see the module's own
+  documentation for the exact boundary and why each one is drawn where it
+  is). A temporal `*_CONSTRAINT_PATTERN` (`yyyy-mm-??`, `??:??:??`) is now
+  read for all four kinds, wrapped or unwrapped, carried and not evaluated
+  (`A-75`; `K15.18`'s own "no partial pass" governs what a governed node
+  reports), and a wrapped `rm_type_id` is matched against a primitive kind
+  name exactly, not case-insensitively, so a genuine RM class spelled like
+  one — `DATE`, ISO 13606's own type — is read as the `C_COMPLEX_OBJECT`
+  it is (`A-76`). It reads
   `definition` alone, still cannot build an
   `Archetype` (no `language`, no `terminology`, so a node id it reads names
   nothing), and does not read the header either — the two additions do not
