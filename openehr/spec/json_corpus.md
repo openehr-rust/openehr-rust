@@ -92,7 +92,7 @@ and several of them turn out to carry a real, separate violation
 ### What did not parse, examined file by file
 
 Every one of the 28 remaining files was read, not merely categorised.
-Twenty-four are out of scope or deliberately invalid; three are `A-80`'s
+Twenty-four are out of scope or deliberately invalid; three are `A-02`'s
 own open finding; one is `HIER_OBJECT_ID`'s own already-tested grammar
 correctly refusing two fixture files' inconsistency.
 
@@ -104,7 +104,7 @@ correctly refusing two fixture files' inconsistency.
 | 1 | `composition_with_dvinterval_composite.json`: `content` is a JSON object, not an array | **Not a defect.** `COMPOSITION.content` is `List<CONTENT_ITEM>` unambiguously; a map there is malformed regardless of implementation. |
 | 1 | `invalid.json`: a garbage date value, a literal key named `BAD-----------`, an empty `uid` | **Deliberately invalid**, the file's own name says so — the same shape as the ADL corpus's own `validity` directory. |
 | 2 | `cardinality_of_section__full.json`, `nested.en.v1.json`: `uid` is tagged `HIER_OBJECT_ID` but its value has two `::` separators (`uuid::ehrdb::1`), the shape of an `OBJECT_VERSION_ID` | **The fixture's own inconsistency, not a defect.** `HIER_OBJECT_ID` admits at most one `::` extension (already tested, `hier_object_id_rejects_a_double_colon_extension`); a value shaped like a different type under this type's tag is wrong regardless of implementation. |
-| 3 | `all_types_no_multimedia.json` and two siblings: `DV_DATE.value` is `"20190114"`, ISO 8601's basic format | **`A-80`, open.** `D3.13a` refuses this deliberately, on two grounds; one of them ("does not appear in openEHR canonical JSON") is false, per exactly these three files. See `audit.md`. |
+| 3 | `all_types_no_multimedia.json` and two siblings: `DV_DATE.value` is `"20190114"`, ISO 8601's basic format | **`A-02`, open.** `D3.13a` refuses this deliberately, on two grounds; one of them ("does not appear in openEHR canonical JSON") is false, per exactly these three files. See `audit.md`. |
 
 ### Findings this run produced
 
@@ -112,7 +112,7 @@ correctly refusing two fixture files' inconsistency.
   though `openEHR/adl-antlr`'s own grammar names it. 21 files.
 - **`A-79`** (fixed): `TEMPLATE_ID` refused whitespace the specification
   never asked it to. 8 files.
-- **`A-80`** (classified, open): `D3.13a`'s own supporting claim was false;
+- **`A-02`** (classified, open): `D3.13a`'s own supporting claim was false;
   the refusal and its other ground stand pending an actual design
   decision. 3 files.
 
@@ -134,7 +134,7 @@ two files. None examined yet.
    `archetype_details` before concluding either way.
 2. **The other four invariants**, one or two files each. Not yet
    examined.
-3. **`A-80`'s own design question**: is `20240517` genuinely ambiguous
+3. **`A-02`'s own design question**: is `20240517` genuinely ambiguous
    with a bare year `2024` the way `D3.13a` states, given that a basic
    date always carries eight digits and a year-only value never does? A
    requirement change, not a quick parser fix, and not this file's call.

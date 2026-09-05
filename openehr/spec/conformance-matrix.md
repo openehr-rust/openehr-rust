@@ -173,7 +173,7 @@ Process requirements; they govern this specification rather than the code.
 | I2.11 | • | `object_id::tests::version_id_round_trips_exactly` |
 | I2.12–I2.13 | • | doctest on `VersionTreeId` |
 | I2.14–I2.15 | • | `object_id::tests::archetype_id_rejects_malformed_forms` |
-| I2.16 | • | doctest on `TemplateId` |
+| I2.16 | • | doctest on `TemplateId`; `object_id::tests::a_template_id_may_contain_whitespace` (`A-79`) |
 | I2.17 | • | doctest on `TerminologyId` |
 | I2.18 | • | doctest on `GenericId` |
 | I2.19 | • | `invariants::a_uid_field_admits_only_the_two_uid_based_classes` |
@@ -195,6 +195,7 @@ Process requirements; they govern this specification rather than the code.
 | D3.6 | • | `invariants::a_term_mapping_match_is_one_of_four_characters` |
 | D3.7–D3.8 | • | `text::tests::rubric_checking_reports_unchecked_separately_from_valid` |
 | D3.9–D3.10 | • | `iso8601::tests::partial_dates_keep_their_precision_and_text`; `canonical_json::partial_dates_and_negative_durations_survive_verbatim` |
+| D3.10b | • | `iso8601::tests::a_comma_decimal_sign_is_accepted_like_a_full_stop`, `…a_durations_comma_decimal_sign_is_accepted_like_a_full_stop` (`A-78`) |
 | D3.11 | • | `iso8601::tests::leap_day_validity_follows_the_gregorian_rule` |
 | D3.12 | • | `invariants::a_leap_second_is_accepted_and_a_sixty_first_is_not` |
 | D3.13 | • | `iso8601::tests::durations_round_trip_and_reject_disorder` |

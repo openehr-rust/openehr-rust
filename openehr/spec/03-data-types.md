@@ -90,7 +90,7 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
 - **D3.13a** The extended ISO 8601 format is required; the basic format
   (`20240517`) MUST be refused, and accepting it would make `2024` ambiguous.
   Recorded as a limitation in [`audit.md`](audit.md). *Corrected 2026-09-05
-  (`A-80`)*: this requirement previously also claimed the basic format "does
+  (`A-02`)*: this requirement previously also claimed the basic format "does
   not appear in openEHR canonical JSON" — false, and known false rather than
   merely unverified: `EHRbase`'s own reference test corpus writes
   `DV_DATE.value` as `"20190114"` in three real fixtures

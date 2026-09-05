@@ -221,14 +221,16 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         `ehrbase/openEHR_SDK`'s own canonical-JSON reference fixtures at
         `e57511c`, results in
         [`openehr/spec/json_corpus.md`](openehr/spec/json_corpus.md).
-        Three findings from it: `A-78` (a comma decimal sign in a
+        Two findings from it: `A-78` (a comma decimal sign in a
         fractional second, refused though openEHR's own ADL grammar names
         it — 21 of 57 fixtures) and `A-79` (`TEMPLATE_ID` refusing
-        whitespace a real template name needs) fixed the same day; `A-80`
-        left open (`D3.13a`'s own supporting claim was false, but the
-        refusal it explains needs an actual design decision, not a
-        same-day fix). "Better's web-template test compositions" named in
-        this item's own text turned out not to fit: WebTemplate is a
+        whitespace a real template name needs) fixed the same day; a third
+        needed no new number — the run also falsified one of the two
+        grounds `A-02` (already open, "ISO 8601 basic format refused")
+        gives for its own refusal, corrected in place rather than left
+        standing on a claim now known false. "Better's web-template test
+        compositions" named in this item's own text turned out not to fit:
+        WebTemplate is a
         simplified, non-canonical format this crate has no reader for
         (`K15.14`–`K15.17`, not implemented), so running it through
         `validate()` would test nothing real — noted rather than forced.
