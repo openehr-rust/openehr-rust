@@ -194,6 +194,7 @@ Process requirements; they govern this specification rather than the code.
 | D3.5 | • | `invariants::a_code_phrase_needs_a_terminology_and_a_code` |
 | D3.6 | • | `invariants::a_term_mapping_match_is_one_of_four_characters` |
 | D3.7–D3.8 | • | `text::tests::rubric_checking_reports_unchecked_separately_from_valid` |
+| D3.7a | open | `A-81` — a non-English rubric is reported as a violation rather than unchecked, the crate's own English-only table having no way to tell the two apart |
 | D3.9–D3.10 | • | `iso8601::tests::partial_dates_keep_their_precision_and_text`; `canonical_json::partial_dates_and_negative_durations_survive_verbatim` |
 | D3.10b | • | `iso8601::tests::a_comma_decimal_sign_is_accepted_like_a_full_stop`, `…a_durations_comma_decimal_sign_is_accepted_like_a_full_stop` (`A-78`) |
 | D3.11 | • | `iso8601::tests::leap_day_validity_follows_the_gregorian_rule` |

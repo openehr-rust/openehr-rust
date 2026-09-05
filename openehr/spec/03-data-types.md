@@ -62,6 +62,19 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
 - **D3.8** Where a code appears in more than one openEHR terminology group with
   different rubrics, agreement with **any** group MUST be accepted: a bare
   `DV_CODED_TEXT` does not know which attribute it sits on.
+- **D3.7a** *(added 2026-09-05)* `D3.7`'s own "report *not checked*, never a
+  false violation" principle is not yet met for a non-English record: this
+  crate's rubric table carries the **English** rubric only, and the check does
+  not know the enclosing record's own declared `language` — so a valid
+  Spanish rubric (`"evento"` for openEHR's own code `433`, whose English
+  rubric is `"event"`) is reported as a *violation*, not as *unchecked*,
+  which is exactly the false claim `D3.7` says not to make, just in the
+  refusing direction rather than the accepting one. Found running the JSON
+  corpus (`EHRbase`'s own `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`,
+  declared `language: es`), recorded as `A-81`, open: closing it needs
+  either threading the record's language through the validation walk and
+  reporting unchecked for anything but English, or sourcing and citing real
+  multi-language rubric data — a decision, not a same-day fix.
 
 ## Dates, times, and durations
 

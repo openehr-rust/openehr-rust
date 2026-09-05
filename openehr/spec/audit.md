@@ -15,8 +15,8 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**79 findings, 79 in the table below: 7 High, 43 Medium, 29 Low. 73 fixed or
-classified, 6 open.** These counts are checked against the table by CI
+**80 findings, 80 in the table below: 7 High, 44 Medium, 29 Low. 73 fixed or
+classified, 7 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
 verified), and the check should have failed. Every one of the 6 open findings
@@ -166,6 +166,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-77 | Low | A negative unwrapped `integer_value`/`real_value` (`{-3}`, a `C_ATTRIBUTE_TUPLE` row item; also a plain `attr matches {-3}`) was refused as "expected a primitive value, found `-`": the leading `-` tokenizes as `Symbol('-')` on its own, and neither `starts_inline_primitive` nor `parse_inline_primitive`'s dispatch had a case for it — found in `DV_ORDINAL`'s own canonical `[value, symbol]` tuple, `openEHR-EHR-CLUSTER.symptom.v1` (both the CKM and NEHTA copies), corpus run 5's own new candidate | **fixed** — `Lexer::peek_after_sign`, a two-token lookahead past a leading `+`/`-` to the token the ordinary tokenizer would read next, without consuming either; both call sites use it, and a negative *duration* (`-PT1H`) is unaffected, already reached through the temporal check ahead of it |
 | A-78 | Medium | `Time`/`DateTime`/`Duration::from_str` accepted only `.` as a fractional-second decimal sign, though `openEHR/adl-antlr`'s own `fragment SECOND_DEC_SEP : '.' \| ',' ;` (`base_lexer.g4`) states both, and ISO 8601 itself permits either — found running `EHRbase`'s own reference canonical-JSON test corpus (`tests/json_corpus.rs`, the JSON half of `tasks.md`'s external-corpus item): 21 of 57 real fixtures write `,` and none of them parsed | **fixed** (`D3.10b`) — the fractional-second split in `Time::from_str` and the decimal-sign check in `Duration::from_str`'s scanner both accept either character; the exact input text, separator included, is still what `Display` prints either way (`D3.10`), since neither type ever reconstructs its `Display` form from the parsed digits |
 | A-79 | Medium | `TEMPLATE_ID` refused any value containing whitespace (`I2.16`), though openEHR gives its lexical form as "to be determined" and the requirement's own reasoning already warned that "inventing a stricter grammar would reject valid identifiers from conformant tools" — found by exactly that: `EHRbase`'s own corpus names a real template `Virologischer Befund`, refused by every version of this crate before this fix, in 8 of 57 fixtures | **fixed** — the whitespace check is removed; only emptiness is refused, the one floor `I2.16`'s reasoning actually supports. `I2.16`'s text corrected in place, id unchanged (`C0.5`) |
+| A-81 | Medium | `DV_CODED_TEXT.check_openehr_rubric` compares `value` against an **English-only** rubric table (`terminology::Group::rubric`'s own doc comment already says so), with no way to know the enclosing record's declared `language` — so a valid Spanish rubric (`"evento"` for openEHR code `433`, English `"event"`) is reported as a `Value_is_rubric` *violation*, not *unchecked*, which is exactly the false claim `D3.7` says this check must never make, in the refusing direction. Found running the JSON corpus: `EHRbase`'s own `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, declared `language: es` | **open, by decision** — closing it needs either threading the record's language through the validation walk and reporting unchecked for anything but English, or sourcing and citing real multi-language rubric data; new `D3.7a` states the gap |
 
 
 ---
@@ -4662,3 +4663,47 @@ wrong text is not simply deleted.
 verbatim, alongside the existing empty-string refusal; the crate-level
 doctest on `TemplateId` itself now demonstrates acceptance rather than
 refusal.
+
+## A-81 — a non-English rubric is reported as a violation, not unchecked
+
+**Severity: Medium. Status: open, by decision.**
+
+**Found running the JSON corpus's own third pass** — after `A-78` and
+`A-79` closed, the fixtures that still fail `validate()` rather than
+`serde_json` were read one invariant at a time
+(`openehr/spec/json_corpus.md`). `Value_is_rubric` fired on `EHRbase`'s
+own `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, which declares
+`language: {terminology_id: ISO_639-1, code_string: es}` and writes its
+`COMPOSITION.category` as `{"value": "evento", "defining_code": {…,
+"code_string": "433"}}` — Spanish for "event", openEHR's own English
+rubric for code `433`.
+
+`DvCodedText::check_openehr_rubric` compares `value` against
+`terminology::Group::rubric`, whose own doc comment already says plainly:
+"The **English** rubric, as it appears in `DV_CODED_TEXT.value`." The
+table has one language. Nothing in the check knows, or asks, what
+language the enclosing record declares, so a Spanish rubric is compared
+against an English string, disagrees, and is reported as a violation.
+
+**This is not merely an incomplete data table — it contradicts `D3.7`'s
+own already-stated principle.** `D3.7` requires reporting *not checked*
+as an outcome distinct from *valid*, specifically because "reporting an
+unchecked external code as valid would be a claim about a terminology the
+crate cannot see." The same reasoning runs the other way: reporting a
+*violation* for a code the crate cannot check in the record's actual
+language is a claim about a terminology the crate cannot see, just phrased
+as a refusal instead of an acceptance. A Spanish-language clinical record
+using openEHR's own terminology correctly is told it is wrong.
+
+**Open, by decision, not fixed today.** Two real paths close it, and
+neither is a same-day patch: thread the record's own declared `language`
+down to `check_coded_text` (a real plumbing change — the check currently
+runs several structural layers below where `COMPOSITION.language` is
+known) and report *unchecked* rather than a violation whenever the
+declared language is not the one language this crate's table carries; or
+source and cite real rubric text for the languages openEHR itself
+publishes, the same sourcing discipline `03-data-types.md`'s own
+"Where the quantity invariants come from" section already holds itself
+to — not something to approximate from a single corpus fixture. New
+`D3.7a` states the gap in the specification itself, since `D3.7` alone
+now reads as satisfied when it is not, for any language but English.

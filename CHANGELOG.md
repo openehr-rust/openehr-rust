@@ -7,6 +7,12 @@ together.
 
 ## Unreleased
 
+- Documented, not fixed: `DV_CODED_TEXT.check_openehr_rubric` reports a
+  violation, not *unchecked*, for a valid rubric written in any language
+  but English, because the rubric table this crate carries has only one.
+  See `A-81`/`D3.7a` in `openehr/spec/audit.md` — found running the JSON
+  corpus against a Spanish-language `EHRbase` fixture. No code change;
+  recorded so the gap is visible rather than silently passed over.
 - `base::iso8601::Time`/`DateTime`/`Duration` now accept `,` alongside `.`
   as a fractional second's decimal sign, per `openEHR/adl-antlr`'s own
   `SECOND_DEC_SEP : '.' | ',' ;` (`base_lexer.g4`) — refused before, though

@@ -224,13 +224,17 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         Two findings from it: `A-78` (a comma decimal sign in a
         fractional second, refused though openEHR's own ADL grammar names
         it — 21 of 57 fixtures) and `A-79` (`TEMPLATE_ID` refusing
-        whitespace a real template name needs) fixed the same day; a third
+        whitespace a real template name needs) fixed the same day; one
         needed no new number — the run also falsified one of the two
         grounds `A-02` (already open, "ISO 8601 basic format refused")
         gives for its own refusal, corrected in place rather than left
-        standing on a claim now known false. "Better's web-template test
-        compositions" named in this item's own text turned out not to fit:
-        WebTemplate is a
+        standing on a claim now known false; a fourth, `A-81`, examined
+        every invariant `validate()` reported on a parsing file and found
+        one real gap — a correct Spanish rubric reported as a violation,
+        not *unchecked*, because the rubric table this crate carries is
+        English-only — left open by decision, with a new `D3.7a`. "Better's
+        web-template test compositions" named in this item's own text
+        turned out not to fit: WebTemplate is a
         simplified, non-canonical format this crate has no reader for
         (`K15.14`–`K15.17`, not implemented), so running it through
         `validate()` would test nothing real — noted rather than forced.

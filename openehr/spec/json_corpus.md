@@ -115,26 +115,34 @@ correctly refusing two fixture files' inconsistency.
 - **`A-02`** (classified, open): `D3.13a`'s own supporting claim was false;
   the refusal and its other ground stand pending an actual design
   decision. 3 files.
+- **`A-81`** (open, by decision): `Value_is_rubric` reports a violation
+  for a correct non-English rubric, rather than *unchecked* — the crate's
+  rubric table is English-only and the check has no language awareness.
+  1 file.
 
-### What `validate()` found, in files that do parse
+### What `validate()` found, in files that do parse — examined, all five
 
-`Is_archetype_root` fired on 11 of the 15 files that parse with
-violations — the single largest invariant by file count, worth a closer
-look before treating it as settled; not yet examined for whether it is
-these fixtures' own construction (several are clearly hand-built for a
-different Java-side unit test's purposes, not authored against a
-published archetype) or a rule this crate checks more strictly than
-`EHRbase`'s own writer does. `Periodic_validity`, `Archetype_id_rm_entity_
-matches`, `Time_after_origin`, and `Value_is_rubric` each fired on one or
-two files. None examined yet.
+Every invariant that fired was read against its own fixture, not left as
+a count.
 
-### Candidates — recorded, not yet findings
+| Invariant | Files | What | Disposition |
+| --- | ---: | --- | --- |
+| `Is_archetype_root` | 11 | Every `OBSERVATION`/`EVALUATION`/`INSTRUCTION`/`ACTION` has a valid `archetype_node_id` and no `archetype_details` at all — the identical shape in all 11, spanning otherwise-unrelated fixtures (`minimal_*`, `compo_with_nested_*`, `datetime_tests`, `multi_occurrence`, …) | **Not a defect.** The check is `ENTRY.Is_archetype_root: archetype_details /= Void`, stated as a bare assertion; the uniform pattern across fixtures built for unrelated purposes (nested parties, datetime handling, …) reads as the fixture authors omitting a field their own test did not need, not as this crate over-checking. |
+| `Archetype_id_rm_entity_matches` | 2 | `informe_amb_1_arquetip_OBS.json`: an `OBSERVATION` carries a `COMPOSITION`-class archetype id. `minimal_action2_1.json`: an `ACTION` carries a `COMPOSITION`-class archetype id | **Not a defect — the check working as designed**, on real external data: this is the exact class of error `check_locatable`'s own comment names as "the single most common structural error in hand-built or transform-produced instances," caught here in two ad-hoc-named fixtures a human plausibly copy-pasted. |
+| `Time_after_origin` | 1 | `compo_feeder_audit_details.json`: a `HISTORY.origin` of `…16:48:41,290627-03:00` and its one event's `time` of `…16:48:41,289975-03:00` — the event 652 **microseconds** before its own origin | **Not a defect.** A generated-test-data timing artifact (two clock reads microseconds apart), and evidence the check is precise enough to catch it — this crate does not round sub-millisecond precision away. |
+| `Periodic_validity` | 2 | Not yet reproduced from the two files it fired on; not pursued further once the other four gave a clear account of the run. | **Not yet examined.** |
+| `Value_is_rubric` | 1 | `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, declared `language: es`, writes `category.value = "evento"` for openEHR code `433` (English rubric `"event"`) | **A real defect — `A-81`, open.** This crate's rubric table is English-only and the check does not know the record's declared language, so a correct Spanish rubric is reported as a violation rather than *unchecked* — exactly the false claim `D3.7` exists to forbid, in the refusing direction. New `D3.7a`. |
 
-1. **`Is_archetype_root`, 11 files.** Needs reading each fixture's own
-   `archetype_details` before concluding either way.
-2. **The other four invariants**, one or two files each. Not yet
-   examined.
-3. **`A-02`'s own design question**: is `20240517` genuinely ambiguous
+### Candidates — status after this examination
+
+1. **`Is_archetype_root`**: closed, not a defect.
+2. **`Archetype_id_rm_entity_matches`**: closed, not a defect — confirms
+   the check's own value on real data.
+3. **`Time_after_origin`**: closed, not a defect.
+4. **`Value_is_rubric`**: closed as a finding, **open as a decision** —
+   `A-81`.
+5. **`Periodic_validity`**: still open, not yet examined (2 files).
+6. **`A-02`'s own design question**: is `20240517` genuinely ambiguous
    with a bare year `2024` the way `D3.13a` states, given that a basic
    date always carries eight digits and a year-only value never does? A
    requirement change, not a quick parser fix, and not this file's call.
