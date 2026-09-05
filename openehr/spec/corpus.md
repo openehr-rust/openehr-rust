@@ -1,6 +1,9 @@
 # External corpus runs — `am::cadl::parse_definition`
 
-**Not normative, and not a gate.** This file records what happened when
+**Not normative, and not a gate.** This is the archetype half of
+`tasks.md`'s "run an external corpus" item; [`json_corpus.md`](json_corpus.md)
+is the other half, canonical JSON compositions against
+`serde_json → Composition → Validate`. This file records what happened when
 archetypes nobody in this repository wrote were run through the
 `definition` reader: how many parsed, how many were refused and under which
 stated reason, and which refusals turned out to be this crate's defects

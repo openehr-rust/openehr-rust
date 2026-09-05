@@ -696,15 +696,20 @@ crate::impl_valued_serde!(ArchetypeId, "ARCHETYPE_ID");
 /// A template identifier.
 ///
 /// openEHR states the lexical form as "to be determined", so this type stores
-/// the text verbatim and requires only that it be non-empty and free of
-/// whitespace. Inventing a stricter grammar would reject valid identifiers from
-/// conformant tools; accepting anything at all, including an empty string,
-/// would let a missing template id look like a present one.
+/// the text verbatim and requires only that it be non-empty — accepting
+/// anything at all, including an empty string, would let a missing template
+/// id look like a present one (`I2.16`).
+///
+/// A whitespace restriction stood here until `A-79`: real template ids do
+/// contain spaces (`EHRbase`'s own `Virologischer Befund`, found running its
+/// reference test corpus, `tests/json_corpus.rs`), so refusing them was
+/// exactly the invented stricter grammar this type's own reasoning already
+/// warned against — see `I2.16`'s own corrected text.
 ///
 /// ```
 /// use openehr::base::TemplateId;
 ///
-/// assert!("Blood pressure.v1".parse::<TemplateId>().is_err()); // whitespace
+/// assert!("Virologischer Befund".parse::<TemplateId>().is_ok());
 /// assert!("blood_pressure.v1".parse::<TemplateId>().is_ok());
 /// assert!("".parse::<TemplateId>().is_err());
 /// ```
@@ -730,13 +735,10 @@ impl FromStr for TemplateId {
 
     /// # Errors
     ///
-    /// Returns [`ParseError`] if the text is empty or contains whitespace.
+    /// Returns [`ParseError`] if the text is empty.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.is_empty() {
             return Err(ParseError::new("TEMPLATE_ID", "empty", s));
-        }
-        if s.chars().any(char::is_whitespace) {
-            return Err(ParseError::new("TEMPLATE_ID", "contains whitespace", s));
         }
         Ok(Self(s.to_owned()))
     }
@@ -1239,6 +1241,18 @@ mod tests {
         ] {
             assert_eq!(text.parse::<ObjectVersionId>().unwrap().to_string(), text);
         }
+    }
+
+    /// `I2.16`, `A-79`: a template id containing whitespace round-trips
+    /// exactly, the same as any other text this type stores verbatim — real
+    /// tools publish ones that do (`EHRbase`'s own `Virologischer Befund`).
+    /// Only emptiness is refused.
+    #[test]
+    fn a_template_id_may_contain_whitespace() {
+        for text in ["Virologischer Befund", "Blood pressure.v1", "blood_pressure.v1"] {
+            assert_eq!(text.parse::<TemplateId>().unwrap().as_str(), text);
+        }
+        assert!("".parse::<TemplateId>().is_err());
     }
 
     #[test]

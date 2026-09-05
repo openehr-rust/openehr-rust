@@ -216,11 +216,29 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         and `A-71` (an unstated `occurrences`, two thirds of every refusal;
         `K15.32`), taking parsed `.adls` from 178 to 774 of 1,379. Run 2
         recorded there with the next candidates.
-      - [ ] The JSON half (SDK examples, web-template compositions).
+      - [x] 2026-09-05: the JSON half, first run.
+        `openehr/tests/json_corpus.rs` (ignored; `OPENEHR_JSON_CORPUS`) over
+        `ehrbase/openEHR_SDK`'s own canonical-JSON reference fixtures at
+        `e57511c`, results in
+        [`openehr/spec/json_corpus.md`](openehr/spec/json_corpus.md).
+        Three findings from it: `A-78` (a comma decimal sign in a
+        fractional second, refused though openEHR's own ADL grammar names
+        it — 21 of 57 fixtures) and `A-79` (`TEMPLATE_ID` refusing
+        whitespace a real template name needs) fixed the same day; `A-80`
+        left open (`D3.13a`'s own supporting claim was false, but the
+        refusal it explains needs an actual design decision, not a
+        same-day fix). "Better's web-template test compositions" named in
+        this item's own text turned out not to fit: WebTemplate is a
+        simplified, non-canonical format this crate has no reader for
+        (`K15.14`–`K15.17`, not implemented), so running it through
+        `validate()` would test nothing real — noted rather than forced.
       - [ ] `spec_refs` per conformance case, and the index.
-      - [ ] The regression job. Blocked on a corpus this tree may carry:
-        `adl-archetypes` has no licence file, so it is read where it is,
-        never vendored (see `corpus.md` §Licence).
+      - [ ] The regression job, either half. Blocked on a corpus this tree
+        may carry: `adl-archetypes` has no licence file (`corpus.md`
+        §Licence); `openEHR_SDK` is Apache-2.0 and could be vendored, but
+        is read where it is instead, for consistency with the other half
+        (`json_corpus.md` §Licence) rather than because the licence
+        requires it.
 - [x] **Close the corpus's open candidates, largest first** (`corpus.md`
       §Candidates; each needs its test and grammar reading before an `A-`
       number, `W0.19`). *Done 2026-09-03, run 3 (916 of 1,379 parsed):*

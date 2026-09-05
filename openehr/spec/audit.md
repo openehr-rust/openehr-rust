@@ -15,8 +15,8 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**77 findings, 77 in the table below: 7 High, 41 Medium, 29 Low. 71 fixed or
-classified, 6 open.** These counts are checked against the table by CI
+**80 findings, 80 in the table below: 7 High, 43 Medium, 30 Low. 73 fixed or
+classified, 7 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
 verified), and the check should have failed. Every one of the 6 open findings
@@ -164,6 +164,9 @@ in the documentation, which is the class this register most exists to catch.
 | A-75 | Medium | `am::cadl` could not read a temporal `*_CONSTRAINT_PATTERN` (`yyyy-mm-??`, `??:??:??`, `yyyy-mm-ddThh:mm:ss`, a `PnYnMnD` letter pattern) for any of the four temporal kinds — carried as `CPrimitive::Date::pattern` and its siblings since an earlier session's modelling pass, but nothing built one — and could not read any of the four kinds *unwrapped* at all, though `c_inline_primitive_object` gives the shorthand no narrower a set than the wrapped form has (`cadl2_primitives.g4`); a bare `PT0S` under an attribute mis-tokenized as an RM type name and was refused as "expected `[`, found `}`" (corpus run 1, candidate 5) | **fixed** — `Lexer::peek_iso8601` (non-consuming) lets both the pattern check and the unwrapped dispatch look at the raw run before committing; four pattern validators (`is_date_pattern` and three siblings) check the grammar's own field shapes directly rather than through a regex engine (`plan.md`'s own reason none is a dependency); `classify_temporal` decides which of the four kinds an unwrapped run is **structurally** — `-`/`:` presence, `P`/`-P` prefix — before consulting that kind's own value or pattern check, found necessary by this finding's own test: trying all four kinds' `from_str` in a fixed order first misclassified a bare `C_DATE` value as `C_DATE_TIME`, since `DateTime::from_str` accepts a date with no time part |
 | A-76 | Medium | `primitive_kind` matched a wrapped `rm_type_id` against the nine primitive-kind names case-insensitively, so a genuine RM class spelled in capitals the same as a primitive kind — `DATE`, ISO 13606's own type — was wrongly read as `openehr::am::CPrimitive::Date`. Recorded as corpus run 1's second candidate, not reproduced there; found reproduced for real while pursuing `A-75`: `Reference/ISO_13606/Spanish_MOH/ADL_14/CEN-EN13606-CLUSTER.Muestra.v1.adls` wraps `DATE[id3]` around a `C_COMPLEX_OBJECT` with its own attribute (`date`), and the attempt to read that attribute's first word as the primitive's own value failed as "`d` is not a valid `ISO8601_DATE`" — a refusal this crate caused, not a limitation of it | **fixed** — matched exactly; no file anywhere in the corpus wraps a genuine primitive constraint in *any* casing of the nine names (every real archetype uses the unwrapped shorthand this crate already reads), so exact matching costs nothing measured |
 | A-77 | Low | A negative unwrapped `integer_value`/`real_value` (`{-3}`, a `C_ATTRIBUTE_TUPLE` row item; also a plain `attr matches {-3}`) was refused as "expected a primitive value, found `-`": the leading `-` tokenizes as `Symbol('-')` on its own, and neither `starts_inline_primitive` nor `parse_inline_primitive`'s dispatch had a case for it — found in `DV_ORDINAL`'s own canonical `[value, symbol]` tuple, `openEHR-EHR-CLUSTER.symptom.v1` (both the CKM and NEHTA copies), corpus run 5's own new candidate | **fixed** — `Lexer::peek_after_sign`, a two-token lookahead past a leading `+`/`-` to the token the ordinary tokenizer would read next, without consuming either; both call sites use it, and a negative *duration* (`-PT1H`) is unaffected, already reached through the temporal check ahead of it |
+| A-78 | Medium | `Time`/`DateTime`/`Duration::from_str` accepted only `.` as a fractional-second decimal sign, though `openEHR/adl-antlr`'s own `fragment SECOND_DEC_SEP : '.' \| ',' ;` (`base_lexer.g4`) states both, and ISO 8601 itself permits either — found running `EHRbase`'s own reference canonical-JSON test corpus (`tests/json_corpus.rs`, the JSON half of `tasks.md`'s external-corpus item): 21 of 57 real fixtures write `,` and none of them parsed | **fixed** (`D3.10b`) — the fractional-second split in `Time::from_str` and the decimal-sign check in `Duration::from_str`'s scanner both accept either character; the exact input text, separator included, is still what `Display` prints either way (`D3.10`), since neither type ever reconstructs its `Display` form from the parsed digits |
+| A-79 | Medium | `TEMPLATE_ID` refused any value containing whitespace (`I2.16`), though openEHR gives its lexical form as "to be determined" and the requirement's own reasoning already warned that "inventing a stricter grammar would reject valid identifiers from conformant tools" — found by exactly that: `EHRbase`'s own corpus names a real template `Virologischer Befund`, refused by every version of this crate before this fix, in 8 of 57 fixtures | **fixed** — the whitespace check is removed; only emptiness is refused, the one floor `I2.16`'s reasoning actually supports. `I2.16`'s text corrected in place, id unchanged (`C0.5`) |
+| A-80 | Low | `D3.13a` refused ISO 8601's basic date format (`20240517`) on two grounds: ambiguity with a bare year, and the claim that the basic format "does not appear in openEHR canonical JSON." The second ground is false: `EHRbase`'s own corpus writes `DV_DATE.value` as `"20190114"` in three real, non-invalid fixtures (`all_types_no_multimedia.json` and two siblings) | **classified, open** — the false claim is withdrawn from `D3.13a` (`C0.5`, id unchanged); the refusal itself and its ambiguity reasoning are untouched, since accepting the basic format needs the ambiguity question actually resolved, not merely the wrong supporting sentence removed — a design decision, not this finding's to make unilaterally, left in `openehr/spec/corpus.md`'s own record of the run |
 
 
 ---
@@ -4566,3 +4569,108 @@ positive item across three rows; a plain negative integer and real via
 first (`-"x"` never starts an inline primitive at all; `{-true}` inside a
 tuple row reaches `parse_inline_primitive`'s own "expected a number after
 `-`").
+
+## A-78 — a comma decimal sign in a fractional second was refused
+
+**Severity: Medium. Status: fixed.**
+
+**Found running the JSON half of `tasks.md`'s external-corpus item**
+(`tests/json_corpus.rs`, `EHRbase/openEHR_SDK`'s own reference test
+compositions, Apache-2.0): 21 of 57 real canonical-JSON fixtures write a
+date-time like `2019-01-14T18:36:49,294+00:00` — a comma before the
+fractional second — and every one of them failed to deserialize, as
+"second is not two digits". `Time::from_str` split the body on `.` alone;
+for a comma-separated fraction, `body.split(':')` then saw `"49,294"` as
+one six-character "second" component, which is never two digits, whatever
+it contains.
+
+The ground for refusing it was never checked against the actual grammar.
+`openEHR/adl-antlr`'s `base_lexer.g4` states plainly:
+`fragment SECOND_DEC_SEP : '.' | ',' ;` — both signs are the ISO 8601
+tokens openEHR's own ADL grammar names, not a looser "ISO 8601 is
+permissive" this crate could have chosen to ignore.
+
+**Fixed.** `Time::from_str` finds the first `.` *or* `,` rather than only
+`.`, and `Duration::from_str`'s designator scanner accepts either
+character as part of a seconds component, validating the digits by
+replacing `,` with `.` only for the transient `f64` parse that checks the
+number is well-formed — `out.seconds` itself keeps whatever character was
+actually written. Neither type's `Display` reconstructs from the parsed
+digits; both write the original input text verbatim (`self.text`,
+already true before this fix), so `D3.10`'s "preserve the lexical form
+exactly" is satisfied by construction — accepting `,` could not have
+weakened it. `am::cadl`'s own ISO 8601 raw scan already included `,` in
+its character set (for an unrelated reason, `odin_values.g4`'s list
+continuation), so the ADL-side parser gained the same acceptance with no
+separate change: it hands the same raw text to the same `FromStr` impls
+this fix corrects.
+
+**New requirement, `D3.10b`**, states the rule this crate had silently
+gotten wrong, citing the grammar fragment directly.
+
+**Tests.** Two: a comma-separated time and date-time, checked for the
+correct parsed digits and the exact original text on `Display`, plus the
+refusals a widened accept-set could have accidentally admitted (no digits
+after the sign, two decimal signs for one fraction); and the `Duration`
+equivalent, plus the fractional-non-seconds refusal (`P1,5D`) still firing
+regardless of which decimal sign was used.
+
+## A-79 — `TEMPLATE_ID` refused whitespace the specification never asked it to
+
+**Severity: Medium. Status: fixed.**
+
+**Found continuing the same corpus run.** `TEMPLATE_ID`'s own doc comment
+already stated the risk precisely: openEHR gives the type's lexical form
+as "to be determined", so "inventing a stricter grammar would reject
+valid identifiers from conformant tools" — and then invented one anyway,
+refusing any value containing whitespace. `EHRbase`'s corpus falsifies
+exactly that concern: 8 of 57 fixtures name a real template
+`Virologischer Befund` — a genuine, spaces-included German clinical
+template name — and every one of them was refused before this fix, not
+for being malformed, but for matching a rule this crate added on its own
+initiative.
+
+**Fixed.** The whitespace check is removed from `TemplateId::from_str`;
+only emptiness is refused, which is the one floor the type's own
+reasoning ever supported ("accepting anything at all, including an empty
+string, would let a missing template id look like a present one").
+`I2.16`'s text is corrected in place — the requirement itself said "and
+free of whitespace", not only the code — with a dated note recording why,
+per `C0.5`: the id is never renumbered for a text correction, and the old
+wrong text is not simply deleted.
+
+**Tests.** One: a template id containing whitespace round-trips through
+`FromStr`/`Display` exactly like any other text this type stores
+verbatim, alongside the existing empty-string refusal; the crate-level
+doctest on `TemplateId` itself now demonstrates acceptance rather than
+refusal.
+
+## A-80 — `D3.13a`'s own supporting claim was false, though its rule stands
+
+**Severity: Low. Status: classified, open.**
+
+**Found continuing the same corpus run**, and different in kind from
+`A-78`/`A-79`: this is not a case where the crate's behaviour was wrong,
+but one where a *written requirement*'s own justification was factually
+false and, unusually, checkable — `D3.13a` refuses ISO 8601's basic date
+format (`20240517`) on two stated grounds, the second of which is "it does
+not appear in openEHR canonical JSON". `EHRbase`'s corpus writes
+`DV_DATE.value` as `"20190114"` in three fixtures
+(`all_types_no_multimedia.json`, `all_types_systematic_tests.json`,
+`all_types_systematic_tests_feeder_audit.json`) — ordinary positive-path
+feature tests, not the corpus's own deliberately-invalid files (which are
+named accordingly, e.g. `invalid.json`, `ips_invalid.json`, and separately
+refused for a real reason each). The basic format is real, current, and
+written by a widely deployed reference CDR.
+
+**Corrected, not fixed.** The false clause is withdrawn from `D3.13a`'s
+text, in place, the same way `A-79` corrected `I2.16` — `C0.5` again: the
+id stands, the wrong sentence does not. **The refusal itself, and the
+requirement's first ground — accepting the basic format would make a
+bare `2024` ambiguous — are untouched.** Whether that ambiguity is real
+enough to keep refusing three real files, or narrow enough to resolve
+(the ambiguity is specifically about a year-only value; `20240517`'s own
+eight digits are not confusable with a four-digit year under any reading)
+is a design question this finding does not answer for itself — recorded
+here and in `openehr/spec/corpus.md` rather than resolved by whichever
+of the two readings happened to be convenient to implement first.

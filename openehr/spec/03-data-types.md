@@ -72,6 +72,13 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
 - **D3.10** The lexical form MUST be preserved exactly, including the choice
   between `Z` and `+00:00`, and including the number of digits in a fractional
   second.
+- **D3.10b** *(added 2026-09-05)* A fractional second's decimal sign MUST be
+  accepted as either `.` or `,` on read — `openEHR/adl-antlr`'s own
+  `fragment SECOND_DEC_SEP : '.' | ',' ;` (`base_lexer.g4`), not merely
+  general ISO 8601 permissiveness this crate could choose to ignore. `D3.10`
+  is unaffected either way: the stored lexical form is the whole input text,
+  separator included, never reconstructed from the parsed digits, so
+  accepting `,` changes nothing about what a round trip preserves.
 - **D3.11** Date, time, and date-time MUST be validated on construction:
   component ranges, month lengths, and the full Gregorian leap rule including
   the century exceptions.
@@ -81,9 +88,15 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
   ISO 8601 does not, and MUST refuse designators that are out of order or
   repeated.
 - **D3.13a** The extended ISO 8601 format is required; the basic format
-  (`20240517`) MUST be refused. It does not appear in openEHR canonical JSON,
-  and accepting it would make `2024` ambiguous. Recorded as a limitation in
-  [`audit.md`](audit.md).
+  (`20240517`) MUST be refused, and accepting it would make `2024` ambiguous.
+  Recorded as a limitation in [`audit.md`](audit.md). *Corrected 2026-09-05
+  (`A-80`)*: this requirement previously also claimed the basic format "does
+  not appear in openEHR canonical JSON" — false, and known false rather than
+  merely unverified: `EHRbase`'s own reference test corpus writes
+  `DV_DATE.value` as `"20190114"` in three real fixtures
+  (`openehr/spec/corpus.md`). The refusal itself is unchanged and the
+  ambiguity reasoning stands; only the false supporting claim is withdrawn
+  (`C0.5`: the id is not renumbered for a text correction).
 
 ## Comparison
 

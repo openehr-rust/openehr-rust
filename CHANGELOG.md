@@ -7,6 +7,19 @@ together.
 
 ## Unreleased
 
+- `base::iso8601::Time`/`DateTime`/`Duration` now accept `,` alongside `.`
+  as a fractional second's decimal sign, per `openEHR/adl-antlr`'s own
+  `SECOND_DEC_SEP : '.' | ',' ;` (`base_lexer.g4`) — refused before, though
+  21 of 57 real fixtures in `EHRbase`'s own reference test corpus write it
+  this way. See `A-78`/`D3.10b` in `openehr/spec/audit.md`. Not a breaking
+  change: an accepted-input widening, and the exact text — separator
+  included — round-trips exactly either way, since `Display` never
+  reconstructs from the parsed digits.
+- `base::TemplateId` no longer refuses whitespace — a rule its own
+  documentation already warned would "reject valid identifiers from
+  conformant tools," and did: `EHRbase`'s corpus names a real template
+  `Virologischer Befund`. Only an empty string is refused now. See `A-79`/
+  `I2.16` (corrected in place, id unchanged). Not a breaking change.
 - `am::cadl` now decides an unwrapped interval's kind by its first bound's
   token — `|0..100|` is a `C_INTEGER`, `|0.0..100.0|` a `C_REAL`, which is
   what `odin_values.g4` says — instead of refusing every one as undecidable

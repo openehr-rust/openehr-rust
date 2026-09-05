@@ -412,9 +412,17 @@ impl FromStr for Time {
         let bad = |reason| ParseError::new("ISO8601 time", reason, s);
         let (body, offset) = split_offset(s).ok_or_else(|| bad("malformed UTC offset"))?;
 
-        let (body, fraction) = match body.split_once('.') {
+        // `D3.10b`: ISO 8601 permits either `.` or `,` as the decimal sign —
+        // openEHR's own external systems overwhelmingly write `,` (found
+        // running EHRbase's own reference test corpus, `json_corpus.rs`,
+        // `A-78`) — and `text` below stores the whole original string
+        // regardless of which one appears, so accepting both here costs
+        // nothing against `D3.10`'s "preserve the lexical form exactly":
+        // `Display` never reconstructs from `fraction`, only from `text`.
+        let (body, fraction) = match body.find(['.', ',']) {
             None => (body, None),
-            Some((head, frac)) => {
+            Some(sep) => {
+                let (head, frac) = (&body[..sep], &body[sep + 1..]);
                 if frac.is_empty() || !frac.bytes().all(|b| b.is_ascii_digit()) {
                     return Err(bad("fractional second is not a number"));
                 }
@@ -891,7 +899,12 @@ impl FromStr for Duration {
                 let mut next_allowed = 0usize;
                 let mut number = String::new();
                 for ch in part.chars() {
-                    if ch.is_ascii_digit() || (ch == '.' && is_time) {
+                    // `D3.10b`: `,` alongside `.` as the decimal sign — see
+                    // `Time::from_str`'s own comment; `number` keeps
+                    // whichever character was actually written, since
+                    // `out.seconds`' own callers (never `Display`, which
+                    // uses `text`) see it verbatim too.
+                    if ch.is_ascii_digit() || ((ch == '.' || ch == ',') && is_time) {
                         number.push(ch);
                         continue;
                     }
@@ -907,12 +920,12 @@ impl FromStr for Duration {
                     next_allowed = pos + 1;
                     any = true;
                     if is_time && ch == 'S' {
-                        if number.parse::<f64>().is_err() {
+                        if number.replace(',', ".").parse::<f64>().is_err() {
                             return Err(bad("seconds is not a number"));
                         }
                         out.seconds = Some(core::mem::take(&mut number));
                     } else {
-                        if number.contains('.') {
+                        if number.contains(['.', ',']) {
                             return Err(bad("only seconds may be fractional"));
                         }
                         let value: u32 = number
@@ -1130,6 +1143,20 @@ mod tests {
         }
         for text in ["P1M1Y", "P1D1D", "1Y", "P", "PT", "P1.5D", "PY"] {
             assert!(text.parse::<Duration>().is_err(), "accepted {text}");
+        }
+    }
+
+    /// `D3.10b`, `A-78`, `Duration`'s own half: `,` accepted in `PnTnSn`'s
+    /// fractional seconds, the exact scanned text (separator included)
+    /// still what `seconds()` and `Display` both answer, and still refused
+    /// as a fractional sign on a non-seconds component either way.
+    #[test]
+    fn a_durations_comma_decimal_sign_is_accepted_like_a_full_stop() {
+        let d: Duration = "PT1H2M7,5S".parse().unwrap();
+        assert_eq!(d.seconds(), Some("7,5"));
+        assert_eq!(d.to_string(), "PT1H2M7,5S");
+        for bad in ["P1,5D", "PT1,5H", "PT1,5M"] {
+            assert!(bad.parse::<Duration>().is_err(), "accepted {bad}");
         }
     }
 
@@ -1381,6 +1408,32 @@ mod tests {
             "09:30:15.x",
             "09:30:15:00",
         ] {
+            assert!(bad.parse::<Time>().is_err(), "{bad} was accepted as a time");
+        }
+    }
+
+    /// `D3.10b`, `A-78`: `,` alongside `.` as the fractional-second decimal
+    /// sign — `openEHR/adl-antlr`'s own `SECOND_DEC_SEP : '.' | ',' ;`
+    /// (`base_lexer.g4`), and the spelling real external systems write, found
+    /// running `EHRbase`'s own reference test corpus (`tests/json_corpus.rs`):
+    /// 21 of 57 real fixtures used it and none of them parsed before this.
+    /// `fraction()` answers the digits either way, with no separator
+    /// character in it, matching the `.`-form's own contract; the exact
+    /// input text — separator included — is still what `Display` prints
+    /// (`D3.10`, unaffected by which sign was used).
+    #[test]
+    fn a_comma_decimal_sign_is_accepted_like_a_full_stop() {
+        let t: Time = "18:36:49,294".parse().unwrap();
+        assert_eq!(t.fraction(), Some("294"));
+        assert_eq!(t.as_str(), "18:36:49,294");
+
+        let dt: DateTime = "2019-01-14T18:36:49,294+00:00".parse().unwrap();
+        assert_eq!(dt.time().unwrap().fraction(), Some("294"));
+        assert_eq!(dt.as_str(), "2019-01-14T18:36:49,294+00:00");
+
+        // Still refused where a `.` would be: no digits after the sign, or a
+        // second `.`/`,` naming two separators for one fraction.
+        for bad in ["18:36:49,", "18:36:49,x", "18:36:49.5,0"] {
             assert!(bad.parse::<Time>().is_err(), "{bad} was accepted as a time");
         }
     }

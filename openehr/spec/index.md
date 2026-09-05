@@ -97,6 +97,9 @@ departs from; an undeclared departure is a defect, not a decision.
   run through the `definition` reader: dated counts per refusal, the corpus
   commit, and the candidate findings each run left. A discovery record, not
   a gate.
+- [JSON corpus](json_corpus.md) — the same discipline applied to canonical
+  JSON compositions nobody here wrote, against `serde_json → Composition →
+  Validate`.
 
 ## The rules that cost nothing to keep and cannot be repaired once broken
 
