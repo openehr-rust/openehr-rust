@@ -1,10 +1,12 @@
 # Draft: reply in the FerroEHR thread, and the email to its author
 
-**Status: draft, not sent.** Written 2026-09-03 for the maintainer to send by
-2026-09-05 (`tasks.md` P0; `help/outreach/index.md` §11). Posting and emailing
-are the maintainer's actions, not a tool's (`GOVERNANCE.md` §Machines do not
-decide). Every factual claim below is one the tree makes today and
-`scripts/check-docs.py` checks; nothing here says *safe*, *compliant*,
+**Status: draft, not sent. Due today, 2026-09-05** — the date
+`help/outreach/index.md` §11 set (`tasks.md` P0). Posting and emailing are
+the maintainer's actions, not a tool's (`GOVERNANCE.md` §Machines do not
+decide); sending this is what remains. Updated 2026-09-05 to say what
+actually happened between 2026-09-03 and 2026-09-04, not only what was
+offered — every factual claim below is one the tree makes today, re-checked
+against the commits named; nothing here says *safe*, *compliant*,
 *certified*, *clinically*, or *fast* (`help/outreach/index.md` §1).
 
 Thread: [FerroEHR – a new Rust-based openEHR CDR, looking for
@@ -33,10 +35,11 @@ testers](https://discourse.openehr.org/t/ferroehr-a-new-rust-based-openehr-cdr-l
 > that, as of 2026-09-04, parses 969 of the 1,379 ADL 2 files in
 > `openEHR/adl-archetypes` and refuses the rest by name, with every refusal
 > category recorded — no whole-archetype parser, no OPT, no flattening yet.
-> The matrix that owns
-> every one of those claims is
-> [here](https://github.com/openehr-rust/openehr-rust/blob/main/spec/databases/conformance-matrix.md),
-> and the register of our own defects is next to it.
+> The engine levels are owned by
+> [one matrix](https://github.com/openehr-rust/openehr-rust/blob/main/spec/databases/conformance-matrix.md)
+> and the Archetype Model claims by
+> [another](https://github.com/openehr-rust/openehr-rust/blob/main/openehr/spec/conformance-matrix.md);
+> the register of our own defects sits next to each.
 >
 > Two things you may care about regardless of the crates:
 >
@@ -49,15 +52,29 @@ testers](https://discourse.openehr.org/t/ferroehr-a-new-rust-based-openehr-cdr-l
 > 2. Our RM reals are a `Real` type that keeps the written text, not `f64`, so
 >    `1.50 mg` and `1.5 mg` stay different records and hash differently.
 >
+> Post #15's own question — what happens when you run something you didn't
+> write against the code — is one I could answer this week rather than
+> promise: I pointed our `definition` reader at `openEHR/adl-archetypes`
+> (the general reference corpus, not yours) and read every refusal as a
+> question rather than an answer. Eight were this crate's own defects, not
+> the corpus's — a differential-form attribute misread as a duplicate, an
+> interval kind declared undecidable that the grammar already decides, a
+> case-fold that let a genuine ISO 13606 class named `DATE` be read as our
+> `Date` primitive, among others — each with the file that found it and the
+> commit that fixed it. Parsing went from 178 to 969 of 1,379 files across
+> six runs over two days; what still refuses is categorised and dated,
+> largest category first,
+> [here](https://github.com/openehr-rust/openehr-rust/blob/main/openehr/spec/corpus.md).
+>
 > An offer, if it is useful: your conformance corpus has published JSON
 > Schemas and fixtures. I would like to run every fixture through
 > `openehr`'s canonical-JSON reader and `validate()`, and every CKM archetype
-> you used through our `definition` reader, and report back what each side
-> refuses — with the requirement id we refused it under, so you can attribute
-> the disagreement to spec, to you, or to us. Where the released text is
-> silent we keep the same kind of register you describe; the `is_modifiable`
-> ordering in post #6 is exactly the shape of thing we would adopt, with your
-> #2673 cited, rather than re-adjudicate.
+> you used through our `definition` reader the same way, and report back
+> what each side refuses — with the requirement id we refused it under, so
+> you can attribute the disagreement to spec, to you, or to us. Where the
+> released text is silent we keep the same kind of register you describe;
+> the `is_modifiable` ordering in post #6 is exactly the shape of thing we
+> would adopt, with your #2673 cited, rather than re-adjudicate.
 >
 > One question back: how does FerroEHR store a partial date such as
 > `2024-05`? We use two columns — an authoritative exact text and a derived,
@@ -69,10 +86,14 @@ testers](https://discourse.openehr.org/t/ferroehr-a-new-rust-based-openehr-cdr-l
 > How it was written, machine assistance included:
 > [`AI_STATEMENT.md`](https://github.com/openehr-rust/openehr-rust/blob/main/AI_STATEMENT.md).
 
-**Before posting, the maintainer checks:** the two links resolve on `main`;
-the ladder sentence matches `spec/databases/conformance-matrix.md` on the day
-of posting (it is the one file that owns levels, `W0.40`); and the account has
-answered at least two other threads first (§5.1: "earn the post").
+**Before posting, the maintainer checks:** the four links (two matrices,
+`corpus.md`, the licence/AI statement pair) resolve on `main`; the ladder
+sentence matches `spec/databases/conformance-matrix.md` on the day of
+posting (it is the one file that owns levels, `W0.40`); the "969 of 1,379"
+and "eight" figures match `openehr/spec/corpus.md`'s own totals on the day
+of posting, since a further run before send would move them; and the
+account has answered at least two other threads first (§5.1: "earn the
+post").
 
 ## Email to the author (§9: a question, not an announcement)
 

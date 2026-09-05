@@ -116,10 +116,13 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       published conformance corpus's JSON fixtures through `openehr`'s RM
       reader and report what refuses. Never "safe", "compliant", "certified",
       or "clinically" (outreach §1). *Evidence:* the post and the reply,
-      linked from `NEWS.md`. *Draft written 2026-09-03 —
-      `help/outreach/drafts/2026-09-ferroehr-thread-reply.md`, the reply and
-      the email both, every claim checked against the tree; sending is the
-      maintainer's action and has not happened.* — **S**
+      linked from `NEWS.md`. *Draft written 2026-09-03,
+      `help/outreach/drafts/2026-09-ferroehr-thread-reply.md`; updated
+      2026-09-05 (the due date) to report the external corpus run actually
+      completed in the meantime (`A-70`–`A-77`, 178 to 969 of 1,379 files,
+      `openehr/spec/corpus.md`) rather than only offer one. Every claim
+      re-checked against the tree; sending is the maintainer's action and
+      has not happened.* — **S**
 - [ ] **Decide the `regex` dependency.** `K15.10`'s remainder — evaluating a
       carried `ARCHETYPE_SLOT` assertion against a filler's identity — needs a
       regex engine, and `openehr/Cargo.toml` has never had one; every
