@@ -405,7 +405,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       with their date and hardware in `BENCHMARKS.md`. Keep `W0.35`/`W0.36`:
       run, never gated. Then take #4's offer. *Evidence:* dated numbers in
       the file, reproducible by the command beside them. — **M**
-- [ ] **Supply chain: SBOM, `cargo-deny`, `cargo-audit`, push protection.**
+- [x] **Supply chain: SBOM, `cargo-deny`, `cargo-audit`, push protection.**
       `SECURITY.md` names "no SBOM" as an open gap. Add `cargo auditable`
       builds and a CycloneDX SBOM per release artefact, `cargo deny check`
       and `cargo audit` as CI jobs (Dependabot only *alerts*), and turn
@@ -413,6 +413,35 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       stated condition (`spec/trusted-publishing/`). *Evidence:* the jobs in
       `ci.yml` with rows in `AGENTS.md` and `spec/audit.md` (the `claims`
       gate requires them); the gap struck through in `SECURITY.md`. — **S**
+
+      **2026-09-06.** Three of four done in full; the fourth narrowed rather
+      than forced. Push protection: enabled via the GitHub API, verified with
+      a `GET` immediately after (`{"status":"enabled"}`), against a
+      repository with zero existing secret-scanning alerts — nothing
+      retroactive to worry about. `cargo deny check` and `cargo audit`: a new
+      `supply-chain` CI job, all eighteen crates including the eight fuzz
+      crates (a check silently skipped on the fuzz crates would be exactly
+      `W-13`'s shape again), one shared `deny.toml` at the repository root
+      since there is no root workspace for either tool to find a config in on
+      its own. Real findings along the way, not a rubber stamp: a yanked
+      `chacha20` fixed by `cargo update`; two missing-but-legitimate licences
+      added (`0BSD`, `CDLA-Permissive-2.0` for `openehr-loco`'s mail
+      dependencies; `NCSA` for every fuzz crate's `libfuzzer-sys`); a `bans`
+      false positive from `wildcards = "deny"` misreading this monorepo's own
+      unversioned sibling path-dependencies as registry wildcards, reverted
+      to the tool's own default; and three RUSTSEC advisories
+      (`RUSTSEC-2026-0194`, `-0195`, `-0235`) confirmed unfixable by hand
+      (`cargo update --precise` refused each, naming the exact upstream pin
+      in `opendal`/`rust_decimal`) rather than assumed so, accepted with
+      dated reasons in `deny.toml` and the workflow. **SBOM narrowed, not
+      closed:** `cargo cyclonedx` verified and documented as a pre-publish
+      step (`agents/publishing.md`), but no release has cut since, so no SBOM
+      has yet accompanied a real one. `cargo auditable` (embeds a dependency
+      manifest into a *binary*) has no target at all yet — `openehr-loco` is
+      the one crate that builds a binary, and nothing distributes it
+      anywhere (no Docker image, no release artefact); that gap belongs to
+      the `Dockerfile`/`docker-compose.yml` item below, not manufactured
+      here. `SECURITY.md` updated to match exactly this state, not more.
 - [ ] **State the production perimeter.** `openehr-loco` has no TLS, no
       rate limiting, no read audit at the store (`db:D-04`, "fixed above the
       store"), no RBAC. Write the deployment statement — TLS terminated by

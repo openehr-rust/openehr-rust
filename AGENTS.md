@@ -169,6 +169,7 @@ anything useful about it — CI's own x86_64 runners are what verify it now.
 | `bench` | `cargo bench -- --test`: every criterion benchmark runs once. Nothing is gated on wall-clock (`W0.35`) — a threshold on a shared runner fails for unrelated reasons and gets silenced |
 | `schema` | `verify-schema.sh` against real PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle containers — all five pass |
 | `assets` | `openehr-assets` regenerates the committed DDL/schema files and fails the build if a committed one is stale |
+| `supply-chain` | `cargo deny check` and `cargo audit` against all eighteen crates, fuzz crates included, using one shared `deny.toml` at the repository root — no crate is out of either check's list |
 | `fuzz` | a short regression run of every fuzz target — a crash, panic, or abort fails the build; this is a gate, not a campaign |
 | `layering` | `openehr` and `openehr-store` depend inward only, including dev-dependencies. The crate list is **derived** from the tree, not written here: it used to name nine of seventeen and could not see a cycle through the eight it skipped (**W-13**) |
 | `claims` | that no engine crate claims Schema or above without a `schema` job backing it (the check list emptied 2026-09-06, once oracle and then mssql each got one), that the library matrix covers every requirement exactly once, that the conformance matrix does not contradict itself, that the audit summary counts itself correctly, and that **all eighteen** crates declare the same five licences (**W-14**) |

@@ -249,6 +249,23 @@ Verified 2026-08-04: `openehr` packages 67 files including all 18 `spec/*.md`
 and its five examples, so those citations resolve. `openehr-store` cites
 `spec/conformance.md`, which likewise ships.
 
+**A CycloneDX SBOM, per crate, generated fresh at publish time — not
+committed between releases, since it would go stale the moment a dependency
+does:**
+
+```sh
+cd <crate>
+cargo cyclonedx --format json    # writes <crate>.cdx.json
+```
+
+Verified 2026-09-06: run against `openehr`, produces a valid CycloneDX 1.3
+document naming 31 components. `SECURITY.md`'s "no SBOM is published" line
+tracks this; until a release actually carries one, the gap is narrowed, not
+closed — attach the file to the tag's GitHub release (there being no
+release-artefact mechanism here beyond a git tag and the crates.io upload
+itself) the first time this checklist runs for real, and record where it
+ended up.
+
 ## Checks specific to this repository
 
 - **`repository` points at `openehr-rust/openehr-rust`.** All eight were wrong

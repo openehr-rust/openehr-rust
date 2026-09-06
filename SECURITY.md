@@ -160,9 +160,27 @@ none (`W0.3`):
   are all disabled** on the repository, checked 2026-08-26.~~ Closed
   2026-08-26, later the same day: all four settings — private vulnerability
   reporting, Dependabot alerts, automated security fixes, secret scanning —
-  are enabled, each verified with a `GET` after the change. Secret scanning
+  are enabled, each verified with a `GET` after the change. ~~Secret scanning
   **push protection** remains off, so a pushed secret is reported rather
-  than blocked.
+  than blocked.~~ Closed 2026-09-06: push protection is enabled, verified
+  with a `GET` of `security_and_analysis.secret_scanning_push_protection`
+  immediately after the change (`{"status":"enabled"}`), against a
+  repository with zero existing secret-scanning alerts at the time — nothing
+  currently in the tree was retroactively affected.
+- ~~**No dependency licence, ban, or advisory check runs anywhere.**~~ Closed
+  2026-09-06: `cargo deny check` and `cargo audit` run as the CI `supply-chain`
+  job, against all eighteen crates (fuzz crates included — a check run on ten
+  and silently skipped on eight would be a guard only as wide as its own
+  list, `W-13`). One shared [`deny.toml`](deny.toml) at the repository root,
+  since there is no root workspace here for either tool to discover a config
+  in automatically. Three advisories are accepted rather than fixed, each
+  with a dated reason in `deny.toml`/the workflow itself: `RUSTSEC-2026-0194`,
+  `-0195` (`quick-xml`, pinned by `opendal`'s own dependency requirement, no
+  compatible release available), and `-0235` (`rkyv`, pinned by
+  `rust_decimal`'s), all three reaching `openehr-loco` only, in a feature its
+  own request-handling code never calls — confirmed unfixable by hand
+  (`cargo update --precise` refused for each, naming the exact upstream pin),
+  not merely unfixed.
 - **No SBOM is published**, and no release artefacts are attested. Publishing
   uses a long-lived crates.io API token from the maintainer's workstation, not
   [Trusted Publishing](https://crates.io/docs/trusted-publishing)'s
@@ -172,6 +190,19 @@ none (`W0.3`):
   pushes to (GitHub, GitLab, Codeberg) and every destination it publishes to
   (crates.io), because adopting it for one forge while mirrored to three
   would leave the mirrors' provenance an unanswered question.
+
+  **Narrowed 2026-09-06.** A CycloneDX SBOM per crate is now a documented,
+  verified step in [`agents/publishing.md`](agents/publishing.md)'s
+  pre-publish checklist (`cargo cyclonedx --format json`, run and read once
+  per crate against this tree — 31 components for `openehr` alone). What
+  remains open: no SBOM has yet accompanied an *actual* release (the step
+  exists, unused until the next one cuts), and `cargo auditable` — embedding
+  a dependency manifest into a **binary** — has no target yet: `openehr-loco`
+  is the one crate here that builds a binary, and it is not published or
+  distributed anywhere (no Docker image, no release artefact) for
+  `cargo auditable` to embed anything into. That is its own gap, tracked
+  under the `Dockerfile`/`docker-compose.yml` item in `tasks.md`, not solved
+  here by installing a tool with nothing yet to point it at.
 - **The bus factor is one**, and every publishing identity terminates at one
   account ([`MAINTAINERS.md`](MAINTAINERS.md)). A report arriving while the
   maintainer is unavailable will sit until they return.

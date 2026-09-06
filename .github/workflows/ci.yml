@@ -106,6 +106,86 @@ jobs:
   #   * The declared floor is COMPILED, not merely declared (`RV3`). An MSRV no
   #     toolchain has agreed to is a claim, and `W0.3` is about claims.
   #
+  # Licences, banned/duplicate dependencies, and known-vulnerable or yanked
+  # crates -- for all eighteen, fuzz crates included, because a dependency
+  # graph checked in ten crates and silently skipped in eight is a guard only
+  # as wide as its own list (`W-13`, `C0.5`'s own rule one level down).
+  #
+  # `cargo deny` and `cargo audit` are run separately rather than one standing
+  # in for the other: they query different sources (an embedded license/ban
+  # policy against `cargo metadata`, versus the RustSec advisory database
+  # against `Cargo.lock`) and disagreed once already finding this job's own
+  # baseline -- `cargo-audit` flagged `RUSTSEC-2026-0235` in `openehr-loco`'s
+  # dependency tree (`rkyv`, via `rust_decimal`/`byte-unit`/`loco-rs`) that
+  # `cargo deny` did not, even against the same crate and a freshly fetched
+  # database.
+  #
+  # `deny.toml` lives at the repository root, not per crate: there is no root
+  # workspace here (each crate is its own, deliberately), so nothing discovers
+  # it automatically, and every crate below points at it explicitly with
+  # `--config`. One file rather than eighteen, so a licence decision made once
+  # cannot drift into disagreeing with itself the way `W-16`'s conformance
+  # ladder did.
+  supply-chain:
+    name: supply-chain / ${{ matrix.crate }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - crate: openehr
+          - crate: openehr-store
+          - crate: openehr-sqlite
+          - crate: openehr-postgresql
+          - crate: openehr-mysql
+          - crate: openehr-mariadb
+          - crate: openehr-mssql
+          - crate: openehr-oracle
+          # Three advisories accepted here, not fixable by `cargo update`:
+          # confirmed by hand (`cargo update -p quick-xml --precise 0.42.0`,
+          # `cargo update -p rkyv --precise 0.8.17`, both refused, each naming
+          # the exact upstream pin) that `loco-rs`'s own dependency tree
+          # (`opendal`'s `quick-xml = "^0.39.3"`; `rust_decimal`'s `rkyv =
+          # "^0.7"`) has no compatible fixed version available yet. All three
+          # are in features `openehr-loco`'s own request-handling code never
+          # calls. `RUSTSEC-2026-0194`/`-0195` are declared in `deny.toml`
+          # (`cargo deny` does flag them); `RUSTSEC-2026-0235` needs
+          # `cargo audit`'s own `--ignore`, since `cargo deny` never flagged it
+          # to begin with. Revisit when either upstream crate widens its pin.
+          - crate: openehr-loco
+            audit_ignore: "--ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195 --ignore RUSTSEC-2026-0235"
+          - crate: openehr-assets
+          - crate: openehr-fuzz
+          - crate: openehr-postgresql-fuzz
+          - crate: openehr-sqlite-fuzz
+          - crate: openehr-mysql-fuzz
+          - crate: openehr-mariadb-fuzz
+          - crate: openehr-mssql-fuzz
+          - crate: openehr-oracle-fuzz
+          - crate: openehr-store-fuzz
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ matrix.crate }}
+
+      - name: Install cargo-deny and cargo-audit
+        run: cargo install cargo-deny cargo-audit --locked
+
+      - name: cargo deny check
+        working-directory: ${{ matrix.crate }}
+        run: cargo deny check --config ../deny.toml
+
+      - name: cargo audit
+        working-directory: ${{ matrix.crate }}
+        run: cargo audit ${{ matrix.audit_ignore }}
+
   # Do not make this job `continue-on-error`, and do not relax the equality to a
   # lower bound. Either turns a check into a decoration, which is the defect
   # class the whole audit register is about.

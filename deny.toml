@@ -1,0 +1,91 @@
+# Shared `cargo-deny` configuration for every crate in this monorepo.
+#
+# There is no root workspace (each crate is its own, deliberately — see
+# CLAUDE.md), so this file is not discovered automatically. Every CI job and
+# every local run points at it explicitly:
+#
+#   cd <crate> && cargo deny --config ../deny.toml check
+#
+# One file rather than eighteen copies, for the same reason the conformance
+# ladder and the trademark notice each have exactly one owner: a policy
+# duplicated eighteen times is a policy that drifts in one of them and nobody
+# notices which.
+
+[graph]
+# Every crate here targets whatever the MSRV job's stable toolchain runs on
+# (`spec/rust-msrv-n-minus-2/`); no target-specific dependency exists to prune
+# by triple, so the full graph is checked as built.
+all-features = false
+no-default-features = false
+
+[output]
+feature-depth = 1
+
+[advisories]
+db-urls = ["https://github.com/rustsec/advisory-db"]
+ignore = [
+    # `quick-xml` 0.39.4, pulled in by `opendal-core` (via `loco-rs`, in
+    # `openehr-loco`), which pins `quick-xml = "^0.39.3"` — a fixed release
+    # exists (0.42.0) but `cargo update` cannot reach it while that upstream
+    # pin stands; confirmed by hand (`cargo update -p quick-xml --precise
+    # 0.42.0` refuses, naming this exact constraint). Both are DoS-shaped
+    # (quadratic attribute-name checking; unbounded namespace-declaration
+    # allocation) in an XML feature this crate's own request-handling code
+    # never calls — `openehr-loco` is a JSON API and reaches `quick-xml` only
+    # through whichever storage backend `opendal` compiles in, not through
+    # anything openEHR data reaches. Not verified absent, only unreached by
+    # this crate's own code; tracked as `spec/audit.md` residual rather than
+    # silenced. Revisit when `loco-rs`/`opendal` widen the pin.
+    { id = "RUSTSEC-2026-0194", reason = "transitive via opendal's pinned quick-xml; unreached by this crate's own code; no compatible fix available upstream" },
+    { id = "RUSTSEC-2026-0195", reason = "transitive via opendal's pinned quick-xml; unreached by this crate's own code; no compatible fix available upstream" },
+]
+
+# Every licence actually present in the graph is named here explicitly, not
+# matched by a wildcard, so a new dependency with an unreviewed licence fails
+# the check rather than silently passing.
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+    "MPL-2.0",
+    # `quoted_printable`, via `lettre`, via `loco-rs`, in `openehr-loco`.
+    "0BSD",
+    # `webpki-roots`, via `lettre`, via `loco-rs`, in `openehr-loco`.
+    "CDLA-Permissive-2.0",
+    # `libfuzzer-sys`, in every `openehr-*-fuzz` crate.
+    "NCSA",
+]
+confidence-threshold = 0.8
+
+[licenses.private]
+ignore = false
+
+[bans]
+# Every crate here is small and single-purpose by design (`W16.4`'s own "a
+# dependency implies a capability"), so a second major version of the same
+# dependency reaching the graph is worth seeing rather than silencing —
+# `warn`, not `deny`, because two crates in this monorepo legitimately
+# depending on different major versions of something neither controls is not
+# itself a defect.
+multiple-versions = "warn"
+# Left at cargo-deny's own default, `allow`, rather than `deny`: this monorepo
+# has no root workspace (each crate is its own, deliberately), so a crate's
+# path dependency on a sibling here — `openehr-store = { path =
+# "../openehr-store" }`, with no version, in every unpublished dev-tool crate
+# — reads to cargo-deny as a wildcard requirement. It is not the risk
+# `wildcards = "deny"` exists to catch: a path dependency inside this
+# repository always resolves to the exact sibling checked out beside it,
+# never to an arbitrary future version from a registry.
+wildcards = "allow"
+allow-workspace = false
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
