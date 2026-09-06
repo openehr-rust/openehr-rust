@@ -215,7 +215,15 @@ mssql)
   # `-b` ("terminate batch job if there is an error") is what makes `sqlcmd`'s
   # own exit code trustworthy: undecorated, it returns 0 for most in-batch
   # T-SQL errors and the `await` loop below reads by exit code, not output.
-  ms() { $CONTAINER exec -i "$NAME" /opt/mssql-tools18/bin/sqlcmd -C -b -S localhost -U sa -P "${PASS}!1" "$@"; }
+  # `-W` ("remove trailing spaces from a column"): without it, `sqlcmd`
+  # right-pads every column's text to its display width, and an
+  # `nvarchar(max)` column's is wide — found because `json_out`'s value
+  # compared unequal to the literal it went in as, with the two printed
+  # values looking identical until the trailing padding on one was counted
+  # (M3.43/D-08's own check exists to catch exactly this class of thing,
+  # just not the shape of it coming from the test harness rather than the
+  # engine).
+  ms() { $CONTAINER exec -i "$NAME" /opt/mssql-tools18/bin/sqlcmd -C -b -W -S localhost -U sa -P "${PASS}!1" "$@"; }
   # Not `ms -d openehr -Q 'SELECT 1'`: that was the first fix here and it was
   # still not enough. `MSSQL_DB` creates the target database asynchronously,
   # after the server starts accepting connections to `master` — a real CI
