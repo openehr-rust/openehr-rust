@@ -80,17 +80,27 @@ approach as well as spelling:
 | --- | --- | --- |
 | guard strategy | query the catalogue, then create | attempt, and swallow ORA-00955 |
 | guard varies by object kind | **yes** | no — one error code covers both |
-| statement terminator | `;` | `\n/` — every statement is a PL/SQL block |
+| statement terminator | `\nGO` — every statement its own batch (`D-12`) | `\n/` — every statement is a PL/SQL block |
 | quoting | `[…]`, `]]` | `"…"`, `""` |
 
 ## 9. Unmet core requirements
 
 - **M14.6 amends `T11.2`.** The core requires the DDL to be executed against a
-  real server before **Schema** is claimed. It has not been, so this crate claims
-  **Dialect** and this is a statement of the gap rather than a licence to skip it.
+  real server before **Schema** is claimed.
 
-  Cause: SQL Server 2022 segfaults under qemu on arm64, the only architecture
-  available. That is an evidence gap, **not** a judgement that the DDL works.
+  **Update, 2026-09-06.** It has been, on CI's own x86_64 runners — no arm64
+  Linux SQL Server image exists, so this crate's DDL still cannot be verified
+  on the machine this annex was originally written from, but that machine was
+  never CI's own. The live run found a real defect, not merely an evidence
+  gap: `append_only_sql` emitted `CREATE OR ALTER TRIGGER` as a bare statement
+  sharing a batch with everything before it, which SQL Server refuses
+  outright (`Msg 111`, `'CREATE TRIGGER' must be the first statement in a
+  query batch`) — full account in `spec/databases/audit.md` **D-12**. Fixed by
+  giving this dialect its own `terminator()`, `\nGO`, so every statement is
+  its own batch; see §8's comparison table. `M14.6` is met once
+  `spec/databases/conformance-matrix.md` — the one file that owns a level
+  (`W0.40`) — records a green `schema / mssql` run with the fix applied; this
+  annex does not itself grant the level (`X15.9`).
 
 - **`db:D-01`** is closed by this file existing; ratifying it (`X15.9`) requires
   a live run.

@@ -13,7 +13,8 @@ IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_schema_version' 
   [applied_text] nvarchar(64) NOT NULL,
   [applied_utc] datetimeoffset(7),
   PRIMARY KEY ([version])
-)');
+)')
+GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_ehr' AND type = 'U')
   EXEC('CREATE TABLE [openehr_ehr] (
@@ -24,7 +25,8 @@ IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_ehr' AND type = 
   [ehr_status_uid] nvarchar(255) NOT NULL,
   [ehr_access_uid] nvarchar(255) NOT NULL,
   PRIMARY KEY ([ehr_id])
-)');
+)')
+GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_versioned_object' AND type = 'U')
   EXEC('CREATE TABLE [openehr_versioned_object] (
@@ -35,7 +37,8 @@ IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_versioned_object
   [time_created_utc] datetimeoffset(7),
   PRIMARY KEY ([uid]),
   FOREIGN KEY ([ehr_id]) REFERENCES [openehr_ehr] ([ehr_id])
-)');
+)')
+GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_version' AND type = 'U')
   EXEC('CREATE TABLE [openehr_version] (
@@ -66,7 +69,8 @@ IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_version' AND typ
   [chain_tag_mac] binary(32),
   PRIMARY KEY ([uid]),
   FOREIGN KEY ([versioned_object_uid]) REFERENCES [openehr_versioned_object] ([uid])
-)');
+)')
+GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_contribution' AND type = 'U')
   EXEC('CREATE TABLE [openehr_contribution] (
@@ -79,7 +83,8 @@ IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_contribution' AN
   [audit_time_committed_utc] datetimeoffset(7),
   PRIMARY KEY ([uid]),
   FOREIGN KEY ([ehr_id]) REFERENCES [openehr_ehr] ([ehr_id])
-)');
+)')
+GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_composition_index' AND type = 'U')
   EXEC('CREATE TABLE [openehr_composition_index] (
@@ -98,29 +103,39 @@ IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_composition_inde
   [context_end_utc] datetimeoffset(7),
   PRIMARY KEY ([version_uid]),
   FOREIGN KEY ([version_uid]) REFERENCES [openehr_version] ([uid])
-)');
+)')
+GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_versioned_object_ehr')
-  EXEC('CREATE INDEX [ix_versioned_object_ehr] ON [openehr_versioned_object] ([ehr_id], [rm_type])');
+  EXEC('CREATE INDEX [ix_versioned_object_ehr] ON [openehr_versioned_object] ([ehr_id], [rm_type])')
+GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_version_container_trunk')
-  EXEC('CREATE UNIQUE INDEX [ix_version_container_trunk] ON [openehr_version] ([versioned_object_uid], [trunk_version], [branch_number], [branch_version])');
+  EXEC('CREATE UNIQUE INDEX [ix_version_container_trunk] ON [openehr_version] ([versioned_object_uid], [trunk_version], [branch_number], [branch_version])')
+GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_version_time')
-  EXEC('CREATE INDEX [ix_version_time] ON [openehr_version] ([versioned_object_uid], [audit_time_committed_utc])');
+  EXEC('CREATE INDEX [ix_version_time] ON [openehr_version] ([versioned_object_uid], [audit_time_committed_utc])')
+GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_version_preceding')
-  EXEC('CREATE INDEX [ix_version_preceding] ON [openehr_version] ([preceding_version_uid])');
+  EXEC('CREATE INDEX [ix_version_preceding] ON [openehr_version] ([preceding_version_uid])')
+GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_contribution_ehr_time')
-  EXEC('CREATE INDEX [ix_contribution_ehr_time] ON [openehr_contribution] ([ehr_id], [audit_time_committed_utc])');
+  EXEC('CREATE INDEX [ix_contribution_ehr_time] ON [openehr_contribution] ([ehr_id], [audit_time_committed_utc])')
+GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_composition_archetype')
-  EXEC('CREATE INDEX [ix_composition_archetype] ON [openehr_composition_index] ([ehr_id], [archetype_id])');
+  EXEC('CREATE INDEX [ix_composition_archetype] ON [openehr_composition_index] ([ehr_id], [archetype_id])')
+GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_composition_context_start')
-  EXEC('CREATE INDEX [ix_composition_context_start] ON [openehr_composition_index] ([ehr_id], [context_start_utc])');
+  EXEC('CREATE INDEX [ix_composition_context_start] ON [openehr_composition_index] ([ehr_id], [context_start_utc])')
+GO
 
-CREATE OR ALTER TRIGGER [trg_openehr_version_append_only] ON [openehr_version] INSTEAD OF UPDATE, DELETE AS BEGIN THROW 50000, 'openehr_version is append-only (openEHR V8.10)', 1; END;
+CREATE OR ALTER TRIGGER [trg_openehr_version_append_only] ON [openehr_version] INSTEAD OF UPDATE, DELETE AS BEGIN THROW 50000, 'openehr_version is append-only (openEHR V8.10)', 1; END
+GO
 
-CREATE OR ALTER TRIGGER [trg_openehr_contribution_append_only] ON [openehr_contribution] INSTEAD OF UPDATE, DELETE AS BEGIN THROW 50000, 'openehr_contribution is append-only (openEHR V8.10)', 1; END;
+CREATE OR ALTER TRIGGER [trg_openehr_contribution_append_only] ON [openehr_contribution] INSTEAD OF UPDATE, DELETE AS BEGIN THROW 50000, 'openehr_contribution is append-only (openEHR V8.10)', 1; END
+GO

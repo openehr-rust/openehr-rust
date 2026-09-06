@@ -109,9 +109,78 @@ unauthenticated image, and `openehr-oracle`'s live run now exists — `M14.7` is
 met, and the crate is **Schema** (`spec/databases/conformance-matrix.md`, the
 one file that owns a level, `W0.40`). Its annex stays **proposed**; ratifying
 an annex and reaching Schema level turned out to be independent — the three
-already-Schema engines' annexes are proposed too. `openehr-mssql` remains
-Dialect: no arm64 Linux SQL Server image exists, so `M14.6` stays open pending
-a green run on CI's own x86_64 runners.
+already-Schema engines' annexes are proposed too.
+
+`openehr-mssql` remained Dialect past that point for a different reason than
+this paragraph expected: not the missing arm64 image (real, and still true —
+this machine still cannot run the branch locally), but a genuine defect the
+attempt to get a live run on CI's x86_64 runners found once the verification
+script itself stopped failing before the DDL could even be tried — see
+**D-12**. `M14.6`'s status follows D-12's own.
+
+### D-12 — SQL Server refused its own generated trigger — **High, status pending CI**
+
+**Required.** `T11.2`/`M14.6`: the DDL a dialect emits must be executable by
+the engine it names, not merely parseable by this crate's own golden tests —
+exactly the gap `openehr-store/spec/conformance.md` names Dialect as
+deliberately not closing.
+
+**Found**, running `openehr-store/scripts/verify-schema.sh mssql` against a
+real SQL Server 2022 container in CI: `Msg 111, Level 15, State 1 ... 'CREATE
+TRIGGER' must be the first statement in a query batch.` `MssqlDialect` joins
+every statement with a bare `;` (the shared default `Dialect::terminator`),
+so the whole script is one batch, and `CREATE OR ALTER TRIGGER` — emitted
+last, in `append_only_sql` — is never first in it.
+
+The rule was already known and already handled for `CREATE TABLE`/`CREATE
+INDEX`: `MssqlDialect::guard`'s own comment says so ("`CREATE TABLE` must be
+the first statement in its batch, so it cannot appear directly inside `IF
+... BEGIN`") and works around it by wrapping the statement inside
+`EXEC('…')`, which sidesteps the batch-position rule entirely — the literal
+`CREATE TABLE` text is only a string argument there, not a statement in the
+outer batch. `append_only_sql` has no such wrapping, so the same rule that
+was solved once was never applied to the one statement kind that still hits
+it.
+
+**Consequence.** Nothing about this defect could be seen without running the
+DDL against a real server: `conformance::check_dialect` and every golden
+test in `tests/ddl.rs` assert what the emitter produces, and every one of
+them passed while the produced script was one SQL Server would reject
+outright, at the very last statement, after every prior one succeeded.
+
+This was masked for five rounds of `verify-schema.sh` fixes by an unrelated,
+genuinely real bug in the script itself (`M14.6`'s CI attempt): `apply`/`seed`
+delivered SQL to `sqlcmd` via `-i "$path"`, a path that exists on the CI
+runner but not inside the container `sqlcmd` runs in via `podman exec`, so
+the DDL was never actually submitted at all across four rounds, and the
+resulting `Sqlcmd: '<path>': Invalid filename.` matched none of the error
+patterns the script checked for. Once that was fixed — piping through stdin
+instead, matching how the postgresql/mysql/mariadb branches already do it —
+the DDL reached a real server for the first time and Msg 111 is what came
+back.
+
+**Fixed** by giving `MssqlDialect` its own `terminator()`, `"\nGO"` instead
+of the shared default `";"` — the same category of override
+`OracleDialect::terminator` already makes for its own batching rule
+(`\n/` for SQL*Plus). `GO` is a `sqlcmd`/SSMS client directive, not T-SQL
+proper, and harmless between statements that did not need separating; every
+statement including the trigger is now the sole content of its own batch. A
+regression test,
+`the_trigger_is_the_first_statement_in_its_own_batch`
+(`openehr-mssql/tests/ddl.rs`), asserts nothing but blank lines sit between
+the last `GO` and `CREATE TRIGGER`.
+
+**Status: pending the CI run this fix has not yet been observed in.** Per
+this repository's own rule against claiming more than verified (`W0.3`),
+`openehr-mssql` stays at whatever level `spec/databases/conformance-matrix.md`
+states until a `schema / mssql` job is actually seen green with this fix
+applied — the same discipline `openehr-oracle`'s own promotion followed.
+
+This is the fourth real DDL defect the same gap has found across the four
+crates that have now had DDL run against a real server for the first time:
+`A-13`, `A-14`, `A-15` for PostgreSQL and MySQL, and this one for SQL
+Server. `openehr-oracle` alone had none — its DDL held up on first real
+contact, and every failure attempting to verify it was in the script.
 
 ### D-02 — Two store requirements were unverifiable as written — **Medium, fixed**
 

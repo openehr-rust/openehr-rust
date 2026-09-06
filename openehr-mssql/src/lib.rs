@@ -113,4 +113,21 @@ impl Dialect for MssqlDialect {
             table.name
         )]
     }
+
+    // `CREATE [OR ALTER] TRIGGER` must be the first statement in its batch
+    // (`Msg 111`) — the same rule `guard`'s own comment names for `CREATE
+    // TABLE`, worked around there by wrapping the statement inside `EXEC('…')`
+    // so it is never a literal first-class statement in the outer batch at
+    // all. The trigger in `append_only_sql` has no such wrapping, so without a
+    // real batch boundary between it and whatever precedes it in the script,
+    // the engine refuses it outright — found by running the generated script
+    // against a real server (`M14.6`), not by reading the rule.
+    //
+    // `GO` after every statement, not only before the trigger: it is a
+    // `sqlcmd`/SSMS client directive rather than T-SQL proper, harmless
+    // between two statements that did not need separating, and simpler than
+    // tracking which statement kinds do.
+    fn terminator(&self) -> &'static str {
+        "\nGO"
+    }
 }

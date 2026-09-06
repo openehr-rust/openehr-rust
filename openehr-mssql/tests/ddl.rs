@@ -58,6 +58,28 @@ fn every_table_and_index_is_emitted() {
     }
 }
 
+/// `CREATE TRIGGER` refuses to be anything but the first statement in its
+/// batch (`Msg 111`) -- found by running this exact script against a real
+/// server, not by reading the rule (`M14.6`). `GO` (a `sqlcmd` batch
+/// separator, not T-SQL) must appear between every statement and the trigger
+/// that follows it, or the two share a batch and the engine rejects the
+/// script outright regardless of how correct either statement is on its own.
+#[test]
+fn the_trigger_is_the_first_statement_in_its_own_batch() {
+    let sql = ddl_script(&MssqlDialect);
+    let trigger_pos = sql
+        .find("CREATE OR ALTER TRIGGER")
+        .expect("a trigger is emitted");
+    let preceding = &sql[..trigger_pos];
+    let last_go = preceding.rsplit("GO").next().unwrap_or(preceding);
+    // Nothing but blank lines between the last `GO` and the trigger: if this
+    // fails, some statement is again sharing a batch with `CREATE TRIGGER`.
+    assert!(
+        last_go.trim().is_empty(),
+        "CREATE TRIGGER is not first in its batch: {last_go:?}"
+    );
+}
+
 /// The dialect names itself, and its append-only trigger names both the
 /// mutation it refuses and the table it protects.
 ///
