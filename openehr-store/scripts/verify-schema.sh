@@ -216,8 +216,22 @@ mssql)
   # own exit code trustworthy: undecorated, it returns 0 for most in-batch
   # T-SQL errors and the `await` loop below reads by exit code, not output.
   ms() { $CONTAINER exec -i "$NAME" /opt/mssql-tools18/bin/sqlcmd -C -b -S localhost -U sa -P "${PASS}!1" "$@"; }
-  await "SQL Server" ms -Q 'SELECT 1'
-  apply() { ms -d openehr -i "$sql" 2>&1 | grep -E '^Msg [0-9]+' || true; }
+  # Against `openehr`, not `master`: the same readiness race the postgresql
+  # and mysql branches above already document, on this engine's own version
+  # of it. `MSSQL_DB` creates the target database asynchronously, after the
+  # server starts accepting connections to `master` — confirmed by a real CI
+  # failure, not read ahead: `SELECT 1` against the default database returned
+  # instantly while `openehr` did not exist yet, and both `apply` and `seed`
+  # then failed to log in ("Login failed for user 'sa'. Reason: Failed to
+  # open the explicitly specified database 'openehr'") in a form `apply`'s
+  # own `^Msg [0-9]+` grep does not match, so the failure passed as a clean
+  # DDL run and only surfaced two steps later as "seed row absent".
+  await "SQL Server" ms -d openehr -Q 'SELECT 1'
+  # `^Sqlcmd: Error` alongside `^Msg [0-9]+`: the former is sqlcmd's own
+  # client-side/connection-level failure format (a login rejected, a database
+  # not found) and carries no `Msg NNNN` line at all — the exact shape that
+  # let the readiness race above pass as a clean DDL run once already.
+  apply() { ms -d openehr -i "$sql" 2>&1 | grep -E '^(Msg [0-9]+|Sqlcmd: Error)' || true; }
   # A row must exist before the mutations: an `INSTEAD OF` trigger on zero rows
   # never fires, so an empty table reports refusal it never performed.
   #
@@ -257,7 +271,7 @@ SEED
     # the script before reading it back*.
     out=$(ms -d openehr -i "$q" 2>&1) || true
     rm -f "$q"
-    if printf '%s\n' "$out" | grep -qE '^Msg [0-9]+'; then
+    if printf '%s\n' "$out" | grep -qE '^(Msg [0-9]+|Sqlcmd: Error)'; then
       fail "seed insert failed: $out"
     fi
   }
