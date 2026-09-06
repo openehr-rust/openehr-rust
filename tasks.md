@@ -164,6 +164,21 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       orderings against `openehr-sqlite`. *Evidence:* the requirement, two
       conformance cases, and `EHR_STATUS` read/update in the `Store` trait
       and `openehr-loco` (`GET`/`PUT …/ehr_status`). — **M**
+      - **Scope corrected 2026-09-06, before writing any of it.** `Ehr.ehr_status`
+        (`openehr::rm::ehr`) is only an `ObjectRef` — a pointer to a
+        `VERSIONED_EHR_STATUS` elsewhere, per RM — and `openehr-store`'s
+        `Store` trait has no method to create, commit, or read an
+        `EhrStatus` version at all; `openehr_version`'s own `rm_class`
+        column already admits `EHR_STATUS` generically (`schema.rs`), but
+        nothing calls it that way. So this task's real prerequisite is
+        **versioned `EhrStatus` persistence** — a `Version<EhrStatus>`
+        counterpart to `commit_composition`/`get_version`/`latest_version`,
+        the same shape composition versioning already has — not merely the
+        one commit-rule check the task's own headline names. That
+        prerequisite is close in size to the composition-versioning work
+        itself, not a small addition to it. Re-sized **L**, and the `db:H5.x`
+        commit rule itself is unaffected — it is one check on data this
+        prerequisite must exist to supply.
 - [ ] **PostgreSQL `Store`.** Every CDR in the thread runs on PostgreSQL
       18; this repository's only `Store` is SQLite. Implement
       `openehr-postgresql`'s store against the existing DDL, run
