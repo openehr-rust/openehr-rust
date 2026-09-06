@@ -106,6 +106,12 @@ reader deciding whether to use this crate needs the reason more than the fact.
   terminology published in `openEHR/specifications-TERM`. `ARCHETYPED.rm_version`
   is carried and not enforced: data authored against 1.0.2 is readable, and the
   version it declares is preserved so a caller can decide.
+
+  This is a version *target*, not a file citation: no piece of `src/rm/` names
+  a specific `specifications-RM` file it was read against, unlike `TERM`'s own
+  citation in `src/terminology.rs`. See
+  [`releases.md`](releases.md) for what is and is not pinned across every
+  area, checked directly rather than assumed.
 - **S1.17** Where the current terminology disagrees with the older
   `openEHR/terminology` repository, the current one governs, and the divergence
   MUST be recorded where the codes are defined (see `src/terminology.rs`).

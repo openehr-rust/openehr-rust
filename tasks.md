@@ -455,13 +455,37 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       then wire `scripts/check-databases-matrix-coverage.py` into CI once it
       would pass on day one. *Evidence:* the script green in CI; `D-11`
       closed. — **L**
-- [ ] **A specification-release pin table.** One file — `spec/releases.md`
+- [x] **A specification-release pin table.** One file — `spec/releases.md`
       or a section of `openehr/spec/index.md` — naming the RM, BASE, AM,
       TERM, QUERY, and ITS-REST releases every module here was transcribed
       from, with the date and the source file, the way `terminology.rs`
       already does for one of them. Then a re-vendor check: when a release
       moves, which modules to re-read. Thread #7 and #8 are about exactly
       this risk. *Evidence:* the table; `S1.16`/`K15.2` cite it. — **S**
+
+      **2026-09-06.** `openehr/spec/releases.md`, checked against each
+      specification repo's own GitHub API (tags/releases, and per-file commit
+      history) rather than assumed from what was already cited in the tree.
+      The honest result is not the tidy table the headline implies: only
+      `TERM` has both a file and a date, and re-reading it today reproduces
+      exactly what was read on 2026-07-31, since the cited file has not
+      changed since. `RM` names a version target (1.1.0, matching the latest
+      tag exactly) but no file. `BASE` and `AM` cite specific files that
+      *have* changed on `master` since the last numbered release — confirmed
+      by comparing blob shas at the tag versus `master` for one sampled file
+      each, not merely by comparing dates. `QUERY` and `AM`'s own release
+      number (`K15.2`) have no citation of any kind; the `AM` corpus (a
+      *different* thing — real archetype fixtures, not the AOM2 specification
+      itself) is the one part of AM that is genuinely commit-pinned. Both
+      `S1.16` and `K15.2` now cite the file, and `K15.2` is corrected in
+      place: it stays unmet, now for the specific, verified reason above
+      rather than a general one — naming "AOM 2.3.0" would have been exactly
+      the kind of unchecked number this repository's culture forbids, so it
+      was not named. The "re-vendor check" the item's own text asks for is
+      in the file: read `ITS-REST` first (its own latest release, `1.1.0`,
+      postdates `openehr-loco`'s work on it by weeks), then `QUERY` (no
+      citation to go stale — the first read is the first citation), then
+      `BASE`/`AM` (confirmed drifted), `RM` last (stable, matches its tag).
 - [ ] **An ambiguities register, and file it upstream.** SEC asked (#19)
       that spec inconsistencies not be discarded. Collect the spec silences
       and contradictions this tree has already adjudicated — `versions` typed

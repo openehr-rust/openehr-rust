@@ -100,6 +100,11 @@ departs from; an undeclared departure is a defect, not a decision.
 - [JSON corpus](json_corpus.md) — the same discipline applied to canonical
   JSON compositions nobody here wrote, against `serde_json → Composition →
   Validate`.
+- [Specification release provenance](releases.md) — which openEHR
+  specification release each area (RM, BASE, AM, TERM, QUERY, ITS-REST) was
+  actually read against, checked directly rather than assumed: one area is
+  dated and stable, two have citations that have already drifted from the
+  release they name, and two have no citation at all.
 
 ## The rules that cost nothing to keep and cannot be repaired once broken
 

@@ -77,6 +77,16 @@ before the code does.
   names RM 1.1.0, and MUST carry an artefact's declared version rather than
   enforcing it. An archetype authored against an older AM is readable, and what
   it declares is preserved so a caller can decide.
+
+  **Checked, not fixed, 2026-09-06.** This remains unmet, and now for a
+  specific reason rather than a general one: every AM citation in `src/am/`
+  reads `openEHR/specifications-AM`'s `master` branch at an unrecorded time,
+  not a numbered release. The latest tagged release is `Release-2.3.0`
+  (2024-03-20), but two sampled files this crate cites have both changed on
+  `master` since that tag — so naming "AOM 2.3.0" here would be a number
+  nobody checked the crate's actual behaviour against, which is the exact
+  shape of claim this repository's own culture forbids. See
+  [`releases.md`](releases.md).
 - **K15.3** Every AOM2 type MUST round-trip losslessly through the
   serialisations the crate accepts (§9 governs the JSON form). `S1.13` applies
   unchanged: not interpreting a construct is not a licence to lose it.
