@@ -40,7 +40,7 @@ tasks below are ordered by these gaps.
 | **A REST surface tools can talk to**: ITS-REST 1.1.0, AQL over HTTP, templates, EHR_STATUS, an admin scheme — openEHR Explorer added FerroEHR as a server type within three days | #1, #21 | Eleven endpoints: EHR, contribution, composition commit/read/history/vread, one index search. No `/query/aql`, no template endpoints, no `EHR_STATUS`, `DELETE` answers `501` |
 | **AQL that executes** | #1 | AQL is parsed and statically checked and **not executed** — a deliberate rule (`S1.5`, reaffirmed `K15.29`) that a CDR reader will read as the headline gap |
 | **Templates**: OPT 1.4, ADL 2.4, WebTemplate, FLAT/STRUCTURED, validated at upload | #1 | AOM2 types, `am::validate` against an in-memory archetype, and a `definition`-only cADL reader (`A-40`, `A-62`–`A-69`). No OPT, no template, no flattening, no ADL 1.4 body |
-| **Strict readers and typed errors**: undeclared/duplicate JSON keys refused, every error naming path and rule | #1, #21 | Constructors validate and `validate()` runs on JSON ingress (`lib:A-23`); duplicate-key refusal and a stated unknown-field posture are not in place |
+| **Strict readers and typed errors**: undeclared/duplicate JSON keys refused, every error naming path and rule | #1, #21 | Constructors validate and `validate()` runs on JSON ingress (`lib:A-23`); duplicate keys **are** already refused (`serde`'s own derived behavior, unconditionally). Undeclared keys are not — and a stated posture already exists, the opposite way: `J9.9` requires ignoring them, deliberately, for forward compatibility with future openEHR minor releases |
 | **One edition, security included**: RBAC/ABAC, ATNA audit, multi-tenancy all in the open-source build | #18 | Tamper-evident audit chain, PHI redaction, PASETO auth; no RBAC, no read audit at the store (`db:D-04`), no SBOM, no TLS statement |
 | **Upstreaming spec defects** — SEC asked for the 228 inconsistencies rather than let them be discarded | #18, #19 | This repository adjudicates spec silences inside its audit registers and has reported none of them upstream |
 | **Transparent AI disclosure** — praised first, before anything technical | #2, #7, #19 | `AI_STATEMENT.md` exists and is candid; keep it that way |
@@ -242,6 +242,58 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       requirement), not crate-by-crate accident; duplicate-key refusal needs
       a custom `serde_json` map visitor. *Evidence:* invalid twins for each
       refusal beside the valid fixture, the way #16 describes. — **M**
+
+      **Scope corrected 2026-09-06, before landing any of it.** Both halves
+      of this task's own premise turned out to be wrong, in opposite
+      directions.
+
+      **Duplicate-key refusal needs no code at all.** `serde`'s own derived
+      struct/enum `Deserialize` already refuses a repeated key by default —
+      verified against a scratch crate and then against
+      `openehr::rm::ehr::Composition` directly: `{"name":"a","name":"b",…}`
+      returns `Err("duplicate field `name`")`, with no custom visitor,
+      through `#[serde(flatten)]` and through `#[serde(tag = "_type")]`
+      internally-tagged dispatch alike (`DataValue`, `ContentItemWire`). This
+      has evidently been true throughout; the "needs a custom map visitor"
+      line was never checked. The only path that loses this guarantee is
+      deserializing into `serde_json::Value` first — which nothing on the
+      ingestion path (`axum::Json<Version<Composition>>` in
+      `openehr-loco`) does.
+
+      **`deny_unknown_fields` cannot be adopted as this task describes,
+      because a stated policy already exists and says the opposite:
+      `J9.9`** — "The crate MUST ignore attributes it does not model rather
+      than rejecting the document. openEHR adds attributes between minor
+      releases, and a strict reader rejects tomorrow's payload for
+      containing something it does not need." This is not an oversight to
+      correct; it was deliberately reaffirmed once already, in `lib:A-23`'s
+      own fix ("Deserialization stays lenient rather than being made to
+      refuse, because `J9.9` says so and the reason holds: a document that
+      cannot be read cannot be inspected, repaired, or reported on").
+      `J9.7` names the specific case this task's own JSON would hit: "A
+      `_type` on a concrete class MAY be ignored, because there it is
+      redundant" — `CODE_PHRASE` is a real example that does not model its
+      own `_type`, and adding `deny_unknown_fields` across
+      `openehr::rm`'s ~85 `Deserialize`-deriving types (confirmed
+      mechanically achievable — `#[serde(deny_unknown_fields)]` composes
+      correctly with `#[serde(flatten)]` in every arrangement tested,
+      contrary to a real historical `serde` limitation this task may have
+      been written against) broke it immediately: 7 existing tests failed,
+      two of them asserting `J9.9` itself by name
+      (`validation::tests::a_version_envelope_is_checked_on_data_that_arrived_as_json`,
+      `security::redact::tests::a_redacted_composition_is_still_valid`).
+      Reverted rather than landed.
+
+      So this is not an implementation gap; it is two stated goals in
+      direct conflict — Thread #1's "refuse the undeclared" against this
+      crate's own forward-compatibility guarantee — and **choosing between
+      them is a maintainer decision, not code**, the same footing
+      `tasks.md`'s own regex item already stands on. One shape that
+      resolves it without repealing `J9.9`: strictness as an opt-in posture
+      at the ingestion boundary (`openehr-loco`, or a `Store::commit_*`
+      flag) rather than baked into the RM's own `Deserialize` — refusing at
+      the edge an operator chooses to run strict, while the library itself
+      keeps reading tomorrow's payload. Not decided here.
 - [ ] **Run an external corpus, and cite the spec per test.** The single
       strongest answer to #15: fixtures nobody here wrote. Feed the openEHR
       SDK's canonical JSON examples and Better's web-template test
