@@ -237,11 +237,24 @@ mssql)
     esac
   }
   await "SQL Server" ready
-  # `^Sqlcmd: Error` alongside `^Msg [0-9]+`: the former is sqlcmd's own
-  # client-side/connection-level failure format (a login rejected, a database
-  # not found) and carries no `Msg NNNN` line at all — the exact shape that
-  # let the readiness race above pass as a clean DDL run once already.
-  apply() { ms -d openehr -i "$sql" 2>&1 | grep -E '^(Msg [0-9]+|Sqlcmd: Error)' || true; }
+  # `< "$sql"`, not `-i "$sql"`: this is the actual root cause behind every
+  # earlier fix in this branch, found only once the diagnostics added for the
+  # other two bugs finally showed it verbatim: "Sqlcmd: '/tmp/tmp.XXX':
+  # Invalid filename." `-i` names a file for sqlcmd, *running inside the
+  # container*, to open — but `$sql` is a path on the *host* (mktemp on the
+  # runner), invisible inside the container's own filesystem. `apply` has
+  # been silently applying no DDL at all since this branch's first commit:
+  # every earlier "parses"/"idempotent" was this exact error, reported clean
+  # because it matches neither `^Msg [0-9]+` nor the one `Sqlcmd: Error:`
+  # shape already known. Piping via stdin instead crosses the boundary
+  # correctly — `podman exec -i` forwards the host shell's redirected input
+  # through to the container process, the same mechanism the postgresql,
+  # mysql, and mariadb branches above already use for exactly this reason.
+  #
+  # The grep is widened to any `^Sqlcmd:` line, not only `Sqlcmd: Error:`:
+  # this error shape had no "Error" in it, and matching only the one shape
+  # already seen is how it went uncaught for four rounds of the wrong fix.
+  apply() { ms -d openehr <"$sql" 2>&1 | grep -E '^(Msg [0-9]+|Sqlcmd:)' || true; }
   # A row must exist before the mutations: an `INSTEAD OF` trigger on zero rows
   # never fires, so an empty table reports refusal it never performed.
   #
@@ -279,14 +292,16 @@ SEED
     # moved but not actually sprung, since the first fix addressed *where*
     # the output went without addressing *that the assignment still killed
     # the script before reading it back*.
-    out=$(ms -d openehr -i "$q" 2>&1) || true
+    # `< "$q"`, not `-i "$q"` — see the comment on `apply`'s own delivery
+    # above. This was the actual root cause the diagnostics in this function
+    # exist to have found: "Sqlcmd: '/tmp/tmp.XXX': Invalid filename.",
+    # printed unconditionally below and matching neither grep this branch had
+    # until now, which is exactly why `apply` reporting "parses"/"idempotent"
+    # was never real: no DDL had been applied for either call to fail against.
+    out=$(ms -d openehr <"$q" 2>&1) || true
     rm -f "$q"
-    # Printed unconditionally, matched or not: the seed step has already
-    # failed silently twice in CI while matching neither `^Msg [0-9]+` nor
-    # `^Sqlcmd: Error`, so a third silent failure would mean guessing a
-    # fourth fix with no more evidence than the first three had.
     printf '  seed() sqlcmd transcript:\n%s\n' "$out" >&2
-    if printf '%s\n' "$out" | grep -qE '^(Msg [0-9]+|Sqlcmd: Error)'; then
+    if printf '%s\n' "$out" | grep -qE '^(Msg [0-9]+|Sqlcmd:)'; then
       fail "seed insert failed: $out"
     fi
   }
