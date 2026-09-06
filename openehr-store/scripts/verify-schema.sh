@@ -281,6 +281,11 @@ SEED
     # the script before reading it back*.
     out=$(ms -d openehr -i "$q" 2>&1) || true
     rm -f "$q"
+    # Printed unconditionally, matched or not: the seed step has already
+    # failed silently twice in CI while matching neither `^Msg [0-9]+` nor
+    # `^Sqlcmd: Error`, so a third silent failure would mean guessing a
+    # fourth fix with no more evidence than the first three had.
+    printf '  seed() sqlcmd transcript:\n%s\n' "$out" >&2
     if printf '%s\n' "$out" | grep -qE '^(Msg [0-9]+|Sqlcmd: Error)'; then
       fail "seed insert failed: $out"
     fi
@@ -412,7 +417,9 @@ out=$(apply)
 printf 'idempotent '
 
 seed
-[ "$(rows | tr -d '[:space:]')" = "1" ] || fail "seed row absent; enforcement below would prove nothing"
+row_count=$(rows | tr -d '[:space:]')
+[ "$row_count" = "1" ] || fail "seed row absent; enforcement below would prove nothing
+  rows() returned: '$row_count'"
 
 # M3.43: canonical JSON must come back as the bytes it went in as.
 #
