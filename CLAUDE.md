@@ -57,7 +57,7 @@ the next release is 0.10.0, not 0.9.1.
 | `openehr-postgresql` | PostgreSQL 18 dialect | **Schema** |
 | `openehr-mysql` | MySQL 8.4 dialect | **Schema** |
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
-| `openehr-mssql` | SQL Server dialect | **Dialect** |
+| `openehr-mssql` | SQL Server dialect | **Schema** |
 | `openehr-oracle` | Oracle dialect | **Schema** |
 | `openehr-loco` | HTTP service: Axum, Loco, PASETO verification | not published |
 | `openehr-assets` | regenerates `assets/`; fails on a stale one | not published |

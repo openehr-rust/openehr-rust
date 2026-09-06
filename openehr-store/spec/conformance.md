@@ -69,35 +69,49 @@ reports the silence as success.
 | `openehr-postgresql` | **Schema** | DDL executed against **PostgreSQL 18**: 5 tables, 7 indexes, idempotent across repeated runs, foreign keys enforced, and both append-only tables refused `UPDATE` and `DELETE` with the row surviving unmodified. | No driver and no `Store`. |
 | `openehr-mysql` | **Schema** | The same, against **MySQL 8.4**. | as above |
 | `openehr-mariadb` | **Schema** | The same, against **MariaDB 11.4**. | as above. This crate was a name-substituted copy of `openehr-mysql` until 2026-08-01, claiming Schema against a "MariaDB 8.4" that does not exist; see [`spec/audit.md`](../../spec/audit.md) **W-01**. The current claim was earned by an actual run. |
-| `openehr-mssql` | **Dialect** | DDL emission, type distinctness, quoting, identifier coverage, and that the declared catalogue guard is actually emitted. | No server has parsed it yet. Its `verify-schema.sh` branch exists and runs in CI's own x86_64 runners (`schema / mssql`), but has not yet passed there (`M14.6`); SQL Server 2022 segfaults under qemu, so no arm64 machine can check it locally either. |
+| `openehr-mssql` | **Schema** | DDL executed against **SQL Server 2022**: tables and indexes created, idempotent across repeated runs, a seed row's canonical JSON round-tripped byte for byte, and both append-only tables refused `UPDATE`/`DELETE` with the row surviving unmodified. Verified 2026-09-06, in CI (`schema / mssql`, `M14.6`) — SQL Server 2022 segfaults under qemu, so this crate still cannot be checked on an arm64 machine locally. | No driver and no `Store`. |
 | `openehr-oracle` | **Schema** | DDL executed against **Oracle Database Free 26ai** (`gvenzl/oracle-free`): tables and indexes created, idempotent across repeated runs, a seed row's canonical JSON round-tripped byte for byte, and both append-only tables refused `UPDATE`/`DELETE` with the row surviving unmodified. Verified 2026-09-06, both locally and in CI (`schema / oracle`, `M14.7`). | No driver and no `Store`. |
 
 ## What "Dialect" deliberately does not mean
 
-It does not mean the DDL runs, and the one crate still at this level
-(`openehr-mssql`) should be read accordingly. The golden tests assert what the
-emitter produces, not that a parser accepts it — those are different claims,
-and the sibling monorepo has two findings (**F-25**, **F-26**) for a migration
-path that could never have executed in a port with no store to notice.
+**No crate is at this level any longer, as of 2026-09-06** — every engine has
+now had its DDL run against a real server — but the distinction stays worth
+stating for whichever crate is next to add one. It does not mean the DDL
+runs. The golden tests assert what the emitter produces, not that a parser
+accepts it — those are different claims, and the sibling monorepo has two
+findings (**F-25**, **F-26**) for a migration path that could never have
+executed in a port with no store to notice.
 
-The distance between the two claims is now measured rather than asserted. **All
-three of the first crates that moved to Schema were wrong at Dialect level**,
-and passed every golden test while being wrong: PostgreSQL and MySQL surfaced
-`A-13`, `A-14`, and `A-15`, and MariaDB was emitting another engine's script
-entirely (**W-01**). Three of three is the number to carry into any judgement
-about the crate still at Dialect.
+The distance between the two claims is now measured rather than asserted, for
+every engine that has made the move. **PostgreSQL, MySQL, and MariaDB were
+each wrong at Dialect level**, and passed every golden test while being
+wrong: PostgreSQL and MySQL surfaced `A-13`, `A-14`, and `A-15`, and MariaDB
+was emitting another engine's script entirely (**W-01**).
 
-**Oracle's move, 2026-09-06, breaks that pattern in a way worth recording
-rather than smoothing over.** Its DDL itself held up completely — every
-statement this dialect emits parsed, was idempotent, and enforced append-only
-correctly on the first real run. What was wrong twice was the *verification
-script's* own Oracle branch: it read `sqlplus`'s exit code for readiness, which
-is 0 even on a failed connection; and it ran the shared mutation statements
-unquoted, which Oracle folds to uppercase against a schema quoted lowercase, so
-the refusal check was hitting "no such table" rather than the trigger under
-test. Both were found and fixed before the crate's own claim moved, which is
-the same discipline the three-of-three crates above were held to — the defect
-just turned out to live one level down, in the harness rather than the dialect.
+**Oracle's move, 2026-09-06, broke that pattern.** Its DDL itself held up
+completely — every statement this dialect emits parsed, was idempotent, and
+enforced append-only correctly on the first real run. What was wrong twice
+was the *verification script's* own Oracle branch: it read `sqlplus`'s exit
+code for readiness, which is 0 even on a failed connection; and it ran the
+shared mutation statements unquoted, which Oracle folds to uppercase against
+a schema quoted lowercase, so the refusal check was hitting "no such table"
+rather than the trigger under test. Both were found and fixed before the
+crate's own claim moved — the defect lived one level down, in the harness
+rather than the dialect.
+
+**SQL Server's move, the same day, restored it.** Getting a live run at all
+took five rounds of fixing the verification script — two `set -eu` bugs that
+swallowed the real error, two different readiness-race diagnoses, and a
+host/container filesystem-boundary mistake in how SQL was delivered to
+`sqlcmd` — but once the DDL actually reached a real server, it found a
+genuine defect in this dialect: `append_only_sql`'s `CREATE OR ALTER TRIGGER`
+shared a batch with every statement before it, which SQL Server refuses
+outright (`Msg 111`). Fixed by giving the dialect its own statement
+terminator so every statement is its own batch (`D-12`). One further script
+fix — `sqlcmd`'s own column padding, hiding behind what looked like a clean
+byte-exact JSON round-trip — came after that. Four of five crates that have
+reached Schema by a live run were wrong at Dialect level; Oracle alone was
+not.
 
 ## Why the shared logic being verified once is worth something anyway
 

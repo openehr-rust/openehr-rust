@@ -33,7 +33,7 @@ crates.io at 0.9.0; the other ten are `publish = false`.
 | `openehr-postgresql` | PostgreSQL 18 dialect | **Schema** |
 | `openehr-mysql` | MySQL 8.4 dialect | **Schema** |
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
-| `openehr-mssql` | SQL Server dialect | **Dialect** |
+| `openehr-mssql` | SQL Server dialect | **Schema** |
 | `openehr-oracle` | Oracle dialect | **Schema** |
 | `openehr-loco` | HTTP service on Axum and Loco; verifies PASETO `v4.public` | outside the ladder (`W0.32`) |
 | `openehr-assets` | regenerates `assets/`, and fails the build on a stale one | not published |
@@ -127,7 +127,8 @@ and false of the configuration.
 ### Verifying a dialect against a real engine
 
 This is what separates conformance level **Dialect** from **Schema**, and it has
-found a defect in every crate it has been run against — three of three.
+found a real defect in four of the five crates it has been run against — every
+one but `openehr-oracle`, whose DDL held up on first real contact.
 
 ```sh
 sh openehr-store/scripts/verify-schema.sh postgresql   # PostgreSQL 18
@@ -144,13 +145,17 @@ checks the append-only tables refuse `UPDATE` and `DELETE` **with that row
 present**. The row matters: a `FOR EACH ROW` trigger on an empty table never
 fires, so a check on zero rows reports a refusal it never performed.
 
-**`openehr-oracle` reached Schema 2026-09-06**: `gvenzl/oracle-free` needs no
-registry login, unlike the official Oracle images this section used to say
-blocked every branch. **`openehr-mssql` still has none run for real**: SQL
-Server 2022 segfaults under qemu on arm64, so its branch exists and runs in
-CI's own x86_64 runners, but has not yet passed there (`M14.6`) — a local
-`sh ... verify-schema.sh mssql` on Apple Silicon will not tell you anything
-useful about it.
+**Both remaining engines reached Schema 2026-09-06.** `openehr-oracle`:
+`gvenzl/oracle-free` needs no registry login, unlike the official Oracle
+images this section used to say blocked every branch, and its DDL parsed
+clean on the first real run. `openehr-mssql`: getting a live run at all took
+five rounds of fixing the verification script itself, and once the DDL
+finally reached a real server it found a genuine defect —
+`append_only_sql`'s `CREATE TRIGGER` shared a batch with every statement
+before it, which SQL Server refuses outright (`Msg 111`, `db:D-12`). SQL
+Server 2022 still segfaults under qemu on arm64, so
+`sh ... verify-schema.sh mssql` on Apple Silicon will still not tell you
+anything useful about it — CI's own x86_64 runners are what verify it now.
 
 ### CI
 
@@ -162,11 +167,11 @@ useful about it.
 | `msrv` | derives N−2 from the stable toolchain it just installed, checks every manifest and document declares exactly that, then **builds and tests on it**. See [`spec/rust-msrv-n-minus-2/index.md`](spec/rust-msrv-n-minus-2/index.md); this job is expected to go red within six weeks of every Rust release, and that is the point |
 | `examples` | the five runnable tutorials in `openehr`, plus the persistence tutorial in `openehr-sqlite` |
 | `bench` | `cargo bench -- --test`: every criterion benchmark runs once. Nothing is gated on wall-clock (`W0.35`) — a threshold on a shared runner fails for unrelated reasons and gets silenced |
-| `schema` | `verify-schema.sh` against real PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle containers (SQL Server's has not yet passed, `M14.6`) |
+| `schema` | `verify-schema.sh` against real PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle containers — all five pass |
 | `assets` | `openehr-assets` regenerates the committed DDL/schema files and fails the build if a committed one is stale |
 | `fuzz` | a short regression run of every fuzz target — a crash, panic, or abort fails the build; this is a gate, not a campaign |
 | `layering` | `openehr` and `openehr-store` depend inward only, including dev-dependencies. The crate list is **derived** from the tree, not written here: it used to name nine of seventeen and could not see a cycle through the eight it skipped (**W-13**) |
-| `claims` | that mssql still claims only Dialect (oracle left this guard 2026-09-06 once `schema / oracle` gave it a real job to claim Schema against), that the library matrix covers every requirement exactly once, that the conformance matrix does not contradict itself, that the audit summary counts itself correctly, and that **all eighteen** crates declare the same five licences (**W-14**) |
+| `claims` | that no engine crate claims Schema or above without a `schema` job backing it (the check list emptied 2026-09-06, once oracle and then mssql each got one), that the library matrix covers every requirement exactly once, that the conformance matrix does not contradict itself, that the audit summary counts itself correctly, and that **all eighteen** crates declare the same five licences (**W-14**) |
 | `trademarks` | `scripts/check-trademarks.py`: every root document and every published crate's rustdoc that uses the openEHR mark in prose carries the notice of professionalization rule 5 verbatim, non-affiliation sentence included |
 | `mutants` | `cargo-mutants --in-diff` over the lines a **push or a pull request** changed, per crate touched. It was pull-request-only until 2026-08-21, so nine commits made straight to `main` bypassed it entirely while it reported `skipped` (**W-18**). A push is mutated against `event.before..HEAD` only, so a survivor in code an earlier push carried is never re-checked here; run it locally by function name before pushing — see [`agents/auditing.md`](agents/auditing.md) |
 

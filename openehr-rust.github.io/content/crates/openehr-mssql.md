@@ -7,12 +7,24 @@ openEHR® persistence for **Microsoft SQL Server 2022** — the schema dialect.
 > constitute endorsement of this product by openEHR International or openEHR
 > Foundation.
 
-## Conformance level: Dialect
+## Conformance level: Schema
 
-This crate emits DDL for the shared openEHR schema. **It does not contain a
-store.** There is no driver dependency, no connection handling, no
-implementation of `Store`, and no statement in this crate has ever been
-submitted to a Microsoft SQL Server 2022 server.
+This crate emits DDL for the shared openEHR schema, and that DDL has been
+executed against a real SQL Server: `mcr.microsoft.com/mssql/server:2022-latest`.
+Tables and indexes were created, the script re-applied as a no-op, a seed
+row's canonical JSON round-tripped byte for byte, and both append-only tables
+refused `UPDATE` and `DELETE` with the row unchanged afterwards.
+`openehr-store/scripts/verify-schema.sh mssql` reproduces it from a fresh
+container, and runs in CI on every push.
+
+The first real run found a genuine defect: `CREATE TRIGGER` shared a batch
+with every statement before it, which SQL Server refuses outright (`Msg
+111`). Fixed by giving this dialect its own statement terminator so every
+statement is the sole content of its own batch — full account in
+[`spec/databases/audit.md`](../spec/databases/audit.md) **D-12**.
+
+**It does not contain a store.** There is no driver dependency, no connection
+handling, and no implementation of `Store`.
 
 See [`openehr-store/spec/conformance.md`](../openehr-store/spec/conformance.md)
 for what each level means and why they are stated this bluntly.
@@ -56,7 +68,7 @@ owns only spellings cannot do that, and
 | `nvarchar(max)` for JSON | SQL Server has no JSON column type; `JSON_VALUE` and friends operate on `nvarchar`. |
 | `datetimeoffset(7)`, not `datetime2` | openEHR instants carry a UTC offset, and `datetime2` would drop it — making two records from different zones compare as the same moment. |
 | No `IF NOT EXISTS` | SQL Server has no such clause for tables or indexes. Emitting it anyway would produce a script that fails on the one engine it targets, which is the shape of the sibling monorepo's **F-25** and **F-26**. |
-| No append-only trigger | An `INSTEAD OF` trigger is the right mechanism, and its exact form has not been run against a server. Left undone and stated. |
+| `INSTEAD OF` trigger for append-only | Refuses before anything is written, rather than rolling back work already done. Its own batch, not shared with any statement before it — see `D-12`. |
 
 ## Every instant is stored twice, and that is the point
 
@@ -83,7 +95,7 @@ assertions that it is *not* another engine's SQL.
 
 | Not here | Why |
 | --- | --- |
-| A `Store` | This crate is a dialect. Level **Dialect** means the schema is emitted, not that this crate can talk to a database. |
+| A `Store` | This crate is a dialect. Level **Schema** means the DDL has run against a real server, not that this crate can talk to a database for anything beyond that. |
 | A driver dependency | A dependency implies a capability, and readers reasonably infer one (`W16.4`). |
 | Archetype or template validation | Not implemented anywhere in this project (`lib:S1.4`). |
 | AQL execution | Parsed and statically checked by `openehr`, never executed (`S1.6`). |

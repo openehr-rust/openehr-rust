@@ -116,15 +116,20 @@ each engine crate stands, under the ladder set out in
 | `openehr-postgresql` | **Schema** — DDL executed against PostgreSQL 18 |
 | `openehr-mysql` | **Schema** — DDL executed against MySQL 8.4 |
 | `openehr-mariadb` | **Schema** — DDL executed against MariaDB 11.4 |
-| `openehr-mssql` | **Dialect** — its `verify-schema.sh` branch runs in CI, but has not yet passed there |
+| `openehr-mssql` | **Schema** — DDL executed against SQL Server 2022 |
 | `openehr-oracle` | **Schema** — DDL executed against Oracle Database Free 26ai |
 
 `openehr-sqlite` reached **Verified** on 2026-08-01: [run 30713623082](https://github.com/openehr-rust/openehr-rust/actions/runs/30713623082) is green across
-all nineteen jobs. `openehr-oracle` joined the Schema claims 2026-09-06 (run
-[34040865467](https://github.com/openehr-rust/openehr-rust/actions/runs/34040865467)),
-once `gvenzl/oracle-free` — a public image needing no registry login — was
-found. The four Schema claims are checked by CI on every push rather than
-attested once. See [`spec/audit.md`](../spec/audit.md) **W-02**.
+all nineteen jobs. `openehr-oracle` and `openehr-mssql` joined the Schema
+claims 2026-09-06 — Oracle (run
+[34040865467](https://github.com/openehr-rust/openehr-rust/actions/runs/34040865467))
+once `gvenzl/oracle-free`, a public image needing no registry login, was
+found; SQL Server (run
+[34045294037](https://github.com/openehr-rust/openehr-rust/actions/runs/34045294037))
+after a real defect in its own DDL was found and fixed (`D-12`). **No engine
+crate remains at Dialect.** All five Schema claims are checked by CI on every
+push rather than attested once. See [`spec/audit.md`](../spec/audit.md)
+**W-02**.
 
 ## Specification
 

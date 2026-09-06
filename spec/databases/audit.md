@@ -116,9 +116,9 @@ this paragraph expected: not the missing arm64 image (real, and still true —
 this machine still cannot run the branch locally), but a genuine defect the
 attempt to get a live run on CI's x86_64 runners found once the verification
 script itself stopped failing before the DDL could even be tried — see
-**D-12**. `M14.6`'s status follows D-12's own.
+**D-12**, now fixed and observed green. `openehr-mssql` is **Schema**.
 
-### D-12 — SQL Server refused its own generated trigger — **High, status pending CI**
+### D-12 — SQL Server refused its own generated trigger — **High, fixed**
 
 **Required.** `T11.2`/`M14.6`: the DDL a dialect emits must be executable by
 the engine it names, not merely parseable by this crate's own golden tests —
@@ -170,11 +170,13 @@ regression test,
 (`openehr-mssql/tests/ddl.rs`), asserts nothing but blank lines sit between
 the last `GO` and `CREATE TRIGGER`.
 
-**Status: pending the CI run this fix has not yet been observed in.** Per
-this repository's own rule against claiming more than verified (`W0.3`),
-`openehr-mssql` stays at whatever level `spec/databases/conformance-matrix.md`
-states until a `schema / mssql` job is actually seen green with this fix
-applied — the same discipline `openehr-oracle`'s own promotion followed.
+**Confirmed** in CI run
+[34045294037](https://github.com/openehr-rust/openehr-rust/actions/runs/34045294037),
+job `schema / mssql`, 2026-09-06 — one further, unrelated script fix was
+needed to get there (`sqlcmd`'s own column padding made a byte-exact JSON
+comparison fail; fixed with `-W`, no dialect change). `openehr-mssql` is
+**Schema** (`spec/databases/conformance-matrix.md`, the one file that owns a
+level, `W0.40`).
 
 This is the fourth real DDL defect the same gap has found across the four
 crates that have now had DDL run against a real server for the first time:

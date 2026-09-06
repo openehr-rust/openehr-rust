@@ -45,7 +45,7 @@ assert_eq!(back, composition);
 | [`openehr-postgresql`](openehr-postgresql) | PostgreSQL 18 dialect | **Schema** |
 | [`openehr-mysql`](openehr-mysql) | MySQL 8.4 dialect | **Schema** |
 | [`openehr-mariadb`](openehr-mariadb) | MariaDB 11.4 dialect | **Schema** |
-| [`openehr-mssql`](openehr-mssql) | SQL Server dialect | **Dialect** |
+| [`openehr-mssql`](openehr-mssql) | SQL Server dialect | **Schema** |
 | [`openehr-oracle`](openehr-oracle) | Oracle Database dialect | **Schema** |
 | [`openehr-loco`](openehr-loco) | An HTTP API server over `openehr-sqlite`, on Axum and Loco | not on the ladder |
 | [`openehr-assets`](openehr-assets) | Regenerates the committed DDL/schema files; fails the build if they are stale | tooling |
@@ -576,13 +576,6 @@ times with two already diverged (**W-16**).
 
 Recorded rather than implied — see [`spec/audit.md`](spec/audit.md):
 
-- **SQL Server DDL has never been parsed by the engine it names.** SQL Server
-  2022 segfaults under qemu on arm64, and its CI job (`schema / mssql`, on a
-  real x86_64 runner) has not yet passed, so the crate stays at **Dialect**.
-  That is a gap in evidence, not a judgement that the DDL is wrong. Oracle
-  closed the same gap 2026-09-06: `gvenzl/oracle-free` needs no registry login,
-  unlike the official images this line used to assume were the only ones, and
-  `openehr-oracle` is now **Schema**.
 - **`spec/databases/` was rewritten from an imported FHIR specification** on
   2026-08-01. It now describes this system, but the requirements were derived by
   reading the code rather than the openEHR sources, so some are descriptions

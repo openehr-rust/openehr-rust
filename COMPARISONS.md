@@ -76,8 +76,9 @@ this afternoon, one of the projects below is the better answer.
   here at **Verified**.
 - **…you want to know exactly how far each claim has been checked.** The
   conformance ladder and its matrix exist because "supports six databases" is a
-  sentence anyone can write. Two of the six have never been parsed by a server,
-  and the matrix says so.
+  sentence anyone can write. Five of the six have had their DDL parsed by a
+  real server; one has been implemented against and re-verified in CI since;
+  the matrix says exactly which is which.
 - **…you are auditing.** The requirement tree, the register of known defects, and
   the disclosure of how the code was written are all in the repository, and CI
   fails when a document disagrees with the tree.

@@ -76,7 +76,7 @@ this table restates it and is checked against it.
 | [`openehr-postgresql`](openehr-postgresql/) | **Schema** |
 | [`openehr-mysql`](openehr-mysql/) | **Schema** |
 | [`openehr-mariadb`](openehr-mariadb/) | **Schema** |
-| [`openehr-mssql`](openehr-mssql/) | **Dialect** |
+| [`openehr-mssql`](openehr-mssql/) | **Schema** |
 | [`openehr-oracle`](openehr-oracle/) | **Schema** |
 
 `openehr` and `openehr-store` are libraries outside the engine ladder;

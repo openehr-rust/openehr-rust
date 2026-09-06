@@ -2,10 +2,13 @@
 
 **Status: proposed** (`X15.9`).
 
-**Conformance level: Dialect.** No SQL Server has ever parsed this DDL. Read
-everything below as *what this dialect emits*, not as *what an engine accepted* —
-the distance between those has been measured on this project at three defects in
-three crates (`A-13`, `A-15`, **W-01**).
+**Conformance level: Schema**, since 2026-09-06 (CI run
+[34045294037](https://github.com/openehr-rust/openehr-rust/actions/runs/34045294037),
+job `schema / mssql`). Restated here only for orientation — the one file that
+owns a level is [`spec/databases/conformance-matrix.md`](../../spec/databases/conformance-matrix.md)
+(`W0.40`); see `M14.6` below. The first real run found exactly the kind of gap
+the distance between "emits" and "accepted" predicts: `D-12`, a `CREATE
+TRIGGER` that shared a batch with every statement before it.
 
 Normative only where it explicitly amends a core requirement by number
 (`C0.12`, `X15.7`). Requirement prefix for departures: `M14`.
@@ -85,22 +88,31 @@ approach as well as spelling:
 
 ## 9. Unmet core requirements
 
-- **M14.6 amends `T11.2`.** The core requires the DDL to be executed against a
-  real server before **Schema** is claimed.
+- **M14.6 amends `T11.2`. Met 2026-09-06.** The core requires the DDL to be
+  executed against a real server before **Schema** is claimed.
 
-  **Update, 2026-09-06.** It has been, on CI's own x86_64 runners — no arm64
-  Linux SQL Server image exists, so this crate's DDL still cannot be verified
-  on the machine this annex was originally written from, but that machine was
-  never CI's own. The live run found a real defect, not merely an evidence
-  gap: `append_only_sql` emitted `CREATE OR ALTER TRIGGER` as a bare statement
-  sharing a batch with everything before it, which SQL Server refuses
-  outright (`Msg 111`, `'CREATE TRIGGER' must be the first statement in a
-  query batch`) — full account in `spec/databases/audit.md` **D-12**. Fixed by
-  giving this dialect its own `terminator()`, `\nGO`, so every statement is
-  its own batch; see §8's comparison table. `M14.6` is met once
+  It has been, on CI's own x86_64 runners — no arm64 Linux SQL Server image
+  exists, so this crate's DDL still cannot be verified on the machine this
+  annex was originally written from, but that machine was never CI's own. The
+  live run found a real defect, not merely an evidence gap: `append_only_sql`
+  emitted `CREATE OR ALTER TRIGGER` as a bare statement sharing a batch with
+  everything before it, which SQL Server refuses outright (`Msg 111`,
+  `'CREATE TRIGGER' must be the first statement in a query batch`) — full
+  account in `spec/databases/audit.md` **D-12**. Fixed by giving this dialect
+  its own `terminator()`, `\nGO`, so every statement is its own batch; see
+  §8's comparison table.
+
+  Getting a clean run past that also needed one fix outside this crate
+  entirely: `verify-schema.sh`'s own `sqlcmd` invocation was missing `-W`
+  ("remove trailing spaces from a column"), so an `nvarchar(max)` value came
+  back correctly followed by a large run of padding, comparing unequal to the
+  literal it went in as — a display artifact in the verification harness, not
+  in this dialect's DDL.
+
   `spec/databases/conformance-matrix.md` — the one file that owns a level
-  (`W0.40`) — records a green `schema / mssql` run with the fix applied; this
-  annex does not itself grant the level (`X15.9`).
+  (`W0.40`) — records the green `schema / mssql` run (34045294037); this
+  annex does not itself grant the level (`X15.9`), and stays **proposed** for
+  the same reason the three earlier Schema engines' annexes do.
 
 - **`db:D-01`** is closed by this file existing; ratifying it (`X15.9`) requires
   a live run.

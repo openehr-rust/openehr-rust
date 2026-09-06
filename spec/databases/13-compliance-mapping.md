@@ -65,8 +65,8 @@ Stated so that "not covered" and "covered elsewhere" stay distinguishable:
    verified against Oracle.
 
 Step 4 is the one that gets skipped and the one that matters: only one of six
-engine crates has a store at all, and two have never had their DDL parsed by the
-engine they name (`C0.8`).
+engine crates has a store at all, and reaching **Schema** — DDL actually parsed
+by the engine it names — is not the same claim as **Store** (`C0.8`).
 
 ## A caution about this document
 

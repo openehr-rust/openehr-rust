@@ -25,7 +25,7 @@ The table below is a **marked copy**: `db:C0.8` owns it, and
 | `openehr-postgresql` | **Schema** | No driver, no `Store`. |
 | `openehr-mysql` | **Schema** | as above |
 | `openehr-mariadb` | **Schema** | as above |
-| `openehr-mssql` | **Dialect** | Its `verify-schema.sh` branch exists and runs in CI, but has not yet passed there — SQL Server 2022 segfaults under qemu, so no arm64 machine can verify it locally either (`M14.6`). |
+| `openehr-mssql` | **Schema** | Verified 2026-09-06 in CI, `schema / mssql` (`M14.6`, met) — SQL Server 2022 segfaults under qemu, so still unverifiable on an arm64 machine locally. The live run found a real defect (`CREATE TRIGGER` sharing a batch with prior statements, `Msg 111`), fixed and recorded as `db:D-12`. |
 | `openehr-oracle` | **Schema** | `gvenzl/oracle-free` needs no registry login, unlike the official Oracle images this row used to point at. Verified 2026-09-06, both locally and in CI, `schema / oracle` (`M14.7`, met). |
 
 **`openehr-sqlite` is at Verified** as of the green run on 2026-08-01. A

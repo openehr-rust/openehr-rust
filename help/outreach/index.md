@@ -27,7 +27,7 @@ those six a server has actually executed, twice, and observed refusing an
 
 | Do not write | Write instead |
 | --- | --- |
-| "Supports PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and SQLite." | "Emits DDL for six engines. SQLite is at **Verified** — the full store, re-checked in CI on every commit. PostgreSQL, MySQL, and MariaDB are at **Schema**: a real server executed the DDL. SQL Server and Oracle are at **Dialect**: no server has parsed it yet." |
+| "Supports PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and SQLite." | "Emits DDL for six engines. SQLite is at **Verified** — the full store, re-checked in CI on every commit. PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle are at **Schema**: a real server executed the DDL." |
 | "Production-ready openEHR persistence." | "One embedded store you can run today; five dialects that need an implementor." |
 | "Fast." | Nothing. No benchmark here asserts a wall-clock number, deliberately (`W0.35`, `W0.36`). |
 | "Safe for patient data." | Never. That is a regulatory claim about a deployment, not a property of a crate. |

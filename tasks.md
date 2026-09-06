@@ -187,38 +187,44 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       conformance-matrix.md` — the one file that owns a level (`W0.40`).
       *Evidence:* the matrix row moves Schema → Store → Verified with the
       job named. — **L**
-- [ ] **MSSQL and Oracle parsed by a real server.** Two of six dialects have
+- [x] **MSSQL and Oracle parsed by a real server.** Two of six dialects had
       "never been parsed by a server" (`spec/databases/conformance-matrix
       .md`). Both now run in containers — `mcr.microsoft.com/mssql/server`
-      and `gvenzl/oracle-free` — so `verify-schema.sh` can gain both, the
-      `M14.6`/`M14.7` departures close, and the two annexes can move from
-      *proposed* to *ratified* (`X15.9`). *Evidence:* the `schema` matrix in
-      `.github/workflows/ci.yml` lists six engines; two rows promote to
-      Schema. — **M**
+      and `gvenzl/oracle-free` — `verify-schema.sh` gained both, the
+      `M14.6`/`M14.7` departures are met, and both rows promote to Schema.
+      *Evidence:* `spec/databases/conformance-matrix.md`; `schema / oracle`
+      run [34040865467](https://github.com/openehr-rust/openehr-rust/actions/runs/34040865467);
+      `schema / mssql` run
+      [34045294037](https://github.com/openehr-rust/openehr-rust/actions/runs/34045294037). — **M**
 
-      **2026-09-06: Oracle done, MSSQL not yet.** `verify-schema.sh` gained
-      both branches and the `schema` matrix lists all five engines.
-      `openehr-oracle` is **Schema**: `gvenzl/oracle-free` (Oracle Database
-      Free 26ai) needs no registry login — the blocker recorded in `M14.7`
-      was true of the official images, not of every image — and its DDL
-      parses, is idempotent, round-trips canonical JSON byte-exact, and
-      enforces append-only, both locally and in CI (run
-      [34040865467](https://github.com/openehr-rust/openehr-rust/actions/runs/34040865467),
-      job `schema / oracle`). `M14.7` is met; `conformance-matrix.md`,
-      `AGENTS.md`, `CLAUDE.md`, `README.md`, `index.md`, both crates' READMEs,
-      `openehr-oracle/src/lib.rs`, and the Oracle dialect annex are updated.
-      `openehr-mssql` stays **Dialect**: `schema / mssql` exists and ran in
-      that same CI push, but failed at the seed step (a `set -eu` script bug
-      that discarded the real SQL Server error along with its diagnostics,
-      now fixed to surface it); the branch cannot be verified locally at all
-      on this arm64 machine, since SQL Server 2022 segfaults under qemu here.
-      **Neither annex was ratified** — Postgres/MySQL/MariaDB's annexes are
-      also still *proposed*, so reaching Schema evidently does not require
-      ratifying the annex, only citing real evidence in
-      `conformance-matrix.md`; ratification looks like a separate, human
-      editorial judgement this task should not make unilaterally. Next: watch
-      the following CI run's `schema / mssql` job with the fixed script; if
-      green, promote `openehr-mssql` the same way and check this box.
+      **2026-09-06, closed.** `openehr-oracle` needed two script fixes and no
+      dialect change: `gvenzl/oracle-free` (a public image, unlike the
+      official ones the blocker was originally about) let its DDL reach a
+      real server, where it parsed, was idempotent, round-tripped canonical
+      JSON byte-exact, and enforced append-only on the first real attempt.
+      `openehr-mssql` took seven rounds to reach the same result, six of them
+      fixing `verify-schema.sh` itself (two `set -eu` bugs that swallowed the
+      real error, two different readiness-race diagnoses against `MSSQL_DB`'s
+      asynchronous database creation, a host/container filesystem-boundary
+      mistake — `sqlcmd -i` names a file for the *container* to open, not the
+      host running `mktemp` — and `sqlcmd`'s own column padding hiding behind
+      what looked like a clean byte-exact JSON comparison) and one a genuine
+      defect in the dialect: `append_only_sql`'s `CREATE OR ALTER TRIGGER`
+      shared a batch with every statement before it, which SQL Server refuses
+      outright (`Msg 111`). Recorded as `spec/databases/audit.md` **D-12**,
+      fixed by giving `MssqlDialect` its own statement terminator (`\nGO`,
+      the same technique `OracleDialect` already uses). Both crates are
+      **Schema**; **no engine crate remains at Dialect**. Neither dialect
+      annex was ratified — the three earlier Schema engines' annexes are
+      still *proposed* too, so ratification and reaching Schema are
+      independent axes, and ratifying either was left as a separate,
+      editorial judgement rather than made here. Updated everywhere the level
+      is restated: `conformance-matrix.md`, both dialect annexes, both
+      crates' `lib.rs`/`README.md`, `AGENTS.md`, `CLAUDE.md`, `README.md`,
+      `index.md`, `openehr-store`'s `README.md`/`spec/conformance.md`,
+      `agents/conformance.md`, the CI `claims` job's guard, `spec/audit.md`
+      and `spec/databases/audit.md`'s dated corrections, `CHANGELOG.md`,
+      `RFC.md`, `COMPARISONS.md`, and the outreach draft/index.
 - [ ] **ITS-REST completeness, and say which release.** State the ITS-REST
       version `openehr-loco` targets and its base path (`/openehr/v1` here;
       `/rest/openehr/v1` is what tooling expects — thread #21 had to add a

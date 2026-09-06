@@ -1,13 +1,15 @@
 # Draft: reply in the FerroEHR thread, and the email to its author
 
-**Status: draft, not sent. Due today, 2026-09-05** — the date
+**Status: draft, not sent. Was due 2026-09-05** — the date
 `help/outreach/index.md` §11 set (`tasks.md` P0). Posting and emailing are
 the maintainer's actions, not a tool's (`GOVERNANCE.md` §Machines do not
 decide); sending this is what remains. Updated 2026-09-05 to say what
 actually happened between 2026-09-03 and 2026-09-04, not only what was
-offered — every factual claim below is one the tree makes today, re-checked
-against the commits named; nothing here says *safe*, *compliant*,
-*certified*, *clinically*, or *fast* (`help/outreach/index.md` §1).
+offered, and again 2026-09-06 to drop the "SQL Server and Oracle are at
+Dialect" line, since both reached **Schema** that day — every factual claim
+below is one the tree makes today, re-checked against the commits named;
+nothing here says *safe*, *compliant*, *certified*, *clinically*, or *fast*
+(`help/outreach/index.md` §1).
 
 Thread: [FerroEHR – a new Rust-based openEHR CDR, looking for
 testers](https://discourse.openehr.org/t/ferroehr-a-new-rust-based-openehr-cdr-looking-for-testers/17230)
@@ -26,10 +28,10 @@ testers](https://discourse.openehr.org/t/ferroehr-a-new-rust-based-openehr-cdr-l
 > not and says so), paths, AQL parsing — parsing only, it does not execute —
 > an engine-agnostic store, and DDL for six SQL engines, with each engine
 > stated by level rather than by feature: SQLite is **Verified** (the full
-> store, re-checked in CI on every commit); PostgreSQL, MySQL, and MariaDB are
-> at **Schema** (a real server executed the DDL and the append-only tables
-> were observed refusing `UPDATE`); SQL Server and Oracle are at **Dialect**
-> (no server has parsed it yet). The Archetype Model is in scope since August:
+> store, re-checked in CI on every commit); PostgreSQL, MySQL, MariaDB, SQL
+> Server, and Oracle are at **Schema** (a real server executed the DDL and
+> the append-only tables were observed refusing `UPDATE`). The Archetype
+> Model is in scope since August:
 > the AOM2 object model, validation of a composition against an archetype
 > already in memory, and a reader for an archetype's `definition` section
 > that, as of 2026-09-04, parses 969 of the 1,379 ADL 2 files in

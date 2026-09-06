@@ -10,10 +10,26 @@
 //! constitute endorsement of this product by openEHR International or openEHR
 //! Foundation.
 //!
-//! # Conformance level: **Dialect**
+//! # Conformance level: **Schema**
 //!
-//! DDL only. No driver, no [`openehr_store::Store`], and nothing here has run
-//! against a SQL Server instance. See `spec/conformance.md`.
+//! This crate emits DDL, and that DDL has been executed against a real SQL
+//! Server: `mcr.microsoft.com/mssql/server:2022-latest`. Tables and indexes
+//! were created, the script re-applied as a no-op, a seed row's canonical
+//! JSON round-tripped byte for byte, and both append-only tables refused
+//! `UPDATE` and `DELETE` with a row present and unchanged afterwards.
+//! `openehr-store/scripts/verify-schema.sh mssql` reproduces it from a fresh
+//! container, and runs in CI on every push.
+//!
+//! The first real run found a genuine defect, not only an evidence gap:
+//! `append_only_sql`'s `CREATE TRIGGER` shared a batch with every statement
+//! before it, which SQL Server refuses outright (`Msg 111`). Fixed by giving
+//! this dialect its own statement terminator, `\nGO`, so every statement —
+//! the trigger included — is the sole content of its own batch. Full account:
+//! `spec/databases/audit.md` **D-12**.
+//!
+//! It does **not** contain a store: there is no driver dependency and no
+//! implementation of [`openehr_store::Store`]. See `spec/databases/
+//! conformance-matrix.md` — the one file that owns a level (`W0.40`).
 //!
 //! ```
 //! use openehr_mssql::MssqlDialect;

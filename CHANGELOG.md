@@ -13,6 +13,21 @@ together.
   byte-exact, and enforces append-only — both locally and in CI on every
   push (`M14.7`, met). No code change in this crate; the dialect held up on
   first real contact. See `spec/databases/conformance-matrix.md`.
+- `openehr-mssql` reaches conformance level **Schema**: its DDL has been
+  executed against a real SQL Server 2022 in CI on every push (`M14.6`,
+  met). Unlike Oracle, this one is a genuine code fix, not only a
+  verification-script fix: `append_only_sql`'s `CREATE OR ALTER TRIGGER`
+  shared a batch with every statement before it, which SQL Server refuses
+  outright (`Msg 111`, `'CREATE TRIGGER' must be the first statement in a
+  query batch`). `MssqlDialect` now gives every statement its own batch
+  (`terminator()` returns `"\nGO"`, the same technique `OracleDialect`
+  already uses for its own batching rule). This changes the exact bytes
+  `ddl_script(&MssqlDialect)` returns (`;` between statements, now `\nGO`);
+  no Rust signature changes, but anyone snapshot-testing or diffing the
+  emitted script against a prior version will see a difference, and the
+  DDL is now genuinely installable where it was not before. See
+  `spec/databases/audit.md` **D-12** and
+  `spec/databases/conformance-matrix.md`.
 - Documented, not fixed: `DV_CODED_TEXT.check_openehr_rubric` reports a
   violation, not *unchecked*, for a valid rubric written in any language
   but English, because the rubric table this crate carries has only one.

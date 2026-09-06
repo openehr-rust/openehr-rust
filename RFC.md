@@ -30,8 +30,8 @@ query convenience.
 ### 2. Do the dialects match how these engines are actually administered?
 
 Five of six are below **Store** level, and the DDL has been reviewed by its
-author and, for three engines, executed by a server. That is a low bar for
-something a DBA has to live with.
+author and, for all five engine crates, executed by a real server. That is
+still a low bar for something a DBA has to live with.
 
 - Partitioning, tablespaces, collation, and character-set choices: what is
   missing that your organisation would require before running this?
@@ -39,9 +39,10 @@ something a DBA has to live with.
   here can search one without the adjuncts in
   [`spec/databases/search-adjuncts.md`](spec/databases/search-adjuncts.md) —
   and none is emitted (`db:P6.18`). What would you need emitted?
-- SQL Server and Oracle DDL has never been parsed by a server. If you have one,
-  the output of `cargo run --example ddl` piped into it is the single most
-  useful thing anyone could send.
+- Real-server verification only exercises this schema in isolation: single
+  writer, one row, no concurrent load, no production-scale data. If you run
+  this DDL against SQL Server or Oracle under real conditions, what breaks
+  first?
 
 ### 3. Is the conformance ladder legible, or just unusual?
 
