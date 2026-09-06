@@ -247,7 +247,15 @@ VALUES ('vo1::sys::1','vo1','sys',1,'532',0,'c1','sys','249','2026-01-01T00:00:0
   0x1111111111111111111111111111111111111111111111111111111111111111,
   0x2222222222222222222222222222222222222222222222222222222222222222);
 SEED
-    out=$(ms -d openehr -i "$q" 2>&1)
+    # `|| true` on the assignment itself, not just around it: `out=$(cmd)` is a
+    # simple command whose exit status is `cmd`'s, and under `set -eu` that
+    # aborts the script right here on any non-zero `-b` exit -- before the
+    # `if` below, before `fail`'s diagnostics, before anything. This is
+    # exactly what silenced the previous CI run's real error: the same trap,
+    # moved but not actually sprung, since the first fix addressed *where*
+    # the output went without addressing *that the assignment still killed
+    # the script before reading it back*.
+    out=$(ms -d openehr -i "$q" 2>&1) || true
     rm -f "$q"
     if printf '%s\n' "$out" | grep -qE '^Msg [0-9]+'; then
       fail "seed insert failed: $out"
