@@ -1,6 +1,9 @@
 # External corpus runs — `am::cadl::parse_definition`
 
-**Not normative, and not a gate.** This file records what happened when
+**Not normative, and not a gate.** This is the archetype half of
+`tasks.md`'s "run an external corpus" item; [`json_corpus.md`](json_corpus.md)
+is the other half, canonical JSON compositions against
+`serde_json → Composition → Validate`. This file records what happened when
 archetypes nobody in this repository wrote were run through the
 `definition` reader: how many parsed, how many were refused and under which
 stated reason, and which refusals turned out to be this crate's defects
@@ -247,6 +250,201 @@ ordinals).
   `List`/`Set`-typed attributes) and this crate already has the RM in
   `rm::`; deriving it there, once, is the `lib:A-33` shape — one rule, one
   home — rather than a second table in `am::cadl`. A requirement first.
+
+## Run 3 — 2026-09-03, after `A-72`, `A-73`, `A-74`
+
+- Corpus: unchanged, `093c77ea003742b9540e3dd377d615e2b26f2996`.
+- Crate: run 2's tree plus `A-72` (an unwrapped interval's kind decided by
+  its first bound's token), `A-73` (`allow_archetype … closed` parsed), and
+  `A-74` (the relop interval spelling `|>=0.0|`), the last found by the
+  intermediate run between the first two and this one.
+
+### Totals
+
+| Extension | Files | Parsed | Refused | No `definition` | Not UTF-8 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `.adls` | 1,379 | **916** (run 2: 774; run 1: 206) | 462 | 1 | 2 |
+| `.adl` | 593 | 32 (run 2: 29) | 561 | 0 | 2 |
+
+By directory, the clinical corpora now lead: `Reference/CKM_2013_12_09`
+237 of 322 parsed, `Reference/Nehta_2014_04_25` 132 of 164. The reference
+suite (`ADL2-reference`) is 219, a third of it the `validity` directory,
+where a refusal is the expected answer for the invalid twins.
+
+### Refusals by stated reason, `.adls`
+
+| Files | Stated reason (tokens stripped) | What it is |
+| ---: | --- | --- |
+| 130 | expected `[`, found `matches` | Id-less objects; correctly refused (runs 1–2). |
+| 72 | generic RM type parameters are not implemented by this parser | Stated limitation, refused by name. Now the largest *limitation* left; the count rises each run as more files reach it. |
+| 61 | `CIMI` is not a valid id-, at-, or ac-code | ADL 1.5-form `use_archetype`; correctly refused (run 1, candidate 3). |
+| 54 | `SIBLING_ORDER` is not implemented by this parser | Stated limitation. |
+| 32 | expected `[`, found `}` | Unwrapped temporal literals (`{PT0S}`) taken for RM type names — candidate 5, up from 22 as more files reach it. |
+| 28 | a single-valued attribute's child occurrences upper bound exceeds 1 | **`A-71`'s residual**, 19 of them CKM/NEHTA: `items matches {` with no `cardinality` clause under a `CLUSTER`, built single-valued. The Reference Model multiplicity decision (`plan.md`) is now the largest lever on the clinical corpus. |
+| 21 | expected `[`, found `-` | `DATE_TIME_CONSTRAINT_PATTERN` unwrapped — candidate 1/5. |
+| 14 | `d` is not a valid `ISO8601_DATE` | `DATE_CONSTRAINT_PATTERN` — candidate 1. |
+| 13 | expected `[`, found `/` | Not yet examined. |
+| 9 | expected an attribute name, found `*` | ADL 1.4 `matches {*}`; correctly refused. |
+| 6 | `…` is not a valid at- or ac-code | Not yet examined. |
+| 3 | an unwrapped temporal interval … is not implemented by this parser | `A-72`'s own named refusal; the three files are the reference suite's temporal-interval features. |
+| 3 each and fewer | `unexpected content after the definition's root object` (3), `expected an RM type name, found (` (3), `expected a primitive value, found -` (2), `expected }, found \|` (2), one each of four more | Not yet examined. |
+
+The `.adl` column is unchanged in shape: 471 id-less objects and `matches
+{*}`, the rest stated limitations.
+
+### Findings this run produced
+
+- **`A-72`** (fixed): `A-67`'s "cannot be told apart" was wrong;
+  `odin_values.g4` decides by token. 184 files.
+- **`A-73`** (fixed): the closed slot stayed refused after `A-71` removed
+  the reason. 13 files.
+- **`A-74`** (fixed): the relop spelling failed on its `=`, not by name.
+  106 files, surfaced only once `A-72` let intervals reach the reader — a
+  refusal can hide another, which is why runs are recorded one at a time.
+
+### Candidates — status
+
+1. `DATE_CONSTRAINT_PATTERN` (and the date-time form): **open**, 35 files.
+2. `primitive_kind` case-insensitivity: **open**, still not reproduced.
+3. Refusal names that are correct but unhelpful: **open**.
+4. Unwrapped interval kind: **closed, `A-72`**.
+5. Unwrapped temporal literals: **open**, 32 files; shares candidate 1's
+   fix (a `CPrimitive` pattern form and unwrapped temporal dispatch by
+   lexical shape).
+6. **New — the `+/-` interval spelling** is refused by name and no corpus
+   file uses it; recorded so its absence from the numbers is not read as
+   support.
+
+### Decisions the run asks for
+
+- **Reference Model multiplicity** (run 2, restated): 28 files now, 19 of
+  them clinical, and the count will keep rising as other refusals fall.
+  The decision is in `plan.md`; a requirement first.
+
+## Run 4 — 2026-09-04, after `A-75`
+
+- Corpus: unchanged, `093c77ea003742b9540e3dd377d615e2b26f2996`.
+- Crate: run 3's tree plus `A-75`: temporal `*_CONSTRAINT_PATTERN`s read
+  for all four kinds, wrapped or unwrapped, and the four temporal kinds
+  reachable unwrapped (`c_inline_primitive_object`'s own full grammar,
+  not the five-kind subset this parser used to admit).
+
+### Totals
+
+| Extension | Files | Parsed | Refused | No `definition` | Not UTF-8 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `.adls` | 1,379 | **959** (run 3: 916) | 419 | 1 | 2 |
+| `.adl` | 593 | 32 (run 3: 32) | 561 | 0 | 2 |
+
+The `d is not a valid ISO8601_DATE` category (14 files, all
+`Reference/ISO_13606`) and its duration sibling (1 file) both dropped —
+but not to zero, which is what led straight to `A-76`: one file still
+failed the same way, for a different reason `A-75` does not touch.
+
+### Refusals by stated reason, `.adls`, that changed
+
+| Files | Stated reason | Change |
+| ---: | --- | --- |
+| 5 (was 3) | an unwrapped temporal interval … is not implemented | Up: `A-75`'s unwrapped dispatch reaches more files that then meet the one remaining named refusal `A-72` already gives temporal interval bounds. |
+| 2 (new) | expected a primitive value, found `-` | Both `Reference/CKM_2013_12_09` and `Reference/Nehta_2014_04_25` copies of `openEHR-EHR-CLUSTER.symptom.v1`: `[{-3}, {[at49]}]`, a *negative* unwrapped integer tuple item. Not yet examined — likely `expect_signed_integer`'s own reach inside a tuple row versus the plain `c_objects` dispatch path this parser takes first. |
+
+## Run 5 — 2026-09-04, after `A-76`
+
+- Corpus: unchanged, `093c77ea003742b9540e3dd377d615e2b26f2996`.
+- Crate: run 4's tree plus `A-76`: `primitive_kind` matches exactly, not
+  case-insensitively.
+
+### Totals
+
+| Extension | Files | Parsed | Refused | No `definition` | Not UTF-8 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `.adls` | 1,379 | **967** (run 4: 959) | 411 | 1 | 2 |
+| `.adl` | 593 | 33 (run 4: 32) | 560 | 0 | 2 |
+
+The `ISO8601_DATE`/`ISO8601_DURATION` categories are gone entirely. One
+category rose in their place: `children require more occurrences than the
+cardinality permits` went from 1 to 8 files (7 in `.adls`, 7 in `.adl`,
+all `Reference/ISO_13606`) — not a regression, but the files parsing
+*further* than before and meeting a real `VACMCU` check the earlier
+misparse never let them reach. Not yet examined for whether the archetype
+or this parser's cardinality inference is at fault.
+
+### Findings runs 4 and 5 produced
+
+- **`A-75`** (fixed): temporal patterns and unwrapped temporal literals,
+  corpus run 1's candidates 1 and 5, closed together.
+- **`A-76`** (fixed): `primitive_kind`'s case-insensitive match, corpus run
+  1's candidate 2 — recorded as "not yet reproduced by a test" there, and
+  reproduced for real chasing `A-75`'s own residual refusal.
+
+### Candidates — status after run 5
+
+1. `DATE_CONSTRAINT_PATTERN`: **closed, `A-75`**.
+2. `primitive_kind` case-insensitivity: **closed, `A-76`**.
+3. Refusal names that are correct but unhelpful: **open**.
+4. Unwrapped interval kind: **closed, `A-72`**.
+5. Unwrapped temporal literals: **closed, `A-75`**.
+6. The `+/-` interval spelling: **open**, refused by name, still unused
+   in the corpus.
+7. **New — a negative unwrapped integer in a `C_ATTRIBUTE_TUPLE` row**
+   (`{-3}`), 2 files, `expected a primitive value, found`-``. Not yet
+   examined.
+8. **New — a `VACMCU` cardinality violation** surfaced by `A-76`, 8 files,
+   all ISO 13606. Not yet examined; may be the corpus's own defect, not
+   this parser's.
+
+### Decisions the run asks for
+
+- **Reference Model multiplicity** (runs 2–3, restated): still open,
+  `plan.md`.
+
+## Run 6 — 2026-09-04, after `A-77`
+
+- Corpus: unchanged, `093c77ea003742b9540e3dd377d615e2b26f2996`.
+- Crate: run 5's tree plus `A-77`: a negative unwrapped number
+  (`{-3}`) is dispatched, wrapped or unwrapped.
+
+### Totals
+
+| Extension | Files | Parsed | Refused | No `definition` | Not UTF-8 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `.adls` | 1,379 | **969** (run 5: 967) | 409 | 1 | 2 |
+| `.adl` | 593 | 33 (run 5: 33) | 560 | 0 | 2 |
+
+The `expected a primitive value, found` `-`` category is gone — both files
+that produced it (candidate 7) now parse.
+
+### Candidates — status after run 6
+
+1. `DATE_CONSTRAINT_PATTERN`: **closed, `A-75`**.
+2. `primitive_kind` case-insensitivity: **closed, `A-76`**.
+3. Refusal names that are correct but unhelpful: **open**.
+4. Unwrapped interval kind: **closed, `A-72`**.
+5. Unwrapped temporal literals: **closed, `A-75`**.
+6. The `+/-` interval spelling: **open**, still unused in the corpus.
+7. A negative unwrapped integer in a tuple row: **closed, `A-77`**.
+8. A `VACMCU` cardinality violation surfaced by `A-76`, 8 files, all ISO
+   13606: **examined and closed, no code change** — the archetype's own
+   inconsistency, not this parser's. Seven of the eight are
+   `Reference/ISO_13606/Spanish_MOH` `COMPOSITION`s that share one
+   boilerplate `SECTION`: `members cardinality matches {0..1; unordered;
+   unique} matches { allow_archetype ENTRY[…] occurrences matches {1} …
+   allow_archetype ENTRY[…] occurrences matches {1} … }` — two mandatory
+   children under an attribute whose cardinality permits at most one,
+   contradictory on its own terms and correctly refused
+   (`CAttribute::container`'s own `VACMCU` check, `A-71`'s residual
+   documentation). Present verbatim in every file examined, so it reads as
+   a systematic artefact of whatever produced these from EN13606, not a
+   one-off. The eighth, `ADL2-reference/validity/structure/
+   openEHR-EHR-OBSERVATION.WACMCL_container_items_out_of_bounds.v1.0.0.adls`,
+   is the reference suite's own deliberately invalid fixture — its name
+   says so, and refusing it is the correct answer, the same as every other
+   `validity` directory file this corpus contains.
+
+### Decisions the run asks for
+
+- **Reference Model multiplicity** (runs 2–3, restated): still open,
+  `plan.md`.
 
 ## Trademarks
 

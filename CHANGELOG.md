@@ -7,6 +7,12 @@ together.
 
 ## Unreleased
 
+- `openehr-oracle` reaches conformance level **Schema**: its DDL has been
+  executed against a real Oracle server (`gvenzl/oracle-free`, Oracle
+  Database Free 26ai) — parses, is idempotent, round-trips canonical JSON
+  byte-exact, and enforces append-only — both locally and in CI on every
+  push (`M14.7`, met). No code change in this crate; the dialect held up on
+  first real contact. See `spec/databases/conformance-matrix.md`.
 - Documented, not fixed: `DV_CODED_TEXT.check_openehr_rubric` reports a
   violation, not *unchecked*, for a valid rubric written in any language
   but English, because the rubric table this crate carries has only one.

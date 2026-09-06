@@ -10,10 +10,22 @@
 //! constitute endorsement of this product by openEHR International or openEHR
 //! Foundation.
 //!
-//! # Conformance level: **Dialect**
+//! # Conformance level: **Schema**
 //!
-//! DDL only. No driver, no [`openehr_store::Store`], and nothing here has run
-//! against an Oracle instance. See `spec/conformance.md`.
+//! This crate emits DDL, and that DDL has been executed against a real Oracle
+//! server: `gvenzl/oracle-free:latest` (Oracle Database Free 26ai, newer than
+//! the 23ai this crate targets but within the `12.2+` floor `S1.4` declares).
+//! Tables, indexes, and both append-only triggers were created; the script
+//! re-applied as a no-op; a seed row's canonical JSON round-tripped byte for
+//! byte; and both append-only tables were observed refusing `UPDATE` and
+//! `DELETE` with a row present and unchanged afterwards.
+//! `openehr-store/scripts/verify-schema.sh oracle` reproduces it from a fresh
+//! container, and runs in CI on every push (`M14.7`,
+//! [run 34040865467](https://github.com/openehr-rust/openehr-rust/actions/runs/34040865467)).
+//!
+//! It does **not** contain a store: there is no driver dependency and no
+//! implementation of [`openehr_store::Store`]. See `spec/databases/
+//! conformance-matrix.md` — the one file that owns a level (`W0.40`).
 //!
 //! The sibling FHIR monorepo's Oracle port shipped a DDL emitter that produced
 //! **`MySQL`** types for as long as the fork existed (**F-08**), because each

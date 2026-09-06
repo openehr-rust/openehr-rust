@@ -195,6 +195,30 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       *proposed* to *ratified* (`X15.9`). *Evidence:* the `schema` matrix in
       `.github/workflows/ci.yml` lists six engines; two rows promote to
       Schema. — **M**
+
+      **2026-09-06: Oracle done, MSSQL not yet.** `verify-schema.sh` gained
+      both branches and the `schema` matrix lists all five engines.
+      `openehr-oracle` is **Schema**: `gvenzl/oracle-free` (Oracle Database
+      Free 26ai) needs no registry login — the blocker recorded in `M14.7`
+      was true of the official images, not of every image — and its DDL
+      parses, is idempotent, round-trips canonical JSON byte-exact, and
+      enforces append-only, both locally and in CI (run
+      [34040865467](https://github.com/openehr-rust/openehr-rust/actions/runs/34040865467),
+      job `schema / oracle`). `M14.7` is met; `conformance-matrix.md`,
+      `AGENTS.md`, `CLAUDE.md`, `README.md`, `index.md`, both crates' READMEs,
+      `openehr-oracle/src/lib.rs`, and the Oracle dialect annex are updated.
+      `openehr-mssql` stays **Dialect**: `schema / mssql` exists and ran in
+      that same CI push, but failed at the seed step (a `set -eu` script bug
+      that discarded the real SQL Server error along with its diagnostics,
+      now fixed to surface it); the branch cannot be verified locally at all
+      on this arm64 machine, since SQL Server 2022 segfaults under qemu here.
+      **Neither annex was ratified** — Postgres/MySQL/MariaDB's annexes are
+      also still *proposed*, so reaching Schema evidently does not require
+      ratifying the annex, only citing real evidence in
+      `conformance-matrix.md`; ratification looks like a separate, human
+      editorial judgement this task should not make unilaterally. Next: watch
+      the following CI run's `schema / mssql` job with the fixed script; if
+      green, promote `openehr-mssql` the same way and check this box.
 - [ ] **ITS-REST completeness, and say which release.** State the ITS-REST
       version `openehr-loco` targets and its base path (`/openehr/v1` here;
       `/rest/openehr/v1` is what tooling expects — thread #21 had to add a

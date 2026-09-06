@@ -15,8 +15,8 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**71 findings, 71 in the table below: 7 High, 38 Medium, 26 Low. 65 fixed or
-classified, 6 open.** These counts are checked against the table by CI
+**80 findings, 80 in the table below: 7 High, 44 Medium, 29 Low. 73 fixed or
+classified, 7 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
 verified), and the check should have failed. Every one of the 6 open findings
@@ -158,6 +158,16 @@ in the documentation, which is the class this register most exists to catch.
 | A-69 | Low | **BREAKING.** `Archetype.archetype_id` was `base::ArchetypeId`, but AOM2 states `ARCHETYPE.archetype_id: ARCHETYPE_HRID` — the richer, authoring-time identifier `A-49` built `ArchetypeHrid` for, never propagated to the one field it was actually for; `ArchetypeId::from_str` rejects a namespace prefix and a prerelease suffix `ARCHETYPE_HRID`'s own grammar allows (`A-49`), so a real archetype using either could not be held by `Archetype::new` at all | **fixed** — `archetype_id`/`Archetype::new`/`Archetype::archetype_id()`/`ArchetypeViolation.archetype_id` all retyped to `ArchetypeHrid`; `ArchetypeHrid::specialisations()` added (the same `-`-splitting rule applied to `concept_id`) so `specialisation_depth()` needed no logic change; the one place an `ArchetypeHrid` and an `ArchetypeId` now meet — verifying a repository answered the identifier a `C_ARCHETYPE_ROOT` asked for (`K15.26`) — compares by text, both types sharing one textual convention for exactly this reason; `parent_archetype_id`, `ArchetypeRepository::resolve`, and `CArchetypeRoot.archetype_ref` are unchanged, since those are reference/lookup forms, correctly `ArchetypeId`-shaped already (`A-52`'s own residual already confirmed `parent_archetype_id`) |
 | A-70 | Medium | `am::cadl` accepted the lexer's fallback one-character "word" `/` as an attribute name, so an attribute in differential form — `/data/events cardinality matches {2..8; ordered}`, `c_attribute`'s `ADL_PATH` alternative, the way every specialised ADL 2 archetype states what it redefines — mis-parsed into several attributes and was refused later as a `VOKU` duplicate with the name `""`: a valid archetype refused, and refused naming the wrong thing (`K15.6`). Found by the first external-corpus run (`openehr/spec/corpus.md`), not by reading; `C_ATTRIBUTE.differential_path` itself had no counterpart in `CAttribute` | **fixed** — `CAttribute.differential_path`/`with_differential_path()`/`differential_path()` added (`#[serde(default)]`, absent on the wire when `None`); `Lexer::peek_raw_path` lets `c_attribute_def` tell an `ADL_PATH` (contains `/`) from a bare name before reading either; the path is split at its last `/` into parent and attribute; a name that is not an `IDENTIFIER` is refused by name; `VOKU` keyed on (parent, name); `am::validate` reports a differential attribute *unchecked* naming its parent path, since resolving it is flattening (`K15.11`) — never read under the wrong object |
 | A-71 | Medium | **BREAKING.** AOM2's `C_OBJECT.occurrences` is `0..1` — "only set if it overrides the parent archetype … or else the occurrences inferred from the underlying reference model existence and/or cardinality of the containing attribute" — but `CComplexObject`, `CPrimitiveObject`, `ArchetypeSlot`, and `CArchetypeRoot` each required a `MultiplicityInterval`, so the model could not represent an unstated `occurrences` at all (`K15.1`, `K15.3`) and `am::cadl` refused every non-root node that omitted one. The first external corpus run (`corpus.md`) measured that refusal at 1,197 of 1,739 refusals over 1,972 real files: two thirds of everything the parser turned away, on the construct most published archetype nodes use | **fixed** — `occurrences: Option<MultiplicityInterval>` on all four types (constructors take `Option`; `#[serde(default, skip_serializing_if)]`, absent on the wire when unstated); `CObject::effective_occurrences(owner)` implements AOM2's rule (lower `0`; upper the owner's cardinality upper bound, else `1` for an attribute built single-valued), `None` only for a proxy deferring to its target; `MultiplicityInterval::from_zero_to`; the parser carries an omitted one as `None` (the root still defaults to exactly one); `am::validate` checks the effective value — `K15.32` states the rule and the one assumption. **Residual:** the single-or-container decision is still syntactic (`cadl`'s own module documentation), so a real `items matches {` with no cardinality clause is built single-valued and its unstated children infer `0..1`, not `0..*` |
+| A-72 | Medium | `A-67` refused every unwrapped interval (a bare `0..100` between bars under an attribute, and every `C_ATTRIBUTE_TUPLE` row with a range) on the stated ground that `C_INTEGER` and `C_REAL` "cannot be told apart without a wrapping `rm_type_id`". The ground is false: `odin_values.g4` builds `integer_interval_value` from `INTEGER` tokens and `real_interval_value` from `REAL` tokens (`base_lexer.g4`: `DIGIT+` vs `DIGIT+ '.' DIGIT+`), so the kind is lexical, the same distinction the parser already applied to an unwrapped single value. Corpus run 2 measured the refusal at 184 files, the largest left, 120 of them CKM/NEHTA clinical archetypes | **fixed** — `Lexer::peek_interval_bound` looks past the opening bar and any relop/sign symbols to the first bound's token without consuming; `parse_inline_primitive` dispatches `Integer` to `C_INTEGER`, `Real` to `C_REAL`; a bound beginning like an ISO 8601 literal is refused by name as an unwrapped temporal interval, and a bound mixing the kinds (`0..100.0`) is refused as the grammar refuses it. The tuple fixture that had asserted `A-67`'s refusal now asserts the parse |
+| A-73 | Low | `am::cadl` refused `allow_archetype … closed` by name (`A-62`) because the grammar's `SYM_CLOSED` alternative carries no `c_occurrences` and `ArchetypeSlot` could hold only a stated interval — a correct refusal that `A-71` made unnecessary the moment `occurrences` became `Option` on every `C_OBJECT`, and that nobody re-examined: 13 corpus files | **fixed** — `closed` builds `ArchetypeSlot::new(…, None).closed()`, its effective occurrences inferred from the owning attribute like any other node's; `am::validate` already enforced `is_closed` (`A-60`), so a closed slot read from ADL is now checked, not carried |
+| A-74 | Low | The relop interval spelling — one bound with `>`, `>=`, `<`, or `<=` between bars, `odin_values.g4`'s second `*_interval_value` alternative and the way 134 corpus files write a non-negative magnitude — was a stated limitation of `am::cadl`, but was not refused by name: the range reader consumed the `>` as its own optional open lower bound and then failed on the `=` as "expected a real number, found `=`", a symptom rather than the construct (`K15.6`). Visible only once `A-72` let unwrapped intervals reach the reader: 106 files in run 3 | **fixed** — one `parse_numeric_interval` reads both spellings for the integer and real kinds, deciding by what follows the first bound; a relop followed by `..` and the third, `+/-` spelling (no corpus file uses it) are refused by name |
+| A-75 | Medium | `am::cadl` could not read a temporal `*_CONSTRAINT_PATTERN` (`yyyy-mm-??`, `??:??:??`, `yyyy-mm-ddThh:mm:ss`, a `PnYnMnD` letter pattern) for any of the four temporal kinds — carried as `CPrimitive::Date::pattern` and its siblings since an earlier session's modelling pass, but nothing built one — and could not read any of the four kinds *unwrapped* at all, though `c_inline_primitive_object` gives the shorthand no narrower a set than the wrapped form has (`cadl2_primitives.g4`); a bare `PT0S` under an attribute mis-tokenized as an RM type name and was refused as "expected `[`, found `}`" (corpus run 1, candidate 5) | **fixed** — `Lexer::peek_iso8601` (non-consuming) lets both the pattern check and the unwrapped dispatch look at the raw run before committing; four pattern validators (`is_date_pattern` and three siblings) check the grammar's own field shapes directly rather than through a regex engine (`plan.md`'s own reason none is a dependency); `classify_temporal` decides which of the four kinds an unwrapped run is **structurally** — `-`/`:` presence, `P`/`-P` prefix — before consulting that kind's own value or pattern check, found necessary by this finding's own test: trying all four kinds' `from_str` in a fixed order first misclassified a bare `C_DATE` value as `C_DATE_TIME`, since `DateTime::from_str` accepts a date with no time part |
+| A-76 | Medium | `primitive_kind` matched a wrapped `rm_type_id` against the nine primitive-kind names case-insensitively, so a genuine RM class spelled in capitals the same as a primitive kind — `DATE`, ISO 13606's own type — was wrongly read as `openehr::am::CPrimitive::Date`. Recorded as corpus run 1's second candidate, not reproduced there; found reproduced for real while pursuing `A-75`: `Reference/ISO_13606/Spanish_MOH/ADL_14/CEN-EN13606-CLUSTER.Muestra.v1.adls` wraps `DATE[id3]` around a `C_COMPLEX_OBJECT` with its own attribute (`date`), and the attempt to read that attribute's first word as the primitive's own value failed as "`d` is not a valid `ISO8601_DATE`" — a refusal this crate caused, not a limitation of it | **fixed** — matched exactly; no file anywhere in the corpus wraps a genuine primitive constraint in *any* casing of the nine names (every real archetype uses the unwrapped shorthand this crate already reads), so exact matching costs nothing measured |
+| A-77 | Low | A negative unwrapped `integer_value`/`real_value` (`{-3}`, a `C_ATTRIBUTE_TUPLE` row item; also a plain `attr matches {-3}`) was refused as "expected a primitive value, found `-`": the leading `-` tokenizes as `Symbol('-')` on its own, and neither `starts_inline_primitive` nor `parse_inline_primitive`'s dispatch had a case for it — found in `DV_ORDINAL`'s own canonical `[value, symbol]` tuple, `openEHR-EHR-CLUSTER.symptom.v1` (both the CKM and NEHTA copies), corpus run 5's own new candidate | **fixed** — `Lexer::peek_after_sign`, a two-token lookahead past a leading `+`/`-` to the token the ordinary tokenizer would read next, without consuming either; both call sites use it, and a negative *duration* (`-PT1H`) is unaffected, already reached through the temporal check ahead of it |
+| A-78 | Medium | `Time`/`DateTime`/`Duration::from_str` accepted only `.` as a fractional-second decimal sign, though `openEHR/adl-antlr`'s own `fragment SECOND_DEC_SEP : '.' \| ',' ;` (`base_lexer.g4`) states both, and ISO 8601 itself permits either — found running `EHRbase`'s own reference canonical-JSON test corpus (`tests/json_corpus.rs`, the JSON half of `tasks.md`'s external-corpus item): 21 of 57 real fixtures write `,` and none of them parsed | **fixed** (`D3.10b`) — the fractional-second split in `Time::from_str` and the decimal-sign check in `Duration::from_str`'s scanner both accept either character; the exact input text, separator included, is still what `Display` prints either way (`D3.10`), since neither type ever reconstructs its `Display` form from the parsed digits |
+| A-79 | Medium | `TEMPLATE_ID` refused any value containing whitespace (`I2.16`), though openEHR gives its lexical form as "to be determined" and the requirement's own reasoning already warned that "inventing a stricter grammar would reject valid identifiers from conformant tools" — found by exactly that: `EHRbase`'s own corpus names a real template `Virologischer Befund`, refused by every version of this crate before this fix, in 8 of 57 fixtures | **fixed** — the whitespace check is removed; only emptiness is refused, the one floor `I2.16`'s reasoning actually supports. `I2.16`'s text corrected in place, id unchanged (`C0.5`) |
+| A-81 | Medium | `DV_CODED_TEXT.check_openehr_rubric` compares `value` against an **English-only** rubric table (`terminology::Group::rubric`'s own doc comment already says so), with no way to know the enclosing record's declared `language` — so a valid Spanish rubric (`"evento"` for openEHR code `433`, English `"event"`) is reported as a `Value_is_rubric` *violation*, not *unchecked*, which is exactly the false claim `D3.7` says this check must never make, in the refusing direction. Found running the JSON corpus: `EHRbase`'s own `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, declared `language: es` | **open, by decision** — closing it needs either threading the record's language through the validation walk and reporting unchecked for anything but English, or sourcing and citing real multi-language rubric data; new `D3.7a` states the gap |
+
 
 ---
 
@@ -225,9 +235,9 @@ argument for `C0.3`.
 
 **Severity:** Low. **Requirement:** `D3.13a`, which records the decision.
 
-`20240517` and `T091500` are valid ISO 8601 and are refused. They do not appear
-in openEHR canonical JSON, and accepting four bare digits would make `2024`
-ambiguous between a year and a basic-format fragment.
+`20240517` and `T091500` are valid ISO 8601 and are refused. Accepting four
+bare digits would make `2024` ambiguous between a year and a basic-format
+fragment.
 
 **Consequence:** an instance converted from a system that emits basic format
 fails to parse, with a clear error, at the boundary.
@@ -235,6 +245,25 @@ fails to parse, with a clear error, at the boundary.
 **To close, if it should be closed:** accept basic format only where the length
 is unambiguous, and never for a bare four-digit string. Recorded here rather
 than left for a reader to discover from a rejection.
+
+**Corrected 2026-09-05, running the JSON half of `tasks.md`'s external-corpus
+item** (`tests/json_corpus.rs`): this finding, and `D3.13a`'s own text, both
+originally gave a second ground alongside the ambiguity argument — that the
+basic format "does not appear in openEHR canonical JSON". That claim was
+false, and checkable: `EHRbase`'s own reference test corpus writes
+`DV_DATE.value` as `"20190114"` in three real, ordinary fixtures
+(`all_types_no_multimedia.json` and two siblings, `openehr/spec/
+json_corpus.md`), not the corpus's own deliberately-invalid files. The false
+sentence is withdrawn from both this finding and `D3.13a`'s requirement text,
+in place — `C0.5`: neither id is renumbered for a text correction. The
+ambiguity argument is untouched and is now the *only* stated ground for this
+decision, which sharpens rather than resolves the "to close" question above:
+whether `2024` (a bare year, four digits) is genuinely confusable with
+`20240517` (a full basic-format date, eight digits) under any real reading,
+or whether the ambiguity was only ever a concern about the *general* basic
+format family and not about the specific eight-digit case three real files
+now ask for. Still open, and still not this finding's decision to make
+unilaterally.
 
 ---
 
@@ -1202,10 +1231,17 @@ that swallows ORA-00955 and re-raises every other `SQLCODE`.
 `conformance::check_dialect` now fails any dialect that declares `Guard` and
 inherits the no-op default, so the gap cannot silently reopen.
 
-**Not verified against either engine.** SQL Server 2022 segfaults under qemu on
-arm64 and the Oracle images require registry authentication. The fix is
-reasoned and unit-tested, not observed. Both crates therefore stay at
-**Dialect**.
+**Not verified against either engine, at the time.** SQL Server 2022 segfaults
+under qemu on arm64 and the Oracle images available then required registry
+authentication. The fix was reasoned and unit-tested, not observed, and both
+crates stayed at **Dialect**.
+
+**Update, 2026-09-06.** Oracle's guard is now observed, not only reasoned:
+`gvenzl/oracle-free` needed no registry login, and `openehr-store/scripts/
+verify-schema.sh oracle` ran the DDL — including this guard — against a real
+server, twice, with the second run a no-op. `openehr-oracle` is **Schema**
+(`spec/databases/conformance-matrix.md`). SQL Server's guard remains unobserved;
+`openehr-mssql` stays **Dialect**.
 
 ---
 
@@ -4274,3 +4310,407 @@ all four types; the parser carrying an omitted value and the root's
 default; the real `openEHR-EHR-CLUSTER.device.v1.0.0` definition — the
 fixture that had asserted a named refusal since `A-62` — now parsed whole;
 and validation against the inferred value.
+
+## A-72 — an unwrapped interval's kind was refused as undecidable; the grammar decides it
+
+**Severity: Medium. Status: fixed.**
+
+**Found by corpus run 2** (`corpus.md`): once `A-71` let real archetypes
+past the `occurrences` refusal, the largest refusal left was `A-67`'s own:
+"an unwrapped interval's primitive kind (`C_INTEGER` vs `C_REAL`) cannot be
+told apart without a wrapping `rm_type_id`" — 184 files across both
+extensions, 120 of them the CKM 2013 and NEHTA 2014 clinical corpora, on
+constructs as ordinary as `magnitude matches {|0.0..1000.0|}`.
+
+**The stated reason was wrong.** `odin_values.g4` (the grammar
+`cadl2_primitives.g4` imports its values from) says
+
+```
+integer_interval_value : '|' SYM_GT? integer_value '..' SYM_LT? integer_value '|' | … ;
+integer_value          : ( '+' | '-' )? INTEGER ;
+real_interval_value    : '|' SYM_GT? real_value    '..' SYM_LT? real_value    '|' | … ;
+real_value             : ( '+' | '-' )? REAL ;
+```
+
+and `base_lexer.g4` makes `INTEGER : DIGIT+` and `REAL : DIGIT+ '.' DIGIT+`
+distinct tokens. `|0..100|` *is* a `C_INTEGER` and `|0.0..100.0|` *is* a
+`C_REAL`, by the same token distinction this parser had applied to an
+unwrapped single value (`Token::Integer` vs `Token::Real`) since `A-63`.
+`A-67` documented the refusal carefully and tested it; what it did not do
+was read the grammar rule it was refusing, which is the `W0.3` failure in
+its parser form — a limitation asserted rather than verified.
+
+**Fixed.** `Lexer::peek_interval_bound` looks past the opening `|` and any
+run of relop or sign symbols to the first bound's token, without consuming,
+and returns it with the raw text from that point. `parse_inline_primitive`
+dispatches an `Integer` bound to `parse_integer_primitive` and a `Real`
+bound to `parse_real_primitive`, exactly as it already did for a bare
+value. Two refusals remain and both are by name: a bound whose raw text
+begins like an ISO 8601 literal (four digits then `-`, two then `:`, or
+`P`) is an unwrapped *temporal* interval, whose kind among date, time,
+date-time, and duration this parser does not decide unwrapped; and a bound
+mixing the kinds (`|0..100.0|`) is refused by the integer parser as the
+grammar refuses it. `C_ATTRIBUTE_TUPLE` rows, which the grammar gives no
+room for a wrapping type name, get the same decision through the shared
+helper, so AOM2's canonical `[{"mm[Hg]"}, {|0..300|}]` now parses.
+
+**Effect on the corpus** is recorded in `corpus.md`, run 3.
+
+**Tests.** Two: the tuple fixture that had asserted `A-67`'s refusal now
+asserts its second item is a `C_INTEGER` range; and the corpus file's own
+`|0..100|; 10` as a `C_INTEGER` with its assumed value, `|0.0..100.0|` as a
+`C_REAL`, a negative lower bound, and the three refusals (mixed kinds, a
+date bound, a duration bound, and a string bound) each by name.
+
+## A-73 — a closed `ARCHETYPE_SLOT` stayed refused after the reason for refusing it was gone
+
+**Severity: Low. Status: fixed.**
+
+**Found by corpus run 2**, thirteen files, and by re-reading `A-62`'s own
+reason in the light of `A-71`. `allow_archetype CLUSTER[id10] closed` was
+refused by name because the grammar's `SYM_CLOSED` alternative carries no
+`c_occurrences`, and `ArchetypeSlot` could hold only a stated
+`MultiplicityInterval`: "there is no value to build one from without
+guessing" (`am::cadl`'s own module documentation, `A-62`). That was true.
+`A-71` made `occurrences` an `Option` on every `C_OBJECT`, `ArchetypeSlot`
+included, and `K15.32` says what `None` means and how it is inferred — so
+the ground for the refusal disappeared, and the refusal did not. A
+limitation whose reason has been removed is a stale claim, and the corpus
+is what noticed.
+
+**Fixed.** `closed` builds `ArchetypeSlot::new(rm_type_name, node_id,
+None).closed()` and consumes nothing further, as the grammar's alternative
+has nothing further. `am::validate` already enforces `is_closed` against
+whatever filled the slot (`A-60`), so a closed slot read from ADL text is
+now checked rather than refused before it could be. The module
+documentation's `ARCHETYPE_SLOT` bullet, which had explained the refusal
+by `ArchetypeSlot`'s non-deferrable occurrences, now explains the change.
+
+**Tests.** The test that asserted the named refusal now asserts the parse:
+closed, occurrences unstated, no assertions, the node id kept.
+
+## A-74 — the relop interval spelling failed on its `=`, not by name
+
+**Severity: Low. Status: fixed.**
+
+**Found by corpus run 3**, the run after `A-72`: with unwrapped intervals
+reaching the reader for the first time, 106 files failed as "expected a
+real number, found `=`" or "expected an integer, found `=`". The text
+behind every one is `|>=0.0|` or `|>=0|` — a `DV_QUANTITY` magnitude
+constrained to be non-negative, 263 occurrences across 134 files, the
+single most common interval in the clinical corpus. `odin_values.g4`
+gives each numeric kind three interval spellings:
+
+```
+'|' SYM_GT? v '..' SYM_LT? v '|'      a range
+'|' relop? v '|'                      one bound, or a point
+'|' v SYM_PLUS_OR_MINUS v '|'         a tolerance
+```
+
+`am::cadl` read the first, listed the other two as refused in its module
+documentation, and did not refuse the second by name: the range reader
+took the `>` as the range's own optional open lower bound, then met `=`
+where it expected a number. A true statement in the documentation and a
+refusal naming a symptom in the code — `K15.6` asks that the *construct*
+be named at its offset, and a reader of "found `=`" learns nothing about
+what the parser does not do.
+
+**Fixed.** `parse_numeric_interval`, one function for both numeric kinds,
+parameterised on the bound reader (`expect_signed_integer` or
+`expect_signed_real`), reads the opening bar, an optional `>` or `<`, an
+optional `=`, and the first bound, then decides by the next token: a
+closing bar makes it a relop form (`>` gives a lower bound open above,
+`<` an upper bound open below, `=` the inclusion, no relop a point
+`v..v`); `..` makes it the range, with `>` as before; `+` makes it the
+tolerance spelling, refused by name, as is a relop followed by `..`.
+`Interval::new` already represented a half-open interval — the parser had
+simply never asked it to.
+
+**Effect on the corpus** is in `corpus.md`, run 3, together with `A-72`
+and `A-73`.
+
+**Tests.** One, over the corpus spelling and each of its neighbours:
+`|>=0.0|`, `|>0|`, `|<=10|`, `|<10|`, `|5|`, the unchanged `|>0..10|`, and
+the two named refusals.
+
+## A-75 — temporal `*_CONSTRAINT_PATTERN` and unwrapped temporal literals were not read
+
+**Severity: Medium. Status: fixed.**
+
+**Found continuing the corpus's own candidate list** (`corpus.md`, run 1's
+candidates 1 and 5, closed together because they share one cause): AOM2's
+`C_DATE`, `C_TIME`, `C_DATE_TIME`, and `C_DURATION` each admit a
+`*_CONSTRAINT_PATTERN` alternative — `yyyy-mm-??`, `??:??:??`,
+`yyyy-mm-ddThh:mm:ss`, a bare `PnYnMnD` letter pattern — ahead of a value,
+list, or interval in their own grammar rule
+(`cadl2_primitives.g4`/`base_lexer.g4`). An earlier session's modelling
+pass gave every `CPrimitive` temporal variant a `pattern: Option<String>`
+field for exactly this, with `am::validate` already reporting a node
+governed by one *unchecked* rather than applying it — but nothing in
+`am::cadl` ever built one. Separately, `c_inline_primitive_object` — the
+unwrapped shorthand `c_objects` reads directly, `attr matches { … }` with
+no `Date[id]` wrapper — gives all nine kinds equal standing in its own
+grammar rule, but this parser's `starts_inline_primitive` only recognised
+five of them; a real corpus file's `duration_attr1 matches {PT0S}`
+mis-tokenized "PT0S" as an RM type name and was refused as "expected `[`,
+found `}`".
+
+**Fixed.** [`Lexer::peek_iso8601`] is [`Lexer::read_iso8601`] without
+consuming — the same maximal run of ISO 8601-shaped characters
+(`is_iso8601_char`, widened to include `X`/`x` for the pattern's `XX`/`xx`
+wildcard), left in place so a caller can classify it before committing to
+reading it, mirroring [`Lexer::peek_raw_path`] (`A-70`). Four pattern
+validators (`is_date_pattern` and its three siblings) check each grammar
+rule's own field shapes directly — `is_pattern_field` for the doubled-letter
+or `??`/`XX`/`xx` fields every kind but the year shares, and
+`matches_optional_letters` for the duration pattern's ordered, each-once
+optional letters — rather than through a regex engine this crate does not
+depend on (`plan.md`'s own open decision on `K15.10` is exactly why one
+isn't reached for here either). Each `temporal_primitive!`-generated
+parser tries its own pattern first, still allowing the trailing `; <value>`
+assumed form the grammar permits after any alternative.
+
+For the unwrapped half, `classify_temporal` decides which of the four
+kinds a candidate run is — **structurally**, by `-`/`:` presence and
+`P`/`-P` prefix, before consulting that kind's own value or pattern check
+— and `starts_inline_primitive`/`parse_inline_primitive`'s `None` arm both
+consult it. This function's first shape tried each kind's `T::from_str` in
+a fixed order instead, and its own test caught the bug that shape had: a
+bare date value like `"2024-06-15"` also satisfies `DateTime::from_str`
+(a date known to the day, time part absent — `crate::base::DateTime`'s own
+partial-value reasoning, `D3.18d` one type family over), so it was silently
+reclassified as `C_DATE_TIME`. Deciding the kind from the text's own shape
+first removed the ambiguity rather than picking a priority order among
+four checks that can each be individually correct and still disagree.
+
+A genuine RM type name is not put at risk by any of this: `classify_temporal`
+requires the *whole* maximal `is_iso8601_char` run to satisfy a real value
+or pattern check, not merely to start with a temporal-shaped letter.
+`PARTICIPATION`'s own run stops at `"P"` (the next character, `A`, is not
+in the character set), and neither `Duration::from_str("P")` nor
+`is_duration_pattern("P")` accepts it — the latter by design, see `A-75`'s
+own test and `is_duration_pattern`'s documentation for why a bare `"P"` is
+excluded even though the grammar's own optional fields would otherwise
+allow it vacuously.
+
+**Effect on the corpus** is in `corpus.md`, run 4.
+
+**Tests.** Nine, including a direct table of each pattern validator against
+its own real and adjacent-but-wrong shapes, the corpus's own duration and
+date-time fixtures, `peek_iso8601` leaving text in place, and the
+`DateTime`-misclassification regression. The mutation-testing job (run
+locally; `agents/auditing.md`) found five further gaps in this same change:
+two `||`/`&&` boundary conditions reachable by no prior test, and an
+infinite-loop mutation in `matches_optional_letters`'s original
+counter-based shape that no assertion could ever catch — fixed by
+rewriting it over a single shared iterator (`Iterator::any`/`Iterator::all`)
+with no counter to mutate into a loop that never terminates, the same
+"remove the loop's ability to hang" fix `A-70` made for a parser loop.
+
+## A-76 — a genuine RM class named like a primitive kind was read as the primitive
+
+**Severity: Medium. Status: fixed.**
+
+**Found reproduced while fixing `A-75`.** Corpus run 1 recorded, as its
+second candidate, "not yet reproduced by a test": `primitive_kind` matched
+a wrapped `rm_type_id` against its nine known names —
+`Boolean`/`String`/`Integer`/`Real`/`Date`/`Time`/`Date_time`/`Duration`/
+`Terminology_code` — case-insensitively, on the stated ground that real
+archetypes are not perfectly consistent about capitalising
+`Terminology_code`. Chasing `A-75`'s own new "d is not a valid ISO8601_DATE"
+corpus refusal (still present after that fix) led to
+`Reference/ISO_13606/Spanish_MOH/ADL_14/CEN-EN13606-CLUSTER.Muestra.v1.adls`:
+`DATE[id3] occurrences matches {0..1} matches { date existence matches {1}
+matches {yyyy-mm-dd} }` — `DATE` here is ISO 13606's own RM class, a
+`C_COMPLEX_OBJECT` with one attribute, `date`. `"DATE".eq_ignore_ascii_case
+("Date")` is true, so this crate treated it as the `Date` primitive kind
+instead, tried to parse the attribute keyword `date` as that primitive's
+own value, and failed on the first character that did not fit — a refusal
+this crate caused by misreading the construct, not a limitation of an
+unimplemented one, which is exactly the distinction `K15.6` exists to
+preserve.
+
+**Fixed.** `primitive_kind` now matches exactly. Checked against the whole
+corpus first, not assumed: no file, in any casing of any of the nine
+names, wraps a genuine primitive constraint at all — every real archetype
+this parser has been run against uses the unwrapped shorthand
+(`c_inline_primitive_object`, `A-75`'s own subject) instead. The stated
+reason for case-insensitivity — inconsistent `Terminology_code` casing —
+was itself unverified against a corpus (`W0.3`) and the corpus available
+now does not support it; if a real inconsistency turns up later, the fix
+belongs at the specific name, not as a blanket case fold across all nine.
+
+**Effect on the corpus** is in `corpus.md`, run 5.
+
+**Tests.** One: the exact corpus construct, parsed as a `C_COMPLEX_OBJECT`
+named `DATE` with its attribute intact, alongside the correctly cased
+`Date[id]` still building the primitive.
+
+## A-77 — a negative unwrapped number had no dispatch at all
+
+**Severity: Low. Status: fixed.**
+
+**Found examining corpus run 5's own new candidate.** `DV_ORDINAL`'s
+canonical `[value, symbol]` tuple constrains an ordinal scale by pairing
+each numeric value with its coded meaning — AOM2's own worked example for
+`C_ATTRIBUTE_TUPLE` — and a scale that includes zero or a negative rank
+writes `[{-3}, {[at49]}]`. Both corpus copies of
+`openEHR-EHR-CLUSTER.symptom.v1` do exactly this, and both were refused:
+"expected a primitive value, found `-`".
+
+The cause was structural, not a missing case for negative numbers
+specifically. `Self::next`'s own tokenizer treats `-` as a `Symbol`
+(`SYMBOLS` includes it, `cadl_lexer.rs`) on its own — a negative literal's
+sign and its digits are two tokens, not one, unlike a positive literal
+(`read_number` only starts on a digit). `expect_signed_integer` and
+`expect_signed_real` already knew how to *read* one, consuming the sign
+themselves; nothing decided *whether* to call them. `c_primitive_tuple_item`
+calls `parse_inline_primitive(lexer, None)` unconditionally — no
+`starts_inline_primitive` gate at all — so the `Symbol('-')` reached
+`parse_inline_primitive`'s own `None` match with no arm for it, falling to
+"expected a primitive value". A plain `attr matches {-3}` (not in a tuple)
+would have failed one layer earlier, at `starts_inline_primitive`, as
+"expected an RM type name" — no corpus file happens to use that shape, but
+the fix covers both paths for the same reason.
+
+**Fixed.** `Lexer::peek_after_sign` peeks past a leading `+`/`-` to the
+token the ordinary tokenizer would read next — `Token::Integer`/
+`Token::Real` for a number, whatever else is there otherwise — without
+consuming either, the two-token lookahead the existing one-token `peek`
+cannot give. `starts_inline_primitive` gains a disjunct for it;
+`parse_inline_primitive`'s `None` arm gains a `Symbol('-')` case that
+dispatches to `parse_integer_primitive`/`parse_real_primitive`, which
+already consume the sign correctly via `expect_signed_integer`/
+`expect_signed_real`. A negative *duration* (`-PT1H`, `ISO8601_DURATION`'s
+own leading `-'?'` per `base_lexer.g4`) is unaffected: `classify_temporal`
+already recognises it through the temporal check both call sites run
+first, so the new `-` case is reached only for a genuine number.
+
+**Effect on the corpus** is in `corpus.md`, run 6: two files, both closed.
+
+**Tests.** Three: the corpus's own tuple shape with a negative, zero, and
+positive item across three rows; a plain negative integer and real via
+`c_objects` directly; and the two distinct refusals a genuinely malformed
+`-` still produces, depending on which of the two call sites reaches it
+first (`-"x"` never starts an inline primitive at all; `{-true}` inside a
+tuple row reaches `parse_inline_primitive`'s own "expected a number after
+`-`").
+
+## A-78 — a comma decimal sign in a fractional second was refused
+
+**Severity: Medium. Status: fixed.**
+
+**Found running the JSON half of `tasks.md`'s external-corpus item**
+(`tests/json_corpus.rs`, `EHRbase/openEHR_SDK`'s own reference test
+compositions, Apache-2.0): 21 of 57 real canonical-JSON fixtures write a
+date-time like `2019-01-14T18:36:49,294+00:00` — a comma before the
+fractional second — and every one of them failed to deserialize, as
+"second is not two digits". `Time::from_str` split the body on `.` alone;
+for a comma-separated fraction, `body.split(':')` then saw `"49,294"` as
+one six-character "second" component, which is never two digits, whatever
+it contains.
+
+The ground for refusing it was never checked against the actual grammar.
+`openEHR/adl-antlr`'s `base_lexer.g4` states plainly:
+`fragment SECOND_DEC_SEP : '.' | ',' ;` — both signs are the ISO 8601
+tokens openEHR's own ADL grammar names, not a looser "ISO 8601 is
+permissive" this crate could have chosen to ignore.
+
+**Fixed.** `Time::from_str` finds the first `.` *or* `,` rather than only
+`.`, and `Duration::from_str`'s designator scanner accepts either
+character as part of a seconds component, validating the digits by
+replacing `,` with `.` only for the transient `f64` parse that checks the
+number is well-formed — `out.seconds` itself keeps whatever character was
+actually written. Neither type's `Display` reconstructs from the parsed
+digits; both write the original input text verbatim (`self.text`,
+already true before this fix), so `D3.10`'s "preserve the lexical form
+exactly" is satisfied by construction — accepting `,` could not have
+weakened it. `am::cadl`'s own ISO 8601 raw scan already included `,` in
+its character set (for an unrelated reason, `odin_values.g4`'s list
+continuation), so the ADL-side parser gained the same acceptance with no
+separate change: it hands the same raw text to the same `FromStr` impls
+this fix corrects.
+
+**New requirement, `D3.10b`**, states the rule this crate had silently
+gotten wrong, citing the grammar fragment directly.
+
+**Tests.** Two: a comma-separated time and date-time, checked for the
+correct parsed digits and the exact original text on `Display`, plus the
+refusals a widened accept-set could have accidentally admitted (no digits
+after the sign, two decimal signs for one fraction); and the `Duration`
+equivalent, plus the fractional-non-seconds refusal (`P1,5D`) still firing
+regardless of which decimal sign was used.
+
+## A-79 — `TEMPLATE_ID` refused whitespace the specification never asked it to
+
+**Severity: Medium. Status: fixed.**
+
+**Found continuing the same corpus run.** `TEMPLATE_ID`'s own doc comment
+already stated the risk precisely: openEHR gives the type's lexical form
+as "to be determined", so "inventing a stricter grammar would reject
+valid identifiers from conformant tools" — and then invented one anyway,
+refusing any value containing whitespace. `EHRbase`'s corpus falsifies
+exactly that concern: 8 of 57 fixtures name a real template
+`Virologischer Befund` — a genuine, spaces-included German clinical
+template name — and every one of them was refused before this fix, not
+for being malformed, but for matching a rule this crate added on its own
+initiative.
+
+**Fixed.** The whitespace check is removed from `TemplateId::from_str`;
+only emptiness is refused, which is the one floor the type's own
+reasoning ever supported ("accepting anything at all, including an empty
+string, would let a missing template id look like a present one").
+`I2.16`'s text is corrected in place — the requirement itself said "and
+free of whitespace", not only the code — with a dated note recording why,
+per `C0.5`: the id is never renumbered for a text correction, and the old
+wrong text is not simply deleted.
+
+**Tests.** One: a template id containing whitespace round-trips through
+`FromStr`/`Display` exactly like any other text this type stores
+verbatim, alongside the existing empty-string refusal; the crate-level
+doctest on `TemplateId` itself now demonstrates acceptance rather than
+refusal.
+
+## A-81 — a non-English rubric is reported as a violation, not unchecked
+
+**Severity: Medium. Status: open, by decision.**
+
+**Found running the JSON corpus's own third pass** — after `A-78` and
+`A-79` closed, the fixtures that still fail `validate()` rather than
+`serde_json` were read one invariant at a time
+(`openehr/spec/json_corpus.md`). `Value_is_rubric` fired on `EHRbase`'s
+own `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, which declares
+`language: {terminology_id: ISO_639-1, code_string: es}` and writes its
+`COMPOSITION.category` as `{"value": "evento", "defining_code": {…,
+"code_string": "433"}}` — Spanish for "event", openEHR's own English
+rubric for code `433`.
+
+`DvCodedText::check_openehr_rubric` compares `value` against
+`terminology::Group::rubric`, whose own doc comment already says plainly:
+"The **English** rubric, as it appears in `DV_CODED_TEXT.value`." The
+table has one language. Nothing in the check knows, or asks, what
+language the enclosing record declares, so a Spanish rubric is compared
+against an English string, disagrees, and is reported as a violation.
+
+**This is not merely an incomplete data table — it contradicts `D3.7`'s
+own already-stated principle.** `D3.7` requires reporting *not checked*
+as an outcome distinct from *valid*, specifically because "reporting an
+unchecked external code as valid would be a claim about a terminology the
+crate cannot see." The same reasoning runs the other way: reporting a
+*violation* for a code the crate cannot check in the record's actual
+language is a claim about a terminology the crate cannot see, just phrased
+as a refusal instead of an acceptance. A Spanish-language clinical record
+using openEHR's own terminology correctly is told it is wrong.
+
+**Open, by decision, not fixed today.** Two real paths close it, and
+neither is a same-day patch: thread the record's own declared `language`
+down to `check_coded_text` (a real plumbing change — the check currently
+runs several structural layers below where `COMPOSITION.language` is
+known) and report *unchecked* rather than a violation whenever the
+declared language is not the one language this crate's table carries; or
+source and cite real rubric text for the languages openEHR itself
+publishes, the same sourcing discipline `03-data-types.md`'s own
+"Where the quantity invariants come from" section already holds itself
+to — not something to approximate from a single corpus fixture. New
+`D3.7a` states the gap in the specification itself, since `D3.7` alone
+now reads as satisfied when it is not, for any language but English.

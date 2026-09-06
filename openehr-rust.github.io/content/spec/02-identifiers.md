@@ -54,10 +54,18 @@ text is produced are load-bearing rather than cosmetic.
   grammar would reject identifiers that appear in real instance data. The
   guarantee that survives: the major version is always extractable, and the text
   round-trips (`I2.2`).
-- **I2.16** `TEMPLATE_ID` MUST be non-empty and free of whitespace. openEHR
-  gives its lexical form as "to be determined"; inventing a stricter grammar
-  would reject valid identifiers from conformant tools, and accepting anything
-  would let a missing template id look present.
+- **I2.16** `TEMPLATE_ID` MUST be non-empty. openEHR gives its lexical form as
+  "to be determined"; accepting anything at all would let a missing template
+  id look present, and that is the one floor this requirement holds.
+  *Corrected 2026-09-05 (`A-79`)*: this requirement previously also said "and
+  free of whitespace" — an invented stricter grammar this requirement's own
+  reasoning already warned against ("would reject valid identifiers from
+  conformant tools"), and wrong: EHRbase's own reference test corpus names a
+  real template `Virologischer Befund`, refused by every version of this
+  crate before `A-79` (`openehr/spec/corpus.md`). The clause is withdrawn from
+  this requirement rather than superseded by a new id, since the identifier
+  itself is otherwise unaffected (`C0.5`: an id is never renumbered even when
+  its text changes).
 - **I2.17** `TERMINOLOGY_ID` MUST parse as `name [ '(' version ')' ]` with both
   parts non-empty when present.
 - **I2.18** `GENERIC_ID` MUST require both `value` and `scheme` to be non-empty,

@@ -116,12 +116,15 @@ each engine crate stands, under the ladder set out in
 | `openehr-postgresql` | **Schema** — DDL executed against PostgreSQL 18 |
 | `openehr-mysql` | **Schema** — DDL executed against MySQL 8.4 |
 | `openehr-mariadb` | **Schema** — DDL executed against MariaDB 11.4 |
-| `openehr-mssql` | **Dialect** — no server has parsed it |
-| `openehr-oracle` | **Dialect** — no server has parsed it |
+| `openehr-mssql` | **Dialect** — its `verify-schema.sh` branch runs in CI, but has not yet passed there |
+| `openehr-oracle` | **Schema** — DDL executed against Oracle Database Free 26ai |
 
 `openehr-sqlite` reached **Verified** on 2026-08-01: [run 30713623082](https://github.com/openehr-rust/openehr-rust/actions/runs/30713623082) is green across
-all nineteen jobs. The three Schema claims are now checked by CI on every push
-rather than attested once. See [`spec/audit.md`](../spec/audit.md) **W-02**.
+all nineteen jobs. `openehr-oracle` joined the Schema claims 2026-09-06 (run
+[34040865467](https://github.com/openehr-rust/openehr-rust/actions/runs/34040865467)),
+once `gvenzl/oracle-free` — a public image needing no registry login — was
+found. The four Schema claims are checked by CI on every push rather than
+attested once. See [`spec/audit.md`](../spec/audit.md) **W-02**.
 
 ## Specification
 

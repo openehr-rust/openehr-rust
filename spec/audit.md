@@ -146,19 +146,26 @@ exists. It runs, on every push and pull request:
 | `msrv` | that the MSRV is N−2, declared identically everywhere, and **builds** — see [`rust-msrv-n-minus-2/index.md`](rust-msrv-n-minus-2/index.md) and **W-09** (fixed when the floor was N−3; the offset since raised to N−2, `RV1`) |
 | `examples` | the five runnable tutorials the README points at, plus `openehr-sqlite`'s persistence tutorial |
 | `bench` | every criterion benchmark runs once (`--test`); nothing is gated on wall-clock (`W0.35`, `W0.36`) |
-| `schema` | `verify-schema.sh` against real PostgreSQL 18, MySQL 8.4, and MariaDB 11.4 containers |
+| `schema` | `verify-schema.sh` against real PostgreSQL 18, MySQL 8.4, MariaDB 11.4, SQL Server, and Oracle containers (SQL Server's has not yet passed, `M14.6`) |
 | `assets` | that the committed `assets/` files are what the code renders — a stale generated artifact is a lie that reviews are read against |
 | `fuzz` | a bounded run of every fuzz target (`W0.27`); a crash, panic, or abort fails the build |
 | `layering` | that `openehr` and `openehr-store` depend inward only, dev-dependencies included, against a crate list **derived** from the tree (**W-13**) |
-| `claims` | that `openehr-mssql` and `openehr-oracle` still claim only **Dialect**; that the **library** matrix covers every requirement exactly once, and that both conformance matrices do not contradict themselves — the databases matrix has no exactly-once check: it is five topic tables in which one requirement can legitimately appear more than once, and 144 of its 221 requirements have never been assessed at all (`db:D-11`); that this file's summary paragraph counts itself correctly; that the licence expression is harmonized across every crate (`W0.22`); that no requirement marked satisfied calls itself unverified (**W-17**); and that the documentation's countable claims match the tree (`scripts/check-docs.py`) |
+| `claims` | that `openehr-mssql` still claims only **Dialect** (`openehr-oracle` left this guard 2026-09-06, once `schema / oracle` gave it a real CI job to claim **Schema** against); that the **library** matrix covers every requirement exactly once, and that both conformance matrices do not contradict themselves — the databases matrix has no exactly-once check: it is five topic tables in which one requirement can legitimately appear more than once, and 144 of its 221 requirements have never been assessed at all (`db:D-11`); that this file's summary paragraph counts itself correctly; that the licence expression is harmonized across every crate (`W0.22`); that no requirement marked satisfied calls itself unverified (**W-17**); and that the documentation's countable claims match the tree (`scripts/check-docs.py`) |
 | `trademarks` | `scripts/check-trademarks.py`: every root document and every published crate's rustdoc that uses the openEHR mark in prose carries the professionalization rule 5 notice verbatim (added 2026-08-26, once the changes it was deferred behind had landed) |
 | `mutants` | `cargo-mutants --in-diff` over the lines a push or a pull request changed, scoped to the diff because a full run is hours per crate. Pull-request-only until **W-18** |
 
 The `schema` jobs **fail rather than skip** when no container runtime is present
 (`C0.13`), and invoke the same script a contributor runs locally rather than a
-parallel implementation in YAML. There is deliberately **no** schema job for SQL
-Server or Oracle: no server has parsed their DDL, and a job that skipped would
-convert an honest gap into a false green.
+parallel implementation in YAML.
+
+**Update, 2026-09-06.** The sentence that stood here — "There is deliberately
+**no** schema job for SQL Server or Oracle... a job that skipped would convert
+an honest gap into a false green" — described a decision to omit the job
+rather than let it lie by skipping. The matrix now lists all five engines
+instead: `schema / oracle` runs and passes; `schema / mssql` runs and has not
+yet passed (`M14.6`). A running-but-red job is exactly the gap this sentence
+was written to keep visible, achieved the other way — by running it, not by
+leaving it out.
 
 **Demonstrated 2026-08-01**, which is what closed this rather than the commit
 that added the file. run [30713623082](https://github.com/openehr-rust/openehr-rust/actions/runs/30713623082) on `main` (`127b4df`) is green across all
@@ -187,6 +194,13 @@ that cannot be absent. It is the only crate eligible, and now the only one there
 
 **Residual.** `openehr-mssql` and `openehr-oracle` remain at **Dialect** — CI
 cannot verify what no reachable server will parse.
+
+**Update, 2026-09-06.** `openehr-oracle` left this residual: `schema / oracle`
+now runs in CI (`gvenzl/oracle-free`, a public image needing no registry
+login), and the crate is **Schema**
+([`spec/databases/conformance-matrix.md`](databases/conformance-matrix.md), the
+one file that owns a level). `openehr-mssql` remains, unchanged from the
+original finding.
 
 ---
 
@@ -910,11 +924,13 @@ Stated so that "not examined" and "examined and sound" stay distinguishable
   integration tests, and 8 doctests pass, and the crate has its own audit register
   with seventeen findings. This audit did not re-verify any of them against the
   openEHR primary sources.
-- **SQL Server and Oracle DDL.** Neither has been parsed by the engine it names.
-  SQL Server 2022 segfaults under qemu on arm64; the Oracle images require
-  registry authentication. Both remain at **Dialect**, which is the correct level
-  for "no server has seen it", and that is a gap in evidence rather than a
-  judgement that the DDL is wrong.
+- **SQL Server DDL.** Not yet parsed by the engine it names: SQL Server 2022
+  segfaults under qemu on arm64, and `schema / mssql` has not yet passed in CI.
+  The crate remains at **Dialect**, which is the correct level for "no server
+  has seen it", and that is a gap in evidence rather than a judgement that the
+  DDL is wrong. (Oracle DDL was the same gap until 2026-09-06, when
+  `gvenzl/oracle-free` — a public image, unlike the official ones this bullet
+  originally had in mind — closed it; `openehr-oracle` is now **Schema**.)
 - **The SQLite store under concurrency — no longer true, kept as a correction.**
   This said "nothing exercises concurrent writers". It was closed on 2026-08-01
   by `openehr-sqlite/tests/concurrency.rs` (`db:D-02`, and `db:D-06` which that

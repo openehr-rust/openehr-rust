@@ -77,7 +77,7 @@ this table restates it and is checked against it.
 | [`openehr-mysql`](openehr-mysql/) | **Schema** |
 | [`openehr-mariadb`](openehr-mariadb/) | **Schema** |
 | [`openehr-mssql`](openehr-mssql/) | **Dialect** |
-| [`openehr-oracle`](openehr-oracle/) | **Dialect** |
+| [`openehr-oracle`](openehr-oracle/) | **Schema** |
 
 `openehr` and `openehr-store` are libraries outside the engine ladder;
 `openehr-loco` states evidence rather than a level (`W0.32`).

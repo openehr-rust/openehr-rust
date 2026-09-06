@@ -34,7 +34,7 @@ crates.io at 0.9.0; the other ten are `publish = false`.
 | `openehr-mysql` | MySQL 8.4 dialect | **Schema** |
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
 | `openehr-mssql` | SQL Server dialect | **Dialect** |
-| `openehr-oracle` | Oracle dialect | **Dialect** |
+| `openehr-oracle` | Oracle dialect | **Schema** |
 | `openehr-loco` | HTTP service on Axum and Loco; verifies PASETO `v4.public` | outside the ladder (`W0.32`) |
 | `openehr-assets` | regenerates `assets/`, and fails the build on a stale one | not published |
 | `openehr-fuzz`, `openehr-<engine>-fuzz` × 6 | fuzz harnesses | not published |
@@ -133,6 +133,8 @@ found a defect in every crate it has been run against — three of three.
 sh openehr-store/scripts/verify-schema.sh postgresql   # PostgreSQL 18
 sh openehr-store/scripts/verify-schema.sh mysql        # MySQL 8.4
 sh openehr-store/scripts/verify-schema.sh mariadb      # MariaDB 11.4
+sh openehr-store/scripts/verify-schema.sh mssql        # SQL Server 2022
+sh openehr-store/scripts/verify-schema.sh oracle       # Oracle Database Free
 ```
 
 Requires `podman` (or `docker` via `$CONTAINER`), which is also what CI uses. It
@@ -142,9 +144,13 @@ checks the append-only tables refuse `UPDATE` and `DELETE` **with that row
 present**. The row matters: a `FOR EACH ROW` trigger on an empty table never
 fires, so a check on zero rows reports a refusal it never performed.
 
-SQL Server and Oracle have no branch: SQL Server 2022 segfaults under qemu on
-arm64, and the Oracle images need registry authentication. Both crates stay at
-**Dialect** until someone runs them somewhere they work.
+**`openehr-oracle` reached Schema 2026-09-06**: `gvenzl/oracle-free` needs no
+registry login, unlike the official Oracle images this section used to say
+blocked every branch. **`openehr-mssql` still has none run for real**: SQL
+Server 2022 segfaults under qemu on arm64, so its branch exists and runs in
+CI's own x86_64 runners, but has not yet passed there (`M14.6`) — a local
+`sh ... verify-schema.sh mssql` on Apple Silicon will not tell you anything
+useful about it.
 
 ### CI
 
@@ -156,11 +162,11 @@ arm64, and the Oracle images need registry authentication. Both crates stay at
 | `msrv` | derives N−2 from the stable toolchain it just installed, checks every manifest and document declares exactly that, then **builds and tests on it**. See [`spec/rust-msrv-n-minus-2/index.md`](spec/rust-msrv-n-minus-2/index.md); this job is expected to go red within six weeks of every Rust release, and that is the point |
 | `examples` | the five runnable tutorials in `openehr`, plus the persistence tutorial in `openehr-sqlite` |
 | `bench` | `cargo bench -- --test`: every criterion benchmark runs once. Nothing is gated on wall-clock (`W0.35`) — a threshold on a shared runner fails for unrelated reasons and gets silenced |
-| `schema` | `verify-schema.sh` against real PostgreSQL, MySQL, and MariaDB containers |
+| `schema` | `verify-schema.sh` against real PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle containers (SQL Server's has not yet passed, `M14.6`) |
 | `assets` | `openehr-assets` regenerates the committed DDL/schema files and fails the build if a committed one is stale |
 | `fuzz` | a short regression run of every fuzz target — a crash, panic, or abort fails the build; this is a gate, not a campaign |
 | `layering` | `openehr` and `openehr-store` depend inward only, including dev-dependencies. The crate list is **derived** from the tree, not written here: it used to name nine of seventeen and could not see a cycle through the eight it skipped (**W-13**) |
-| `claims` | that mssql and oracle still claim only Dialect, that the library matrix covers every requirement exactly once, that the conformance matrix does not contradict itself, that the audit summary counts itself correctly, and that **all eighteen** crates declare the same five licences (**W-14**) |
+| `claims` | that mssql still claims only Dialect (oracle left this guard 2026-09-06 once `schema / oracle` gave it a real job to claim Schema against), that the library matrix covers every requirement exactly once, that the conformance matrix does not contradict itself, that the audit summary counts itself correctly, and that **all eighteen** crates declare the same five licences (**W-14**) |
 | `trademarks` | `scripts/check-trademarks.py`: every root document and every published crate's rustdoc that uses the openEHR mark in prose carries the notice of professionalization rule 5 verbatim, non-affiliation sentence included |
 | `mutants` | `cargo-mutants --in-diff` over the lines a **push or a pull request** changed, per crate touched. It was pull-request-only until 2026-08-21, so nine commits made straight to `main` bypassed it entirely while it reported `skipped` (**W-18**). A push is mutated against `event.before..HEAD` only, so a survivor in code an earlier push carried is never re-checked here; run it locally by function name before pushing — see [`agents/auditing.md`](agents/auditing.md) |
 

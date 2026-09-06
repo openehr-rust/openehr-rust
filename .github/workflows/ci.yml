@@ -566,17 +566,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # `openehr-oracle` left this loop 2026-09-06: `schema / oracle` now
+      # verifies it on every push (`M14.7`), so its lib.rs is allowed, and
+      # expected, to claim Schema. `openehr-mssql` stays here until `schema /
+      # mssql` passes for real (`M14.6`) — this guard is what would have
+      # caught either crate claiming a level before that job existed.
       - name: No crate claims a level with no evidence here
         run: |
           set -eu
-          for c in openehr-mssql openehr-oracle; do
+          for c in openehr-mssql; do
             if grep -qE 'Conformance level:\s*\**(Schema|Store|Verified)' \
                  "$c/src/lib.rs" "$c/README.md"; then
               echo "::error::$c claims Schema or above, but no CI job verifies it"
               exit 1
             fi
           done
-          echo "mssql and oracle still claim Dialect, as recorded"
+          echo "mssql still claims Dialect, as recorded"
 
       # `lib:A-26`: the library matrix said "every requirement id checked to
       # appear exactly once — 291 ids, 291 covered, none missing". That was

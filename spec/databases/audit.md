@@ -103,6 +103,16 @@ Writing them surfaced things that had not been written down anywhere:
 ratified annex before it counts as evidence, and ratification for the two
 Dialect-level crates needs a live run that no available machine can provide.
 
+**Update, 2026-09-06.** That last sentence was true of the machine available
+when it was written, not of every machine: `gvenzl/oracle-free` is a public,
+unauthenticated image, and `openehr-oracle`'s live run now exists — `M14.7` is
+met, and the crate is **Schema** (`spec/databases/conformance-matrix.md`, the
+one file that owns a level, `W0.40`). Its annex stays **proposed**; ratifying
+an annex and reaching Schema level turned out to be independent — the three
+already-Schema engines' annexes are proposed too. `openehr-mssql` remains
+Dialect: no arm64 Linux SQL Server image exists, so `M14.6` stays open pending
+a green run on CI's own x86_64 runners.
+
 ### D-02 — Two store requirements were unverifiable as written — **Medium, fixed**
 
 **Required.** `R4.5` (a multi-row read sees one snapshot) and `H5.4` (concurrent

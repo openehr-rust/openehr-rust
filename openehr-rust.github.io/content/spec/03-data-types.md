@@ -62,6 +62,19 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
 - **D3.8** Where a code appears in more than one openEHR terminology group with
   different rubrics, agreement with **any** group MUST be accepted: a bare
   `DV_CODED_TEXT` does not know which attribute it sits on.
+- **D3.7a** *(added 2026-09-05)* `D3.7`'s own "report *not checked*, never a
+  false violation" principle is not yet met for a non-English record: this
+  crate's rubric table carries the **English** rubric only, and the check does
+  not know the enclosing record's own declared `language` — so a valid
+  Spanish rubric (`"evento"` for openEHR's own code `433`, whose English
+  rubric is `"event"`) is reported as a *violation*, not as *unchecked*,
+  which is exactly the false claim `D3.7` says not to make, just in the
+  refusing direction rather than the accepting one. Found running the JSON
+  corpus (`EHRbase`'s own `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`,
+  declared `language: es`), recorded as `A-81`, open: closing it needs
+  either threading the record's language through the validation walk and
+  reporting unchecked for anything but English, or sourcing and citing real
+  multi-language rubric data — a decision, not a same-day fix.
 
 ## Dates, times, and durations
 
@@ -72,6 +85,13 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
 - **D3.10** The lexical form MUST be preserved exactly, including the choice
   between `Z` and `+00:00`, and including the number of digits in a fractional
   second.
+- **D3.10b** *(added 2026-09-05)* A fractional second's decimal sign MUST be
+  accepted as either `.` or `,` on read — `openEHR/adl-antlr`'s own
+  `fragment SECOND_DEC_SEP : '.' | ',' ;` (`base_lexer.g4`), not merely
+  general ISO 8601 permissiveness this crate could choose to ignore. `D3.10`
+  is unaffected either way: the stored lexical form is the whole input text,
+  separator included, never reconstructed from the parsed digits, so
+  accepting `,` changes nothing about what a round trip preserves.
 - **D3.11** Date, time, and date-time MUST be validated on construction:
   component ranges, month lengths, and the full Gregorian leap rule including
   the century exceptions.
@@ -81,9 +101,15 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
   ISO 8601 does not, and MUST refuse designators that are out of order or
   repeated.
 - **D3.13a** The extended ISO 8601 format is required; the basic format
-  (`20240517`) MUST be refused. It does not appear in openEHR canonical JSON,
-  and accepting it would make `2024` ambiguous. Recorded as a limitation in
-  [`audit.md`](audit.md).
+  (`20240517`) MUST be refused, and accepting it would make `2024` ambiguous.
+  Recorded as a limitation in [`audit.md`](audit.md). *Corrected 2026-09-05
+  (`A-02`)*: this requirement previously also claimed the basic format "does
+  not appear in openEHR canonical JSON" — false, and known false rather than
+  merely unverified: `EHRbase`'s own reference test corpus writes
+  `DV_DATE.value` as `"20190114"` in three real fixtures
+  (`openehr/spec/corpus.md`). The refusal itself is unchanged and the
+  ambiguity reasoning stands; only the false supporting claim is withdrawn
+  (`C0.5`: the id is not renumbered for a text correction).
 
 ## Comparison
 

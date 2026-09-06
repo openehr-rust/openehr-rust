@@ -173,7 +173,7 @@ Process requirements; they govern this specification rather than the code.
 | I2.11 | • | `object_id::tests::version_id_round_trips_exactly` |
 | I2.12–I2.13 | • | doctest on `VersionTreeId` |
 | I2.14–I2.15 | • | `object_id::tests::archetype_id_rejects_malformed_forms` |
-| I2.16 | • | doctest on `TemplateId` |
+| I2.16 | • | doctest on `TemplateId`; `object_id::tests::a_template_id_may_contain_whitespace` (`A-79`) |
 | I2.17 | • | doctest on `TerminologyId` |
 | I2.18 | • | doctest on `GenericId` |
 | I2.19 | • | `invariants::a_uid_field_admits_only_the_two_uid_based_classes` |
@@ -194,7 +194,9 @@ Process requirements; they govern this specification rather than the code.
 | D3.5 | • | `invariants::a_code_phrase_needs_a_terminology_and_a_code` |
 | D3.6 | • | `invariants::a_term_mapping_match_is_one_of_four_characters` |
 | D3.7–D3.8 | • | `text::tests::rubric_checking_reports_unchecked_separately_from_valid` |
+| D3.7a | open | `A-81` — a non-English rubric is reported as a violation rather than unchecked, the crate's own English-only table having no way to tell the two apart |
 | D3.9–D3.10 | • | `iso8601::tests::partial_dates_keep_their_precision_and_text`; `canonical_json::partial_dates_and_negative_durations_survive_verbatim` |
+| D3.10b | • | `iso8601::tests::a_comma_decimal_sign_is_accepted_like_a_full_stop`, `…a_durations_comma_decimal_sign_is_accepted_like_a_full_stop` (`A-78`) |
 | D3.11 | • | `iso8601::tests::leap_day_validity_follows_the_gregorian_rule` |
 | D3.12 | • | `invariants::a_leap_second_is_accepted_and_a_sixty_first_is_not` |
 | D3.13 | • | `iso8601::tests::durations_round_trip_and_reject_disorder` |
@@ -486,8 +488,8 @@ off **spec** when the code implements it *and* a named test exercises it
 | K15.2 | • | `archetype_model::the_targeted_archetype_model_release_is_named`; `am::AM_RELEASE` is 2.3.0 and an artefact's own declared versions round-trip unenforced |
 | K15.3 | • | `archetype_model::an_archetype_round_trips_through_json_unchanged`, `…a_constraint_this_crate_cannot_model_survives_rather_than_disappearing`. **Scope:** the only serialisation this crate accepts today is its own JSON. ADL and the AM ITS forms are `K15.5`, `K15.8`, and `K15.16`, all below |
 | K15.4 | • | `archetype_model::an_archetype_is_constructible_without_a_parser` |
-| K15.5 | spec | ADL 2 in full. `am::adl2::parse_header` (the header) and `am::cadl::parse_definition` (`definition`'s own `c_complex_object` — every node kind but a `closed` slot and `SIBLING_ORDER`, `A-62`–`A-67`) read two sections and do not compose into an `Archetype`: no `language`, `description`, `rules`, `terminology`, or `annotations` — **A-40** |
-| K15.6–K15.7 | • | `am::cadl::tests::a_closed_archetype_slot_is_refused_by_name`, `…a_slot_assertion_using_a_quoted_string_instead_of_a_regex_is_refused`, `…an_unterminated_contained_regexp_is_refused_naming_it`, `…a_c_attribute_tuple_with_an_unwrapped_interval_item_hits_a_different_refusal`, `…trailing_content_after_the_root_is_refused`, `…a_name_that_is_not_an_identifier_is_refused_by_name`; `am::adl2::tests::a_trailing_concept_section_is_refused_not_silently_accepted`; `am::adl14::tests::missing_concept_section_is_refused_not_defaulted`. **Scope:** proven for the parsers that exist — `am::cadl` and the two header readers — each refusing an unimplemented construct by name at its offset and returning no partial tree; binding on any parser `K15.5` later adds |
+| K15.5 | spec | ADL 2 in full. `am::adl2::parse_header` (the header) and `am::cadl::parse_definition` (`definition`'s own `c_complex_object` — every node kind but `SIBLING_ORDER`, `A-62`–`A-67`, `A-72`–`A-77`) read two sections and do not compose into an `Archetype`: no `language`, `description`, `rules`, `terminology`, or `annotations` — **A-40** |
+| K15.6–K15.7 | • | `am::cadl::tests::a_slot_assertion_using_a_quoted_string_instead_of_a_regex_is_refused`, `…an_unterminated_contained_regexp_is_refused_naming_it`, `…an_unwrapped_intervals_kind_is_decided_by_its_first_bounds_token` (its four refusals), `…trailing_content_after_the_root_is_refused`, `…a_name_that_is_not_an_identifier_is_refused_by_name`, `…a_relop_interval_is_read_as_one_open_ended_bound` (its two refusals); `am::adl2::tests::a_trailing_concept_section_is_refused_not_silently_accepted`; `am::adl14::tests::missing_concept_section_is_refused_not_defaulted`. **Scope:** proven for the parsers that exist — `am::cadl` and the two header readers — each refusing an unimplemented construct by name at its offset and returning no partial tree; binding on any parser `K15.5` later adds |
 | K15.8–K15.10 | spec | ADL 1.4 ingestion, provenance, and the assertion subset |
 | K15.11–K15.13 | spec | specialisation, flattening, and the narrowing check |
 | K15.14–K15.17 | spec | template expansion and operational templates, both directions |

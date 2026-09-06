@@ -1231,10 +1231,17 @@ that swallows ORA-00955 and re-raises every other `SQLCODE`.
 `conformance::check_dialect` now fails any dialect that declares `Guard` and
 inherits the no-op default, so the gap cannot silently reopen.
 
-**Not verified against either engine.** SQL Server 2022 segfaults under qemu on
-arm64 and the Oracle images require registry authentication. The fix is
-reasoned and unit-tested, not observed. Both crates therefore stay at
-**Dialect**.
+**Not verified against either engine, at the time.** SQL Server 2022 segfaults
+under qemu on arm64 and the Oracle images available then required registry
+authentication. The fix was reasoned and unit-tested, not observed, and both
+crates stayed at **Dialect**.
+
+**Update, 2026-09-06.** Oracle's guard is now observed, not only reasoned:
+`gvenzl/oracle-free` needed no registry login, and `openehr-store/scripts/
+verify-schema.sh oracle` ran the DDL — including this guard — against a real
+server, twice, with the second run a no-op. `openehr-oracle` is **Schema**
+(`spec/databases/conformance-matrix.md`). SQL Server's guard remains unobserved;
+`openehr-mssql` stays **Dialect**.
 
 ---
 

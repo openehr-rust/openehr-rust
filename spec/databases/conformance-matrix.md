@@ -41,12 +41,17 @@ evidence (`W0.3`).
 | `openehr-mysql` | **Schema** | DDL executed against MySQL 8.4, in CI on every push |
 | `openehr-mariadb` | **Schema** | DDL executed against MariaDB 11.4, in CI on every push |
 | `openehr-mssql` | **Dialect** | golden tests only; no server has parsed it |
-| `openehr-oracle` | **Dialect** | golden tests only; no server has parsed it |
+| `openehr-oracle` | **Schema** | DDL executed against Oracle Database Free 26ai, in CI on every push |
 
-**`openehr-sqlite` is at Verified** as of green run 30713623082, 2026-08-01. The three Schema
-claims are checked by CI on every push rather than attested once; `openehr-mssql`
-and `openehr-oracle` stay at Dialect because no reachable server will parse their
-DDL ([`spec/audit.md`](../audit.md) **W-02**).
+**`openehr-sqlite` is at Verified** as of green run 30713623082, 2026-08-01. The
+four Schema claims are checked by CI on every push rather than attested once.
+`openehr-oracle` joined them 2026-09-06 (run
+[34040865467](https://github.com/openehr-rust/openehr-rust/actions/runs/34040865467),
+job `schema / oracle`) once `gvenzl/oracle-free` — a public, unauthenticated
+image — was found; `openehr-mssql` still stays at Dialect
+([`spec/audit.md`](../audit.md) **W-02**), now for a narrower reason: its
+`verify-schema.sh` branch exists and runs in CI, but its seed step has not yet
+passed there (`M14.6`).
 
 ## Per-engine requirements
 
@@ -63,10 +68,10 @@ Columns: **pg** PostgreSQL, **lt** SQLite, **my** MySQL, **ma** MariaDB,
 | `G2.20` identifiers quoted by the dialect | • | • | • | • | • | • | |
 | `M3.31` `Instant` ≠ `InstantUtc` type | • | • | • | • | • | • | cross-dialect test |
 | `M3.36` append-only emitted for both tables | • | • | • | • | • | • | `check_dialect` fails a dialect that inherits the empty default |
-| `M3.17` engine **actually refuses** UPDATE/DELETE | • | • | • | • | ✗ | ✗ | verified with a row present; mssql/oracle unparsed |
+| `M3.17` engine **actually refuses** UPDATE/DELETE | • | • | • | • | ✗ | • | verified with a row present; mssql unparsed |
 | `M3.37` no drop-then-create trigger window | • | • | ✗ | • | ? | ? | MySQL must drop first; MariaDB uses `CREATE OR REPLACE` |
 | `X15.18` differs from nearest neighbour, tested | • | • | • | • | • | • | mariadb's is the newest and the reason `X15.18` exists |
-| `T11.2` DDL executed against a real server | • | • | • | • | ✗ | ✗ | |
+| `T11.2` DDL executed against a real server | • | • | • | • | ✗ | • | oracle since 2026-09-06, run 34040865467 |
 | `S1.4` engine floor declared | • | • | • | • | • | • | each stated in its annex, with the dialect fact that sets it |
 | `X15.6` dialect annex exists | ~ | ~ | ~ | ~ | ~ | ~ | all six written; all six **proposed**, not ratified (`X15.9`) |
 
@@ -174,9 +179,14 @@ Listed so the gap is visible rather than inferred from silence (`W0.4`).
 3. Check [`spec/audit.md`](../audit.md) for open findings before trusting any
    row.
 
-The single most useful line here: **two of six engine crates have never had a
-statement parsed by the engine they name**, and every crate that *did* take that
-step was found to be wrong at Dialect level — three of three.
+The single most useful line here: **one of six engine crates has never had a
+statement parsed by the engine they name** (`openehr-mssql` — its
+`verify-schema.sh` branch runs in CI but has not yet passed there, `M14.6`),
+and every crate that *did* take that step was found to be wrong at Dialect
+level — three of three, `openehr-oracle` included: its own `verify-schema.sh`
+branch needed two fixes (a readiness probe that read `sqlplus`'s exit code,
+which is 0 even on a failed connection; and unquoted identifiers, which Oracle
+folds to uppercase against a schema quoted lowercase) before it passed for real.
 
 ---
 

@@ -7,12 +7,18 @@ openEHR® persistence for **Oracle Database 23ai** — the schema dialect.
 > constitute endorsement of this product by openEHR International or openEHR
 > Foundation.
 
-## Conformance level: Dialect
+## Conformance level: Schema
 
-This crate emits DDL for the shared openEHR schema. **It does not contain a
-store.** There is no driver dependency, no connection handling, no
-implementation of `Store`, and no statement in this crate has ever been
-submitted to a Oracle Database 23ai server.
+This crate emits DDL for the shared openEHR schema, and that DDL has been
+executed against a real Oracle server: `gvenzl/oracle-free:latest` (Oracle
+Database Free 26ai). Tables and indexes were created, the script re-applied as
+a no-op, a seed row's canonical JSON round-tripped byte for byte, and both
+append-only tables refused `UPDATE` and `DELETE` with the row unchanged
+afterwards. `openehr-store/scripts/verify-schema.sh oracle` reproduces it from
+a fresh container, and runs in CI on every push.
+
+**It does not contain a store.** There is no driver dependency, no connection
+handling, and no implementation of `Store`.
 
 See [`openehr-store/spec/conformance.md`](../openehr-store/spec/conformance.md)
 for what each level means and why they are stated this bluntly.

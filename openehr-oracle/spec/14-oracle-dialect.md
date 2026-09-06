@@ -2,7 +2,11 @@
 
 **Status: proposed** (`X15.9`).
 
-**Conformance level: Dialect.** No Oracle server has parsed this DDL.
+**Conformance level: Schema**, since 2026-09-06 (CI run
+[34040865467](https://github.com/openehr-rust/openehr-rust/actions/runs/34040865467),
+job `schema / oracle`). Restated here only for orientation — the one file that
+owns a level is [`spec/databases/conformance-matrix.md`](../../spec/databases/conformance-matrix.md)
+(`W0.40`); see `M14.7` below.
 
 Normative only where it explicitly amends a core requirement by number
 (`C0.12`, `X15.7`). Requirement prefix for departures: `M14`.
@@ -86,11 +90,25 @@ strategy (catch-and-inspect against catalogue-query) and the terminator.
 
 ## 10. Unmet core requirements
 
-- **M14.7 amends `T11.2`.** The DDL has not been executed against an Oracle
-  server, so this crate claims **Dialect**.
+- **M14.7 amends `T11.2`. Met as of 2026-09-06** — the departure this
+  requirement number names no longer holds, and the id stays as the permanent
+  record of it (`C0.5`). The DDL has been executed against a real, running
+  Oracle server: `openehr-store/scripts/verify-schema.sh oracle` against
+  `gvenzl/oracle-free:latest` (Oracle Database Free 26ai) — tables and indexes
+  created, the script re-applied as a no-op, a seed row's canonical JSON
+  round-tripped byte for byte, and both append-only triggers observed refusing
+  `UPDATE`/`DELETE` with the row unchanged afterwards — both by hand on a local
+  native-arm64 container and in CI on a real x86_64 runner, run
+  [34040865467](https://github.com/openehr-rust/openehr-rust/actions/runs/34040865467),
+  job `schema / oracle`.
 
-  Cause: the Oracle container images require registry authentication, which the
-  machine available did not have. An evidence gap, not a judgement.
+  The original cause recorded here — "the Oracle container images require
+  registry authentication, which the machine available did not have" — was
+  true of `container-registry.oracle.com`'s own official images, but not of
+  every Oracle image: `gvenzl/oracle-free` is an independently maintained,
+  publicly pullable rebuild requiring no registry login, and is what this
+  crate now verifies against. The evidence gap was real; the image landscape
+  had a way around it this annex did not know about yet.
 
 - **M14.8 amends `M3.42`.** `M3.42` requires digest comparison to be confirmed
   against the source value. Where the source is a `CLOB`, Oracle cannot compare

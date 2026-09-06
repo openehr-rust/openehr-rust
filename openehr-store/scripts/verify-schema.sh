@@ -220,8 +220,16 @@ mssql)
   apply() { ms -d openehr -i "$sql" 2>&1 | grep -E '^Msg [0-9]+' || true; }
   # A row must exist before the mutations: an `INSTEAD OF` trigger on zero rows
   # never fires, so an empty table reports refusal it never performed.
+  #
+  # Delivered as a file through `-i`, the same mechanism `apply` already uses
+  # successfully, rather than piped over stdin: the two are documented as
+  # equivalent, but a first CI run found the stdin form failing silently —
+  # `set -eu` killed the script the instant `ms` returned non-zero here, before
+  # `fail`'s own diagnostics could run, leaving no record of what SQL Server
+  # actually objected to. Explicit failure text now, not a repeat of that.
   seed() {
-    ms -d openehr >/dev/null 2>&1 <<SEED
+    q=$(mktemp)
+    cat >"$q" <<'SEED'
 INSERT INTO [openehr_ehr] ([ehr_id],[system_id],[time_created_text],[ehr_status_uid],[ehr_access_uid])
 VALUES ('e1','sys','2026-01-01T00:00:00Z','st1','ac1');
 INSERT INTO [openehr_versioned_object] ([uid],[ehr_id],[rm_type],[time_created_text])
@@ -239,6 +247,11 @@ VALUES ('vo1::sys::1','vo1','sys',1,'532',0,'c1','sys','249','2026-01-01T00:00:0
   0x1111111111111111111111111111111111111111111111111111111111111111,
   0x2222222222222222222222222222222222222222222222222222222222222222);
 SEED
+    out=$(ms -d openehr -i "$q" 2>&1)
+    rm -f "$q"
+    if printf '%s\n' "$out" | grep -qE '^Msg [0-9]+'; then
+      fail "seed insert failed: $out"
+    fi
   }
   rows() { ms -d openehr -h -1 -Q 'SET NOCOUNT ON; SELECT count(*) FROM [openehr_version]'; }
   json_out() { ms -d openehr -h -1 -Q "SET NOCOUNT ON; SELECT [data_json] FROM [openehr_version] WHERE [uid] = 'vo1::sys::1'"; }
