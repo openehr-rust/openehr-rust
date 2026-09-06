@@ -336,6 +336,31 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         (`K15.14`–`K15.17`, not implemented), so running it through
         `validate()` would test nothing real — noted rather than forced.
       - [ ] `spec_refs` per conformance case, and the index.
+        **Scoped 2026-09-06, before starting.** "Conformance case" is
+        undefined here, and the two readings are far apart in size. Narrow:
+        the corpus runners' own disposition tables already name a section
+        per file/finding (`corpus.md`, `json_corpus.md` — e.g. `K15.6`,
+        `D3.13a` per row), so this sub-item may already be substantially
+        met for the corpus half specifically, and "the index" could be a
+        small, mechanical reverse-mapping generated from those two tables.
+        Wide: every `#[test]` in the tree — 95 in `openehr/tests/*.rs`
+        alone, before the far larger count of `#[cfg(test)] mod tests`
+        unit tests inside `src/` (630+ tests total, `A-58`'s own count) —
+        annotated with a *new*, machine-checked citation tag, when an
+        *informal* version of exactly this already exists and is already
+        common: 74 distinct requirement ids cited in backtick-quoted doc
+        comments across `openehr/tests/guarantees.rs`, `invariants.rs`, and
+        `properties.rs` alone, unchecked by anything. Building the
+        wide reading properly needs a new scanner (`openehr-assets`
+        already has one shape of this, `regex_citations`, but for RM
+        invariant calls, not doc-comment requirement ids; it is not a
+        drop-in), a decision about what counts as "a conformance case" at
+        all, and a decision about whether to formalise the citations
+        already there or add a second, parallel convention beside them —
+        each its own design question, not a mechanical add. Sized on the
+        wide reading, this is its own item, not a sub-bullet of this one;
+        left unscoped rather than started on a guess. The narrow reading
+        (corpus-table index) is achievable and not yet attempted.
       - [ ] The regression job, either half. Blocked on a corpus this tree
         may carry: `adl-archetypes` has no licence file (`corpus.md`
         §Licence); `openEHR_SDK` is Apache-2.0 and could be vendored, but
