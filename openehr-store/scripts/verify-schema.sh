@@ -216,17 +216,27 @@ mssql)
   # own exit code trustworthy: undecorated, it returns 0 for most in-batch
   # T-SQL errors and the `await` loop below reads by exit code, not output.
   ms() { $CONTAINER exec -i "$NAME" /opt/mssql-tools18/bin/sqlcmd -C -b -S localhost -U sa -P "${PASS}!1" "$@"; }
-  # Against `openehr`, not `master`: the same readiness race the postgresql
-  # and mysql branches above already document, on this engine's own version
-  # of it. `MSSQL_DB` creates the target database asynchronously, after the
-  # server starts accepting connections to `master` — confirmed by a real CI
-  # failure, not read ahead: `SELECT 1` against the default database returned
-  # instantly while `openehr` did not exist yet, and both `apply` and `seed`
-  # then failed to log in ("Login failed for user 'sa'. Reason: Failed to
-  # open the explicitly specified database 'openehr'") in a form `apply`'s
-  # own `^Msg [0-9]+` grep does not match, so the failure passed as a clean
-  # DDL run and only surfaced two steps later as "seed row absent".
-  await "SQL Server" ms -d openehr -Q 'SELECT 1'
+  # Not `ms -d openehr -Q 'SELECT 1'`: that was the first fix here and it was
+  # still not enough. `MSSQL_DB` creates the target database asynchronously,
+  # after the server starts accepting connections to `master` — a real CI
+  # failure showed a login connecting to `openehr` succeed the moment the
+  # database *existed*, while it was still mid-recovery ("Starting up
+  # database 'openehr'", "Parallel redo is started") a couple of seconds from
+  # actually being writable. A connection that succeeds is not the same claim
+  # as a database that is online, and the gap between those two claims is
+  # exactly `M3.17`/`T11.2` one level down.
+  #
+  # Reading `sys.databases.state_desc` from `master` sidesteps the ambiguity
+  # entirely: it names the actual state a connection's mere success cannot,
+  # and it does not require a connection *to* `openehr` to ask the question.
+  ready() {
+    out=$(ms -h -1 -Q "SET NOCOUNT ON; SELECT state_desc FROM sys.databases WHERE name = 'openehr'" 2>&1) || return 1
+    case "$out" in
+    *ONLINE*) return 0 ;;
+    *) return 1 ;;
+    esac
+  }
+  await "SQL Server" ready
   # `^Sqlcmd: Error` alongside `^Msg [0-9]+`: the former is sqlcmd's own
   # client-side/connection-level failure format (a login rejected, a database
   # not found) and carries no `Msg NNNN` line at all — the exact shape that
