@@ -175,12 +175,21 @@ jobs:
         with:
           workspaces: ${{ matrix.crate }}
 
+      # Pinned, not `--locked` alone: an unpinned `cargo install` here once
+      # installed 0.20.2 while every local run this was developed and
+      # verified against used 0.19.7, and the two disagree on where `--config`
+      # goes -- `check --config` in 0.19.7, `--config … check` in 0.20.2. The
+      # tool broke the job before it ever ran the check it exists for. Bump
+      # this deliberately, together with the invocation it requires, the same
+      # way a Rust MSRV bump is deliberate rather than incidental.
       - name: Install cargo-deny and cargo-audit
-        run: cargo install cargo-deny cargo-audit --locked
+        run: |
+          cargo install cargo-deny --version 0.20.2 --locked
+          cargo install cargo-audit --version 0.22.2 --locked
 
       - name: cargo deny check
         working-directory: ${{ matrix.crate }}
-        run: cargo deny check --config ../deny.toml
+        run: cargo deny --config ../deny.toml check
 
       - name: cargo audit
         working-directory: ${{ matrix.crate }}
