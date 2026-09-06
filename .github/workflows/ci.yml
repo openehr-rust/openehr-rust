@@ -366,7 +366,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        engine: [postgresql, mysql, mariadb]
+        engine: [postgresql, mysql, mariadb, mssql, oracle]
     steps:
       - uses: actions/checkout@v7
 

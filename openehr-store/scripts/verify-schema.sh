@@ -6,7 +6,7 @@
 # This is what separates conformance level *Schema* from *Dialect*
 # (openehr-store/spec/conformance.md). It found A-13, A-14, and A-15.
 #
-#   usage: verify-schema.sh postgresql|mysql|mariadb
+#   usage: verify-schema.sh postgresql|mysql|mariadb|mssql|oracle
 #
 # Requires podman (or docker, via $CONTAINER). Provisions the engine itself and
 # tears it down after; it does not use an existing database, because a database
@@ -19,7 +19,7 @@
 
 set -eu
 
-ENGINE="${1:?usage: verify-schema.sh postgresql|mysql|mariadb}"
+ENGINE="${1:?usage: verify-schema.sh postgresql|mysql|mariadb|mssql|oracle}"
 CONTAINER="${CONTAINER:-podman}"
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 NAME="openehr-verify-$ENGINE"
@@ -197,8 +197,162 @@ SEED
   json_out() { my -Nse "SELECT data_json FROM openehr_version WHERE uid = 'vo1::sys::1'"; }
   refuse() { my -e "$1" | grep -c 'append-only' || true; }
   ;;
+mssql)
+  IMAGE=mcr.microsoft.com/mssql/server:2022-latest
+  # `MSSQL_DB` (not `MSSQL_DATABASE` — no variable of that name exists) creates
+  # the target database on first startup, so there is no separate
+  # readiness-gated `CREATE DATABASE` step to race against the server's own
+  # first-boot initialization.
+  $CONTAINER run -d --rm --name "$NAME" -e ACCEPT_EULA=Y \
+    -e "MSSQL_SA_PASSWORD=${PASS}!1" -e MSSQL_DB=openehr "$IMAGE" >/dev/null
+  # `-C` trusts the server's self-signed certificate: `sqlcmd` in this image
+  # (mssql-tools18, the only tools this image has shipped since the 2022 CU14
+  # / 2019 CU28 update in mid-2024) defaults to an encrypted connection, and
+  # refusing to trust a certificate this same container generated a moment ago
+  # would fail every command for a reason that has nothing to do with the
+  # schema under test.
+  #
+  # `-b` ("terminate batch job if there is an error") is what makes `sqlcmd`'s
+  # own exit code trustworthy: undecorated, it returns 0 for most in-batch
+  # T-SQL errors and the `await` loop below reads by exit code, not output.
+  ms() { $CONTAINER exec -i "$NAME" /opt/mssql-tools18/bin/sqlcmd -C -b -S localhost -U sa -P "${PASS}!1" "$@"; }
+  await "SQL Server" ms -Q 'SELECT 1'
+  apply() { ms -d openehr -i "$sql" 2>&1 | grep -E '^Msg [0-9]+' || true; }
+  # A row must exist before the mutations: an `INSTEAD OF` trigger on zero rows
+  # never fires, so an empty table reports refusal it never performed.
+  seed() {
+    ms -d openehr >/dev/null 2>&1 <<SEED
+INSERT INTO [openehr_ehr] ([ehr_id],[system_id],[time_created_text],[ehr_status_uid],[ehr_access_uid])
+VALUES ('e1','sys','2026-01-01T00:00:00Z','st1','ac1');
+INSERT INTO [openehr_versioned_object] ([uid],[ehr_id],[rm_type],[time_created_text])
+VALUES ('vo1','e1','VERSIONED_COMPOSITION','2026-01-01T00:00:00Z');
+INSERT INTO [openehr_contribution] ([uid],[ehr_id],[audit_change_type_code],[audit_system_id],[audit_committer_name],[audit_time_committed_text])
+VALUES ('c1','e1','249','sys','Committer','2026-01-01T00:00:00Z');
+INSERT INTO [openehr_version]
+  ([uid],[versioned_object_uid],[creating_system_id],[trunk_version],
+   [lifecycle_state_code],[is_deleted],[contribution_uid],[audit_system_id],
+   [audit_change_type_code],[audit_time_committed_text],[data_json],
+   [chain_previous],[chain_content],[chain_digest])
+VALUES ('vo1::sys::1','vo1','sys',1,'532',0,'c1','sys','249','2026-01-01T00:00:00Z',
+  '{"z":1,"a":2,"magnitude":1.10,"dup":"first"}',
+  0x0000000000000000000000000000000000000000000000000000000000000000,
+  0x1111111111111111111111111111111111111111111111111111111111111111,
+  0x2222222222222222222222222222222222222222222222222222222222222222);
+SEED
+  }
+  rows() { ms -d openehr -h -1 -Q 'SET NOCOUNT ON; SELECT count(*) FROM [openehr_version]'; }
+  json_out() { ms -d openehr -h -1 -Q "SET NOCOUNT ON; SELECT [data_json] FROM [openehr_version] WHERE [uid] = 'vo1::sys::1'"; }
+  refuse() { ms -d openehr -Q "$1" 2>&1 | grep -c 'append-only' || true; }
+  ;;
+oracle)
+  IMAGE=docker.io/gvenzl/oracle-free:latest
+  $CONTAINER run -d --rm --name "$NAME" -e ORACLE_PASSWORD="$PASS" \
+    -e APP_USER=openehr -e APP_USER_PASSWORD="$PASS" "$IMAGE" >/dev/null
+  # The slowest of the five to initialize — a fresh *database*, not only a
+  # fresh schema — so the 300s budget in `await` is what this engine actually
+  # needs, not headroom kept for the others.
+  #
+  # `APP_USER`/`APP_USER_PASSWORD` create a user in the default pluggable
+  # database, `FREEPDB1`, which the DDL runs against; nothing here uses `SYS`.
+  # The image's own healthcheck watches the CDB coming up, not this app user
+  # in this PDB, so it is not a substitute for the probe below.
+  #
+  # Every statement runs from a *file* copied into the container, never from
+  # an inline `-Q`/heredoc piped through shell escaping: sqlplus's
+  # substitution-variable parser reads a bare `:` — as in this schema's own
+  # `vo1::sys::1` uid — as a bind-variable reference and aborts with
+  # "SP2-0552: Bind variable ... not declared" once shell quoting has already
+  # mangled the statement on its way in. `SET DEFINE OFF` turns that parser
+  # off entirely; found by hitting the error first, not by reading ahead.
+  ora_run() {
+    tmp=$(mktemp)
+    { printf 'SET DEFINE OFF\nWHENEVER SQLERROR CONTINUE\n'; cat "$1"; } >"$tmp"
+    remote="/tmp/openehr-verify-$$.sql"
+    $CONTAINER cp "$tmp" "$NAME:$remote" >/dev/null
+    rm -f "$tmp"
+    $CONTAINER exec -i "$NAME" sqlplus -s "openehr/${PASS}@//localhost/FREEPDB1" "@$remote"
+    $CONTAINER exec "$NAME" rm -f "$remote" >/dev/null 2>&1 || true
+  }
+  # Not a bare exit-code check: sqlplus exits 0 even on a failed *connection*
+  # (confirmed against this same image: `ORA-01109: database not open` while
+  # the pluggable database is still mounting, exit code 0 regardless), so
+  # `await`'s normal "the command failed" readiness test never fires and the
+  # loop would return immediately, before the server can actually take a
+  # query. Readiness here is instead read from the *output*.
+  probe=$(mktemp)
+  printf 'SET PAGESIZE 0 FEEDBACK OFF HEADING OFF\nSELECT 1 FROM dual;\n' >"$probe"
+  ora_ready() { ora_run "$probe" 2>&1 | tr -d '[:space:]' | grep -qx 1; }
+  await Oracle ora_ready
+  rm -f "$probe"
+  apply() { ora_run "$sql" 2>&1 | grep -E '^ORA-' || true; }
+  # A row must exist before the mutations: a `FOR EACH ROW` trigger on zero
+  # rows never fires, so an empty table reports refusal it never performed.
+  # Oracle folds every unquoted identifier to uppercase; the DDL quotes all of
+  # them lowercase, so every reference here must be quoted the same way or it
+  # resolves to a table that does not exist (`ORA-00942`).
+  seed() {
+    q=$(mktemp)
+    cat >"$q" <<'SEED'
+INSERT INTO "openehr_ehr" ("ehr_id","system_id","time_created_text","ehr_status_uid","ehr_access_uid")
+VALUES ('e1','sys','2026-01-01T00:00:00Z','st1','ac1');
+INSERT INTO "openehr_versioned_object" ("uid","ehr_id","rm_type","time_created_text")
+VALUES ('vo1','e1','VERSIONED_COMPOSITION','2026-01-01T00:00:00Z');
+INSERT INTO "openehr_contribution" ("uid","ehr_id","audit_change_type_code","audit_system_id","audit_committer_name","audit_time_committed_text")
+VALUES ('c1','e1','249','sys','Committer','2026-01-01T00:00:00Z');
+INSERT INTO "openehr_version"
+  ("uid","versioned_object_uid","creating_system_id","trunk_version",
+   "lifecycle_state_code","is_deleted","contribution_uid","audit_system_id",
+   "audit_change_type_code","audit_time_committed_text","data_json",
+   "chain_previous","chain_content","chain_digest")
+VALUES ('vo1::sys::1','vo1','sys',1,'532',0,'c1','sys','249','2026-01-01T00:00:00Z',
+  '{"z":1,"a":2,"magnitude":1.10,"dup":"first"}',
+  HEXTORAW(RPAD('00',64,'00')), HEXTORAW(RPAD('11',64,'11')), HEXTORAW(RPAD('22',64,'22')));
+COMMIT;
+SEED
+    ora_run "$q" >/dev/null 2>&1
+    rm -f "$q"
+  }
+  # `PAGESIZE 0`/`FEEDBACK OFF`/`HEADING OFF` strip everything sqlplus would
+  # otherwise wrap around the one value under test; `LINESIZE`/`LONG`/
+  # `LONGCHUNKSIZE` are set wide so the CLOB in `json_out` comes back on one
+  # line rather than wrapped mid-string, which would fail the byte-exact
+  # comparison for a reason that has nothing to do with the column's type.
+  ora_query() {
+    q=$(mktemp)
+    printf 'SET PAGESIZE 0 FEEDBACK OFF HEADING OFF LINESIZE 32767 LONG 100000 LONGCHUNKSIZE 100000 TRIMSPOOL ON\n%s\n' "$1" >"$q"
+    ora_run "$q"
+    rm -f "$q"
+  }
+  rows() { ora_query 'SELECT count(*) FROM "openehr_version";'; }
+  json_out() { ora_query 'SELECT "data_json" FROM "openehr_version" WHERE "uid" = '"'"'vo1::sys::1'"'"';'; }
+  # The three mutation statements in the shared tail below are written once,
+  # unquoted, for engines that fold or compare identifiers case-insensitively
+  # by default. Oracle does not: the DDL quotes every identifier lowercase, so
+  # an unquoted reference here folds to uppercase and resolves to no such
+  # table (`ORA-00942`) rather than to the trigger under test — confirmed by
+  # hitting exactly that error before adding this quoting.
+  #
+  # Plain literal substitution, not a `\b`-bounded regex: BSD `sed` (macOS,
+  # used to develop and hand-verify this branch) has no `\b` token at all, and
+  # a literal match is exact here anyway, since none of these five names is a
+  # substring of anything else in the three fixed statements this is ever
+  # called with.
+  refuse() {
+    q=$(mktemp)
+    printf '%s' "$1" |
+      sed -e 's/openehr_version/"openehr_version"/g' \
+          -e 's/openehr_contribution/"openehr_contribution"/g' \
+          -e 's/lifecycle_state_code/"lifecycle_state_code"/g' \
+          -e 's/audit_committer_name/"audit_committer_name"/g' \
+          -e 's/uid/"uid"/g' \
+      >"$q"
+    printf ';\n' >>"$q"
+    ora_run "$q" 2>&1 | grep -c 'append-only'
+    rm -f "$q"
+  }
+  ;;
 *)
-  fail "unknown engine '$ENGINE' (postgresql|mysql|mariadb)"
+  fail "unknown engine '$ENGINE' (postgresql|mysql|mariadb|mssql|oracle)"
   ;;
 esac
 
