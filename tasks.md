@@ -399,12 +399,34 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       image. *Evidence:* `docker compose up` answers `curl /openehr/v1/
       metadata` on a clean machine; the quickstart in `INSTALL.md` is the
       command, not a paragraph. — **M**
-- [ ] **Publish measured numbers.** Add store commit and read benchmarks
+- [x] **Publish measured numbers.** Add store commit and read benchmarks
       to `openehr-store/benches/store.rs` and an HTTP round-trip benchmark
       for `openehr-loco`, run them on a named machine, and put the numbers
       with their date and hardware in `BENCHMARKS.md`. Keep `W0.35`/`W0.36`:
       run, never gated. Then take #4's offer. *Evidence:* dated numbers in
       the file, reproducible by the command beside them. — **M**
+
+      **2026-09-07.** The commit/read benchmarks could not go in
+      `openehr-store/benches/store.rs` as literally written: that crate has
+      no connection to round-trip through (its own bench file says so —
+      "everything else in a write is a round trip to a server, which no
+      benchmark in this process can measure honestly"), and adding
+      `openehr-sqlite` as any kind of dependency of `openehr-store`, even
+      dev-only, would be the exact inward-only layering cycle the `layering`
+      CI job exists to catch. Went in `openehr-sqlite/benches/store.rs`
+      instead — the crate with the real connection — which is consistent
+      with, not a departure from, the store crate's own stated reasoning.
+      New benches: `commit/composition`, `read/get_version`,
+      `read/latest_version` (`openehr-sqlite`) and `http/read_composition`
+      (`openehr-loco`, `tower::oneshot` in process, no socket opened).
+      Numbers dated 2026-09-07 in `BENCHMARKS.md`, same machine as the
+      2026-08-26 measurement it sits beside rather than replaces. `cargo
+      test`/`clippy -D warnings` clean in both crates; `check-docs.py`'s
+      `bench_crates` count moved from 2 to 4, mechanically, with nothing
+      elsewhere in the tree asserting the old number. **Taking #4's offer is
+      not done here** — posting to the thread is the maintainer's own
+      action (`GOVERNANCE.md` §Machines do not decide), same as the
+      Discourse reply draft.
 - [x] **Supply chain: SBOM, `cargo-deny`, `cargo-audit`, push protection.**
       `SECURITY.md` names "no SBOM" as an open gap. Add `cargo auditable`
       builds and a CycloneDX SBOM per release artefact, `cargo deny check`

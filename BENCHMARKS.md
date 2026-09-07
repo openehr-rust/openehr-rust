@@ -15,7 +15,10 @@ moving is not a build failure**.
 
 ## What is measured
 
-Two criterion suites, eight benchmark groups.
+Four criterion suites, twelve rows below — some of which are one named
+`criterion` group covering several related measurements (`iso8601`,
+`integrity`, `read`), which is why this is not the same as the number of
+distinct timings a run reports.
 
 | Suite | Group / benchmark | What it exercises |
 | --- | --- | --- |
@@ -28,21 +31,36 @@ Two criterion suites, eight benchmark groups.
 | [`openehr-store/benches/store.rs`](openehr-store/benches/store.rs) | `project/composition_index` | projecting a composition onto its index rows |
 | | `project/version_row` | projecting a version onto its storage row |
 | | `integrity/verify_versions/{1,10,100}` | re-verifying stored version digests, at three sizes |
+| [`openehr-sqlite/benches/store.rs`](openehr-sqlite/benches/store.rs) | `commit/composition` | one commit against a real (in-memory) connection: validation, the commit rules, projection, and `SQLite`'s own transaction |
+| | `read/get_version`, `read/latest_version` | reading one committed version back, by identity and by container head |
+| [`openehr-loco/benches/http.rs`](openehr-loco/benches/http.rs) | `http/read_composition` | a full `GET` for a composition through the real router — auth, routing, the store read, response serialisation |
 
 The three `verify_versions` sizes exist to show **shape**, not speed: whether the
 integrity check is linear in the number of versions is a property worth knowing,
 and it is one a single measurement cannot tell you.
+
+`openehr-store` measures projection and verification specifically, not a commit
+or a read, because it has no connection to round-trip through — see that
+suite's own module documentation. `openehr-sqlite` is the crate with a real
+connection behind `Store`, so it is where those two numbers live; `openehr-loco`
+is where "how long does a request actually take" lives, one route deep through
+the same in-memory connection, with no network socket opened (`tower::oneshot`
+drives the router in process).
 
 ## How to run them
 
 ```sh
 (cd openehr && cargo bench)
 (cd openehr-store && cargo bench)
+(cd openehr-sqlite && cargo bench)
+(cd openehr-loco && cargo bench)
 
 # the one-iteration form CI runs -- proves the benchmarks still compile and run,
 # and measures nothing
 (cd openehr && cargo bench -- --test)
 (cd openehr-store && cargo bench -- --test)
+(cd openehr-sqlite && cargo bench -- --test)
+(cd openehr-loco && cargo bench -- --test)
 
 # one group only
 (cd openehr && cargo bench -- iso8601)
@@ -83,6 +101,28 @@ performance claim, not a service level, not a comparison, and not a threshold.
 | `integrity/verify_versions/10` | 16.49 µs | 16.272 – 16.798 µs |
 | `integrity/verify_versions/100` | 165.14 µs | 162.83 – 168.06 µs |
 
+## A second measurement, added with the suites it covers
+
+**2026-09-07**, the day `openehr-sqlite/benches/store.rs` and
+`openehr-loco/benches/http.rs` were written — recorded immediately, on the
+same terms as the table above, rather than left for a later run that might
+not happen.
+
+| Condition | Value |
+| --- | --- |
+| Date | 2026-09-07 |
+| Machine | Apple M4 Max, 16 cores, macOS 26.6.1 |
+| Toolchain | rustc 1.98.0 (`88d9e12ae`), cargo 1.98.0, release profile |
+| Commit | the working tree at 0.9.0 |
+| Load | an ordinary interactive desktop; nothing was quiesced |
+
+| Benchmark | Median | Criterion's 95% interval |
+| --- | --- | --- |
+| `commit/composition` | 46.7 µs | 45.839 – 47.808 µs |
+| `read/get_version` | 10.3 µs | 10.279 – 10.350 µs |
+| `read/latest_version` | 11.9 µs | 11.815 – 11.936 µs |
+| `http/read_composition` | 49.3 µs | 49.163 – 49.487 µs |
+
 ## What the shape says
 
 - **Integrity verification is linear**, at roughly 1.65 µs per version across
@@ -101,6 +141,19 @@ performance claim, not a service level, not a comparison, and not a threshold.
   document cost. There is no performance argument for skipping it.
 - **Projection is the cheap half of a write**; `project/version_row` at ~16 µs is
   dominated by producing canonical JSON, not by row assembly.
+- **A commit costs about four reads.** `commit/composition` at ~46.7 µs against
+  `read/get_version` and `read/latest_version` at ~10–12 µs each — expected,
+  since a commit does everything a read does plus validation, the commit
+  rules, and `SQLite`'s own transaction, none of which a read touches.
+- **The whole HTTP layer adds roughly one more read's worth of cost on top of
+  the store it wraps.** `http/read_composition` (~49.3 µs) against
+  `read/get_version` (~10.3 µs) is not the same comparison — the HTTP route
+  reads the *latest* version by container, closer to `read/latest_version`
+  (~11.9 µs) — but either way, authentication, routing, and response
+  serialisation together cost roughly what one more store read would, not a
+  multiple of the store's own cost. Both numbers are against the same
+  in-memory connection; nothing here says what a real deployment's network
+  hop costs, only what this crate's own code costs once a request reaches it.
 
 ## What is not measured, and will not be claimed
 
@@ -116,6 +169,11 @@ performance claim, not a service level, not a comparison, and not a threshold.
   `perf`/`samply` capture, and no allocation profile in the tree. Nothing here
   has been optimised against a profile yet; the numbers above are what the
   straightforward implementation costs.
+- **`http/read_composition` opens no socket.** `tower::oneshot` drives the
+  router in the same process, so this is the cost of this crate's own code —
+  auth, routing, the store, serialisation — and not of TLS, a reverse proxy,
+  or an actual network hop, none of which this crate terminates itself
+  (`openehr-loco/README.md`: "no TLS").
 
 ## Trademarks
 

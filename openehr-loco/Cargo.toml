@@ -79,3 +79,13 @@ result_large_err = "allow"
 [dev-dependencies]
 loco-rs = { version = "1.0.1", default-features = false, features = ["cli", "testing"] }
 tower = { version = "0.5.3", features = ["util"] }
+
+# Benchmarks (`benches/http.rs`). `default-features = false` drops the HTML
+# report and its plotting stack; see `openehr/Cargo.toml` for why.
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
+
+# Criterion drives its own harness; libtest's would swallow the arguments it
+# needs. `harness = false` is required, not stylistic.
+[[bench]]
+name = "http"
+harness = false
