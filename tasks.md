@@ -507,6 +507,21 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       predecessor "went stale as capability was added underneath it" and
       that is `W0.4` read backwards. — **S**, recurring
 
+      **2026-09-07 pass.** No P1 item landed since the last pass — this
+      session's own work (Supply chain, the release pin table) is P2, not
+      capability under `am::cadl` — but checked anyway rather than assumed
+      clean, and found one real drift: `A-40`'s own "sixteen requirements
+      have no code" paragraph still named a closed `ARCHETYPE_SLOT` as
+      something `am::cadl` could not read, alongside `SIBLING_ORDER`. `A-73`
+      closed that gap on 2026-09-03, the same day, and `src/am/mod.rs`'s own
+      module doc was corrected at the time — this one paragraph in
+      `openehr/spec/audit.md` was not. Corrected in place, dated, citing
+      `A-73`; the sixteen-count itself is unaffected (a closed slot was
+      description within `K15.5`'s already-unmet scope, not its own id).
+      `conformance-matrix.md`'s `K15.5` row was already current (cites
+      `A-72`–`A-77` by name) and needed no change. Checked and found nothing
+      else stale in `A-40`'s text against the current `am::` module docs.
+
 ### P3 — larger scope, or awaiting a decision
 
 - [ ] **ADL 1.4 body parsing and conversion** (`K15.8`, `K15.9`): the header

@@ -2304,10 +2304,24 @@ provenance (`K15.26`), and never treating a retrieval failure as a pass
 **Sixteen requirements have no code, as re-counted 2026-09-03 (eighteen on
 2026-08-30).** No *complete* ADL 2 parser (`K15.5`) — `am::cadl`, built
 2026-09-02 (`A-40`'s own status line above), reads `definition`'s own
-`c_complex_object` grammar rule for every node kind but a `closed` slot and
+`c_complex_object` grammar rule for every node kind but
 `SIBLING_ORDER` (`A-62`–`A-67`), not the header, specialisation,
 terminology, rules, or annotations `K15.5` itself requires, and does not
-build an `Archetype`. `K15.6`–`K15.7` — that an unimplemented construct is
+build an `Archetype`.
+
+**Corrected 2026-09-07.** This sentence named a closed `ARCHETYPE_SLOT` as a
+second thing `am::cadl` could not read, alongside `SIBLING_ORDER`. That was
+true when written and false by the end of the same day: `A-73`, found later
+on 2026-09-03 by the same corpus run, closed it — the refusal had outlived
+its own reason once `A-71` made `occurrences` an `Option`. `src/am/mod.rs`'s
+own module documentation was corrected at the time; this sentence was not,
+which is the exact drift the recurring "close `A-40`'s own residual wording"
+backlog item exists to catch. `K15.5`'s own unmet status is unaffected — a
+closed slot was one sentence's worth of description within `am::cadl`'s
+already-narrower scope, not a `K15.x` id of its own, so the sixteen-count
+below does not change; only what is still missing within that scope does.
+
+`K15.6`–`K15.7` — that an unimplemented construct is
 refused by name at its offset, never skipped or returned as a partial tree —
 moved to **•** on 2026-09-03: they are properties of a parser, `am::cadl`
 and the two header readers are the parsers this crate has, and each is
