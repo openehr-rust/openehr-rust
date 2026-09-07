@@ -226,7 +226,12 @@ None of these crates is published (`publish = false`).
 
 ### Benchmarks
 
-`openehr/benches/rm.rs` and `openehr-store/benches/store.rs`, on criterion.
+`openehr/benches/rm.rs`, `openehr-store/benches/store.rs`,
+`openehr-sqlite/benches/store.rs`, and `openehr-loco/benches/http.rs` — the
+last two added 2026-09-07, once a real connection (`openehr-sqlite`) and a
+real router (`openehr-loco`) existed to benchmark honestly; see
+`BENCHMARKS.md` for why `openehr-store` itself only measures projection and
+verification, not a commit or a read.
 
 ```sh
 cd openehr && cargo bench              # measure

@@ -430,7 +430,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        crate: [openehr, openehr-store]
+        # `openehr-sqlite` and `openehr-loco` joined 2026-09-07, when they
+        # first gained a `benches/` directory. A crate with a bench nobody
+        # runs is exactly `bench_crates`'s own count moving from 2 to 4
+        # without this list moving with it — the same "guard only as wide as
+        # its list" shape `W-13` already found once.
+        crate: [openehr, openehr-store, openehr-sqlite, openehr-loco]
     steps:
       - uses: actions/checkout@v7
       - name: Install Rust
