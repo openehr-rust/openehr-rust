@@ -840,6 +840,16 @@ jobs:
       - name: llms.txt and llms.json are current and under the 40 kB budget
         run: python3 scripts/generate-llms-files.py
 
+      # `tasks.md`'s "run an external corpus" item, narrow reading of its own
+      # "generate an index from it": `openehr/spec/corpus-index.md` is a
+      # reverse index from a requirement or finding id to where `corpus.md`
+      # and `json_corpus.md` cite it, generated rather than hand-maintained
+      # for the same reason as `llms.txt` above — a third document updated by
+      # hand on every new corpus run is exactly the drift `spec/audit.md`
+      # **W-16** already found once.
+      - name: The corpus index is current
+        run: python3 scripts/generate-corpus-index.py
+
       # `db:D-09`: the matrix marked two requirements satisfied and listed the
       # same two as absent, in one file, for a day. The file that says "where
       # this disagrees with a crate's documentation, trust this" was disagreeing

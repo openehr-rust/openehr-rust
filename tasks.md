@@ -348,7 +348,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         simplified, non-canonical format this crate has no reader for
         (`K15.14`–`K15.17`, not implemented), so running it through
         `validate()` would test nothing real — noted rather than forced.
-      - [ ] `spec_refs` per conformance case, and the index.
+      - [x] `spec_refs` per conformance case, and the index.
         **Scoped 2026-09-06, before starting.** "Conformance case" is
         undefined here, and the two readings are far apart in size. Narrow:
         the corpus runners' own disposition tables already name a section
@@ -374,6 +374,24 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         wide reading, this is its own item, not a sub-bullet of this one;
         left unscoped rather than started on a guess. The narrow reading
         (corpus-table index) is achievable and not yet attempted.
+
+        **2026-09-08, the narrow reading.** `scripts/generate-corpus-index.py`
+        (`--write`/check, the same convention as `generate-llms-files.py`)
+        scans `corpus.md` and `json_corpus.md` for backtick-quoted ids —
+        findings (`A-71`) and requirements (`K15.6`, `D3.13a`) — and
+        generates `openehr/spec/corpus-index.md`: a reverse map from id to
+        every place a run cites it, by file, section, and the citing line.
+        Adds no new citation and no new convention; it makes the ones the
+        two run reports already carry askable in the other direction. 24
+        ids, 74 citations, first run. Wired into the `claims` CI job (a new
+        step, not a new job) so a corpus run that adds a citation and
+        forgets to regenerate the index fails the build the same way a
+        stale `llms.txt` does. Both `corpus.md` and `json_corpus.md` gained
+        a one-line cross-reference to it. Rows in `AGENTS.md` and
+        `spec/audit.md`'s `claims` job descriptions updated to mention it;
+        `check-docs.py`'s "12 CI jobs have a row" count is unaffected — a
+        step, not a job. `check-trademarks.py` unaffected — the generated
+        file does not use the openEHR mark in prose.
       - [ ] The regression job, either half. Blocked on a corpus this tree
         may carry: `adl-archetypes` has no licence file (`corpus.md`
         §Licence); `openEHR_SDK` is Apache-2.0 and could be vendored, but

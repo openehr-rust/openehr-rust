@@ -4,7 +4,9 @@
 external corpus" item — [`corpus.md`](corpus.md) is the archetype half,
 `am::cadl::parse_definition` against real ADL text; this file is real
 canonical JSON compositions against `serde_json::from_str::<Composition>`
-and [`Validate::validate`](../src/validation.rs). Both exist for the same
+and [`Validate::validate`](../src/validation.rs);
+[`corpus-index.md`](corpus-index.md) answers the reverse question, from a
+requirement or finding id to where it is cited here. Both exist for the same
 reason: a conformance claim graded only by its own tests is the weakest
 kind (`tasks.md` P1, from the FerroEHR thread's post #15), and every
 finding in [`audit.md`](audit.md) was found by running something. The

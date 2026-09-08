@@ -100,6 +100,9 @@ departs from; an undeclared departure is a defect, not a decision.
 - [JSON corpus](json_corpus.md) — the same discipline applied to canonical
   JSON compositions nobody here wrote, against `serde_json → Composition →
   Validate`.
+- [Corpus index](corpus-index.md) — a reverse index, generated from the two
+  files above (`scripts/generate-corpus-index.py`), from a requirement or
+  finding id to where a corpus run cites it.
 - [Specification release provenance](releases.md) — which openEHR
   specification release each area (RM, BASE, AM, TERM, QUERY, ITS-REST) was
   actually read against, checked directly rather than assumed: one area is
