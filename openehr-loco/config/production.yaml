@@ -1,0 +1,42 @@
+# Production configuration — what the `Dockerfile`'s image runs under.
+#
+# The one substantive difference from `development.yaml`: `binding` is
+# `0.0.0.0`, not `localhost`. Inside a container, a server bound to
+# `localhost` answers only itself — the port mapping `docker-compose.yml`
+# declares has nothing to forward to, and a request from outside the
+# container gets a connection refusal that has nothing to do with this
+# service's own logic. `host` stays informational only; nothing here reads it
+# to decide what to bind to.
+
+logger:
+  enable: true
+  pretty_backtrace: false
+  level: info
+  format: compact
+
+server:
+  port: 5150
+  binding: "0.0.0.0"
+  host: http://localhost
+  middlewares:
+    # Same shape as `development.yaml`; see its own comments for why each is
+    # on or off. Duplicated rather than shared because Loco's config format
+    # has no include mechanism, and three near-identical files are easier to
+    # audit than one with conditionals a reader has to trace.
+    request_id:
+      enable: true
+    catch_panic:
+      enable: true
+    logger:
+      enable: true
+    timeout_request:
+      enable: true
+      timeout: 10000
+    limit_payload:
+      enable: true
+      body_limit: 8mb
+    etag:
+      enable: false
+
+workers:
+  mode: ForegroundBlocking

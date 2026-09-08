@@ -1,0 +1,32 @@
+# One service and one volume — nothing else, because there is nothing else
+# to compose. `openehr-loco`'s only store is `openehr-sqlite`, a file this
+# process opens directly (`openehr-sqlite/src/store.rs`'s own doc comment:
+# "a complete store in process, with no daemon"). A second container for a
+# database server would be composing infrastructure this service does not
+# have, the way `openEHR/adl-archetypes`'s own thread #9 lost an afternoon to
+# a compose override nobody needed.
+#
+#   OPENEHR_PASETO_PUBLIC_KEYS=k4.public.… docker compose up
+#
+# `OPENEHR_PASETO_PUBLIC_KEYS` has no default here on purpose: this service
+# verifies tokens against a key it is given and holds no secret of its own
+# (`openehr-loco/src/auth.rs`'s own module documentation), so there is no
+# value that would be safe to commit as a default. `INSTALL.md` shows where a
+# throwaway one comes from for trying this out.
+
+services:
+  openehr-loco:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5150:5150"
+    environment:
+      OPENEHR_SQLITE_PATH: /home/openehr/data/openehr.sqlite3
+      OPENEHR_PASETO_PUBLIC_KEYS: ${OPENEHR_PASETO_PUBLIC_KEYS:?set this to a k4.public.… key; see INSTALL.md}
+      OPENEHR_PASETO_AUDIENCE: ${OPENEHR_PASETO_AUDIENCE:-}
+    volumes:
+      - openehr-data:/home/openehr/data
+
+volumes:
+  openehr-data: {}

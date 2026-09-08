@@ -1,0 +1,20 @@
+{
+  "name": "openehr-rust",
+  // The same base the Dockerfile's builder stage uses, not the slim runtime
+  // stage: a Codespace needs `cargo`, `rustc`, and a C compiler (for
+  // `rusqlite`'s bundled SQLite build), none of which the production image
+  // carries on purpose. This is a development environment, not the service
+  // itself — `docker compose up` inside it runs the real image the same way
+  // it would anywhere else.
+  "image": "docker.io/library/rust:1.98-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "forwardPorts": [5150],
+  "postCreateCommand": "rustup component add clippy rustfmt",
+  "customizations": {
+    "vscode": {
+      "extensions": ["rust-lang.rust-analyzer"]
+    }
+  }
+}

@@ -404,7 +404,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
 
 ### P2 — operability and evidence
 
-- [ ] **`Dockerfile`, `docker-compose.yml`, `.devcontainer/`.** Thread #9
+- [x] **`Dockerfile`, `docker-compose.yml`, `.devcontainer/`.** Thread #9
       lost an afternoon to a compose override; #21's whole review was "one
       `docker compose up` and it's running". Build `openehr-loco` as a
       static binary in a multi-stage image, compose it with nothing but a
@@ -412,6 +412,79 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       image. *Evidence:* `docker compose up` answers `curl /openehr/v1/
       metadata` on a clean machine; the quickstart in `INSTALL.md` is the
       command, not a paragraph. — **M**
+
+      **2026-09-08.** Two scope corrections against the task's own words,
+      both because there is no publishing pipeline for `openehr-loco`
+      images (it is `publish = false`, `AGENTS.md`) and standing one up is
+      a maintainer-level release decision, not this task's to make:
+      "static binary" is scoped to what is actually true — `rusqlite`'s
+      `bundled` feature means no `libsqlite3` at runtime, but the binary
+      still links `glibc`, so the runtime stage is `debian:bookworm-slim`,
+      not `scratch` (the `Dockerfile`'s own header comment says so, rather
+      than let "static" overclaim). "Boots the published image" became
+      "the devcontainer builds from the local `Dockerfile`" —
+      `.devcontainer/devcontainer.json` uses `rust:1.98-bookworm` (the
+      builder stage's own base, since a Codespace needs the compiler the
+      runtime stage deliberately drops), not an image nowhere exists to
+      pull.
+
+      Two real defects found only by actually building and running the
+      image, not by reading the Dockerfile:
+
+      1. No `.dockerignore` existed, so `COPY openehr ./openehr` (and the
+         three crates beside it) sent each crate's `target/` — a combined
+         ~37 GB on this machine — into the build context. The first build
+         attempt looked hung for that reason; it was copying tens of
+         gigabytes nothing downstream can use (a host `target/` cannot be
+         reused by a different toolchain and path inside the image).
+         Fixed by adding `.dockerignore` (`**/target/`, `.git/`); the four
+         `COPY` steps went from indefinite to instant.
+      2. Loco's own default environment is `development`
+         (`loco_rs::environment::DEFAULT_ENVIRONMENT`) unless `LOCO_ENV`
+         says otherwise, and nothing in the first version of the
+         `Dockerfile` set it — so the container would have silently loaded
+         `config/development.yaml`, whose `binding: localhost` is exactly
+         the mistake `config/production.yaml` (this task's own prerequisite
+         fix, `development.yaml` bound to `localhost` being unreachable
+         from outside a container) exists to avoid. Fixed with
+         `ENV LOCO_ENV=production` in the runtime stage; confirmed by the
+         container's own startup banner logging `environment: production`.
+
+      One more found and fixed as a robustness improvement, not a
+      network-only workaround: the runtime stage's original
+      `apt-get install ca-certificates` duplicates a package the builder
+      stage's `rust:*-bookworm` image already carries (it is
+      `buildpack-deps`-based). Changed to `COPY --from=builder
+      /etc/ssl/certs /etc/ssl/certs`, which removes a second,
+      independent package-index fetch from the runtime stage entirely —
+      worth doing regardless of any one day's network conditions, though
+      it was this session's own flaky path to `deb.debian.org` (`apt-get`
+      caught in an `Ign:`/re-`Get:` retry loop on the same 8.6 MB file,
+      confirmed not podman-specific by a bare `curl` from the host timing
+      out against the same mirror) that surfaced it. What was **not**
+      changed in anything committed: verifying the build on this
+      machine also needed `podman build --pull=never` plus a bind-mounted
+      host `~/.cargo/registry`, because pulls to `docker.io` and
+      `crates.io` were, independently, too slow or actively failing
+      (`SSL_ERROR_SYSCALL` mid-transfer) today — neither belongs in
+      `Dockerfile` or `docker-compose.yml`, since a normal network needs
+      neither, and baking in a local cache path would silently break the
+      image for anyone without this machine's exact cache.
+
+      Full, real verification, in order: `podman build` (multi-stage,
+      producing `openehr-loco:test`) → `podman run` with the port, volume,
+      and env vars `docker-compose.yml` declares → `cargo run --example
+      generate_test_token` for a throwaway key → `curl
+      http://localhost:5150/openehr/v1/metadata` → `200`. Then the actual
+      committed `docker-compose.yml` itself, end to end: `podman compose up
+      -d` (Podman's Compose v2 delegate) → the same `curl` → `200`, log
+      line `environment: production`, `listening on http://0.0.0.0:5150` →
+      `podman compose down -v`, clean teardown, no leftover containers,
+      volumes, or images. `INSTALL.md` gained a "Run the HTTP service"
+      section ending in exactly that `curl` command — the quickstart is the
+      command, not a paragraph. `scripts/check-docs.py` and
+      `scripts/check-trademarks.py` both clean; no Rust source changed, so
+      no crate's `cargo test`/`clippy` run was needed.
 - [x] **Publish measured numbers.** Add store commit and read benchmarks
       to `openehr-store/benches/store.rs` and an HTTP round-trip benchmark
       for `openehr-loco`, run them on a named machine, and put the numbers
