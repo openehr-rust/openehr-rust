@@ -12,7 +12,7 @@ Not published, and it sits **outside the conformance ladder** — every rung the
 is defined by DDL, a `Store` implementation, or a database server, and this
 crate is none of those. So it states evidence instead of a level (`W0.32`).
 
-**Demonstrated.** 53 tests. `tests/http.rs` serves real requests through Loco's
+**Demonstrated.** 54 tests. `tests/http.rs` serves real requests through Loco's
 own router: `410` for a deleted composition against `404` for one that never
 existed, the history still readable behind that `410`, `401` on every clinical
 route without a token and an identical body whether or not the record exists,
@@ -25,7 +25,10 @@ first two were mutation-checked — the branch was disabled and the test went re
 `src/auth.rs` covers key rotation, expiry, audience binding, the implicit
 assertion, a token naming nobody, a `v4.local` token offered as `v4.public`,
 and spoofed identity headers. `tests/tasks.rs` executes the **built binary** and
-reads its output.
+reads its output. `src/app.rs` covers the request-rate limiter directly (`50`
+requests through, the `51`st `429`) — `tests/http.rs`'s own router-building
+fixture never calls `after_routes`, the hook the limiter is layered in, the
+same gap `install`'s own test closes for `before_run`.
 
 The server has also been booted by hand and answered `curl`: `/metadata` served,
 `401` with `WWW-Authenticate: Bearer` on a clinical route, and a refusal to start
@@ -289,6 +292,49 @@ establishes who is reading, on every single request, and discards it. That is a
 worse statement than the old "this layer records no reads", not a better one:
 the information exists and is thrown away. A deployment needing an access log
 must still build one.
+
+## The deployment perimeter
+
+What this service is, on the wire, once something else sits in front of it —
+stated here because a reviewer filling in `PHI.md`'s questionnaire needs the
+whole perimeter in one place, not assembled from several sections above.
+
+**No TLS.** This process speaks plain HTTP. A deployment terminates TLS at a
+reverse proxy and reaches this service over a network the proxy alone can
+answer to — the same posture `openehr-loco/Dockerfile` builds toward: nothing
+in the image or `docker-compose.yml` opens a TLS listener, and nothing should,
+because a certificate held by this process would be one more thing to rotate
+in a component that already holds no other secret (see "Public key only",
+above).
+
+**One PASETO key set is the whole authorization model.** Not an
+authentication *and* authorization model — see "What it still does not do":
+verification establishes who is asking, and every route trusts every verified
+subject with every record its token can name. There is no role, no scope, no
+per-record grant. A deployment that needs "clinician A may see clinician A's
+patients and no others" does not get it from this crate; it gets it from
+whatever issues the tokens deciding what to put in them, or from a layer in
+front of this one that this crate cannot see and does not pretend to.
+
+**Rate limiting is global, not per-caller, and is stated as such rather than
+oversold.** `src/app.rs`'s `after_routes` layers a fixed request budget
+(`RATE_LIMIT_BURST` requests, replenished one at a time every
+`RATE_LIMIT_PERIOD_SECS`) over the *whole* service, keyed on nothing — every
+caller draws from the same quota. That is deliberate, not a shortcut: behind
+the reverse proxy this service is meant to sit behind, the peer IP address
+tower_governor would otherwise key on is the proxy's, not the caller's, so a
+per-IP limiter would silently collapse into this same global one while
+looking like more protection than it is (the full reasoning is on
+`after_routes`'s own doc comment). What this buys is protection for the one
+resource a flood can actually exhaust — [`app::SharedOpenehrStore`]'s single
+serialised `SQLite` connection, which the whole service shares. What it does
+**not** buy is fairness between callers, or defence against a distributed
+flood arriving through many proxy connections at once; both are the reverse
+proxy's job.
+
+**Read auditing is off by default and per-deployment**, not per-request — see
+"Read auditing", above: `records_reads` in `/metadata` is the one place a
+caller can check which mode a given instance runs in, without assuming.
 
 ## Running
 

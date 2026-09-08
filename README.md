@@ -388,7 +388,7 @@ optional, **not published** crate that puts a RESTful API in front of
 `openehr-sqlite`: PASETO `v4.public` bearer auth (verify-only — this service
 never signs), `410 Gone` for a deleted composition against `404` for one that
 never existed, `403`/`422` split for "not the committer" against "the committer
-cannot be identified", and `If-Match` concurrency control. 53 tests, including
+cannot be identified", and `If-Match` concurrency control. 54 tests, including
 `tests/http.rs` serving real requests through Loco's own router.
 
 It depends on the storage crates; nothing depends on it, and deleting it changes

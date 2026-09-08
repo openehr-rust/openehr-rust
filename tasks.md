@@ -550,7 +550,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       anywhere (no Docker image, no release artefact); that gap belongs to
       the `Dockerfile`/`docker-compose.yml` item below, not manufactured
       here. `SECURITY.md` updated to match exactly this state, not more.
-- [ ] **State the production perimeter.** `openehr-loco` has no TLS, no
+- [x] **State the production perimeter.** `openehr-loco` has no TLS, no
       rate limiting, no read audit at the store (`db:D-04`, "fixed above the
       store"), no RBAC. Write the deployment statement — TLS terminated by
       a reverse proxy, what is and is not audited, that one PASETO key set
@@ -558,6 +558,52 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       `PHI.md` §Known limits, and add rate limiting at the router. *Evidence:*
       a reviewer can answer `PHI.md`'s questionnaire section from the
       documents alone. — **S**
+
+      **2026-09-08.** Rate limiting: `tower_governor`'s `GovernorLayer`,
+      layered over the whole router in a new `Hooks::after_routes` (nothing
+      previously implemented that hook). Keyed on `GlobalKeyExtractor`, not
+      the crate's own default (peer IP) — deliberately, and stated as such
+      in three places (`after_routes`'s own doc comment, the README, and
+      `PHI.md`): behind the reverse proxy this service is meant to sit
+      behind, the peer IP this process sees is always the proxy's, so a
+      per-IP limiter would silently become a global one anyway, while
+      implying more protection than it delivers. Trusting
+      `X-Forwarded-For` to recover the real caller was considered and
+      rejected — the same shape of mistake `auth.rs` already refuses for
+      identity, and not worth reopening for rate limiting. 50 requests
+      burst, replenished one per second; verified directly (`tests/http.rs`'s
+      own router-building fixture never calls `after_routes`, so it could
+      not have caught a limiter wired up wrong or not at all — the same
+      gap `install`'s test already closes for `before_run`): a new test in
+      `src/app.rs` drives 51 requests through `after_routes`'s own output
+      and asserts the 51st, and only the 51st, is `429`. Mutation-checked
+      (`cargo mutants --re after_routes`): 1 mutant (the whole function
+      body replaced with `Ok(Default::default())`), caught.
+
+      The deployment statement itself: a new "§The deployment perimeter"
+      section in `openehr-loco/README.md` (no TLS in this process — a
+      reverse proxy terminates it; one PASETO key set is the whole
+      authorization model, not authentication *and* authorization; rate
+      limiting is global, stated with the reasoning above; read auditing
+      is off by default and per-deployment), and four new bullets in
+      `PHI.md` §Known limits carrying the same three points plus a
+      cross-reference from the existing read-auditing bullet to the HTTP
+      edge log `openehr-loco` can turn on. `PHI.md` §If you are filling in
+      a questionnaire now points a deployer of `openehr-loco` at its
+      README section directly, closing the evidence bar in the task's own
+      words: the questionnaire is answerable from the documents, not
+      assembled from source by the reviewer.
+
+      Test count moved from 53 to 54 in three places (`README.md`,
+      `openehr-loco/README.md`, and the new test itself) — `cargo test`
+      confirms 54 (18 lib + 29 http + 7 tasks). `RUSTFLAGS="-D warnings"
+      cargo clippy --all-targets` and `cargo deny check` both clean with
+      `tower_governor` and its transitive dependencies (`governor`,
+      `quanta`, …) added; the pre-existing `winnow`/`windows-sys`
+      duplicate-version warnings `cargo deny` reports are unrelated,
+      already present before this change, and are warnings under
+      `deny.toml`'s policy, not failures. `check-docs.py` and
+      `check-trademarks.py` clean.
 - [ ] **Assess the 144 unassessed database requirements (`db:D-11`).** In
       batches by section, `M3` and `S1` first as the finding recommends,
       then wire `scripts/check-databases-matrix-coverage.py` into CI once it

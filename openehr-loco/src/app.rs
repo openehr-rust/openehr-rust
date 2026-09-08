@@ -1,6 +1,7 @@
 //! The Loco application.
 
 use async_trait::async_trait;
+use axum::Router as AxumRouter;
 use loco_rs::{
     Result,
     app::{AppContext, Hooks},
@@ -14,9 +15,19 @@ use loco_rs::{
 use openehr_sqlite::SqliteStore;
 use openehr_store::Store as _;
 use std::sync::{Arc, Mutex};
+use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder, key_extractor::GlobalKeyExtractor};
 
 use crate::access::{AccessLog, SharedAccessLog};
 use crate::auth::{PasetoVerifier, SharedVerifier};
+
+/// A burst of this many requests is let through before the limiter starts
+/// answering `429`.
+const RATE_LIMIT_BURST: u32 = 50;
+
+/// One request-worth of quota is replenished every this many seconds after a
+/// burst is spent — so, at steady state, `1.0 / RATE_LIMIT_PERIOD_SECS as f64`
+/// requests per second.
+const RATE_LIMIT_PERIOD_SECS: u64 = 1;
 
 /// The store, shared across requests.
 ///
@@ -124,6 +135,52 @@ impl Hooks for App {
 
         install(ctx, verifier, access_log, open_store()?);
         Ok(())
+    }
+
+    /// Layers a request-rate limit over the whole router — the perimeter
+    /// protection `PHI.md`'s deployment statement names, and the only one
+    /// this crate can offer for itself: TLS, and defence against a genuinely
+    /// distributed flood, are the reverse proxy's job, stated as such rather
+    /// than half-built here.
+    ///
+    /// The key is [`GlobalKeyExtractor`], not the crate's own default
+    /// (peer IP), deliberately: behind the reverse proxy every deployment of
+    /// this service is meant to sit behind (`PHI.md`), the peer IP this
+    /// process sees is the proxy's, not the caller's, so a per-IP limiter
+    /// would silently become a per-proxy one — no different from a global
+    /// limit, except that it looks like more protection than it is. The
+    /// honest alternative, trusting `X-Forwarded-For` to recover the real
+    /// caller, is the same shape of mistake `auth.rs`'s own module doc
+    /// refuses for identity — a header believed because of where it is
+    /// expected to arrive from — and rate limiting is not worth reopening it
+    /// for. One consequence follows from the choice: this limits the
+    /// service's *total* load, not any one caller's, which is what
+    /// [`SharedOpenehrStore`]'s single serialised connection can actually be
+    /// overwhelmed by (`AGENTS.md`'s own reasoning for that `Mutex`, echoed
+    /// here). Per-caller throttling would need identity — the verified
+    /// PASETO subject — and this layer runs on every request, including the
+    /// unauthenticated ones a flood is made of, so it cannot be keyed on a
+    /// claim this early.
+    ///
+    /// # Errors
+    ///
+    /// Only if `RATE_LIMIT_BURST` or `RATE_LIMIT_PERIOD_SECS` were ever
+    /// changed to zero — [`GovernorConfigBuilder::finish`]'s one failure
+    /// mode, unreachable with the constants above but checked because a
+    /// silently-absent rate limiter is worse than a refusal to start
+    /// (`db:PR12.16`'s same reasoning, applied here).
+    async fn after_routes(router: AxumRouter, _ctx: &AppContext) -> Result<AxumRouter> {
+        let mut builder = GovernorConfigBuilder::default().key_extractor(GlobalKeyExtractor);
+        builder
+            .per_second(RATE_LIMIT_PERIOD_SECS)
+            .burst_size(RATE_LIMIT_BURST);
+        let governor_config = builder.finish().ok_or_else(|| {
+            loco_rs::Error::Message(
+                "rate limiter: RATE_LIMIT_BURST and RATE_LIMIT_PERIOD_SECS must be non-zero"
+                    .to_owned(),
+            )
+        })?;
+        Ok(router.layer(GovernorLayer::new(governor_config)))
     }
 
     async fn connect_workers(_ctx: &AppContext, _queue: &Queue) -> Result<()> {
@@ -241,5 +298,61 @@ mod tests {
     fn the_app_names_and_versions_itself() {
         assert_eq!(App::app_name(), "openehr_loco", "CARGO_CRATE_NAME changed?");
         assert!(App::app_version().contains(env!("CARGO_PKG_VERSION")));
+    }
+
+    /// The rate limiter answers `429` once `RATE_LIMIT_BURST` requests have
+    /// arrived faster than the quota replenishes, and not before — checked
+    /// directly against `after_routes`, since `tests/http.rs`'s own fixture
+    /// builds its router through `AppRoutes::to_router` alone and never calls
+    /// this hook (the same gap `install`'s own test above exists to close
+    /// for `before_run`; a limiter wired up wrong, or not at all, would fail
+    /// no other test in this crate).
+    #[tokio::test]
+    async fn the_rate_limiter_answers_429_only_after_the_burst_is_spent() {
+        use axum::{
+            Router,
+            body::Body,
+            http::{Request, StatusCode},
+            routing::get,
+        };
+        use tower::ServiceExt as _;
+
+        let ctx = AppContext::builder(Environment::Test, loco_rs::tests_cfg::config::test_config())
+            .build();
+        let base = Router::new().route("/x", get(|| async { "ok" }));
+        let router = App::after_routes(base, &ctx).await.expect("after_routes");
+
+        for n in 0..super::RATE_LIMIT_BURST {
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri("/x")
+                        .body(Body::empty())
+                        .expect("request"),
+                )
+                .await
+                .expect("infallible");
+            assert_eq!(
+                response.status(),
+                StatusCode::OK,
+                "request {n} inside the burst was limited early"
+            );
+        }
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/x")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("infallible");
+        assert_eq!(
+            response.status(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "the request past the burst was not limited"
+        );
     }
 }
