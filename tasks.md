@@ -235,6 +235,19 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       actually specifies. Publish an OpenAPI 3 document generated from the
       routes and check it in. *Evidence:* openEHR Explorer connects with no
       server-specific branch; every endpoint has an `http.rs` test. — **L**
+
+      **2026-09-08: three more concrete divergences, found running the new
+      conformance runner against a real EHRbase 2.35.1**
+      (`openehr-loco/spec/conformance-runs.md`), not read off its docs:
+      `POST /ehr` expects a caller-built `Ehr` object here, against
+      query parameters or an `EHR_STATUS` body there — a real request-shape
+      mismatch, not only a base-path one; the real ITS-REST history and
+      version-read resource is `versioned_composition/{uid}/...`, confirmed
+      against EHRbase's own `/v3/api-docs`, not `composition/{uid}/_history`
+      as this crate has it; and `GET /composition` (search) is not part of
+      ITS-REST at all — absent from EHRbase's own OpenAPI paths — so it is
+      this crate's own invention with nothing to check it against, and
+      belongs off this item's list rather than on it.
 - [ ] **Strict readers.** Thread #1's strictness list is the bar: refuse
       undeclared keys and duplicate keys on the canonical-JSON ingress path,
       and make every refusal name the JSON path and the requirement. Decide
@@ -517,13 +530,42 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       the computable one — into `openehr/spec/ambiguities.md` with the
       disposition each got, and open one openEHR tracker issue per entry.
       *Evidence:* the file, and issue links beside each entry. — **M**
-- [ ] **A conformance runner anyone can point at any server.** Thread #16's
+- [x] **A conformance runner anyone can point at any server.** Thread #16's
       `scripts/conformance.sh` with bring-your-own-SUT is the model: a
       catalogue of HTTP cases against ITS-REST, runnable against
       `openehr-loco`, EHRbase, or FerroEHR, with verdicts committed. Start
       with the eleven endpoints that exist. *Evidence:* the runner, a
       committed run against `openehr-loco`, and one against a stock EHRbase.
       — **M**
+
+      **2026-09-08.** "The eleven endpoints" turned out not to be one shared
+      catalogue's worth, checked directly against a real, running EHRbase
+      2.35.1 rather than assumed: `POST /ehr`'s request body genuinely
+      differs between the two (a caller-built `Ehr` here, query parameters
+      or an `EHR_STATUS` body there); every composition and contribution
+      case is blocked on template infrastructure this tree does not have
+      (`OPT 1.4 ingestion`, a separate P1 item — EHRbase refuses a
+      template-less composition outright, confirmed by posting one); and
+      `GET /composition` (search) and `GET /metadata` are not part of
+      ITS-REST at all, absent from EHRbase's own OpenAPI paths, with nothing
+      to check them against. What is genuinely shared, checked and
+      landed: reading an EHR that exists, and reading one that does not —
+      [`openehr-loco/scripts/conformance.sh`](../openehr-loco/scripts/conformance.sh)
+      plus [`openehr-loco/examples/generate_test_token.rs`](../openehr-loco/examples/generate_test_token.rs)
+      (a throwaway PASETO keypair and token, for running it by hand), with
+      both required runs committed and dated in
+      [`openehr-loco/spec/conformance-runs.md`](../openehr-loco/spec/conformance-runs.md)
+      — `2 passed, 0 failed` against `openehr-loco` (a keypair from the new
+      example, `cargo run -- start`) and against a real EHRbase 2.35.1
+      (`podman`, no Keycloak needed despite the upstream compose file making
+      it a startup dependency — confirmed by using Basic auth successfully
+      without it, not assumed). Three genuinely new, verified divergences
+      fed back into the "ITS-REST completeness" item above rather than
+      re-stated here. A small claim next to the item's own headline, and
+      the honest one — two endpoints, not eleven, with the other nine's
+      blockers named precisely enough that closing this further is now a
+      matter of sequencing (OPT ingestion; deciding `POST /ehr`'s contract;
+      renaming two paths to `versioned_composition/...`), not investigation.
 - [ ] **Close `A-40`'s own residual wording and the matrix dates** after
       each P1 item lands, not at the end — the register said this file's
       predecessor "went stale as capability was added underneath it" and
