@@ -80,6 +80,8 @@ Columns: **pg** PostgreSQL, **lt** SQLite, **my** MySQL, **ma** MariaDB,
 | `T11.2` DDL executed against a real server | • | • | • | • | • | • | mssql and oracle since 2026-09-06, runs 34045294037 and 34040865467 |
 | `S1.4` engine floor declared | • | • | • | • | • | • | each stated in its annex, with the dialect fact that sets it |
 | `X15.6` dialect annex exists | ~ | ~ | ~ | ~ | ~ | ~ | all six written; all six **proposed**, not ratified (`X15.9`) |
+| `M3.6` `ColTy` declared once, dialect maps it | • | • | • | • | • | • | `col_sql` implemented in all six; `X15.19`/`M3.31` test the mapped differences directly |
+| `M3.29` `Id`/`Text` carry a maximum length | • | • | • | • | • | • | bounded by construction — `ColTy::Id(n)`/`Text(n)` take the length as a parameter, not by convention |
 
 ## Store-level requirements
 
@@ -112,6 +114,13 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `M3.16d` content verified from the **stored bytes** | • | `tests/tamper.rs` edits a row through a second connection with the triggers dropped; `integrity`'s own unit tests catch 15 of 15 viable mutants (`lib:A-09`) |
 | `M3.43` canonical JSON in a byte-preserving column | • | the store round-trips it; the per-engine claim is below |
 | `M3.34` anonymous committer stored as `NULL` | • | |
+| `M3.15` audit attributes on every version/contribution row | • | committing system, change type, committer, and the commit-time pair — the same columns `R4.2`'s own note names |
+| `M3.19` canonical JSON is the record, stored whole | • | `M3.43`/`R4.8`/`R4.11` together are this claim, tested |
+| `M3.20` the relational part is an index, never shredded content | ? | true today — `openehr_composition_index` carries only RM-fixed attributes (`M3.32`) — but nothing would fail a schema change that added an archetype-specific column |
+| `M3.28` ordering and range scans use the derived column | • | the real SQL: `... AND audit_time_committed_utc IS NOT NULL ORDER BY audit_time_committed_utc DESC ...` (`src/store.rs`); the skip is `H5.13`'s own tested claim |
+| `M3.32` composition index carries only RM-fixed attributes | • | `openehr_composition_index`'s column list matches exactly: archetype id, template id, category, composer, language, territory, setting, context start/end |
+| `M3.35` projection is one function, shared | • | one `project` function in `openehr-store::record`; the guarantee is structural — today only `openehr-sqlite` calls it, since it is the only `Store` |
+| `S1.13` `openehr-sqlite` pins its engine rather than discovering it | • | the `bundled` `rusqlite` feature (`Cargo.toml`) |
 
 ## Service requirements
 
@@ -137,6 +146,7 @@ states evidence and takes no level. Nothing here is published.
 | `H5.15` update requires a precondition; `412` not `409` | • | stale, absent, and `*` all tested |
 | `H5.16` both `W/"uid"` and the bare uid accepted | • | |
 | `PR12.12` tamper detection | — | the store's, not the service's |
+| `S1.19` a service crate implements no clinical behaviour | ? | no controller calls `validate()` or any store-internal check directly (`openehr-loco/src/controllers/`) — true by absence, and an absence is not what a test demonstrates |
 
 ## Cross-cutting
 
@@ -154,6 +164,23 @@ states evidence and takes no level. Nothing here is published.
 | `P6.13` every index records the query it exists for | • | schema test over `Index::note` |
 | `W16.19` one licence expression, one licence file | • | checked in CI |
 | `W16.15` `repository` names the real repository | ~ | correct since 0.1.1 and in the current 0.2.0; `openehr` **0.1.0 is published with the wrong one and is immutable** (**W-03**) |
+| `S1.1` one engine-agnostic storage model | • | schema, projection, commit rules, and the conformance suite all live in `openehr-store`, unduplicated; `layering` CI job keeps the six dialect crates and `openehr-sqlite` depending on it rather than reimplementing it |
+| `S1.2` targets RM 1.1.0, matching `openehr` | • | inherited from `openehr` (`lib:S1.16`); `Cargo.toml`'s version dependency is what would break first if the two drifted |
+| `S1.3` stores every class `openehr` models, without loss | • | `R4.2`'s lossless round-trip, including the four `VERSION`/`AUDIT_DETAILS` attributes `D-07` found dropped |
+| `S1.5` no per-attribute shredding | • | six tables total (`M3.21`), none per-attribute; archetyped content stays in `data_json` (`M3.43`) |
+| `S1.6` no AQL execution in the core | ? | no AQL executor exists in `openehr-store` — stated on `Store`'s own doc comment — but nothing tests the absence directly |
+| `S1.7` no HTTP dependency or server in the core | ? | no `axum`/`hyper`/`tokio`/`tower` line in `openehr`, `openehr-store`, or any of the six engine crates' `Cargo.toml` — checked by hand for this assessment, not yet a named CI check; `openehr-loco` is the stated exception |
+| `S1.8` the core does not authenticate or authorize | ? | no credential, key, or principal type anywhere in the core; `openehr-loco` verifies without authenticating (`PR12.13`–`PR12.15`, service table), which is a different crate |
+| `S1.9` no terminology resolution, unit conversion, or timing interpretation | ? | inherited exclusion from `openehr` (`lib:S1.8`–`lib:S1.10`); unchecked at this layer specifically |
+| `S1.10` no encryption at rest or key management | ? | no such code exists in the core; both belong to the deployment and the engine |
+| `S1.11` an unimplemented operation returns `StoreError::Unsupported`, never a default | ? | the variant exists with exactly this shape (`engine`, `what`, `spec_ref`) but is constructed nowhere in the tree — no engine crate below Store level implements enough of `Store` to reach it yet |
+| `S1.12` no engine below Store level ships a partial `Store` | ? | true today — only `openehr-sqlite` implements `Store` at all — but nothing would catch a partial implementation appearing on another engine crate |
+| `S1.21` sections 7 and 8 stay retired | — | a statement about which specification sections are active, not a claim about this crate's code |
+| `M3.21` five data tables plus one metadata table, no more without an amendment | ? | `schema.rs::TABLES` holds exactly these six today; nothing would catch a seventh being added without the amendment this requirement asks for |
+| `M3.24` an instant is stored as two columns | • | `every_instant_has_a_derived_partner_and_the_partner_is_nullable` (`openehr-store/src/schema.rs`), the same test `M3.27` cites |
+| `M3.25` the `_text` column is authoritative on read | • | `R4.2`'s round-trip returns the exact lexical form from `_text`; `_utc` is a different, non-lexical type, so there is no path by which a read could take the value from it instead |
+| `M3.26` `_utc` is nullable, `NULL` when unestablished | • | the same schema test as `M3.24`/`M3.27` |
+| `M3.38` a store error never echoes stored content | ? | every `StoreError` variant's fields are identifiers, engine names, or rule names (`src/error.rs`) — true by construction, but no test asserts a stored value can never reach one |
 
 ## Not implemented in the store
 

@@ -603,18 +603,57 @@ floor rather than exact-once).
 
 **Not fixed.** Closing this means reading each of the 144 requirements against
 six engine crates and the store, and recording an honest mark — `•`, `~`, `?`,
-`✗`, `—`, or `doc` — which is real assessment work, not something this finding
-or a script can manufacture. Filing 144 guessed rows to make a count look
-better would be a worse defect than the one being recorded (`W0.3`).
-`plan.md`'s "Open decisions" names the recommended path: assess in batches by
-section, starting with `M3` and `S1` since they are the requirements most
-likely to already be silently satisfied by existing, tested code.
+`✗`, or `—`, this file's own five (its Legend has no `doc`; that mark belongs
+to `openehr/spec/conformance-matrix.md`'s legend, a different file with a
+different set, and citing it here before checking was itself an unchecked
+claim, corrected in place 2026-09-09) — which is real assessment work, not
+something this finding or a script can manufacture. Filing 144 guessed rows to
+make a count look better would be a worse defect than the one being recorded
+(`W0.3`). `plan.md`'s "Open decisions" names the recommended path: assess in
+batches by section, starting with `M3` and `S1` since they are the
+requirements most likely to already be silently satisfied by existing, tested
+code.
 
-**Residual.** The diagnostic script is not wired into CI (see its own
-docstring): it would fail on every push today for a pre-existing gap rather
-than a regression, which is a different kind of red build than every other gate
-in this repository asserts. Once the 144 are assessed, wiring it in is
-mechanical — the library matrix is the working example.
+**2026-09-09, first batch: `M3` and `S1`, 27 of 144.** Read each of the 13
+missing `M3` requirements and 14 missing `S1` requirements against the actual
+code — `openehr-store/src/schema.rs`, `record.rs`, `error.rs`, and every
+`Cargo.toml` in the seven core crates — rather than assumed satisfied because
+the surrounding architecture is sound. Fifteen landed `•` with a real test or
+an unambiguous structural fact behind them (six-table schema for `S1.5`;
+`R4.2`'s own round-trip for `S1.3`/`M3.15`; `M3.43`/`R4.8`/`R4.11` together
+for `M3.19`; bounded-by-construction `ColTy::Id(n)`/`Text(n)` for `M3.29`;
+the real `... audit_time_committed_utc IS NOT NULL ORDER BY ...` clause,
+`H5.13`'s own test, for `M3.28`). Eleven landed `?` — true today, on inspection,
+but not actively guarded: `S1.6`–`S1.10` (the core's own "MUST NOT" list —
+no AQL executor, no HTTP dependency confirmed absent from all seven
+`Cargo.toml`s by hand for this pass, no auth, no terminology resolution, no
+encryption — every one of which is a real, checkable absence that nothing
+currently checks by name), `S1.11` (`StoreError::Unsupported` exists with
+the exact shape required and is constructed nowhere in the tree — dead code
+waiting for an engine crate that needs it), `S1.12` (true while only
+`openehr-sqlite` implements `Store` at all), `S1.19` (no controller calls
+`validate()` — an absence, not a demonstrated presence), `M3.20`/`M3.21`
+(the schema is exactly this shape today; nothing would catch a change away
+from it), `M3.38` (`StoreError`'s fields are identifiers and rule names by
+construction; no test asserts a stored value can never reach one). One, the
+purely editorial `S1.21` ("sections 7 and 8 stay retired"), landed `—`: a
+statement about the specification's own structure, not a claim this crate's
+code can satisfy or fail. Zero landed `✗` — no gap this pass found was a
+genuine unmet requirement rather than an untested true one, which is itself
+worth recording rather than assumed typical of the remaining 117.
+`spec/databases/conformance-matrix.md`'s own rows carry the per-requirement
+evidence; this paragraph is the summary, not the citation.
+
+**Residual.** 117 of 221 remain unassessed, reproduced by the script rather
+than hand-counted: `C0` (21), `W16` (18), `T11` (14), `O10` (13), `X15` (10),
+`P6` (9), `G2` (8), `V9` (7), `H5` (7), `PR12` (6), `R4` (4) — `G2`, `V9`,
+`H5`, and `PR12` unchanged from the finding's own original table above,
+since this pass touched only `M3` and `S1`. The diagnostic script is still
+not wired into CI (see its own docstring): it would fail on every push today
+for a pre-existing gap rather than a regression, which is a different kind
+of red build than every other gate in this repository asserts. Once all 144
+are assessed, wiring it in is mechanical — the library matrix is the working
+example.
 
 ## Closed
 

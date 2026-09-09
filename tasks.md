@@ -627,6 +627,26 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       then wire `scripts/check-databases-matrix-coverage.py` into CI once it
       would pass on day one. *Evidence:* the script green in CI; `D-11`
       closed. — **L**
+
+      **2026-09-09, batch 1 of N: `M3` and `S1`, 27 of 144.** Read each
+      against the real code (`openehr-store/src/schema.rs`, `record.rs`,
+      `error.rs`, and every core crate's `Cargo.toml`), not assumed from the
+      surrounding architecture. 15 landed `•` (a real test or an
+      unambiguous structural fact — e.g. `M3.29` bounded-by-construction via
+      `ColTy::Id(n)`/`Text(n)`, `M3.28` a real SQL clause plus `H5.13`'s own
+      test), 11 landed `?` (true on inspection, not actively guarded —
+      `S1.6`–`S1.12`'s "core MUST NOT" list, `M3.20`/`M3.21`/`M3.38`), 1
+      landed `—` (`S1.21`, a statement about the specification's own
+      structure, not this crate's code), 0 landed `✗`. Full account,
+      row by row, in `spec/databases/audit.md` **D-11**'s own dated
+      paragraph; the matrix rows themselves carry the per-requirement
+      evidence. Found and fixed in passing: `D-11`'s own text listed `doc`
+      as one of this file's marks — this matrix's Legend has only five
+      (`•`, `~`, `?`, `✗`, `—`); `doc` belongs to the *library* matrix's
+      legend, a different file. `check-databases-matrix-coverage.py`:
+      144 → 117 missing. Still **not** wired into CI — 117 remain, so it
+      would not pass on day one, exactly the condition this item's own text
+      sets for wiring it in.
 - [x] **A specification-release pin table.** One file — `spec/releases.md`
       or a section of `openehr/spec/index.md` — naming the RM, BASE, AM,
       TERM, QUERY, and ITS-REST releases every module here was transcribed
