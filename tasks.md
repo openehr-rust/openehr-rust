@@ -647,6 +647,26 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       144 → 117 missing. Still **not** wired into CI — 117 remain, so it
       would not pass on day one, exactly the condition this item's own text
       sets for wiring it in.
+
+      **2026-09-09, batch 2: `C0`, 21 of 21 — the whole section.** `D-11`
+      itself predicted this section would resolve like the library
+      matrix's own `C0` rows, marked `doc`. Checked rather than assumed,
+      and it could not resolve that way for the reason batch 1 already
+      found: this matrix has no `doc` mark. 7 landed `—` (pure reading
+      conventions and editorial-process rules — RFC 2119 interpretation,
+      rationale, what counts as a departure, how an amendment is
+      conducted — not claims about any crate's code at all), 9 landed `•`
+      against real, already-existing checks (the ladder table in this same
+      file, `check-docs.py`'s level-consistency and shared-block checks,
+      the `schema` CI job running each dialect against its own server —
+      the actual fix for `W-01`, `verify-schema.sh`'s row-present insert,
+      all six dialect annexes' `M14.x` entries, and the literal absence of
+      `07-`/`08-`/`14-` numbered files), 5 landed `?` (id-format and
+      no-reuse-and-next-ordinal discipline, cross-directory qualification,
+      and departure review — all followed in practice, none enforced by a
+      script), 0 landed `✗`. Full account in `spec/databases/audit.md`
+      **D-11**'s own dated paragraph. `check-databases-matrix-coverage.py`:
+      117 → 96 missing.
 - [x] **A specification-release pin table.** One file — `spec/releases.md`
       or a section of `openehr/spec/index.md` — naming the RM, BASE, AM,
       TERM, QUERY, and ITS-REST releases every module here was transcribed

@@ -644,16 +644,50 @@ worth recording rather than assumed typical of the remaining 117.
 `spec/databases/conformance-matrix.md`'s own rows carry the per-requirement
 evidence; this paragraph is the summary, not the citation.
 
-**Residual.** 117 of 221 remain unassessed, reproduced by the script rather
-than hand-counted: `C0` (21), `W16` (18), `T11` (14), `O10` (13), `X15` (10),
-`P6` (9), `G2` (8), `V9` (7), `H5` (7), `PR12` (6), `R4` (4) — `G2`, `V9`,
-`H5`, and `PR12` unchanged from the finding's own original table above,
-since this pass touched only `M3` and `S1`. The diagnostic script is still
-not wired into CI (see its own docstring): it would fail on every push today
+**2026-09-09, batch 2: `C0`, 21 of 21.** The section the finding itself
+predicted would resolve like the library matrix's own `C0` rows — "largely
+framework sections... most of those 39 will resolve the same way once
+looked at" — checked rather than assumed. It did not resolve the same way,
+because it could not: **this matrix's own Legend has no `doc` mark** (five
+only — `•`, `~`, `?`, `✗`, `—`; `doc` belongs to `openehr/spec/conformance-
+matrix.md`'s legend, a different file, corrected above once already this
+finding). Framework language that is purely a reading convention for the
+specification itself — RFC 2119 keyword interpretation (`C0.1`), rationale
+being non-normative (`C0.2`–`C0.3`), the definitional rules for what counts
+as a departure (`C0.16`–`C0.17`) and how an amendment is conducted
+(`C0.21`–`C0.22`) — 7 in all, landed `—`: not applicable to any crate's
+code, because they are not claims about code at all. 9 landed `•`, and
+every one against
+a real, already-existing check rather than a new one written to make the
+count look better: the ladder table in this same file (`C0.8`, `C0.13`),
+`check-docs.py`'s existing "every conformance level restated in the tree
+matches conformance-matrix.md" (`C0.9`, `C0.11`) and its shared-block check
+(`C0.18`), the `schema` CI job running each of the five dialects against
+its own server separately — the actual fix for `W-01`, the finding
+`C0.10`'s own rationale names (`C0.10`), `verify-schema.sh` inserting a row
+before testing `UPDATE`/`DELETE` refusal (`C0.12`), all six dialect annexes
+carrying at least one `M14.x` entry (`C0.14`), and `spec/databases/`
+genuinely having no `07-`, `08-`, or `14-` numbered file (`C0.6`). 5 landed
+`?`: the identifier-format and no-reuse-and-next-ordinal disciplines
+(`C0.4`, `C0.5`, `C0.19`) are followed throughout this tree but enforced by
+no script — a malformed id would not be flagged, it would simply fail to
+match the regex every id-aware tool including this matrix's own coverage
+checker relies on, and vanish from tracking rather than erroring; `C0.7`'s
+cross-directory qualification (`lib:`/`db:`) is likewise followed but
+unchecked; `C0.15`'s "a departure must not weaken an engine-independent
+invariant" is a review-time judgement on the six departures that exist
+today, not something a script currently evaluates. 0 landed `✗`.
+
+**Residual.** 96 of 221 remain unassessed, reproduced by the script rather
+than hand-counted: `W16` (18), `T11` (14), `O10` (13), `X15` (10), `P6`
+(9), `G2` (8), `V9` (7), `H5` (7), `PR12` (6), `R4` (4) — unchanged from
+the finding's own original table above, since the two batches so far
+touched only `M3`, `S1`, and `C0`. The diagnostic script is still not
+wired into CI (see its own docstring): it would fail on every push today
 for a pre-existing gap rather than a regression, which is a different kind
-of red build than every other gate in this repository asserts. Once all 144
-are assessed, wiring it in is mechanical — the library matrix is the working
-example.
+of red build than every other gate in this repository asserts. Once all
+144 are assessed, wiring it in is mechanical — the library matrix is the
+working example.
 
 ## Closed
 

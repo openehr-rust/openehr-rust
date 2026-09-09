@@ -181,6 +181,27 @@ states evidence and takes no level. Nothing here is published.
 | `M3.25` the `_text` column is authoritative on read | • | `R4.2`'s round-trip returns the exact lexical form from `_text`; `_utc` is a different, non-lexical type, so there is no path by which a read could take the value from it instead |
 | `M3.26` `_utc` is nullable, `NULL` when unestablished | • | the same schema test as `M3.24`/`M3.27` |
 | `M3.38` a store error never echoes stored content | ? | every `StoreError` variant's fields are identifiers, engine names, or rule names (`src/error.rs`) — true by construction, but no test asserts a stored value can never reach one |
+| `C0.1` RFC 2119 keywords, normative only when capitalized | — | a convention for reading this specification, not a claim about any crate's code |
+| `C0.2` unmarked prose is rationale, not an obligation | — | same — a reading convention |
+| `C0.3` examples/numbers in rationale are illustrative; the requirement governs on conflict | — | same |
+| `C0.4` every requirement id follows `<prefix><section>.<ordinal>[<suffix>]` | ? | true of every id in this directory today; a malformed one would not be flagged as malformed — it would simply not match the regex every id-aware script (including this matrix's own coverage checker) relies on, and vanish from tracking silently rather than loudly |
+| `C0.5` ids are stable and never reused | ? | followed in practice throughout this tree (withdrawn ids keep their number, e.g. `03-storage-model.md`'s own withdrawn section) — a discipline, not a script |
+| `C0.6` section gaps 7, 8, 14 are deliberate, not renumbered | • | `spec/databases/` has no `07-*.md`, `08-*.md`, or `14-*.md` — directly checkable by listing the directory |
+| `C0.7` ids in this directory are scoped to it; `openehr/spec/` allocates the same prefixes with different meanings | ? | true — confirmed for `S1.4` specifically while assessing this same batch — but nothing catches an unqualified, ambiguous citation before it is written |
+| `C0.8` the four-level ladder | • | this file's own "Conformance levels" table, above, is the ladder — `check-docs.py`'s "every conformance level restated in the tree matches conformance-matrix.md" |
+| `C0.9` a crate states its level in its README and crate docs | • | same `check-docs.py` check |
+| `C0.10` a level's evidence MUST come from the crate's own engine | • | the `schema` CI job runs each of the five dialects against its own server, separately — the exact fix for `W-01`, the finding this requirement's own rationale names |
+| `C0.11` docs MUST NOT describe a capability above the crate's level | • | same `check-docs.py` check as `C0.9` |
+| `C0.12` Schema's "with a row present" clause | • | `verify-schema.sh` inserts a row into `openehr_version` before testing `UPDATE`/`DELETE` refusal, every dialect, every run |
+| `C0.13` a level is present-tense; Verified needs CI green on `main` | • | this file's own "Conformance levels" section, above, cites the specific green run for each claim |
+| `C0.14` a departure is a numbered `M14.x` requirement in the crate's dialect annex | • | all six annexes carry at least one `M14.x` entry |
+| `C0.15` a departure MUST NOT weaken an engine-independent invariant | ? | a review-time judgement on any new departure; true of the six that exist today, not machine-enforced |
+| `C0.16` an undeclared departure is a defect, not retroactively an amendment | — | a definitional/classification rule for how findings are written up, not a claim about code |
+| `C0.17` prose describing an engine is not itself a departure | — | same — definitional |
+| `C0.18` a specification change is one copy, one commit | • | `check-docs.py`'s shared-block check (`4 shared blocks match their 1 owners`) is the general enforcement this requirement asks for |
+| `C0.19` a new requirement takes the next unused ordinal, never inserted mid-sequence | ? | followed throughout this session's own batch of additions; a discipline, not a script |
+| `C0.21` a silent amendment is forbidden; the commit states which crate's behaviour drove it | — | a commit-message discipline, not a property of the code or the document at rest |
+| `C0.22` every amendment is checked against the matrix and `audit.md` | — | same — an editorial-process rule |
 
 ## Not implemented in the store
 
