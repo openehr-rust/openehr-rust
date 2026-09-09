@@ -129,11 +129,21 @@ Listed as requirements rather than omitted, so the gap is visible (`C0.20`).
   direct `UPDATE`/`DELETE` on an append-only table is refused **by the database**
   (`M3.17`).
 
-  The second half is tested, by `verify-schema.sh`, against three engines. The
-  tamper-evidence half of the original requirement — that a chain verifies under
-  each algorithm, that a truncated chain still verifies while the checkpoint
-  moves, that a retired key leaves history verifiable — has nothing to test,
-  because no chain exists (`M3.16`).
+  The second half is tested, by `verify-schema.sh`, against every dialect that
+  has reached Schema level — six as of 2026-09-06, not the three this text
+  said while only PostgreSQL, MySQL, and MariaDB had (corrected while
+  assessing this section against `db:D-11`, `db:D-13`). The tamper-evidence
+  half is now **partially** tested rather than not at all: a truncated chain
+  still verifying while the checkpoint moves **is** tested (`M3.16c`), and
+  a rewritten row failing to recompute is too (`M3.16`, `M3.16d`) — this
+  text said the chain did not exist, which was false by the time this
+  section was last touched (`db:D-13` traces the fix). What remains
+  genuinely untested at this layer: "verifies under each algorithm" is
+  itself obsolete — `M3.39` fixed the algorithm to exactly one, SHA-256, so
+  there is no longer an "each" to test — and "a retired key leaves history
+  verifiable" has no test in `openehr-sqlite`'s own suite; key-rotation
+  additivity (`lib:X11.14`) is a library-level guarantee, not yet exercised
+  through a `Store` commit and read.
 
 ## Rules about tests themselves
 

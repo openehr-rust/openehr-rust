@@ -358,12 +358,18 @@ Non-normative; the annexes govern (`X15.6`).
 | SQL Server | `binary(32)` |
 | Oracle | `RAW(32)` |
 
-**Not implemented.** No digest is stored anywhere in this schema today: the
-chain of `M3.16` does not exist, and the checksum adjunct belongs to a
-text-search feature this layer does not have. Implementing either requires a new
-`ColTy` variant, which by design will fail to compile in all six dialects until
-each one states its own spelling (`M3.30`) — that break is the mechanism, not an
-obstacle.
+**The chain is implemented; the checksum adjunct is not.** This paragraph
+said neither existed, unchanged since before `M3.16`'s own chain was wired
+in (`f951556`, 2026-08-02) — found stale five weeks later, while assessing
+`T11` against `db:D-11` (`db:D-13`). `openehr_version` carries
+`chain_previous`, `chain_content`, `chain_digest`, `chain_tag_key_id`, and
+`chain_tag_mac`, all `ColTy::Digest`, declared once in
+`openehr_store::schema` and populated on every commit by every `Store`
+(today, only `openehr-sqlite`). The `ColTy` variant this paragraph said
+implementing either would require already exists and is what those five
+columns use. What remains genuinely not implemented is the checksum
+adjunct for `U4`'s unbounded-string search, a separate feature this layer
+does not have — the same gap `db:P6.18` already records.
 
 ## Errors
 

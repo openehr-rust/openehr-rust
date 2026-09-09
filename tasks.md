@@ -687,6 +687,36 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       unflagged) and "No crate here has one yet" about a changelog
       (`CHANGELOG.md` exists). Both corrected in place, dated.
       `check-databases-matrix-coverage.py`: 96 → 78 missing.
+
+      **2026-09-09, batch 4: `T11`, 14 of 14 — and a real defect found
+      along the way, `db:D-13`.** Tracing `T11.8`'s own "no chain exists
+      (`M3.16`)" back to its source turned up a genuine, five-week-stale
+      self-contradiction: `03-storage-model.md`'s Digests section said no
+      digest was stored anywhere and the chain did not exist, while
+      `M3.16`'s own bullet two pages earlier already said *(amended —
+      implemented)*, and the store-level table's own `M3.16`/`M3.39`–`M3.42`
+      rows were already marked `•`. `openehr_version` has carried real
+      `chain_previous`/`chain_content`/`chain_digest` columns since
+      `f951556`, 2026-08-02. Fixed in both places the claim appeared
+      (`03-storage-model.md` and `T11.8` itself, which also cited a
+      three-engine count six weeks out of date and an "each algorithm"
+      framing `M3.39` had already made moot) — full account in
+      `spec/databases/audit.md`'s new **D-13**.
+
+      The batch itself: 11 of 14 landed `•`, most citing evidence already
+      on the matrix for a different id — `T11.15`/`T11.16`/`T11.17`/
+      `T11.20` restate `G2.9`/`M3.36`/`X15.15`–`X15.16` exactly; `T11.18`
+      restates `X15.18`; `T11.21` restates the `W16.9` row just added;
+      `T11.10` cites the `mutants` CI job; `T11.13` cites `C0.8`'s own
+      ladder; `T11.19` cites `ci.yml`'s own stated principle of invoking
+      `verify-schema.sh` identically to a contributor; `T11.6` cites
+      `openehr-sqlite/tests/concurrency.rs`, the same test `H5.4`/`R4.5`
+      already use. 1 landed `~` (`T11.8`, corrected as above — real
+      tamper-evidence coverage now, minus key-rotation specifically). 2
+      landed `?` (`T11.11`'s narrowest-assertion style discipline; `T11.14`,
+      vacuously true since no database crate currently has an `#[ignore]`d
+      test). 0 landed `✗`. `check-databases-matrix-coverage.py`: 78 → 64
+      missing.
 - [x] **A specification-release pin table.** One file — `spec/releases.md`
       or a section of `openehr/spec/index.md` — naming the RM, BASE, AM,
       TERM, QUERY, and ITS-REST releases every module here was transcribed

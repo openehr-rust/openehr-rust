@@ -112,6 +112,7 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `O10.15` schema version recorded, mismatch refused | • | three states, all tested |
 | `M3.33` projection refuses a non-archetype-root | • | |
 | `M3.16d` content verified from the **stored bytes** | • | `tests/tamper.rs` edits a row through a second connection with the triggers dropped; `integrity`'s own unit tests catch 15 of 15 viable mutants (`lib:A-09`) |
+| `T11.6` concurrency tested adversarially, against a database the threads genuinely share | • | `openehr-sqlite/tests/concurrency.rs` — the same test `H5.4`/`R4.5` above cite; only `openehr-sqlite` has a `Store` to test this way |
 | `M3.43` canonical JSON in a byte-preserving column | • | the store round-trips it; the per-engine claim is below |
 | `M3.34` anonymous committer stored as `NULL` | • | |
 | `M3.15` audit attributes on every version/contribution row | • | committing system, change type, committer, and the commit-time pair — the same columns `R4.2`'s own note names |
@@ -220,6 +221,19 @@ states evidence and takes no level. Nothing here is published.
 | `W16.17` a sibling dependency's declared version matches the sibling's actual version | • | `check-docs.py`: "versions agree... manifests and inter-crate pins included" |
 | `W16.18` no crate is published while a finding against its claims is open | • | `agents/publishing.md`'s documented checklist checks this explicitly before every release |
 | `W16.20` a behaviour change bumps the incompatible version, never a patch | ? | followed in practice — 0.9.0's own two breaking changes bumped minor, not patch, per `CLAUDE.md`'s own dated account — no automated semver-diff check enforces it |
+| `T11.8` an audit test asserts committing-system/change-type AND database-enforced append-only | ~ | append-only: • on all six dialects (`M3.17`, per-engine). Tamper evidence: truncation-under-checkpoint and content-verification are tested (`M3.16`, `M3.16c`, `M3.16d`); key-rotation additivity is not, at this layer (`db:D-13`) |
+| `T11.10` a test proven to fail without its fix | • | `cargo mutants --in-diff`, the `mutants` CI job — the continuous, automated form of exactly this check |
+| `T11.11` a regression pinned by the narrowest assertion that catches it | ? | followed throughout this session's own additions (exact values and named sets, not thresholds) — a style discipline, not machine-enforced |
+| `T11.12` coverage does not degrade silently; a skip that checks nothing fails | • | the `verify` task's own behaviour: "exits non-zero when the history is not intact, including when it verified nothing" (`openehr-loco/README.md`) |
+| `T11.13` a self-skipping test is not the sole evidence for a level | • | `C0.8`'s own ladder, above — Schema and above require a CI job that fails, not skips, without the engine |
+| `T11.14` an `#[ignore]`d test has a matrix entry | ? | vacuously true — no test in any database crate is currently `#[ignore]`d — demonstrated correctly in the sibling `openehr` crate's own corpus tests, not exercised here |
+| `T11.15` every dialect has golden DDL tests | • | the same `tests/ddl.rs` evidence as `G2.9`, above |
+| `T11.16` every dialect is checked by `conformance::check_dialect` | • | the same mechanism `M3.36`'s own row cites |
+| `T11.17` every dialect compared against every other, coverage asserted | • | `X15.15`/`X15.16`, above — the same rows |
+| `T11.18` a golden test names the specific spellings that would indicate a copy | • | `X15.18`'s own row: compared against the nearest neighbour specifically, the shape that would have caught `W-01` |
+| `T11.19` the CI check invokes the same script a contributor runs locally | • | `verify-schema.sh`, invoked identically by `ci.yml` and by a contributor's own terminal — stated as a principle in both places |
+| `T11.20` a guard over a list asserts the list's completeness | • | the same `X15.16` row |
+| `T11.21` a documentation example is compiled and run | • | the same `W16.9` row |
 
 ## Not implemented in the store
 

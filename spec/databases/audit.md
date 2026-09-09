@@ -726,6 +726,64 @@ red build than every other gate in this repository asserts. Once all 144
 are assessed, wiring it in is mechanical — the library matrix is the
 working example.
 
+### D-13 — The Digests section described a chain that had already shipped — **Medium, fixed**
+
+**Required.** `C0.18`: a change to a normative statement changes its text in
+this directory, in one commit, with the reason stated. `M3.16`'s own bullet
+already says *(amended — implemented)*.
+
+**Found** while assessing `T11` against `db:D-11`, tracing `T11.8`'s "no
+chain exists (`M3.16`)" back to its source: the Digests section of
+[`03-storage-model.md`](03-storage-model.md) closed with **"Not
+implemented. No digest is stored anywhere in this schema today: the chain
+of `M3.16` does not exist... Implementing either requires a new `ColTy`
+variant."** All three clauses are false of the tree as it stands, and have
+been since `f951556` ("Wire the tamper-evidence chain, and give `D-07` its
+columns"), 2026-08-02 — five weeks before this was noticed.
+`openehr_version` carries `chain_previous`, `chain_content`,
+`chain_digest`, `chain_tag_key_id`, and `chain_tag_mac`
+(`openehr-store/src/schema.rs`), all `ColTy::Digest` — the variant the
+paragraph said would need adding, already added, already the store-level
+table's own evidence for `M3.39`–`M3.42` two sections above the one that
+said it did not exist.
+
+**Why it happened.** `M3.16`'s own bullet was updated the same commit that
+wired the chain in — the requirement text changed. The *rationale*
+paragraph beneath a different, later section did not, and nothing checks
+that a fact restated in two places moved together (`W0.38`'s own concern,
+one level down: a duplicated *claim*, not a duplicated *passage*, so the
+shared-block mechanism `check-docs.py` already runs would not have caught
+it either). `db:D-11`'s own assessment of this same section is what
+surfaced it — reading `T11.8` against the code it cites led straight to
+the sentence contradicting both.
+
+**Consequence.** A reader trusting this paragraph over the store-level
+table's own `M3.16`/`M3.39`–`M3.42` rows — the two disagree, and the file
+never said which one to believe — would conclude tamper evidence needs
+building from nothing, when `openehr-sqlite` has shipped it since 2026-08-02
+and `db:D-06`, `db:PR12.11`, and `PHI.md`'s own "in the process, not in the
+database" distinction all already depend on it existing.
+
+**Fixed.** The paragraph now says what is actually true: the chain is
+implemented, using the `ColTy::Digest` variant that already exists; only
+the checksum adjunct for `U4`'s unbounded-string search remains not
+implemented, the same gap `db:P6.18` already records and the one true
+clause in the original three.
+
+**The stale claim had a second copy.** `T11.8`'s own text repeated "no
+chain exists (`M3.16`)" as the reason its tamper-evidence half had
+"nothing to test" — also false by the same date, since `M3.16c`/`M3.16d`
+already test exactly the truncation and content-verification behaviour
+this text said had no test to run. Also stale in the same paragraph,
+independently: "tested... against three engines" — six dialects reached
+Schema by 2026-09-06, not three — and "verifies under each algorithm",
+which `M3.39` had already made moot by fixing the algorithm to exactly
+one. All three corrected in
+[`11-conformance-testing.md`](11-conformance-testing.md); the one gap that
+survives the correction is real: no test in `openehr-sqlite`'s own suite
+exercises a retired key leaving prior history verifiable, though the
+library-level guarantee it depends on (`lib:X11.14`) is tested elsewhere.
+
 ## Closed
 
 ### D-05 — The specification required the architecture the code rejects — **High, fixed**
