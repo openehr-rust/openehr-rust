@@ -687,6 +687,27 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       the computable one — into `openehr/spec/ambiguities.md` with the
       disposition each got, and open one openEHR tracker issue per entry.
       *Evidence:* the file, and issue links beside each entry. — **M**
+
+      **2026-09-09, the register itself.** `openehr/spec/ambiguities.md`,
+      all five named entries, each with the specific citation (grammar
+      files, class definitions, module docs) rather than a restated
+      summary — the `TERM` repository's exact disagreeing codes, the three
+      ADL identifier grammars' exact differences, `C_STRING`'s one
+      interpretive decision beyond the type fix, `is_modifiable`'s
+      not-yet-implemented status stated plainly rather than implied
+      finished, and `versions` List-vs-Set noting FerroEHR's own `#2674`
+      rather than duplicating it. Linked from `openehr/spec/index.md`.
+      **Filing upstream is not done here** — opening issues against an
+      openEHR tracker on this project's behalf is a maintainer action
+      (`GOVERNANCE.md` §Machines do not decide), the same footing as the
+      Discourse reply draft and the benchmarks thread post. Every entry
+      says "Filed upstream: not yet" (two — `is_modifiable` and `versions`
+      — cite FerroEHR's own existing tracker numbers instead, since those
+      were filed by thread #6, not by this project). `check-docs.py` and
+      `check-trademarks.py` clean; the latter correctly does not scan
+      `openehr/spec/*.md` at all (`ROOT.glob("*.md")` is root-level only),
+      so this file joining `corpus.md`/`json_corpus.md`/`releases.md`
+      outside its scope is consistent, not a gap.
 - [x] **A conformance runner anyone can point at any server.** Thread #16's
       `scripts/conformance.sh` with bring-your-own-SUT is the model: a
       catalogue of HTTP cases against ITS-REST, runnable against

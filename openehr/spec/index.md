@@ -93,6 +93,11 @@ departs from; an undeclared departure is a defect, not a decision.
   intent.
 - [Audit](audit.md) — the findings register: every known gap between what this
   spec requires, what the documentation claims, and what the code does.
+- [Ambiguities](ambiguities.md) — where openEHR's own specification is
+  silent, contradicts itself, or disagrees with another repository claiming
+  the same authority, and the disposition this project gave each case. SEC
+  asked that these not be discarded; filing them upstream is a separate,
+  maintainer-only step this register does not itself take.
 - [Corpus](corpus.md) — what happened when archetypes nobody here wrote were
   run through the `definition` reader: dated counts per refusal, the corpus
   commit, and the candidate findings each run left. A discovery record, not
