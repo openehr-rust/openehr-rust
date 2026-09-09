@@ -667,6 +667,26 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       script), 0 landed `✗`. Full account in `spec/databases/audit.md`
       **D-11**'s own dated paragraph. `check-databases-matrix-coverage.py`:
       117 → 96 missing.
+
+      **2026-09-09, batch 3: `W16`, 18 of 18.** Repository/release
+      conventions, more concretely checkable than `C0`'s prose. 11 landed
+      `•` against real existing checks — `check-docs.py`'s crate counts,
+      version-agreement, and level-consistency checks; `X15.15`'s
+      cross-dialect DDL comparison (the actual mechanism that found
+      `W-01`); `agents/publishing.md`'s documented pre-publish checklist;
+      the `examples` CI job; direct inspection for two structural facts
+      (every engine crate's `spec/` holds one dialect annex and nothing
+      else; all eighteen crates declare their own `[workspace]`). 6 landed
+      `?` (true by inspection, none independently tested). 1 landed `~`
+      (`W16.12`, once `CHANGELOG.md` was found to exist but cover the eight
+      crates as a set, not literally one-per-crate). 0 landed `✗`. **Found
+      and fixed in passing, twice**: `16-repository-and-release.md`'s own
+      text said the crates "currently share `0.2.0`" (six releases stale —
+      `check-docs.py`'s version check reads this file but looks for
+      phrasings this sentence does not use, so the drift passed through
+      unflagged) and "No crate here has one yet" about a changelog
+      (`CHANGELOG.md` exists). Both corrected in place, dated.
+      `check-databases-matrix-coverage.py`: 96 → 78 missing.
 - [x] **A specification-release pin table.** One file — `spec/releases.md`
       or a section of `openehr/spec/index.md` — naming the RM, BASE, AM,
       TERM, QUERY, and ITS-REST releases every module here was transcribed

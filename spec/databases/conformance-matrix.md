@@ -202,6 +202,24 @@ states evidence and takes no level. Nothing here is published.
 | `C0.19` a new requirement takes the next unused ordinal, never inserted mid-sequence | ? | followed throughout this session's own batch of additions; a discipline, not a script |
 | `C0.21` a silent amendment is forbidden; the commit states which crate's behaviour drove it | — | a commit-message discipline, not a property of the code or the document at rest |
 | `C0.22` every amendment is checked against the matrix and `audit.md` | — | same — an editorial-process rule |
+| `W16.1` eighteen crates, eight published, ten not | • | `check-docs.py`'s own derived counts: `crates=18`, `published=8`, `unpublished=10` |
+| `W16.2` an engine crate's name matches the engine it targets | • | `X15.15`'s cross-dialect DDL comparison is the mechanism that would catch a violation of this shape — it is how `W-01` (`openehr-mariadb` emitting `openehr-mysql`'s DDL under its own name) was found |
+| `W16.3` a crate's description names its engine and does not overclaim | ? | true by inspection — `openehr-oracle`/`openehr-mssql`'s descriptions read "schema dialect and DDL", not persistence — but nothing beyond the trademark-notice check reads crate descriptions for this specifically |
+| `W16.4` a crate declares only the drivers it uses | ? | true by inspection — no database-driver crate (`sqlx`, `tiberius`, …) in any Schema-level engine crate's `Cargo.toml` — not asserted by a dedicated check |
+| `W16.5` normative text lives in `spec/` once; an engine crate's `spec/` holds only its dialect annex | • | every engine crate's `spec/` directory holds exactly one `14-<engine>-dialect.md` and nothing else |
+| `W16.6` CI verifies no two dialects emit the same DDL, covering every engine | • | `X15.15`/`X15.16`, above — the same rows, the same evidence |
+| `W16.7` a shared-behaviour change is one edit in `openehr-store`, not reproduced in engine crates | ? | true by inspection — no commit-rule or projection logic is duplicated in any dialect crate — not actively tested for regression |
+| `W16.8` no documentation is text-substituted from another crate | ? | the one known violation (`W-01`) is fixed; nothing automated guards against a recurrence beyond review |
+| `W16.9` a documentation code example runs, and CI runs it | • | the `examples` job, plus every rustdoc example being compiled and run as a doctest |
+| `W16.10` a measured number names what measured it and when | ? | true of the numbers checked this session (`BENCHMARKS.md`'s convention) — no script scans the whole tree for an unattributed measured number |
+| `W16.11` crates may version independently; they currently share one version | • | `check-docs.py`: "versions agree: live 0.9.0 everywhere" — found and fixed in passing while assessing this row: the requirement's own rationale said `0.2.0`, six releases stale (`16-repository-and-release.md`) |
+| `W16.12` a changelog describes the crate it sits in | ~ | `CHANGELOG.md` exists (found and fixed in passing: the requirement's own text said "no crate here has one yet") but covers the eight published crates as a declared set, not strictly one crate each — not a substitution, but not literally this requirement's own words either |
+| `W16.13` pre-publish: tests and lints pass, the package is clean, every linked file ships | • | `agents/publishing.md`'s documented `cargo publish --dry-run` and `cargo package --list` checklist, followed for every release recorded there |
+| `W16.14` a crate is not published above its level, and says which level | • | the same `check-docs.py` level-consistency check as `C0.9`/`C0.11`, applied to the eight published crates specifically |
+| `W16.16` every crate is its own Cargo workspace | • | confirmed for all eighteen crates' `Cargo.toml` while assessing this row |
+| `W16.17` a sibling dependency's declared version matches the sibling's actual version | • | `check-docs.py`: "versions agree... manifests and inter-crate pins included" |
+| `W16.18` no crate is published while a finding against its claims is open | • | `agents/publishing.md`'s documented checklist checks this explicitly before every release |
+| `W16.20` a behaviour change bumps the incompatible version, never a patch | ? | followed in practice — 0.9.0's own two breaking changes bumped minor, not patch, per `CLAUDE.md`'s own dated account — no automated semver-diff check enforces it |
 
 ## Not implemented in the store
 

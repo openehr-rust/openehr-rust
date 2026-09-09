@@ -87,13 +87,29 @@ Requirement prefix: `W16`.
   with no provenance cannot be rechecked, and will be repeated long after it
   stopped being true.
 - **W16.12** *(amended)* A changelog, where one exists, MUST describe changes to
-  the crate it sits in. No crate here has one yet; adding one is not required,
-  but an inherited or substituted changelog is forbidden by `W16.8`.
+  the crate it sits in. Adding one is not required, but an inherited or
+  substituted changelog is forbidden by `W16.8`.
+
+  `CHANGELOG.md` now exists (found stale here while assessing this section
+  against `db:D-11`, 2026-09-09 — this text still said "no crate here has
+  one yet"), and reads slightly differently from "the crate it sits in":
+  it covers the eight published crates **as a declared set**, stating so in
+  its own first line, since they version and release together (`W16.11`).
+  Not a substitution — each entry names the specific crate and requirement
+  the change is about — but not literally per-crate either, so the
+  requirement's own text is not yet amended to match, and the matrix marks
+  this `~` rather than `•` until it is.
 
 ## Versioning and publishing
 
 - **W16.11** *(amended)* Crates MAY version independently. They currently share
-  `0.2.0`, which is a fact about their history rather than a rule.
+  `0.9.0` (checked while assessing this section against `db:D-11`,
+  2026-09-09 — this text said `0.2.0`, six releases stale.
+  `scripts/check-docs.py` does read this file, but its version check looks
+  for four specific fixed phrasings — "crates.io at", "published at" among
+  them — and "currently share `X`" matches none of them, so the drift
+  passed through unflagged rather than uncounted), which is a fact about
+  their history rather than a rule.
 - **W16.20** A release that changes behaviour a caller can observe MUST bump the
   version cargo treats as **incompatible**, not the one it treats as a patch.
   Below `1.0` that means `0.1.x` → `0.2.0`, never `0.1.1` → `0.1.2`.

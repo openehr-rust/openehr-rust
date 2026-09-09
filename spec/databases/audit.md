@@ -678,15 +678,52 @@ unchecked; `C0.15`'s "a departure must not weaken an engine-independent
 invariant" is a review-time judgement on the six departures that exist
 today, not something a script currently evaluates. 0 landed `✗`.
 
-**Residual.** 96 of 221 remain unassessed, reproduced by the script rather
-than hand-counted: `W16` (18), `T11` (14), `O10` (13), `X15` (10), `P6`
-(9), `G2` (8), `V9` (7), `H5` (7), `PR12` (6), `R4` (4) — unchanged from
-the finding's own original table above, since the two batches so far
-touched only `M3`, `S1`, and `C0`. The diagnostic script is still not
-wired into CI (see its own docstring): it would fail on every push today
-for a pre-existing gap rather than a regression, which is a different kind
-of red build than every other gate in this repository asserts. Once all
-144 are assessed, wiring it in is mechanical — the library matrix is the
+**2026-09-09, batch 3: `W16`, 18 of 18.** Repository and release conventions
+— more concretely code/manifest-checkable than `C0`'s pure prose turned out
+to be. 11 landed `•`, most against real, already-existing checks:
+`check-docs.py`'s own derived counts for `W16.1` (eighteen crates, eight
+published), its version-agreement check for `W16.11`/`W16.17`, its
+level-consistency check for `W16.14`; `X15.15`'s cross-dialect DDL
+comparison — the actual mechanism that found `W-01` — for `W16.2` and
+`W16.6`; `agents/publishing.md`'s documented pre-publish checklist for
+`W16.13` and `W16.18`; the `examples` CI job and rustdoc doctests for
+`W16.9`; direct inspection for `W16.5` (every engine crate's `spec/` holds
+exactly one dialect annex, nothing else) and `W16.16` (all eighteen crates
+declare their own `[workspace]`, checked exhaustively for this pass). 6
+landed `?` — true by inspection, none independently tested: `W16.3`/`W16.4`
+(crate descriptions and driver dependencies read correctly today), `W16.7`
+(no shared-behaviour logic duplicated in an engine crate), `W16.8` (the one
+known violation, `W-01`, is fixed; nothing guards a recurrence but review),
+`W16.10` (measured numbers checked this session carry provenance; no script
+scans the whole tree for one that does not), `W16.20` (0.9.0's own two
+breaking changes bumped minor, not patch, but no automated semver-diff
+check enforces the discipline). 1 landed `~`: `W16.12`, once `CHANGELOG.md`
+was found to now exist — see below. 0 landed `✗`.
+
+**Found and fixed in passing, twice, in the same section this time.**
+`16-repository-and-release.md`'s own text had gone stale in two places, both
+surfaced only by checking rather than reading past them: `W16.11`'s
+rationale said the crates "currently share `0.2.0`" — six releases behind
+the real `0.9.0`, and invisible to `check-docs.py`'s version check because
+that check looks for four specific fixed phrasings ("crates.io at",
+"published at") and "currently share `X`" matches none of them, so the
+drift passed through the file unflagged rather than the file going
+unscanned. `W16.12` said "No crate here has one yet" about a changelog;
+`CHANGELOG.md` exists, covering the eight published crates as a declared
+set rather than strictly one-per-crate, which is why the requirement lands
+`~` and not `•` — real, not a substitution (`W16.8`), but not literally the
+requirement's own words either, so the requirement's own text is corrected
+to describe the fact rather than deny it, pending a fuller amendment.
+
+**Residual.** 78 of 221 remain unassessed, reproduced by the script rather
+than hand-counted: `T11` (14), `O10` (13), `X15` (10), `P6` (9), `G2` (8),
+`V9` (7), `H5` (7), `PR12` (6), `R4` (4) — unchanged from the finding's own
+original table above, since the three batches so far touched only `M3`,
+`S1`, `C0`, and `W16`. The diagnostic script is still not wired into CI
+(see its own docstring): it would fail on every push today for a
+pre-existing gap rather than a regression, which is a different kind of
+red build than every other gate in this repository asserts. Once all 144
+are assessed, wiring it in is mechanical — the library matrix is the
 working example.
 
 ## Closed
