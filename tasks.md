@@ -772,6 +772,20 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       account, including why neither `✗` is a documentation defect like
       `db:D-13`'s, in `spec/databases/audit.md`. `check-databases-matrix-
       coverage.py`: 41 → 32 missing.
+
+      **2026-09-10, batch 8: `G2`, 8 of 8.** Schema generation — emission
+      order, idempotence, identifiers — mostly structural fact rather than
+      runtime behaviour, since the schema is declared, not generated. 7
+      landed `•`: `G2.7` against `schema::TABLES`'s own const declaration;
+      `G2.10`/`G2.11` against the shared `Dialect::ddl` default (no dialect
+      overrides it — tables, then all indexes, then append-only, in that
+      order); `G2.12` restates `M3.23`; `G2.14` against the `Idempotence`
+      enum's own shape; `G2.17` against `openehr-mysql`'s real
+      `index_idempotence` returning `Inline` while `openehr-mariadb` is
+      deliberately left at the default; `G2.18` restates `X15.3`. 1 landed
+      `?` (`G2.19` — true by inspection, longest identifier today 29
+      bytes, nothing would catch a longer one). 0 landed `✗`.
+      `check-databases-matrix-coverage.py`: 32 → 24 missing.
 - [x] **A specification-release pin table.** One file — `spec/releases.md`
       or a section of `openehr/spec/index.md` — naming the RM, BASE, AM,
       TERM, QUERY, and ITS-REST releases every module here was transcribed

@@ -80,6 +80,14 @@ Columns: **pg** PostgreSQL, **lt** SQLite, **my** MySQL, **ma** MariaDB,
 | `T11.2` DDL executed against a real server | • | • | • | • | • | • | mssql and oracle since 2026-09-06, runs 34045294037 and 34040865467 |
 | `S1.4` engine floor declared | • | • | • | • | • | • | each stated in its annex, with the dialect fact that sets it |
 | `P6.4` all seven named indexes declared and emitted | • | • | • | • | • | • | `openehr-store::schema::TABLES`, one declaration, all six derive from it |
+| `G2.7` the schema is compile-time Rust data, not generated | • | • | • | • | • | • | `openehr_store::schema`'s `TABLES` const |
+| `G2.10` `ddl()` emits tables, then indexes, then append-only, in that order | • | • | • | • | • | • | the shared `Dialect::ddl` default — no dialect overrides it |
+| `G2.11` indexes come after all tables, not per-table | • | • | • | • | • | • | the same `ddl()` default |
+| `G2.12` tables emit in `TABLES` order, needing no deferred constraints | • | • | • | • | • | • | the same `M3.23` evidence, plus the same `ddl()` default |
+| `G2.14` idempotence declares exactly `IfNotExists`, `Guard`, or `Inline` | • | • | • | • | • | • | the `Idempotence` enum's own shape |
+| `G2.17` `Inline` is MySQL's answer; MariaDB does not use it | • | • | • | • | • | • | `openehr-mysql`'s `index_idempotence` returns `Inline`; MariaDB is left at the default |
+| `G2.18` table and index names are identical on every engine | • | • | • | • | • | • | the same `X15.3` evidence |
+| `G2.19` every identifier fits the tightest engine's limit | ? | ? | ? | ? | ? | ? | true by inspection — the longest name today is 29 bytes, well under Oracle's 30-byte pre-12.2 floor — no test would catch a longer one being added |
 | `X15.6` dialect annex exists | ~ | ~ | ~ | ~ | ~ | ~ | all six written; all six **proposed**, not ratified (`X15.9`) |
 | `M3.6` `ColTy` declared once, dialect maps it | • | • | • | • | • | • | `col_sql` implemented in all six; `X15.19`/`M3.31` test the mapped differences directly |
 | `M3.29` `Id`/`Text` carry a maximum length | • | • | • | • | • | • | bounded by construction — `ColTy::Id(n)`/`Text(n)` take the length as a parameter, not by convention |

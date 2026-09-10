@@ -795,11 +795,26 @@ specifically). 3 landed `?` (`P6.10`, true by inspection of the schema;
 truncate silently — the real cap is `openehr-loco`'s; `P6.17`, vacuous
 while `P6.18` already establishes nothing needs an adjunct yet).
 
-**Residual.** 32 of 221 remain unassessed, reproduced by the script rather
-than hand-counted: `G2` (8), `V9` (7), `H5` (7), `PR12` (6), `R4` (4) —
-unchanged from the finding's own original table above, since the seven
-batches so far touched only `M3`, `S1`, `C0`, `W16`, `T11`, `O10`, `X15`,
-and `P6`. The diagnostic script is still not wired into CI (see its own
+**2026-09-10, batch 8: `G2`, 8 of 8.** Schema generation — emission order,
+idempotence, identifiers. The section the schema is declared in, not
+generated, so most of this is structural fact rather than runtime
+behaviour. 7 landed `•`: `G2.7` against `schema::TABLES`'s own const
+declaration; `G2.10`/`G2.11` against the shared `Dialect::ddl` default,
+confirmed with no dialect overriding it — tables, then all indexes, then
+append-only, in that order; `G2.12` against the same `M3.23` evidence;
+`G2.14` against the `Idempotence` enum's own three-variant shape; `G2.17`
+against `openehr-mysql`'s own `index_idempotence` returning `Inline` while
+`openehr-mariadb` is deliberately left at the default — read directly,
+not assumed from the requirement's own worked example; `G2.18` against the
+same `X15.3` evidence. 1 landed `?`: `G2.19` — true by inspection (the
+longest identifier today is 29 bytes, under Oracle's 30-byte pre-12.2
+floor) but nothing would catch a longer one being added. 0 landed `✗`.
+
+**Residual.** 24 of 221 remain unassessed, reproduced by the script rather
+than hand-counted: `V9` (7), `H5` (7), `PR12` (6), `R4` (4) — unchanged
+from the finding's own original table above, since the eight batches so
+far touched only `M3`, `S1`, `C0`, `W16`, `T11`, `O10`, `X15`, `P6`, and
+`G2`. The diagnostic script is still not wired into CI (see its own
 docstring): it would fail on every push today for a pre-existing gap
 rather than a regression, which is a different kind of red build than
 every other gate in this repository asserts. Once all 144 are assessed,
