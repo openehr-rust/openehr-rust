@@ -79,6 +79,7 @@ Columns: **pg** PostgreSQL, **lt** SQLite, **my** MySQL, **ma** MariaDB,
 | `X15.18` differs from nearest neighbour, tested | • | • | • | • | • | • | mariadb's is the newest and the reason `X15.18` exists |
 | `T11.2` DDL executed against a real server | • | • | • | • | • | • | mssql and oracle since 2026-09-06, runs 34045294037 and 34040865467 |
 | `S1.4` engine floor declared | • | • | • | • | • | • | each stated in its annex, with the dialect fact that sets it |
+| `P6.4` all seven named indexes declared and emitted | • | • | • | • | • | • | `openehr-store::schema::TABLES`, one declaration, all six derive from it |
 | `X15.6` dialect annex exists | ~ | ~ | ~ | ~ | ~ | ~ | all six written; all six **proposed**, not ratified (`X15.9`) |
 | `M3.6` `ColTy` declared once, dialect maps it | • | • | • | • | • | • | `col_sql` implemented in all six; `X15.19`/`M3.31` test the mapped differences directly |
 | `M3.29` `Id`/`Text` carry a maximum length | • | • | • | • | • | • | bounded by construction — `ColTy::Id(n)`/`Text(n)` take the length as a parameter, not by convention |
@@ -124,6 +125,9 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `M3.28` ordering and range scans use the derived column | • | the real SQL: `... AND audit_time_committed_utc IS NOT NULL ORDER BY audit_time_committed_utc DESC ...` (`src/store.rs`); the skip is `H5.13`'s own tested claim |
 | `M3.32` composition index carries only RM-fixed attributes | • | `openehr_composition_index`'s column list matches exactly: archetype id, template id, category, composer, language, territory, setting, context start/end |
 | `M3.35` projection is one function, shared | • | one `project` function in `openehr-store::record`; the guarantee is structural — today only `openehr-sqlite` calls it, since it is the only `Store` |
+| `P6.11` a store offers version-by-id, latest, at-time, every-version, and archetype search | • | all five exercised in `openehr-store/src/conformance.rs`, including `find_compositions_by_archetype` |
+| `P6.14` time-ranged queries use the derived UTC column | • | the same `M3.28` evidence |
+| `P6.15` no silent truncation of a result set | ? | vacuously true at this layer — the store applies no bound to `find_compositions_by_archetype` at all, so nothing here truncates; the caller-facing page/cap (`_count`/`_offset`, capped at 100) is `openehr-loco`'s own, above the store |
 | `S1.13` `openehr-sqlite` pins its engine rather than discovering it | • | the `bundled` `rusqlite` feature (`Cargo.toml`) |
 
 ## Service requirements
@@ -257,6 +261,10 @@ states evidence and takes no level. Nothing here is published.
 | `X15.14` a dialect does not own the schema | • | the same `M3.22` evidence |
 | `X15.17` a new engine crate is not created by copying an existing one | ? | true today, after `W-01`'s fix (`openehr-mariadb` rewritten from the `Dialect` trait) — a process discipline, nothing machine-enforced against a future copy |
 | `X15.20` the projection is one shared function | • | the same `M3.35` evidence |
+| `P6.10` the queryable surface is the index, nothing else | ? | true by inspection — `openehr_composition_index` carries only RM-fixed attributes (`M3.32`); no path or structural index over content exists — not independently tested |
+| `P6.16` every search target declares its kind (identity, prefix, range, membership, containment) | ✗ | `search-adjuncts.md`'s `AD1`–`AD2` define the framework, but no declaration exists for any of the seven real indexed columns `P6.4` names — written in advance of the columns it would apply to, not yet applied to them |
+| `P6.17` where an engine cannot serve a target's kind, the dialect emits the required adjuncts | ? | vacuous today — `P6.18` already establishes no target currently needs one; nothing exercises the obligation this binds |
+| `P6.19` the canonical JSON column gets no structural or path index | • | the same `P6.18` evidence — `Json`/`LongText` cannot be indexed at all, structurally, so neither can be given a path index specifically |
 
 ## Not implemented in the store
 
@@ -273,6 +281,7 @@ Listed so the gap is visible rather than inferred from silence (`W0.4`).
 | `M3.18` | GDPR Art. 17 erasure | no erasure operation |
 | `PR12.5`, `PR12.6` | read auditing **in the store** | `openehr-loco` records reads above it (see the service table); a program embedding `openehr-store` directly still records none, which is the case `PR12.5` was written for |
 | `O10.14` | schema migration | no migration mechanism, and none before 1.0 by decision. The applied version **is** recorded — see `O10.15` above |
+| `P6.7` | bounded result sets **in the store** | `find_compositions_by_archetype` returns every match, unbounded, with no opt-in a caller can decline — no `LIMIT`, no page parameter. `openehr-loco` bounds it above the store (`_count`/`_offset`, capped at 100, `P6.15` above); a program embedding `openehr-store` directly gets none of that, the same shape as `PR12.5` |
 
 
 | `T11.7` | redaction test over emitted logs | |

@@ -761,11 +761,45 @@ itself, and `openehr-oracle`'s own `M14.8` departure. Both corrected in
 place, dated; `D-13`'s own account extended to record all four. Full
 detail there.
 
-**Residual.** 41 of 221 remain unassessed, reproduced by the script rather
-than hand-counted: `P6` (9), `G2` (8), `V9` (7), `H5` (7), `PR12` (6), `R4`
-(4) — unchanged from the finding's own original table above, since the
-six batches so far touched only `M3`, `S1`, `C0`, `W16`, `T11`, `O10`, and
-`X15`. The diagnostic script is still not wired into CI (see its own
+**2026-09-10, batch 7: `P6`, 9 of 9 — the first two genuine `✗`.** Every
+prior batch found `0` landed `✗`: eleven of the ids checked already worked,
+untested, or inapplicable — never simply unmet. This batch breaks that
+run, twice, for real:
+
+- **`P6.16`** requires every search target to declare its kind (identity,
+  prefix, range, membership, containment). `search-adjuncts.md`'s
+  `AD1`–`AD2` define the framework in full, but no declaration exists for
+  any of the seven real indexed columns `P6.4` names — written in advance
+  of the columns it would apply to, and never applied to them. `✗`.
+- **`P6.7`** forbids an operation whose result grows without limit in the
+  size of a record unless the caller asked for exactly that, named so they
+  know — `all_versions` is the example the requirement's own text gives.
+  `find_compositions_by_archetype` (`openehr-store::Store`) is not:
+  `Vec<CompositionIndexRow>`, no `LIMIT`, no page parameter, in the trait
+  signature or in `openehr-sqlite`'s own SQL. `openehr-loco` bounds it
+  above the store (`_count`/`_offset`, capped at 100) — the same shape as
+  `PR12.5`'s read-auditing gap, so it joins that table rather than getting
+  a bare `✗`: satisfied by the service, absent from the store a program
+  embedding it directly would get.
+
+Neither is a documentation defect like `D-13`; both are genuinely unmet —
+exactly what assessing 144 previously-silent requirements was for.
+
+The rest of the batch: 4 landed `•` (`P6.4`, all seven named indexes
+confirmed in the one shared declaration; `P6.11`, all five required query
+capabilities exercised in `openehr-store/src/conformance.rs`; `P6.14`
+restates `M3.28`; `P6.19` restates `P6.18` — `Json`/`LongText` cannot be
+indexed at all, structurally, so neither can be given a path index
+specifically). 3 landed `?` (`P6.10`, true by inspection of the schema;
+`P6.15`, vacuously true since the store applies no bound at all to
+truncate silently — the real cap is `openehr-loco`'s; `P6.17`, vacuous
+while `P6.18` already establishes nothing needs an adjunct yet).
+
+**Residual.** 32 of 221 remain unassessed, reproduced by the script rather
+than hand-counted: `G2` (8), `V9` (7), `H5` (7), `PR12` (6), `R4` (4) —
+unchanged from the finding's own original table above, since the seven
+batches so far touched only `M3`, `S1`, `C0`, `W16`, `T11`, `O10`, `X15`,
+and `P6`. The diagnostic script is still not wired into CI (see its own
 docstring): it would fail on every push today for a pre-existing gap
 rather than a regression, which is a different kind of red build than
 every other gate in this repository asserts. Once all 144 are assessed,

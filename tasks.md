@@ -756,6 +756,22 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       corrected in place, `D-13` extended to record all four. Full
       account in `spec/databases/audit.md`. `check-databases-matrix-
       coverage.py`: 51 → 41 missing.
+
+      **2026-09-10, batch 7: `P6`, 9 of 9 — the first two genuine `✗` in
+      the whole assessment.** Every prior batch (77 requirements) landed
+      `0 ✗`. This one found two real, unmet requirements: `P6.16` (every
+      search target must declare a kind — the framework exists, but no
+      declaration exists for any of the seven real indexed columns) and
+      `P6.7` (`find_compositions_by_archetype` returns every match,
+      unbounded, no `LIMIT`, no page parameter — `openehr-loco` bounds it
+      above the store, the same shape as `PR12.5`, so it joins that table
+      rather than getting a bare `✗`). 4 landed `•` (`P6.4`'s seven named
+      indexes confirmed in the one shared declaration; `P6.11`'s five
+      required query capabilities exercised in `conformance.rs`; `P6.14`
+      restates `M3.28`; `P6.19` restates `P6.18`). 3 landed `?`. Full
+      account, including why neither `✗` is a documentation defect like
+      `db:D-13`'s, in `spec/databases/audit.md`. `check-databases-matrix-
+      coverage.py`: 41 → 32 missing.
 - [x] **A specification-release pin table.** One file — `spec/releases.md`
       or a section of `openehr/spec/index.md` — naming the RM, BASE, AM,
       TERM, QUERY, and ITS-REST releases every module here was transcribed
