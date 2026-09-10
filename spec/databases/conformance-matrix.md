@@ -103,6 +103,13 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `R4.11` canonicalized in Rust, not by the engine | • | shared `to_canonical_string` |
 | `R4.12` reads reconstruct from JSON, not index columns | • | |
 | `R4.13` validate before writing | • | |
+| `V9.1` a store validates against the Reference Model before writing, refuses a failure | • | the same `R4.13` evidence |
+| `V9.4` terminology validation is out of scope; no `CHECK` constraint enumerates a value set | • | no dialect emits `CHECK` anywhere in the schema — code columns are plain `Id(n)` |
+| `V9.5` validation uses `openehr`'s own `validate()`, never a reimplementation | • | `commit_composition`'s `version.validate_ok()` — literally `Validate::validate().into_result()` |
+| `V9.6` a refusal is a structured report: path, class, invariant | • | `error::Violation { path, class, invariant, detail }` |
+| `V9.7` a validation report never contains a submitted value | • | `Violation::detail` is `&'static str` — a compile-time constant cannot embed a runtime value, structurally |
+| `V9.8` construction-time checking alone is not the only guard | • | `commit_composition` validates the whole `Version`, not just its data — the fix `lib:A-23` made for JSON-arrived content that never went through a constructor |
+| `V9.9` validation is Reference-Model-level only, never described as archetype/template validation | • | `/metadata`'s own `not_implemented` list names "archetype and template validation" (`lib:S1.4`) explicitly |
 | `R4.2` lossless round-trip incl. lexical instants | • | including the four `VERSION`/`AUDIT_DETAILS` attributes `D-07` found dropped |
 | `R4.4` commit is one transaction | • | |
 | `R4.5` snapshot reads | • | a reader looping against a writer never sees a version without its index row |

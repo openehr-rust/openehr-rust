@@ -786,6 +786,21 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       `?` (`G2.19` — true by inspection, longest identifier today 29
       bytes, nothing would catch a longer one). 0 landed `✗`.
       `check-databases-matrix-coverage.py`: 32 → 24 missing.
+
+      **2026-09-10, batch 9: `V9`, 7 of 7 — every one a bullet.**
+      Validation: validate before writing, the two-gate discipline, what
+      a refusal reports, what validation does not claim. The first batch
+      of the whole assessment where every requirement landed `•`, because
+      `lib:A-23`'s own fix — validate the whole `Version` a caller sent,
+      not just the `Composition` inside it — already built exactly what
+      this section asks for, months before this assessment read it.
+      Strongest single piece of evidence: `error::Violation::detail` is
+      `&'static str`, so `V9.7` ("never a submitted value") holds
+      structurally, not by discipline — a compile-time constant cannot
+      embed a runtime value. `V9.9` cites `/metadata`'s own
+      `not_implemented` list naming "archetype and template validation"
+      by name. 0 landed `?`, `~`, or `✗`. `check-databases-matrix-
+      coverage.py`: 24 → 17 missing.
 - [x] **A specification-release pin table.** One file — `spec/releases.md`
       or a section of `openehr/spec/index.md` — naming the RM, BASE, AM,
       TERM, QUERY, and ITS-REST releases every module here was transcribed

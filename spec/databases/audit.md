@@ -810,15 +810,38 @@ same `X15.3` evidence. 1 landed `?`: `G2.19` — true by inspection (the
 longest identifier today is 29 bytes, under Oracle's 30-byte pre-12.2
 floor) but nothing would catch a longer one being added. 0 landed `✗`.
 
-**Residual.** 24 of 221 remain unassessed, reproduced by the script rather
-than hand-counted: `V9` (7), `H5` (7), `PR12` (6), `R4` (4) — unchanged
-from the finding's own original table above, since the eight batches so
-far touched only `M3`, `S1`, `C0`, `W16`, `T11`, `O10`, `X15`, `P6`, and
-`G2`. The diagnostic script is still not wired into CI (see its own
-docstring): it would fail on every push today for a pre-existing gap
-rather than a regression, which is a different kind of red build than
-every other gate in this repository asserts. Once all 144 are assessed,
-wiring it in is mechanical — the library matrix is the working example.
+**2026-09-10, batch 9: `V9`, 7 of 7 — every one a bullet.** Validation:
+validate before writing, the two-gate discipline, what a refusal reports,
+what validation does not claim. The first batch of this whole assessment
+where every requirement landed `•`, because `lib:A-23`'s own fix — validate
+the whole `Version` a caller sent, not just the `Composition` inside it,
+precisely because deserialization skips the constructor JSON always does —
+already built exactly what this section asks for, months before this
+assessment read it. `V9.1` restates `R4.13`. `V9.4`: no dialect emits
+`CHECK` anywhere in the schema — code columns are plain `Id(n)`, so there
+is no value set to freeze at DDL time even if one were tempted to. `V9.5`:
+`commit_composition`'s `version.validate_ok()` is literally
+`Validate::validate().into_result()`, the same trait method every other
+caller in the library uses. `V9.6`/`V9.7`: `error::Violation`'s own fields
+are `path`, `class`, `invariant`, and `detail: &'static str` — the last one
+load-bearing for `V9.7` specifically, since a `&'static str` is a
+compile-time constant and cannot embed a runtime-submitted value,
+structurally rather than by discipline. `V9.8`: the same `lib:A-23` fix,
+read directly in `commit_composition`'s own comment. `V9.9`: `/metadata`'s
+own `not_implemented` list names "archetype and template validation"
+(`lib:S1.4`) by name, so the crate never has to be trusted not to overclaim
+— it states the boundary in the one response every caller can read. 0
+landed `?`, `~`, or `✗`.
+
+**Residual.** 17 of 221 remain unassessed, reproduced by the script rather
+than hand-counted: `H5` (7), `PR12` (6), `R4` (4) — unchanged from the
+finding's own original table above, since the nine batches so far touched
+only `M3`, `S1`, `C0`, `W16`, `T11`, `O10`, `X15`, `P6`, `G2`, and `V9`.
+The diagnostic script is still not wired into CI (see its own docstring):
+it would fail on every push today for a pre-existing gap rather than a
+regression, which is a different kind of red build than every other gate
+in this repository asserts. Once all 144 are assessed, wiring it in is
+mechanical — the library matrix is the working example.
 
 ### D-13 — The Digests section described a chain that had already shipped — **Medium, fixed**
 
