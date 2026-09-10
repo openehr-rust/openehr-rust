@@ -801,6 +801,22 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       `not_implemented` list naming "archetype and template validation"
       by name. 0 landed `?`, `~`, or `✗`. `check-databases-matrix-
       coverage.py`: 24 → 17 missing.
+
+      **2026-09-10, batch 10: `H5`, 7 of 7 — a third genuine gap, found
+      in the code's own comment this time.** Versioning and history. 6
+      landed `•` (`H5.3` restates `P6.11`; `H5.5`/`H5.6`/`H5.7` against
+      `openehr_version`'s own table shape and columns; `H5.9` against
+      `CommitError`'s four distinguishable variants; `H5.14` against
+      `openehr_contribution` plus `M3.17`). `H5.11` is the batch's own
+      `✗`: it requires `is_deleted` to be indexed, and
+      `openehr_version`'s own doc comment claimed it was — none of the
+      table's three real indexes name it. The comment asserted something
+      about its own file the file did not do; corrected in place
+      (`openehr-store/src/schema.rs`), `assets/schema.json` regenerated
+      to match. Closer to `P6.16`'s shape (written in advance, never
+      applied) than `D-13`'s (true once, then drifted) — full account in
+      `spec/databases/audit.md`. `check-databases-matrix-coverage.py`:
+      17 → 10 missing.
 - [x] **A specification-release pin table.** One file — `spec/releases.md`
       or a section of `openehr/spec/index.md` — naming the RM, BASE, AM,
       TERM, QUERY, and ITS-REST releases every module here was transcribed

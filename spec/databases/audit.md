@@ -833,12 +833,42 @@ own `not_implemented` list names "archetype and template validation"
 — it states the boundary in the one response every caller can read. 0
 landed `?`, `~`, or `✗`.
 
-**Residual.** 17 of 221 remain unassessed, reproduced by the script rather
-than hand-counted: `H5` (7), `PR12` (6), `R4` (4) — unchanged from the
-finding's own original table above, since the nine batches so far touched
-only `M3`, `S1`, `C0`, `W16`, `T11`, `O10`, `X15`, `P6`, `G2`, and `V9`.
-The diagnostic script is still not wired into CI (see its own docstring):
-it would fail on every push today for a pre-existing gap rather than a
+**2026-09-10, batch 10: `H5`, 7 of 7 — a third genuine gap, this time in
+the code's own comment.** Versioning and history — no separate history
+table, version identity, commit refusals, deletion as a version,
+contributions. 6 landed `•`: `H5.3` restates `P6.11`; `H5.5` against the
+six-table schema having exactly one version table, so there is no second
+to split into; `H5.6`/`H5.7` against `openehr_version`'s own columns —
+`uid` whole, `versioned_object_uid`/`creating_system_id`/`trunk_version`/
+`branch_number`/`branch_version` decomposed; `H5.9` against
+`openehr::rm::common::CommitError`'s four named, distinguishable variants
+(`WrongObject`, `DuplicateVersion`, `PrecedingVersionMismatch`,
+`NotLatest`), wrapped by `StoreError::Commit` rather than restated; `H5.14`
+against `openehr_contribution` (`M3.21`) plus the same `M3.17` append-only
+mechanism.
+
+**`H5.11` is the third genuine `✗`, and the first found in the code's own
+words rather than a separate document.** It requires `is_deleted` to be
+"stored as a column derived from the lifecycle state, **and indexed**."
+`openehr_version`'s `is_deleted` column exists and is derived — its own
+doc comment said "indexed so 'current content' does not need a code
+comparison" — but none of the table's three actual indexes name it. The
+comment was asserting something about its own file that the same file did
+not do. Corrected in place (`openehr-store/src/schema.rs`), dated;
+`assets/schema.json` regenerated to match (`openehr-assets check` was red
+until it was). No query in `openehr-sqlite` currently filters on
+`is_deleted`, which is presumably why the gap went unfelt: the comment
+described a query pattern that has not been written yet, and the "indexed"
+half of the sentence was true of no version of this file, not stale from
+a change — closer to `P6.16`'s shape (written in advance, never applied)
+than `D-13`'s (true once, then drifted).
+
+**Residual.** 10 of 221 remain unassessed, reproduced by the script rather
+than hand-counted: `PR12` (6), `R4` (4) — unchanged from the finding's own
+original table above, since the ten batches so far touched only `M3`,
+`S1`, `C0`, `W16`, `T11`, `O10`, `X15`, `P6`, `G2`, `V9`, and `H5`. The
+diagnostic script is still not wired into CI (see its own docstring): it
+would fail on every push today for a pre-existing gap rather than a
 regression, which is a different kind of red build than every other gate
 in this repository asserts. Once all 144 are assessed, wiring it in is
 mechanical — the library matrix is the working example.

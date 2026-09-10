@@ -215,7 +215,7 @@
         "name": "is_deleted",
         "ty": "Bool",
         "nullable": false,
-        "note": "derived from lifecycle_state; indexed so 'current content' does not need a code comparison"
+        "note": "derived from lifecycle_state, so 'current content' does not need a code comparison. Not actually indexed today (db:H5.11 is unmet) -- no query filters on it yet; found stale while assessing db:H5 against db:D-11, 2026-09-10"
       },
       {
         "name": "contribution_uid",

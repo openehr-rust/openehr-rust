@@ -119,7 +119,14 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `H5.2` deletion is a new version | • | |
 | `H5.12` `all_versions` oldest first | • | |
 | `H5.13` `version_at_time` skips unestablished instants | • | |
+| `H5.11` `is_deleted` is a derived, **indexed** column | ✗ | derived: yes. Indexed: no — `openehr_version`'s own three indexes none include it. The column's own comment claimed it was indexed; corrected in place while assessing this row, 2026-09-10 — no query filters on it yet, so nothing has felt the absence |
+| `H5.14` a `CONTRIBUTION` is its own row, append-only | • | `openehr_contribution` (`M3.21`), append-only by the same `M3.17` mechanism |
 | `H5.4` concurrent commits produce one winner | • | 8 racing writers, one winner, losers refused by the commit rules (`D-06`) |
+| `H5.3` a store offers version-by-id, latest, at-time, every-version | • | the same `P6.11` evidence |
+| `H5.5` every version is a row in `openehr_version`, no separate history table | • | one version table in the six-table schema (`M3.21`) — there is no second to split into |
+| `H5.6` version identity stored whole and decomposed | • | `openehr_version.uid` (whole) plus `versioned_object_uid`/`creating_system_id`/`trunk_version`/`branch_number`/`branch_version` (decomposed) |
+| `H5.7` `creating_system_id` stored, never dropped | • | its own required column, same table |
+| `H5.9` commit refusals enforced and distinguishable | • | `openehr::rm::common::CommitError`'s four named variants (`WrongObject`, `DuplicateVersion`, `PrecedingVersionMismatch`, `NotLatest`), wrapped not restated by `StoreError::Commit`; "every engine" is the one engine that has a `Store` today |
 | `P6.12` archetype lookup served by an index | • | |
 | `P6.8` values bound as parameters | • | |
 | `M3.16` tamper-evidence chain | • | per container; a rewritten row fails to recompute |

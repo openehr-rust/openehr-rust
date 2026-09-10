@@ -279,8 +279,10 @@ pub const VERSION: Table = Table {
         Column::required(
             "is_deleted",
             ColTy::Bool,
-            "derived from lifecycle_state; indexed so 'current content' does not \
-             need a code comparison",
+            "derived from lifecycle_state, so 'current content' does not need a \
+             code comparison. Not actually indexed today (db:H5.11 is unmet) -- \
+             no query filters on it yet; found stale while assessing db:H5 \
+             against db:D-11, 2026-09-10",
         ),
         Column::required("contribution_uid", ColTy::Id(255), "the change set"),
         Column::required(
