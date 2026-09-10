@@ -113,6 +113,9 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `M3.33` projection refuses a non-archetype-root | • | |
 | `M3.16d` content verified from the **stored bytes** | • | `tests/tamper.rs` edits a row through a second connection with the triggers dropped; `integrity`'s own unit tests catch 15 of 15 viable mutants (`lib:A-09`) |
 | `T11.6` concurrency tested adversarially, against a database the threads genuinely share | • | `openehr-sqlite/tests/concurrency.rs` — the same test `H5.4`/`R4.5` above cite; only `openehr-sqlite` has a `Store` to test this way |
+| `O10.16` no recorded version but data present is refused, not treated as fresh | • | `openehr-sqlite/tests/conformance.rs`: deleting `openehr_schema_version` from a database holding data yields `SchemaVersionMismatch { found: 0, .. }`, real test |
+| `O10.17` the schema version is bumped for a schema-incompatible change, never the crate version | ? | the mechanism (`O10.15`) is real and tested; remembering to bump it whenever a change actually needs it is a discipline, not machine-enforced |
+| `O10.19` a point-in-time restore cannot lose a version without losing the rows after it | ? | a true logical consequence of `M3.17`'s own tested guarantee — no backup/restore test exists in this tree to exercise it directly |
 | `M3.43` canonical JSON in a byte-preserving column | • | the store round-trips it; the per-engine claim is below |
 | `M3.34` anonymous committer stored as `NULL` | • | |
 | `M3.15` audit attributes on every version/contribution row | • | committing system, change type, committer, and the commit-time pair — the same columns `R4.2`'s own note names |
@@ -234,6 +237,16 @@ states evidence and takes no level. Nothing here is published.
 | `T11.19` the CI check invokes the same script a contributor runs locally | • | `verify-schema.sh`, invoked identically by `ci.yml` and by a contributor's own terminal — stated as a principle in both places |
 | `T11.20` a guard over a list asserts the list's completeness | • | the same `X15.16` row |
 | `T11.21` a documentation example is compiled and run | • | the same `W16.9` row |
+| `O10.2` no stored content in a log line | • | `openehr-store`/`openehr-sqlite` emit no log line at all — no `tracing`, `log`, `println!`, or `eprintln!` anywhere in either crate, confirmed exhaustively |
+| `O10.4` `install()` is idempotent | • | the same `G2.13` evidence (declared per statement kind); `verify-schema.sh` runs every dialect's DDL twice and requires the second run clean |
+| `O10.4a` a recompute path for the one derived value, `…_utc` | — | the requirement's own text: *(amended — not applicable)* — no migration machinery exists to need one, and the projection already recomputes `…_utc` from `…_text` |
+| `O10.6` no bespoke backup format | ? | true by absence — no backup/restore code exists anywhere in this tree — not guarded against one being added |
+| `O10.7` the database connection is encrypted unless in-process | ? | `openehr-sqlite` is exempt by construction (in-process, no connection); no other engine crate opens a live connection yet for the requirement to bind |
+| `O10.10` a release ships supply-chain evidence | • | the `supply-chain` CI job (`cargo deny check`, `cargo audit`, all eighteen crates) plus `Cargo.lock` committed in every one |
+| `O10.11` a published version matches the source that claims it | • | `agents/publishing.md`'s documented process tags the release as part of publishing, from the exact commit, not after it |
+| `O10.12` a contributor's local check and CI run the same script | • | the same `T11.19` row — this requirement's own text cites it |
+| `O10.13` no bound parameter logged at a level a production deployment would enable | • | the same zero-logging evidence as `O10.2` |
+| `O10.18` an engine crate opening a connection documents its TLS configuration | ? | vacuously true — no crate here opens a network connection yet; the requirement states which crate it would bind once one does |
 
 ## Not implemented in the store
 

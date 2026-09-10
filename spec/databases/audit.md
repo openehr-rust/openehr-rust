@@ -715,16 +715,39 @@ set rather than strictly one-per-crate, which is why the requirement lands
 requirement's own words either, so the requirement's own text is corrected
 to describe the fact rather than deny it, pending a fuller amendment.
 
-**Residual.** 78 of 221 remain unassessed, reproduced by the script rather
-than hand-counted: `T11` (14), `O10` (13), `X15` (10), `P6` (9), `G2` (8),
-`V9` (7), `H5` (7), `PR12` (6), `R4` (4) — unchanged from the finding's own
-original table above, since the three batches so far touched only `M3`,
-`S1`, `C0`, and `W16`. The diagnostic script is still not wired into CI
-(see its own docstring): it would fail on every push today for a
-pre-existing gap rather than a regression, which is a different kind of
-red build than every other gate in this repository asserts. Once all 144
-are assessed, wiring it in is mechanical — the library matrix is the
-working example.
+**2026-09-10, batch 5: `O10`, 13 of 13.** Operations — logging, install
+idempotence, schema versioning, connection security, backup, release
+evidence. 7 landed `•`: `O10.16` against a real test
+(`openehr-sqlite/tests/conformance.rs` deletes the schema-version row from
+a database holding data and asserts `SchemaVersionMismatch { found: 0,
+.. }` — exactly the scenario the requirement names); `O10.2`/`O10.13`
+against an exhaustive, direct finding — `openehr-store` and
+`openehr-sqlite` emit **no log line at all**, no `tracing`, `log`,
+`println!`, or `eprintln!` anywhere in either crate, so neither stored
+content nor a bound parameter can reach one; `O10.4` against `G2.13` and
+`verify-schema.sh`'s own twice-run requirement; `O10.10` against the
+`supply-chain` CI job and `Cargo.lock` committed in every crate; `O10.11`
+against `agents/publishing.md`'s documented tag-as-part-of-publishing
+step; `O10.12` against `T11.19`, which this requirement's own text already
+cites. 5 landed `?`: `O10.6` (no backup code exists, but nothing guards
+against a bespoke one being added), `O10.7`/`O10.18` (true today — SQLite
+is exempt by construction, no other engine crate opens a live connection
+yet for either requirement to bind), `O10.17` (the schema-version
+mechanism is real and tested; remembering to bump it is a discipline, not
+machine-enforced), `O10.19` (a true logical consequence of `M3.17`'s own
+tested guarantee, with no backup/restore test in this tree to exercise it
+directly). 1 landed `—`: `O10.4a`, already self-classified *(amended — not
+applicable)* in its own text. 0 landed `✗`.
+
+**Residual.** 51 of 221 remain unassessed, reproduced by the script rather
+than hand-counted: `X15` (10), `P6` (9), `G2` (8), `V9` (7), `H5` (7),
+`PR12` (6), `R4` (4) — unchanged from the finding's own original table
+above, since the five batches so far touched only `M3`, `S1`, `C0`, `W16`,
+`T11`, and `O10`. The diagnostic script is still not wired into CI (see
+its own docstring): it would fail on every push today for a pre-existing
+gap rather than a regression, which is a different kind of red build than
+every other gate in this repository asserts. Once all 144 are assessed,
+wiring it in is mechanical — the library matrix is the working example.
 
 ### D-13 — The Digests section described a chain that had already shipped — **Medium, fixed**
 

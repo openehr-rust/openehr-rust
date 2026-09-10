@@ -717,6 +717,29 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       vacuously true since no database crate currently has an `#[ignore]`d
       test). 0 landed `✗`. `check-databases-matrix-coverage.py`: 78 → 64
       missing.
+
+      **2026-09-10, batch 5: `O10`, 13 of 13.** Operations — logging,
+      install idempotence, schema versioning, connection security, backup,
+      release evidence. 7 landed `•`, two of them from an exhaustive,
+      direct finding rather than a pointer to an existing test:
+      `openehr-store` and `openehr-sqlite` emit **no log line at all** —
+      no `tracing`, `log`, `println!`, or `eprintln!` anywhere in either
+      crate — which settles both `O10.2` (no stored content in a log) and
+      `O10.13` (no bound parameter logged) at once. `O10.16` cites a real
+      test (`openehr-sqlite/tests/conformance.rs` deletes the
+      schema-version row from a database holding data and gets exactly
+      the refusal the requirement names); `O10.4` cites `G2.13` and
+      `verify-schema.sh`'s twice-run requirement; `O10.10` cites the
+      `supply-chain` CI job and every crate's committed `Cargo.lock`;
+      `O10.11` cites `agents/publishing.md`'s tag-as-part-of-publishing
+      step; `O10.12` cites `T11.19`, which this requirement's own text
+      already names. 5 landed `?` (backup format, connection encryption
+      and TLS documentation — the latter two vacuously true, since no
+      engine crate opens a live network connection yet — schema-version
+      bumping discipline, and point-in-time restore as a logical but
+      untested consequence of `M3.17`). 1 landed `—` (`O10.4a`, already
+      self-classified *not applicable* in its own text). 0 landed `✗`.
+      `check-databases-matrix-coverage.py`: 64 → 51 missing.
 - [x] **A specification-release pin table.** One file — `spec/releases.md`
       or a section of `openehr/spec/index.md` — naming the RM, BASE, AM,
       TERM, QUERY, and ITS-REST releases every module here was transcribed
