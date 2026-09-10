@@ -114,10 +114,16 @@ strategy (catch-and-inspect against catalogue-query) and the terminator.
   against the source value. Where the source is a `CLOB`, Oracle cannot compare
   it with `=` at all; a confirming comparison MUST use `DBMS_LOB.COMPARE`.
 
-  This is presently theoretical — no digest is stored anywhere (`M3.39`–`M3.42`
-  are ahead of their code) — but it is recorded now because the `CLOB` binding in
-  §2 is what makes it necessary, and a departure discovered later reads as an
-  oversight.
+  This is presently theoretical **for this crate specifically** — this crate
+  has no `Store` (below), so nothing here ever executes a digest comparison
+  to make — not because no digest exists anywhere in the schema: `M3.39`–
+  `M3.42`'s `ColTy::Digest` columns are real and populated by every commit
+  `openehr-sqlite` makes, using the same shared schema this crate's DDL
+  emits (corrected here 2026-09-10, found stale while assessing `db:X15`
+  against `db:D-11`; the same premise was wrong in three other places,
+  `db:D-13`). It is recorded now because the `CLOB` binding in §2 is what
+  makes it necessary the day a Store exists for this engine, and a
+  departure discovered later reads as an oversight.
 
 No `Store` exists in this crate, so store-level requirements are **not
 applicable** rather than unmet.

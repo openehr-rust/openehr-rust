@@ -739,13 +739,35 @@ tested guarantee, with no backup/restore test in this tree to exercise it
 directly). 1 landed `—`: `O10.4a`, already self-classified *(amended — not
 applicable)* in its own text. 0 landed `✗`.
 
-**Residual.** 51 of 221 remain unassessed, reproduced by the script rather
-than hand-counted: `X15` (10), `P6` (9), `G2` (8), `V9` (7), `H5` (7),
-`PR12` (6), `R4` (4) — unchanged from the finding's own original table
-above, since the five batches so far touched only `M3`, `S1`, `C0`, `W16`,
-`T11`, and `O10`. The diagnostic script is still not wired into CI (see
-its own docstring): it would fail on every push today for a pre-existing
-gap rather than a regression, which is a different kind of red build than
+**2026-09-10, batch 6: `X15`, 10 of 10.** Portability and the dialect
+boundary — largely a section restating, from a different angle, facts
+already established and evidenced elsewhere in this file. 9 landed `•`:
+`X15.1`/`X15.14` restate `S1.1`/`M3.22`; `X15.2` restates `R4.11`; `X15.3`
+cites `M3.22` (names come from the one shared schema declaration; a
+dialect's `col_sql`/`quote` affect spelling, never naming); `X15.7`/`X15.8`
+restate `C0.14`/`W16.5` — the annex-citation pattern read directly while
+investigating `db:D-13`'s own `M14.8`; `X15.12` cites `X15.15`/`X15.19`,
+which this requirement's own text names as exactly the tests it asks for;
+`X15.13` cites the `Dialect` trait's own method list, which structurally
+cannot own more than the four methods the requirement names; `X15.20`
+restates `M3.35`. 1 landed `?`: `X15.17` (no engine crate created by
+copying one — true today, after `W-01`'s own fix, but a process
+discipline nothing machine-enforces against a future copy). 0 landed `✗`.
+
+**Two more copies of `D-13`'s stale premise, found the same way.**
+Assessing this section against `D-11` surfaced two further instances of
+the "no chain exists" claim `D-13` already found and fixed twice: `X15.11`
+itself, and `openehr-oracle`'s own `M14.8` departure. Both corrected in
+place, dated; `D-13`'s own account extended to record all four. Full
+detail there.
+
+**Residual.** 41 of 221 remain unassessed, reproduced by the script rather
+than hand-counted: `P6` (9), `G2` (8), `V9` (7), `H5` (7), `PR12` (6), `R4`
+(4) — unchanged from the finding's own original table above, since the
+six batches so far touched only `M3`, `S1`, `C0`, `W16`, `T11`, `O10`, and
+`X15`. The diagnostic script is still not wired into CI (see its own
+docstring): it would fail on every push today for a pre-existing gap
+rather than a regression, which is a different kind of red build than
 every other gate in this repository asserts. Once all 144 are assessed,
 wiring it in is mechanical — the library matrix is the working example.
 
@@ -806,6 +828,24 @@ one. All three corrected in
 survives the correction is real: no test in `openehr-sqlite`'s own suite
 exercises a retired key leaving prior history verifiable, though the
 library-level guarantee it depends on (`lib:X11.14`) is tested elsewhere.
+
+**Two more copies, found assessing `db:X15` the same way, 2026-09-10.**
+`X15.11` said the same "no chain exists (`M3.16`)" as its reason
+cross-engine chain verification was "not implemented" — the chain is real;
+what is actually untestable is *cross-engine* verification specifically,
+because only `openehr-sqlite` has a `Store` to verify against, the same
+reason `X15.10` already gives one bullet above it. And
+`openehr-oracle/spec/14-oracle-dialect.md`'s own `M14.8` departure said "no
+digest is stored anywhere" as why its `DBMS_LOB.COMPARE` requirement was
+"presently theoretical" — true for a different reason: this crate has no
+`Store` at all, so nothing in it ever executes the comparison, regardless
+of whether `openehr-sqlite` writes digests through the same shared schema,
+which it does. Both corrected in place, dated; the matrix's own
+"Not implemented in the store" row for `X15.11` corrected to match. Four
+copies of the same stale premise, across three files, found across two
+assessment passes — the same root cause each time: `M3.16`'s own
+requirement text was updated the day the chain shipped, and every other
+place that had restated its old conclusion in different words was not.
 
 ## Closed
 

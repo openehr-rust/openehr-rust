@@ -740,6 +740,22 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       untested consequence of `M3.17`). 1 landed `—` (`O10.4a`, already
       self-classified *not applicable* in its own text). 0 landed `✗`.
       `check-databases-matrix-coverage.py`: 64 → 51 missing.
+
+      **2026-09-10, batch 6: `X15`, 10 of 10 — plus two more copies of
+      `db:D-13`'s stale premise.** Portability/dialect-boundary section,
+      largely restating facts this file had already evidenced elsewhere:
+      9 landed `•` (`X15.1`/`X15.14` restate `S1.1`/`M3.22`; `X15.2`
+      restates `R4.11`; `X15.3` cites the one shared schema declaration;
+      `X15.7`/`X15.8` restate `C0.14`/`W16.5`; `X15.12` cites `X15.15`/
+      `X15.19`, named in its own text; `X15.13` cites the `Dialect`
+      trait's own method list; `X15.20` restates `M3.35`), 1 landed `?`
+      (`X15.17`, true after `W-01`'s fix, unenforced against a future
+      copy), 0 landed `✗`. Assessing this section surfaced two more
+      instances of `db:D-13`'s stale "no chain exists" premise —
+      `X15.11` itself, and `openehr-oracle`'s own `M14.8` departure — both
+      corrected in place, `D-13` extended to record all four. Full
+      account in `spec/databases/audit.md`. `check-databases-matrix-
+      coverage.py`: 51 → 41 missing.
 - [x] **A specification-release pin table.** One file — `spec/releases.md`
       or a section of `openehr/spec/index.md` — naming the RM, BASE, AM,
       TERM, QUERY, and ITS-REST releases every module here was transcribed

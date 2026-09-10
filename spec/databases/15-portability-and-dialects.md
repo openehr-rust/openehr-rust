@@ -147,10 +147,16 @@ Requirement prefix: `X15`.
   **Untestable today.** Only `openehr-sqlite` has a store, so there is no second
   implementation to compare against.
 
-- **X15.11** *(amended — **not implemented**)* A tamper-evidence chain written by
+- **X15.11** *(amended — **untestable today**)* A tamper-evidence chain written by
   one engine would have to be verifiable by another, given the same key material.
-  No chain exists (`M3.16`), so this is a property the design reserves rather
-  than one it has.
+
+  Not because no chain exists — `M3.16`'s chain has been real since
+  2026-08-02, and this text said otherwise until corrected here 2026-09-10
+  while assessing `db:X15` against `db:D-11` (`db:D-13` traces the same
+  stale premise in three other places). The actual reason is `X15.10`'s:
+  only `openehr-sqlite` has a `Store`, so there is no second engine's chain
+  to verify this one against. The property the design reserves is
+  cross-engine verification specifically, not the chain itself.
 - **X15.12** *(amended)* A cross-engine test MUST exist for whatever *can* be
   compared without two stores. Today that is the DDL: `dialects_are_distinct`
   compares all six dialects, and companion tests assert the boolean and JSON

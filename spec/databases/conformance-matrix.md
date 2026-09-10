@@ -247,6 +247,16 @@ states evidence and takes no level. Nothing here is published.
 | `O10.12` a contributor's local check and CI run the same script | • | the same `T11.19` row — this requirement's own text cites it |
 | `O10.13` no bound parameter logged at a level a production deployment would enable | • | the same zero-logging evidence as `O10.2` |
 | `O10.18` an engine crate opening a connection documents its TLS configuration | ? | vacuously true — no crate here opens a network connection yet; the requirement states which crate it would bind once one does |
+| `X15.1` the portable core exists in exactly one crate, not copied | • | the same `S1.1` evidence — `openehr-store` is the one crate; the `layering` job keeps it that way |
+| `X15.2` canonical form is computed in Rust, one shared function, never delegated to the database | • | the same `R4.11` evidence: shared `to_canonical_string` |
+| `X15.3` table and index names are identical on every engine | • | names come from `openehr-store::schema`'s one declaration (`M3.22`); a dialect's `col_sql`/`quote` affect spelling, never naming |
+| `X15.7` a departure cites the core requirement by number and states what holds instead | • | the same `C0.14` evidence — read directly while investigating `db:D-13`'s `M14.8`: every annex entry names its number and states the replacement |
+| `X15.8` an annex does not restate core requirements it does not change | • | the same `W16.5` evidence — every engine crate's `spec/` holds exactly its own dialect annex |
+| `X15.12` a cross-engine test exists for whatever can be compared without two stores | • | this requirement's own text names `X15.15`/`X15.19`'s own tests as exactly that test |
+| `X15.13` a dialect owns exactly `col_sql`, `quote`, `placeholder`, `append_only_sql`, plus idempotence, `guard`, `terminator` | • | the `Dialect` trait's own method list (`openehr-store/src/dialect.rs`) — structurally cannot own more |
+| `X15.14` a dialect does not own the schema | • | the same `M3.22` evidence |
+| `X15.17` a new engine crate is not created by copying an existing one | ? | true today, after `W-01`'s fix (`openehr-mariadb` rewritten from the `Dialect` trait) — a process discipline, nothing machine-enforced against a future copy |
+| `X15.20` the projection is one shared function | • | the same `M3.35` evidence |
 
 ## Not implemented in the store
 
@@ -267,7 +277,7 @@ Listed so the gap is visible rather than inferred from silence (`W0.4`).
 
 | `T11.7` | redaction test over emitted logs | |
 | `X15.10` | cross-engine logical agreement | untestable: only one store exists |
-| `X15.11` | cross-engine chain verification | follows `M3.16` |
+| `X15.11` | cross-engine chain verification | untestable, same reason as `X15.10`: only one store exists. `M3.16`'s chain is real, not absent — corrected here 2026-09-10, `db:D-13` |
 
 ## How to read this file
 
