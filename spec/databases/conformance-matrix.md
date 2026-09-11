@@ -141,6 +141,14 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `O10.19` a point-in-time restore cannot lose a version without losing the rows after it | ? | a true logical consequence of `M3.17`'s own tested guarantee — no backup/restore test exists in this tree to exercise it directly |
 | `M3.43` canonical JSON in a byte-preserving column | • | the store round-trips it; the per-engine claim is below |
 | `M3.34` anonymous committer stored as `NULL` | • | |
+| `PR12.3a` anonymous `PARTY_SELF` committer stored `NULL` | • | the same `M3.34` evidence |
+| `PR12.4` every version records `AUDIT_DETAILS` | • | the same `M3.15` evidence |
+| `PR12.9` no inferred, defaulted, or synthesized committer | • | `AuditDetails.committer: PartyProxy` is a required field with no `Default` impl — structurally impossible to construct or deserialize without one |
+| `PR12.10` a `CONTRIBUTION` carries its own audit, distinct from its versions' | • | `openehr_contribution`'s own `audit_*` columns, separate from `openehr_version`'s |
+| `R4.3` content is not rejected for archetyped structure the crate does not interpret | • | the same `V9.9` evidence — no archetype-validation code path exists to reject on |
+| `R4.6` identifiers satisfy openEHR's lexical grammars before reaching a column, never normalised | • | `Store` trait methods take typed `HierObjectId`/`ObjectVersionId`, never a bare string — malformed input is refused at parse, before it can reach a column |
+| `R4.9` the projection is a pure function, no SQL, shared by every engine | • | the same `M3.35` evidence |
+| `R4.10` a projected column is never the only home of a fact | ? | plausible by construction — `project()`'s only input is the same `Composition` object that gets canonicalized to JSON, so nothing it derives can come from elsewhere — but no test re-projects from stored JSON and compares |
 | `M3.15` audit attributes on every version/contribution row | • | committing system, change type, committer, and the commit-time pair — the same columns `R4.2`'s own note names |
 | `M3.19` canonical JSON is the record, stored whole | • | `M3.43`/`R4.8`/`R4.11` together are this claim, tested |
 | `M3.20` the relational part is an index, never shredded content | ? | true today — `openehr_composition_index` carries only RM-fixed attributes (`M3.32`) — but nothing would fail a schema change that added an archetype-specific column |
@@ -273,6 +281,8 @@ states evidence and takes no level. Nothing here is published.
 | `O10.12` a contributor's local check and CI run the same script | • | the same `T11.19` row — this requirement's own text cites it |
 | `O10.13` no bound parameter logged at a level a production deployment would enable | • | the same zero-logging evidence as `O10.2` |
 | `O10.18` an engine crate opening a connection documents its TLS configuration | ? | vacuously true — no crate here opens a network connection yet; the requirement states which crate it would bind once one does |
+| `PR12.8` the trust boundary is stated plainly: this layer does not authenticate | • | `openehr-loco/src/auth.rs`'s own module doc cites this requirement by number: "the practical consequence is that `db:PR12.8` still holds" |
+| `PR12.11` append-only is not tamper evidence, and documentation must not conflate them | • | `PHI.md`'s own text draws exactly this distinction, citing `db:PR12.11` by number |
 | `X15.1` the portable core exists in exactly one crate, not copied | • | the same `S1.1` evidence — `openehr-store` is the one crate; the `layering` job keeps it that way |
 | `X15.2` canonical form is computed in Rust, one shared function, never delegated to the database | • | the same `R4.11` evidence: shared `to_canonical_string` |
 | `X15.3` table and index names are identical on every engine | • | names come from `openehr-store::schema`'s one declaration (`M3.22`); a dialect's `col_sql`/`quote` affect spelling, never naming |

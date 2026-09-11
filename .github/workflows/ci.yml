@@ -850,6 +850,21 @@ jobs:
       - name: The corpus index is current
         run: python3 scripts/generate-corpus-index.py
 
+      # `db:D-11`: 144 of 221 `spec/databases/` requirements had never been
+      # mentioned in the matrix at all — not `•`, not `~`, not `?`, not `✗`,
+      # not a row in "Not implemented". Assessed in ten dated batches,
+      # 2026-09-09 through 2026-09-10 (`spec/databases/audit.md`, `db:D-11`'s
+      # own paragraphs; `tasks.md`'s matching dated entries). Now wired in,
+      # per the item's own stated condition: once it would pass on day one.
+      # Along the way it found three genuinely unmet requirements
+      # (`P6.7`'s unbounded query, `P6.16`'s never-applied search-kind
+      # declarations, `H5.11`'s never-applied index) and one stale claim
+      # propagated across four places (`db:D-13`) — this check does not
+      # re-find those; it only keeps a 145th requirement from going
+      # unmentioned the same way.
+      - name: Every spec/databases/ requirement is mentioned in the matrix
+        run: python3 scripts/check-databases-matrix-coverage.py
+
       # `db:D-09`: the matrix marked two requirements satisfied and listed the
       # same two as absent, in one file, for a day. The file that says "where
       # this disagrees with a crate's documentation, trust this" was disagreeing

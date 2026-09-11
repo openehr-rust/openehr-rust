@@ -552,7 +552,7 @@ service and nowhere below, so the finding stays open for anyone embedding
 `openehr-store` directly — which is the case `PR12.5` was written for and the
 one that has not changed.
 
-### D-11 — Most requirements have never been assessed against the matrix — **Medium, open**
+### D-11 — Most requirements have never been assessed against the matrix — **Medium, fixed**
 
 Found by writing the coverage check the library matrix already has
 (`.github/workflows/ci.yml`, "Every requirement has exactly one row in the
@@ -863,15 +863,42 @@ half of the sentence was true of no version of this file, not stale from
 a change — closer to `P6.16`'s shape (written in advance, never applied)
 than `D-13`'s (true once, then drifted).
 
-**Residual.** 10 of 221 remain unassessed, reproduced by the script rather
-than hand-counted: `PR12` (6), `R4` (4) — unchanged from the finding's own
-original table above, since the ten batches so far touched only `M3`,
-`S1`, `C0`, `W16`, `T11`, `O10`, `X15`, `P6`, `G2`, `V9`, and `H5`. The
-diagnostic script is still not wired into CI (see its own docstring): it
-would fail on every push today for a pre-existing gap rather than a
-regression, which is a different kind of red build than every other gate
-in this repository asserts. Once all 144 are assessed, wiring it in is
-mechanical — the library matrix is the working example.
+**2026-09-11, batch 11: `PR12` and `R4`, 10 of 10 — the last batch.**
+Trust/principal/audit and projection/round-trip. 9 of 10 landed `•`:
+`PR12.3a`/`PR12.4` restate `M3.34`/`M3.15`; `PR12.9` against
+`AuditDetails.committer: PartyProxy` being a required field with no
+`Default` impl — structurally impossible to synthesize; `PR12.10` against
+`openehr_contribution`'s own `audit_*` columns, distinct from
+`openehr_version`'s; `R4.3` against the same `V9.9` evidence (no
+archetype-validation code path exists to reject on); `R4.6` against every
+`Store` method taking typed `HierObjectId`/`ObjectVersionId`, never a bare
+string; `R4.9` restates `M3.35`. Two found their evidence in the code's
+own words rather than a test: `PR12.8` — `openehr-loco/src/auth.rs`'s
+module doc cites this requirement by number, "the practical consequence
+is that `db:PR12.8` still holds"; `PR12.11` — `PHI.md`'s own text draws
+exactly the append-only/tamper-evidence distinction the requirement asks
+for, citing it by number too. One landed `?`: `R4.10` — plausible by
+construction (`project()`'s only input is the same object that gets
+canonicalized to JSON, so nothing it derives can come from elsewhere) but
+no test re-projects from stored JSON and compares. 0 landed `✗` or `~`.
+
+**All 144 of the originally-unassessed 221 requirements now carry a mark.**
+`scripts/check-databases-matrix-coverage.py` reports zero missing, for the
+first time since it was written. Eleven dated batches, `M3`/`S1` through
+`PR12`/`R4`, 2026-09-09 through 2026-09-11. Three genuinely unmet
+requirements found along the way (`P6.7`, `P6.16`, `H5.11`) and one stale
+claim traced to four separate places and fixed (`db:D-13`) — real findings
+this assessment surfaced rather than manufactured, and the reason
+`plan.md`'s own recommendation against "filing 144 guessed rows" mattered:
+an assessment that found nothing wrong across 144 requirements would have
+been the less credible result, not the more reassuring one.
+
+**Fixed**, per this item's own stated condition: the diagnostic script is
+now wired into CI (`.github/workflows/ci.yml`, the `claims` job) — it
+would have passed on day one, because this is the day it does.
+`AGENTS.md` and this file's own `claims`-job row updated to describe what
+the check now asserts, in place of the 144-of-221 figure that described
+the gap this closes.
 
 ### D-13 — The Digests section described a chain that had already shipped — **Medium, fixed**
 

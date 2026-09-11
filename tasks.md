@@ -622,7 +622,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       already present before this change, and are warnings under
       `deny.toml`'s policy, not failures. `check-docs.py` and
       `check-trademarks.py` clean.
-- [ ] **Assess the 144 unassessed database requirements (`db:D-11`).** In
+- [x] **Assess the 144 unassessed database requirements (`db:D-11`).** In
       batches by section, `M3` and `S1` first as the finding recommends,
       then wire `scripts/check-databases-matrix-coverage.py` into CI once it
       would pass on day one. *Evidence:* the script green in CI; `D-11`
@@ -817,6 +817,29 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       applied) than `D-13`'s (true once, then drifted) — full account in
       `spec/databases/audit.md`. `check-databases-matrix-coverage.py`:
       17 → 10 missing.
+
+      **2026-09-11, batch 11: `PR12` and `R4`, 10 of 10 — closed.** 9
+      landed `•` (`PR12.3a`/`PR12.4`/`R4.9` restate `M3.34`/`M3.15`/`M3.35`;
+      `PR12.9` against `AuditDetails.committer`'s required, un-`Default`ed
+      type; `PR12.10` against `openehr_contribution`'s own audit columns;
+      `R4.3` against the same `V9.9` evidence; `R4.6` against every `Store`
+      method taking a typed identifier, never a bare string; `PR12.8` and
+      `PR12.11` each found in the code's own words — `openehr-loco/src/
+      auth.rs` and `PHI.md` both cite their requirement by number). 1
+      landed `?` (`R4.10`, plausible by construction, untested). 0 landed
+      `✗`/`~`.
+
+      **All 144 of the originally-unassessed 221 requirements now carry a
+      mark** — `check-databases-matrix-coverage.py` reports zero missing
+      for the first time since it was written. Three genuinely unmet
+      requirements found along the way (`P6.7`, `P6.16`, `H5.11`) and one
+      stale claim traced to four places and fixed (`db:D-13`) — real
+      findings, not a clean pass manufactured by guessing. Wired the
+      script into CI (`claims` job) per the item's own stated condition:
+      it would pass on day one, because this is the day it does.
+      `AGENTS.md` and `spec/databases/audit.md`'s own `claims`-job rows
+      updated; `db:D-11` itself closed, "Medium, fixed". Full account in
+      `spec/databases/audit.md`.
 - [x] **A specification-release pin table.** One file — `spec/releases.md`
       or a section of `openehr/spec/index.md` — naming the RM, BASE, AM,
       TERM, QUERY, and ITS-REST releases every module here was transcribed
