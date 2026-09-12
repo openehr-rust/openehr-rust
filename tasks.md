@@ -413,7 +413,8 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
 
       Not started. The system-identity decision blocks the rest, and is
       the one a maintainer should make once rather than have invented
-      under it.
+      under it. Recorded in `plan.md` §Open decisions, the same footing
+      the `regex` and RM-multiplicity decisions already stand on there.
 - [ ] **Strict readers.** Thread #1's strictness list is the bar: refuse
       undeclared keys and duplicate keys on the canonical-JSON ingress path,
       and make every refusal name the JSON path and the requirement. Decide

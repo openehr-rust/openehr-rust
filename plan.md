@@ -188,6 +188,26 @@ posture. Open items for each are in `tasks.md`.
   infers `0..*`). The table is small and the RM is already in `rm::`; the
   decision is whether to derive it there once (`lib:A-33`'s shape) or carry
   a second table in `am`. A requirement first, then code.
+- **`openehr-loco`'s configured system identity** — opened 2026-09-12,
+  investigating the `POST /ehr` request-shape mismatch (`tasks.md`'s
+  ITS-REST item). ITS-REST's real `POST /ehr` mints the `EHR` and its
+  `EHR_STATUS`/`EHR_ACCESS` container references from an optional
+  `EHR_STATUS` body, rather than accepting the caller-built `Ehr` this
+  service takes today — but `Ehr::new` also requires a `system_id`
+  (`creating_system_id`, `H5.7`), and minting that fresh per request would
+  be wrong, not merely untidy: the field exists precisely so one
+  deployment's records carry the *same* value over time, distinguishing
+  its "version 2" from another system's. Nothing in `openehr-loco` reads a
+  configured system identity today (checked: `src/`, `config/`). The
+  decision is what that value is and where it lives — a config key in
+  `config/production.yaml` threaded through `AppContext` is the obvious
+  shape, but naming the deployment is the maintainer's call, not a default
+  to invent. Bundled with it, lower-stakes and likely uncontroversial: a
+  `uuid`-shaped dependency (none exists anywhere in this tree yet) to mint
+  `ehr_id` and the two container identifiers, and a default `EHR_STATUS`
+  policy (`is_queryable`/`is_modifiable`) for a `POST /ehr` that omits one.
+  Blocks `POST /ehr`'s own fix and, through it, `PUT …/ehr_status`
+  (`tasks.md`'s `is_modifiable` item).
 
 ## Non-goals (for now)
 
