@@ -145,10 +145,22 @@ impl Served {
     /// A service with read auditing **off**, which is the default and what most
     /// of these tests are about.
     fn new() -> Self {
-        Self::with_log(AccessLog::off())
+        Self::build(AccessLog::off(), None)
     }
 
     fn with_log(access_log: AccessLog) -> Self {
+        Self::build(access_log, None)
+    }
+
+    /// The same fixture, with one `EHR_STATUS` version already committed
+    /// directly through the [`Store`](openehr_store::Store) trait —
+    /// exactly the way [`crate::controllers::ehr_status`]'s own module doc
+    /// says a caller must reach it today, since `POST /ehr` mints none.
+    fn with_ehr_status(is_modifiable: bool) -> Self {
+        Self::build(AccessLog::off(), Some(is_modifiable))
+    }
+
+    fn build(access_log: AccessLog, ehr_status: Option<bool>) -> Self {
         let pair = AsymmetricKeyPair::<V4>::generate().expect("keypair");
         let mut paserk = String::new();
         pair.public.fmt(&mut paserk).expect("PASERK");
@@ -179,6 +191,16 @@ impl Served {
         store
             .commit_composition(&ehr_id, &version(GONE, 2, Some(1), true), CONTRIBUTION)
             .expect("gone v2");
+
+        if let Some(is_modifiable) = ehr_status {
+            store
+                .commit_ehr_status(
+                    &ehr_id,
+                    &conformance::sample_ehr_status_version(1, None, 30, is_modifiable),
+                    CONTRIBUTION,
+                )
+                .expect("ehr_status v1");
+        }
 
         let ctx = AppContext::builder(Environment::Test, loco_rs::tests_cfg::config::test_config())
             .build();
@@ -246,6 +268,10 @@ impl Served {
 
     fn composition(&self, uid: &str) -> String {
         format!("/openehr/v1/ehr/{}/composition/{uid}", self.ehr_id)
+    }
+
+    fn ehr_status(&self) -> String {
+        format!("/openehr/v1/ehr/{}/ehr_status", self.ehr_id)
     }
 }
 
@@ -330,6 +356,7 @@ async fn every_clinical_route_refuses_an_unauthenticated_request() {
         format!("{}/_history", served.composition(LIVE)),
         format!("{}/version/{LIVE}::{SYSTEM}::1", served.composition(LIVE)),
         format!("/openehr/v1/ehr/{ehr}/composition?archetype_id=x"),
+        served.ehr_status(),
     ] {
         let (status, _, _) = served.get_anonymous(&path).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED, "{path} was served openly");
@@ -1050,6 +1077,96 @@ async fn a_version_view_carries_a_full_chain_digest() {
     assert_eq!(digest.len(), 64, "not a SHA-256: {digest}");
     assert!(digest.chars().all(|c| c.is_ascii_hexdigit()), "{digest}");
     assert_ne!(digest, "0".repeat(64), "the genesis digest is not an entry's");
+}
+
+// --- EHR_STATUS ------------------------------------------------------------
+
+#[tokio::test]
+async fn ehr_status_answers_404_when_nothing_has_ever_been_committed() {
+    // The ordinary case today: `POST /ehr` mints no `EHR_STATUS`
+    // (`openehr_loco::controllers::ehr_status`'s own module doc). A `200`
+    // with a fabricated `is_modifiable: true` body would assert a committed
+    // fact that does not exist; `404` says exactly what is true.
+    let served = Served::new();
+    let (status, _, _) = served.get(&served.ehr_status()).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn ehr_status_can_be_read_back_after_a_direct_store_commit() {
+    let served = Served::with_ehr_status(true);
+    let (status, body, etag) = served.get(&served.ehr_status()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(etag.is_some(), "an EHR_STATUS read carried no ETag");
+
+    let data = &serde_json::from_str::<serde_json::Value>(&body).expect("json")["data"];
+    assert_eq!(data["is_modifiable"], serde_json::json!(true));
+}
+
+#[tokio::test]
+async fn ehr_status_vread_reads_the_version_the_etag_named() {
+    let served = Served::with_ehr_status(false);
+    let (_, _, etag) = served.get(&served.ehr_status()).await;
+    let uid = etag
+        .expect("an ETag")
+        .trim_start_matches("W/")
+        .trim_matches('"')
+        .to_owned();
+
+    let (status, body, _) = served
+        .get(&format!("{}/{uid}", served.ehr_status()))
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let read_uid = serde_json::from_str::<serde_json::Value>(&body).expect("json")["uid"]
+        .as_str()
+        .expect("a uid")
+        .to_owned();
+    assert_eq!(read_uid, uid, "vread returned a different version than its own ETag named");
+}
+
+#[tokio::test]
+async fn ehr_status_version_at_time_reads_the_version_current_then() {
+    let served = Served::with_ehr_status(true);
+
+    // Before the one committed version existed at all.
+    let (status, _, _) = served
+        .get(&format!(
+            "{}?version_at_time=2020-01-01T00:00:00Z",
+            served.ehr_status()
+        ))
+        .await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "a time before any commit must not return the latest anyway"
+    );
+
+    // At or after it, the same version `GET` without the parameter finds.
+    let (latest_status, latest_body, _) = served.get(&served.ehr_status()).await;
+    assert_eq!(latest_status, StatusCode::OK);
+    let (at_time_status, at_time_body, _) = served
+        .get(&format!(
+            "{}?version_at_time=2026-08-01T09:30:00Z",
+            served.ehr_status()
+        ))
+        .await;
+    assert_eq!(at_time_status, StatusCode::OK);
+    assert_eq!(
+        at_time_body, latest_body,
+        "the one committed version should be current at and after its own commit time"
+    );
+}
+
+#[tokio::test]
+async fn ehr_status_malformed_version_at_time_is_the_callers_fault() {
+    let served = Served::with_ehr_status(true);
+    let (status, _, _) = served
+        .get(&format!(
+            "{}?version_at_time=not-a-time",
+            served.ehr_status()
+        ))
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[test]

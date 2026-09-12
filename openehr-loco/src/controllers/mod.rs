@@ -8,6 +8,7 @@
 pub mod composition;
 pub mod contribution;
 pub mod ehr;
+pub mod ehr_status;
 pub mod metadata;
 
 use axum::http::StatusCode;

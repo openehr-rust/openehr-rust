@@ -107,6 +107,7 @@ impl Hooks for App {
         AppRoutes::empty()
             .add_route(controllers_routes::metadata())
             .add_route(controllers_routes::ehr())
+            .add_route(controllers_routes::ehr_status())
             .add_route(controllers_routes::contribution())
             .add_route(controllers_routes::composition())
     }
@@ -205,6 +206,9 @@ mod controllers_routes {
     }
     pub fn ehr() -> Routes {
         crate::controllers::ehr::routes()
+    }
+    pub fn ehr_status() -> Routes {
+        crate::controllers::ehr_status::routes()
     }
     pub fn composition() -> Routes {
         crate::controllers::composition::routes()

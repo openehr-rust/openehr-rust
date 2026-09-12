@@ -54,7 +54,7 @@ fn etag(uid: &str) -> String {
     format!("W/\"{uid}\"")
 }
 
-fn headers(uid: &str) -> HeaderMap {
+pub(crate) fn headers(uid: &str) -> HeaderMap {
     let mut map = HeaderMap::new();
     if let Ok(value) = etag(uid).parse() {
         map.insert(header::ETAG, value);
@@ -72,7 +72,7 @@ fn hex(bytes: &[u8; 32]) -> String {
     out
 }
 
-fn view(row: &VersionRow) -> VersionView {
+pub(crate) fn view(row: &VersionRow) -> VersionView {
     VersionView {
         uid: row.uid.clone(),
         versioned_object_uid: row.versioned_object_uid.clone(),

@@ -34,7 +34,7 @@ tasks below are ordered by these gaps.
 | --- | --- | --- |
 | **Conformance that is not self-graded**: a machine-readable catalogue, every case citing the spec section, negative twins for every refusal, cross-run against EHRbase, a bring-your-own-server runner, a public ambiguities register | #15 (Haarbrandt, SEC), #16 | A conformance *ladder* and two matrices, self-checked counts, three audit registers — strong on honesty, but no external corpus has ever been run through this code, no test cites a spec section by id, and `db:D-11` says 144 of 221 database requirements have never been assessed at all |
 | **Which spec generation, pinned where**: RM/BASE/LANG releases coupled as openEHR publishes them; a `stable` profile refusing surfaces the released specs do not define | #7 (Iancu, SEC), #8 | Release targets exist per requirement (`S1.16`, `K15.2`) and terminology provenance is recorded to the file and date, but there is no one table of every specification release this tree is transcribed from |
-| **Lifecycle edge cases**: `is_modifiable` toggled inside one contribution | #5, #6 | **Done at the `Store` level, 2026-09-12** (`db:H5.17`): `SqliteStore::commit_composition` refuses content while deactivated and admits it again once reactivated, even later in the same contribution. `openehr-loco`'s `GET`/`PUT …/ehr_status` HTTP endpoints remain undone |
+| **Lifecycle edge cases**: `is_modifiable` toggled inside one contribution | #5, #6 | **Done at the `Store` level, 2026-09-12** (`db:H5.17`): `SqliteStore::commit_composition` refuses content while deactivated and admits it again once reactivated, even later in the same contribution. `openehr-loco`'s `GET …/ehr_status` HTTP endpoints are done the same day; `PUT` waits on the `POST /ehr` request-shape fix below |
 | **Performance**, with an outsider offering to rerun the numbers | #4, #14 | Benchmarks exist and are run-never-gated (`W0.35`); no store commit latency or HTTP round-trip has ever been published |
 | **Runs in sixty seconds**: `docker compose up`, a Codespace, a hosted sandbox with Swagger, and a *correct* quickstart | #9, #10, #11, #13, #21 | `Dockerfile`, compose file, and devcontainer exist and are verified (`curl /openehr/v1/metadata` → 200); no OpenAPI document yet, and `openehr-loco` is still `publish = false`, SQLite-only |
 | **A REST surface tools can talk to**: ITS-REST 1.1.0, AQL over HTTP, templates, EHR_STATUS, an admin scheme — openEHR Explorer added FerroEHR as a server type within three days | #1, #21 | Eleven endpoints: EHR, contribution, composition commit/read/history/vread, one index search. No `/query/aql`, no template endpoints, no `EHR_STATUS`, `DELETE` answers `501` |
@@ -266,6 +266,38 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         remains is exposing `EHR_STATUS` itself — reading the current one
         and toggling `is_modifiable` — over HTTP, a separate, self-contained
         slice left for a follow-up rather than folded into this one.
+
+      **2026-09-12, the `GET` half.** `openehr-loco::controllers::ehr_status`:
+      `GET /openehr/v1/ehr/{ehr_id}/ehr_status` (with `?version_at_time=`,
+      the one query parameter ITS-REST defines for this resource) and
+      `GET …/ehr_status/{version_uid}` (vread, path shape matched to
+      ITS-REST's own — `ehr_status/{version_uid}`, not
+      `ehr_status/version/{version_uid}` the way composition's vread is).
+      Both read through the `Store` trait exactly as the composition
+      endpoints do; nothing new in `openehr-store` or `openehr-sqlite`.
+      Five new `tests/http.rs` cases, including the unauthenticated-route
+      enumeration.
+
+      **`PUT` investigated, not attempted — it is not a small addition.**
+      ITS-REST's own `EHR` API states an `EHR_STATUS` "needs to be always
+      created and committed" alongside the `EHR` itself: `POST /ehr`'s real
+      request body is an *optional* `EHR_STATUS`, with the server minting
+      the `EHR` and its container references around it. This crate's
+      `POST /ehr` instead takes a whole, caller-built [`Ehr`] — confirmed by
+      reading `Ehr::new`'s own signature, which requires `ehr_status`/
+      `ehr_access` as parameters rather than minting them — a real,
+      already-tracked divergence (the ITS-REST item below, found
+      2026-09-08). The practical consequence: **no `EHR` created through
+      this service has ever had an `EHR_STATUS` committed for it**, so
+      there is no established "current version" a `PUT` could require
+      `If-Match` against, and no settled answer for what a *first* `PUT`
+      should do — create outright, the way `POST /composition` does with no
+      precondition, or refuse for want of one, the way `PUT
+      /composition/{uid}` does. Deciding that belongs with fixing
+      `POST /ehr`'s own request shape, not as a guess bolted onto this
+      module — so `GET` is done and correct on its own (it needs no change
+      once `PUT` exists), and `PUT` waits on that larger, already-tracked
+      fix rather than being forced now.
 - [ ] **PostgreSQL `Store`.** Every CDR in the thread runs on PostgreSQL
       18; this repository's only `Store` is SQLite. Implement
       `openehr-postgresql`'s store against the existing DDL, run
@@ -335,6 +367,24 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       ITS-REST at all — absent from EHRbase's own OpenAPI paths — so it is
       this crate's own invention with nothing to check it against, and
       belongs off this item's list rather than on it.
+
+      **2026-09-12, the `POST /ehr` divergence made concrete.** Investigating
+      the `is_modifiable` item's own `GET`/`PUT …/ehr_status` evidence line
+      found the exact shape of the mismatch this item already names, rather
+      than only that one exists: ITS-REST's `POST /ehr` request body is an
+      *optional* `EHR_STATUS`, with the server minting the `EHR` and its
+      `ehr_status`/`ehr_access` container references around it — and per
+      the spec, an `EHR_STATUS` "needs to be always created and committed"
+      for every `EHR`. `Ehr::new`'s own signature requires those references
+      as caller-supplied parameters rather than minting them, so fixing
+      `POST /ehr` to match is not a request-shape edit alone; it needs
+      `openehr-loco` to generate fresh container identifiers and call
+      `commit_ehr_status` with a default (or caller-supplied) `EhrStatus`
+      as part of the same handler. This is also the reason
+      `PUT …/ehr_status` remains undone (`tasks.md`'s `is_modifiable`
+      item, 2026-09-12 note): no `EHR` this service has ever created has an
+      established "current version" to require `If-Match` against, so a
+      `PUT`'s first-time semantics cannot be decided until this is fixed.
 - [ ] **Strict readers.** Thread #1's strictness list is the bar: refuse
       undeclared keys and duplicate keys on the canonical-JSON ingress path,
       and make every refusal name the JSON path and the requirement. Decide
