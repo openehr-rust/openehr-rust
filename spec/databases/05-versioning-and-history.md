@@ -72,6 +72,36 @@ Requirement prefix: `H5`.
   state, and indexed, so that "current content" does not require a code
   comparison on every row.
 
+## Deactivation gates new content
+
+- **H5.17** A commit adding a content version to an `EHR` — a `COMPOSITION`,
+  a `FOLDER` — MUST be refused when the EHR's current `EHR_STATUS` has
+  `is_modifiable = false`.
+
+  **The check MUST re-read `is_modifiable` fresh for every commit, never a
+  value cached from earlier in the same request or the same
+  `CONTRIBUTION`.** This is the sequencing bug FerroEHR's own tracker
+  records (`#2673`): an implementation that reads `is_modifiable` once, at
+  the start of processing a contribution, and reuses that answer for every
+  version the contribution adds, refuses content a caller committed
+  *after* reactivating the same record earlier in the same contribution —
+  because the cached answer is still the pre-reactivation one. A caller
+  reactivating and adding content in one contribution MUST commit the
+  reactivating `EHR_STATUS` version before the content it is meant to
+  admit; this rule does not — cannot, without committing every version of
+  a contribution as a single atomic unit, which nothing here does — look
+  ahead to a reactivation the same contribution has not committed yet.
+
+  A related but distinct defect the same investigation reports,
+  `VERSIONED_OBJECT.versions` typed a `List` but described as a `Set`, is
+  FerroEHR's `#2674` — see
+  [`openehr/spec/ambiguities.md`](../../openehr/spec/ambiguities.md).
+
+  This binds new *content*, not every commit: an `EHR_STATUS` version is
+  itself always admitted regardless of the record's current
+  `is_modifiable` — otherwise a deactivated record could never be
+  reactivated at all, which is not what deactivation is for.
+
 ## Reads over the sequence
 
 - **H5.3** *(amended)* A store MUST offer: a version by identifier, the latest

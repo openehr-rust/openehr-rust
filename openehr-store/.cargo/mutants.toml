@@ -1,21 +1,22 @@
 # `cargo mutants` configuration for this crate.
 #
-# `run` and `run_ehr_status` (`src/conformance.rs`) are the shared
-# conformance suite: "written once, takes a `Store`, and is called from
-# each engine's own test target" (the module's own doc comment). This
-# crate has no `Store` implementation of its own — only `openehr-sqlite`
-# does — so neither function can be exercised from inside this crate at
+# `run`, `run_ehr_status`, and `run_is_modifiable_gate` (`src/conformance.rs`)
+# are the shared conformance suite: "written once, takes a `Store`, and is
+# called from each engine's own test target" (the module's own doc comment).
+# This crate has no `Store` implementation of its own — only `openehr-sqlite`
+# does — so none of the three can be exercised from inside this crate at
 # all, by a mock or otherwise, without building a throwaway `Store` whose
 # only purpose would be making a mutation tool happy.
 #
 # That is not a gap in what actually gets tested: `openehr-sqlite`'s own
-# `tests/conformance.rs` runs both against a real database on every push,
-# and a version of either that silently did nothing would fail there
+# `tests/conformance.rs` runs all three against a real database on every push,
+# and a version of any that silently did nothing would fail there
 # immediately. It is a gap in what *this* crate's own `--in-diff` run can
 # see, because `cargo-mutants` scores a crate against its own test suite,
 # and a cross-crate test is not coverage of this crate (`agents/
 # auditing.md`). Excluded here rather than left to report a false
-# "MISSED" on every future change to either function — found 2026-09-12,
+# "MISSED" on every future change to any of the three — found 2026-09-12,
 # the day `run_ehr_status` was added and its own whole-body-replacement
-# mutant went uncaught for exactly this reason.
-exclude_re = ["replace run(_ehr_status)? ->"]
+# mutant went uncaught for exactly this reason; `run_is_modifiable_gate`
+# added the same day for the same reason, before it ever ran once.
+exclude_re = ["replace run(_ehr_status|_is_modifiable_gate)? ->"]

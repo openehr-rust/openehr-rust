@@ -34,9 +34,9 @@ tasks below are ordered by these gaps.
 | --- | --- | --- |
 | **Conformance that is not self-graded**: a machine-readable catalogue, every case citing the spec section, negative twins for every refusal, cross-run against EHRbase, a bring-your-own-server runner, a public ambiguities register | #15 (Haarbrandt, SEC), #16 | A conformance *ladder* and two matrices, self-checked counts, three audit registers — strong on honesty, but no external corpus has ever been run through this code, no test cites a spec section by id, and `db:D-11` says 144 of 221 database requirements have never been assessed at all |
 | **Which spec generation, pinned where**: RM/BASE/LANG releases coupled as openEHR publishes them; a `stable` profile refusing surfaces the released specs do not define | #7 (Iancu, SEC), #8 | Release targets exist per requirement (`S1.16`, `K15.2`) and terminology provenance is recorded to the file and date, but there is no one table of every specification release this tree is transcribed from |
-| **Lifecycle edge cases**: `is_modifiable` toggled inside one contribution | #5, #6 | The RM models the flag and its semantics; **nothing in `openehr-store` or `openehr-loco` reads it on commit** |
+| **Lifecycle edge cases**: `is_modifiable` toggled inside one contribution | #5, #6 | **Done at the `Store` level, 2026-09-12** (`db:H5.17`): `SqliteStore::commit_composition` refuses content while deactivated and admits it again once reactivated, even later in the same contribution. `openehr-loco`'s `GET`/`PUT …/ehr_status` HTTP endpoints remain undone |
 | **Performance**, with an outsider offering to rerun the numbers | #4, #14 | Benchmarks exist and are run-never-gated (`W0.35`); no store commit latency or HTTP round-trip has ever been published |
-| **Runs in sixty seconds**: `docker compose up`, a Codespace, a hosted sandbox with Swagger, and a *correct* quickstart | #9, #10, #11, #13, #21 | No `Dockerfile`, no compose file, no devcontainer, no OpenAPI document; `openehr-loco` is `publish = false`, SQLite-only, and started by `cargo run` |
+| **Runs in sixty seconds**: `docker compose up`, a Codespace, a hosted sandbox with Swagger, and a *correct* quickstart | #9, #10, #11, #13, #21 | `Dockerfile`, compose file, and devcontainer exist and are verified (`curl /openehr/v1/metadata` → 200); no OpenAPI document yet, and `openehr-loco` is still `publish = false`, SQLite-only |
 | **A REST surface tools can talk to**: ITS-REST 1.1.0, AQL over HTTP, templates, EHR_STATUS, an admin scheme — openEHR Explorer added FerroEHR as a server type within three days | #1, #21 | Eleven endpoints: EHR, contribution, composition commit/read/history/vread, one index search. No `/query/aql`, no template endpoints, no `EHR_STATUS`, `DELETE` answers `501` |
 | **AQL that executes** | #1 | AQL is parsed and statically checked and **not executed** — a deliberate rule (`S1.5`, reaffirmed `K15.29`) that a CDR reader will read as the headline gap |
 | **Templates**: OPT 1.4, ADL 2.4, WebTemplate, FLAT/STRUCTURED, validated at upload | #1 | AOM2 types, `am::validate` against an in-memory archetype, and a `definition`-only cADL reader (`A-40`, `A-62`–`A-69`). No OPT, no template, no flattening, no ADL 1.4 body |
@@ -226,6 +226,46 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         suite, carrying the identical characteristic unnoticed until now).
         Both reproduced locally against the exact failing commit before
         trusting the fix. Full account in `spec/audit.md`'s new **W-20**.
+      - **2026-09-12, the commit rule itself, done.** Specified as
+        `db:H5.17` in `spec/databases/05-versioning-and-history.md`: a
+        content commit is refused when the EHR's current `EHR_STATUS` has
+        `is_modifiable = false`, checked fresh on every call rather than
+        cached — the exact sequencing `#2673` names. `SqliteStore` gained a
+        private `ehr_is_modifiable`, called from `commit_composition`
+        before the write; `StoreError::NotModifiable` is the new refusal.
+        `openehr-loco`'s `status_for` maps it to `409 Conflict`, beside
+        `Conflict`/`Commit`, for the reason both already are (well-formed
+        request, conflicting state). Two conformance orderings, both in
+        `openehr_store::conformance::run_is_modifiable_gate`, run against
+        `openehr-sqlite` in CI: content refused while deactivated, and
+        admitted once reactivated earlier in the same `CONTRIBUTION`.
+        Matrix row added (`spec/databases/conformance-matrix.md`).
+        **Breaking** (`CHANGELOG.md`): existing callers whose workflows
+        relied on committing against a deactivated record will now be
+        refused.
+
+        **A real fixture defect surfaced writing this, before any commit
+        landed.** `sample_ehr()`'s `EHR.ehr_status` `ObjectRef` and
+        `sample_version()`'s composition container had shared one uid
+        (`RECORD`) since the fixture was first written — inert as long as
+        nothing ever looked up "whatever is committed at the container
+        `EHR.ehr_status` names". `ehr_is_modifiable` does exactly that
+        lookup, so any test committing both a composition and an
+        `EHR_STATUS` retrieved the composition's own JSON and failed to
+        parse it as an `EhrStatus` (`missing field 'subject'`) — surfaced
+        first as two failing `openehr-sqlite` concurrency tests. Fixed by
+        giving `EHR_STATUS` its own distinct container constant,
+        `EHR_STATUS_RECORD`, in `openehr-store::conformance` — the
+        production-correct shape, since two different `VERSIONED_OBJECT`s
+        never share a uid. All tests pass, including the two that regressed.
+
+        **Not done in this pass, deliberately**: `openehr-loco`'s
+        `GET`/`PUT …/ehr_status` endpoints. The commit-rule guarantee holds
+        for every caller of the `Store` trait directly, and for
+        `openehr-loco`'s existing composition endpoints, without them; what
+        remains is exposing `EHR_STATUS` itself — reading the current one
+        and toggling `is_modifiable` — over HTTP, a separate, self-contained
+        slice left for a follow-up rather than folded into this one.
 - [ ] **PostgreSQL `Store`.** Every CDR in the thread runs on PostgreSQL
       18; this repository's only `Store` is SQLite. Implement
       `openehr-postgresql`'s store against the existing DDL, run

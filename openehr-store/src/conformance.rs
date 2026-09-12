@@ -26,6 +26,18 @@ use openehr::terminology::{audit_change_type, composition_category, version_life
 
 /// The record identifier the suite uses.
 pub const RECORD: &str = "87284370-2D4B-4E3D-A3F3-F303D2F4F34B";
+/// The `EHR_STATUS` versioned object's own container identifier.
+///
+/// Deliberately distinct from `RECORD`. Earlier this fixture gave
+/// `EHR.ehr_status` the EHR's own id (`RECORD`) — the same identifier
+/// `sample_version`'s compositions use as *their* container — which was inert
+/// as long as nothing ever looked up "whatever is committed at the container
+/// `EHR.ehr_status` names". `ehr_is_modifiable` (`db:H5.17`) does exactly that
+/// lookup, and with one uid naming two unrelated containers it read back a
+/// composition's own JSON and tried to parse it as an `EhrStatus`. Real
+/// `VERSIONED_OBJECT`s never share a uid across kinds; the fixture now
+/// doesn't either.
+pub const EHR_STATUS_RECORD: &str = "5B1FBA00-6C2E-4E9B-9A9C-DDEDD8B87C43";
 /// The committing system the suite uses.
 pub const SYSTEM: &str = "ehr1.example.org";
 
@@ -40,10 +52,12 @@ pub fn sample_ehr() -> Ehr {
     // openEHR requires these to name the versioned containers, not the record
     // (`EHR.Ehr_status_valid`, `Ehr_access_valid`). This fixture built both as
     // "EHR" from the day it was written, and nothing checked — see `lib:A-21`.
+    // The `EHR_STATUS` container is `EHR_STATUS_RECORD`, not `RECORD` itself —
+    // see that constant's own comment for why the two must differ.
     let status = ObjectRef::new(
         "local",
         "VERSIONED_EHR_STATUS",
-        ObjectId::HierObjectId(uid.clone()),
+        ObjectId::HierObjectId(HierObjectId::from_uid_str(EHR_STATUS_RECORD).expect("literal")),
     )
     .expect("literal");
     let access = ObjectRef::new(
@@ -173,8 +187,9 @@ pub fn sample_ehr_status(is_modifiable: bool) -> EhrStatus {
 
 /// Builds a version of the sample `EHR_STATUS`.
 ///
-/// The container's own id is `RECORD` — the EHR's own id — matching the
-/// convention `EHR.ehr_status` follows ([`sample_ehr`]'s own `ObjectRef`):
+/// The container's own id is `EHR_STATUS_RECORD`, matching the `ObjectRef`
+/// [`sample_ehr`] gives `EHR.ehr_status` — not `RECORD`, which names the EHR
+/// itself and, separately, the container `sample_version`'s compositions use.
 /// `commit_ehr_status` does not itself check this, so a caller could choose
 /// otherwise, but nothing in this suite does.
 ///
@@ -189,7 +204,9 @@ pub fn sample_ehr_status_version(
     is_modifiable: bool,
 ) -> Version<EhrStatus> {
     let id = |v: u32| -> ObjectVersionId {
-        format!("{RECORD}::{SYSTEM}::{v}").parse().expect("literal")
+        format!("{EHR_STATUS_RECORD}::{SYSTEM}::{v}")
+            .parse()
+            .expect("literal")
     };
     let owner = ObjectRef::new(
         "local",
@@ -586,7 +603,7 @@ pub fn run_ehr_status<S: Store>(store: &mut S) -> Result<()> {
         "{engine}: first EHR_STATUS commit did not create a container"
     );
 
-    let by_id: ObjectVersionId = format!("{RECORD}::{SYSTEM}::1").parse()?;
+    let by_id: ObjectVersionId = format!("{EHR_STATUS_RECORD}::{SYSTEM}::1").parse()?;
     let read = store.get_version(&by_id)?;
     assert_eq!(
         read.uid,
@@ -598,7 +615,7 @@ pub fn run_ehr_status<S: Store>(store: &mut S) -> Result<()> {
         "{engine}: EHR_STATUS content was not stored"
     );
 
-    let container_uid = HierObjectId::from_uid_str(RECORD)?;
+    let container_uid = HierObjectId::from_uid_str(EHR_STATUS_RECORD)?;
     let latest = store.latest_version(&container_uid)?;
     assert_eq!(
         latest.uid, read.uid,
@@ -644,6 +661,69 @@ pub fn run_ehr_status<S: Store>(store: &mut S) -> Result<()> {
         at_0915.trunk_version, 1,
         "{engine}: EHR_STATUS version_at_time went forwards"
     );
+
+    Ok(())
+}
+
+/// The `is_modifiable` commit gate (`db:H5.17`): a deactivated `EHR` refuses
+/// new content, and a reactivation committed earlier in the same
+/// `CONTRIBUTION` is honoured by the very next content commit — the ordering
+/// `FerroEHR`'s `#2673` names as the one a naive "check once, up front"
+/// implementation gets wrong.
+///
+/// # Errors
+///
+/// Returns the first unexpected engine error. A conformance failure panics.
+///
+/// # Panics
+///
+/// Panics when the engine fails a conformance assertion.
+pub fn run_is_modifiable_gate<S: Store>(store: &mut S) -> Result<()> {
+    let engine = store.engine();
+    store.install()?;
+
+    let ehr = sample_ehr();
+    let ehr_id = ehr.ehr_id().clone();
+    store.create_ehr(&ehr)?;
+
+    let contribution_uid = "44444444-5555-6666-7777-888888888888";
+    store.create_contribution(&ehr_id, &sample_contribution(contribution_uid, &[1, 2, 3]))?;
+
+    // No `EHR_STATUS` has ever been committed for this EHR: a freshly created
+    // record is modifiable by default, so this commit succeeds.
+    store.commit_composition(&ehr_id, &sample_version(1, None, 5), contribution_uid)?;
+
+    // Deactivate. A content commit that follows must now be refused.
+    store.commit_ehr_status(
+        &ehr_id,
+        &sample_ehr_status_version(1, None, 6, false),
+        contribution_uid,
+    )?;
+    assert!(
+        matches!(
+            store.commit_composition(&ehr_id, &sample_version(2, Some(1), 7), contribution_uid),
+            Err(crate::StoreError::NotModifiable { .. })
+        ),
+        "{engine}: a content commit against a deactivated EHR was not refused"
+    );
+
+    // Reactivate, then commit content — both within this same contribution,
+    // reactivation first. The gate re-reads `is_modifiable` fresh on every
+    // call, so this succeeds even though the identical content commit was
+    // refused moments earlier, before the reactivation landed.
+    store.commit_ehr_status(
+        &ehr_id,
+        &sample_ehr_status_version(2, Some(1), 8, true),
+        contribution_uid,
+    )?;
+    store
+        .commit_composition(&ehr_id, &sample_version(2, Some(1), 9), contribution_uid)
+        .unwrap_or_else(|e| {
+            panic!(
+                "{engine}: a content commit after reactivation, later in the same \
+                 contribution, was refused: {e}"
+            )
+        });
 
     Ok(())
 }

@@ -218,6 +218,22 @@ together.
   sequencing item needs (`tasks.md`, re-scoped 2026-09-06); the commit rule
   itself and `openehr-loco`'s `GET`/`PUT …/ehr_status` endpoints are not
   part of this change.
+- **Breaking.** `openehr-sqlite::SqliteStore::commit_composition` now
+  refuses a content commit — a `COMPOSITION`, a `FOLDER` — when the `EHR`'s
+  current `EHR_STATUS` has `is_modifiable = false`, returning the new
+  `openehr_store::StoreError::NotModifiable` (`db:H5.17`). A caller whose
+  workflow committed content against a deactivated record and relied on
+  that succeeding will now see it refused; reactivating first (a new
+  `EHR_STATUS` version with `is_modifiable = true`, via
+  `commit_ehr_status`) admits the content again — even later in the same
+  `CONTRIBUTION`, since the check re-reads `is_modifiable` fresh on every
+  call rather than caching an answer across a request. `openehr-loco` maps
+  the new variant to `409 Conflict`, alongside `Conflict` and `Commit`, for
+  the same reason both are already there: the request is well-formed and
+  conflicts with the record's current state, not malformed. This is
+  thread #5/#6's `is_modifiable` sequencing item itself (`tasks.md`),
+  built on the prerequisite above; `openehr-loco`'s `GET`/`PUT …/ehr_status`
+  endpoints remain a separate, not-yet-done slice.
 
 ## 0.9.0 — 2026-09-02
 

@@ -208,6 +208,38 @@ impl SqliteStore {
             message: "chain_digest is not 32 bytes".to_owned(),
         })
     }
+
+    /// Whether `ehr` currently accepts new content (`EHR_STATUS.is_modifiable`,
+    /// `db:H5.17`), read fresh from the store rather than from any value a
+    /// caller might have cached — that caching is the sequencing bug the
+    /// requirement exists to close.
+    ///
+    /// `true` when no `EHR_STATUS` has ever been committed for this EHR: a
+    /// freshly created record is modifiable by default, and nothing has said
+    /// otherwise yet. `true` too when `ehr.ehr_status()` does not name a
+    /// `HierObjectId` — `Ehr::new` checks the reference's declared *type*
+    /// (`VERSIONED_EHR_STATUS`) but not the identifier *kind* inside it
+    /// (`lib:A-21`'s own residual), so there is nothing to look up rather than
+    /// something malformed to refuse on. A logical deletion of the status
+    /// itself (`data_json` absent) is treated as **not** modifiable — not a
+    /// shape openEHR's own model gives a status version any reason to take,
+    /// and not evidence the record is open.
+    fn ehr_is_modifiable(&self, ehr: &Ehr) -> Result<bool> {
+        let ObjectId::HierObjectId(container_uid) = ehr.ehr_status().id() else {
+            return Ok(true);
+        };
+        match self.latest_version(container_uid) {
+            Ok(row) => {
+                let Some(json) = row.data_json else {
+                    return Ok(false);
+                };
+                let status: EhrStatus = serde_json::from_str(&json)?;
+                Ok(status.is_modifiable())
+            }
+            Err(StoreError::NotFound { .. }) => Ok(true),
+            Err(e) => Err(e),
+        }
+    }
 }
 
 /// Translates a uniqueness violation on the version table into the commit
@@ -422,7 +454,19 @@ impl Store for SqliteStore {
         // The EHR must exist. Without this the foreign key would fire on the
         // container insert with a message about a constraint rather than about
         // a missing record.
-        self.get_ehr(ehr_id)?;
+        let ehr = self.get_ehr(ehr_id)?;
+
+        // Gate: a deactivated EHR refuses new content (`db:H5.17`). Read
+        // fresh, every call — never cached across a request or a
+        // contribution — so a reactivation committed earlier in the same
+        // contribution is seen by the very next content commit, whichever
+        // order a caller made the two calls in. This is the sequencing bug
+        // an implementation that checks once, up front, reproduces.
+        if !self.ehr_is_modifiable(&ehr)? {
+            return Err(StoreError::NotModifiable {
+                ehr_id: ehr_id.to_string(),
+            });
+        }
 
         let container_uid = version.uid().object_id().to_string();
         let head: Option<(String, i64)> = self

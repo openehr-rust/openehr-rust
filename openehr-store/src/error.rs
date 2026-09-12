@@ -101,6 +101,19 @@ pub enum StoreError {
         /// Where the exclusion is recorded.
         spec_ref: &'static str,
     },
+
+    /// A content commit was refused because the `EHR` is deactivated.
+    ///
+    /// `EHR_STATUS.is_modifiable = false` (`db:H5.17`). Refused rather than
+    /// silently accepted or silently dropped — a store that accepted new
+    /// content against a deactivated record would make the flag decorative.
+    /// An `EHR_STATUS` version is not itself subject to this: reactivating
+    /// a record is exactly what this refusal must not block.
+    #[error("EHR {ehr_id} is not modifiable")]
+    NotModifiable {
+        /// The record.
+        ehr_id: String,
+    },
 }
 
 /// This crate's result alias.

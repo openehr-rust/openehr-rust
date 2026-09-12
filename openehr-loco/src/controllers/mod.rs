@@ -60,11 +60,17 @@ pub fn store(ctx: &AppContext) -> Result<SharedOpenehrStore, (StatusCode, String
 pub fn status_for(error: &StoreError) -> (StatusCode, String) {
     let code = match error {
         StoreError::NotFound { .. } => StatusCode::NOT_FOUND,
-        // Two different situations, one answer. `Conflict` is "it already
+        // Three different situations, one answer. `Conflict` is "it already
         // exists"; `Commit` is "another writer took that position in the
-        // version tree" (`db:H5.9`). Both are the caller's to resolve by
-        // re-reading and retrying, and `409` is what says so.
-        StoreError::Conflict { .. } | StoreError::Commit(_) => StatusCode::CONFLICT,
+        // version tree" (`db:H5.9`); `NotModifiable` is "the record is
+        // deactivated" (`db:H5.17`). All three are the caller's to resolve —
+        // by re-reading and retrying, or by reactivating the record first —
+        // and `409` is what says "the request conflicts with the current
+        // state of the target resource" rather than blaming the request
+        // itself, which is what a `4xx` outside the 409/412 pair would imply.
+        StoreError::Conflict { .. } | StoreError::Commit(_) | StoreError::NotModifiable { .. } => {
+            StatusCode::CONFLICT
+        }
         StoreError::Invalid(_) | StoreError::Parse(_) => StatusCode::UNPROCESSABLE_ENTITY,
         // The store refuses what it cannot persist rather than dropping it
         // silently (`db:D-07`). `501` rather than `400`: the request is
