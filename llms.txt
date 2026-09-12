@@ -33,7 +33,7 @@ This project is not affiliated with, endorsed by, or certified by openEHR Intern
 - [openehr-mssql](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-mssql): openEHR® persistence for Microsoft SQL Server: schema dialect and DDL
 - [openehr-mysql](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-mysql): openEHR® persistence for MySQL: schema dialect and DDL
 - [openehr-oracle](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-oracle): openEHR® persistence for Oracle Database: schema dialect and DDL
-- [openehr-postgresql](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-postgresql): openEHR® persistence for PostgreSQL: schema dialect and DDL
+- [openehr-postgresql](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-postgresql): openEHR® persistence for PostgreSQL: schema dialect and a real Store
 - [openehr-sqlite](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-sqlite): openEHR® persistence for SQLite: schema dialect and a complete embedded store
 - [openehr-store](https://github.com/openehr-rust/openehr-rust/blob/main/openehr-store): openEHR® store persistence in agnostic way: storage model, SQL dialect trait, commit semantics, and a conformance suite
 

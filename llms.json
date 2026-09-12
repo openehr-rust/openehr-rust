@@ -117,7 +117,7 @@
         {
           "title": "openehr-postgresql",
           "url": "https://github.com/openehr-rust/openehr-rust/blob/main/openehr-postgresql",
-          "description": "openEHR® persistence for PostgreSQL: schema dialect and DDL"
+          "description": "openEHR® persistence for PostgreSQL: schema dialect and a real Store"
         },
         {
           "title": "openehr-sqlite",
