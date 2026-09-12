@@ -16,10 +16,10 @@ generated DDL of all six dialects compared byte for byte; the three engines that
 can be provisioned locally actually provisioned and the DDL run against them;
 crates.io queried for what is already published.
 
-Nineteen findings: three High (**W-01**, **W-02**, **W-04**), ten Medium
+Twenty findings: three High (**W-01**, **W-02**, **W-04**), eleven Medium
 (**W-03**, **W-05**, **W-06**, **W-09**, **W-11**, **W-12**, **W-13**,
-**W-14**, **W-16**, **W-18**), six Low (**W-07**, **W-08**, **W-10**,
-**W-15**, **W-17**, **W-19**). **Eighteen are fixed**; **W-03** is fixed going forward only, because the
+**W-14**, **W-16**, **W-18**, **W-20**), six Low (**W-07**, **W-08**, **W-10**,
+**W-15**, **W-17**, **W-19**). **Nineteen are fixed**; **W-03** is fixed going forward only, because the
 published `openehr` 0.1.0 is immutable and keeps its wrong `repository` field.
 
 **W-09 through W-18 were added on 2026-08-20 and -21**, outside the original audit date
@@ -153,7 +153,7 @@ exists. It runs, on every push and pull request:
 | `layering` | that `openehr` and `openehr-store` depend inward only, dev-dependencies included, against a crate list **derived** from the tree (**W-13**) |
 | `claims` | that no engine crate claims Schema or above without a `schema` job backing it (the check list emptied 2026-09-06, once `openehr-oracle` and then `openehr-mssql` each got one); that the **library** matrix covers every requirement exactly once, and that both conformance matrices do not contradict themselves — the databases matrix has no exactly-once check: it is five topic tables in which one requirement can legitimately appear more than once; that every one of the databases matrix's 221 requirements is mentioned at least once (`scripts/check-databases-matrix-coverage.py`, wired in 2026-09-10 once `db:D-11`'s own ten-batch assessment closed it — a mention is not a mark, so this floor does not replace reading the matrix); that this file's summary paragraph counts itself correctly; that the licence expression is harmonized across every crate (`W0.22`); that no requirement marked satisfied calls itself unverified (**W-17**); that the documentation's countable claims match the tree (`scripts/check-docs.py`); and that `openehr/spec/corpus-index.md` — a reverse index from a requirement or finding id to where a corpus run cites it — is current (`scripts/generate-corpus-index.py`) |
 | `trademarks` | `scripts/check-trademarks.py`: every root document and every published crate's rustdoc that uses the openEHR mark in prose carries the professionalization rule 5 notice verbatim (added 2026-08-26, once the changes it was deferred behind had landed) |
-| `mutants` | `cargo-mutants --in-diff` over the lines a push or a pull request changed, scoped to the diff because a full run is hours per crate. Pull-request-only until **W-18** |
+| `mutants` | `cargo-mutants --in-diff` over the lines a push or a pull request changed, scoped to the diff because a full run is hours per crate. Pull-request-only until **W-18**. `openehr-sqlite` uses `--in-place`, not the isolated copy every other crate in the matrix gets, since its sibling dev-dependencies do not resolve inside one (**W-20**) |
 
 The `schema` jobs **fail rather than skip** when no container runtime is present
 (`C0.13`), and invoke the same script a contributor runs locally rather than a
@@ -918,6 +918,73 @@ local version's `major.minor`, catching a patch release correctly (`0.8` and
 no behaviour changed. It is here because the *shape* is `W-10`'s and `W-17`'s
 again — a value copied into documents nothing was watching — recurring in a
 place none of those checks happened to look.
+
+## W-20 — the mutation gate could not see `openehr-sqlite`'s own commit-path changes — **Medium, fixed**
+
+**Found 2026-09-12**, when a real push to `main` changing mutable code in
+`openehr-sqlite/src/store.rs` — `commit_ehr_status`, and a refactor of
+`commit_composition` — turned the `mutants (openehr-sqlite)` job red with
+`cargo build failed in an unmutated tree`, not a caught-or-missed verdict.
+
+**Why it had never been seen before.** `agents/auditing.md` already
+documents the cause, as advice for a contributor running `cargo mutants`
+by hand: `openehr-sqlite` dev-depends on its five sibling engine crates
+so one test can compare all six dialects (`W-01`'s own remedy), and
+`cargo-mutants`'s isolated-copy mechanism does not resolve
+`../openehr-mariadb` from inside the copy it builds — it copies what a
+plain `cargo build` needs, which does not include dev-dependencies, and
+only discovers the gap when it then runs `cargo test`. The advice named
+`--in-place` as the fix but the CI workflow itself never used it, for
+`openehr-sqlite` or any other crate in the `mutants` job's matrix. Every
+prior direct push that touched this crate changed only tests, docs, or
+comments — shapes `cargo-mutants` does not mutate at all — so the job
+reported a legitimate zero and nobody had cause to look underneath it
+(the same "zero is not evidence" caveat the job's own CI comment already
+states, for the other way a run yields zero).
+
+**Consequence.** Not a false pass — the job failed, loudly, rather than
+silently reporting a clean mutation run it had not actually performed.
+But it is the same class of gap `W-18` closed one layer up: a gate that
+cannot run at all on the exact code most worth mutating in this crate
+(the append-only commit path) is not "occasionally skipped," it is
+structurally unable to ever check that code, and would have stayed that
+way indefinitely if this push had not happened to be the first in a long
+time to touch it directly.
+
+**Fixed.** `.github/workflows/ci.yml`'s `mutants` job now branches on
+`matrix.crate`: `openehr-sqlite` runs `cargo mutants --in-diff ... --in-place`
+(no `-j`, which `--in-place` does not accept, confirmed by the tool's own
+error message rather than assumed from the flag's description); every
+other crate in the matrix is unaffected. Reproduced locally against the
+exact commit range CI had just failed on
+(`git diff --relative 8fe1fa9..300c2a0 -- '*.rs'` inside `openehr-sqlite/`,
+fed to `cargo mutants --in-diff ... --in-place`) before trusting the fix:
+both mutants in that diff report `unviable` — the same, already-accepted
+verdict `commit_composition`'s own return type gets, not a new gap
+(`CommitOutcome` has no `Default`, so cargo-mutants' whole-body-replacement
+mutant cannot compile).
+
+**A second, related gap closed the same day, in `openehr-store` rather than
+CI.** `run_ehr_status` — the new `EHR_STATUS` half of the shared conformance
+suite, `src/conformance.rs` — has no `Store` to call inside `openehr-store`
+itself; only `openehr-sqlite` has one, and its own real test is what
+actually exercises it. The `mutants (openehr-store)` job, scoped to this
+crate's own test suite, correctly could not see that exercise and reported
+the function's whole-body-replacement mutant `MISSED`. `openehr-sqlite`'s
+own job could not cover it either — the file lives outside
+`openehr-sqlite/`, so `--in-diff` there never mutates it at all. Neither
+job was wrong; the function is architecturally untestable from inside
+either crate alone, the same shape `check_commit_rules` was in until a
+direct unit test was added for it in the same push (that one *could* be
+given a direct test, being pure; this one cannot, needing a real `Store`).
+Excluded via `openehr-store/.cargo/mutants.toml`'s `exclude_re`, alongside
+the pre-existing `run` (the composition half of the same suite, which has
+carried the identical characteristic, silently, since it was written —
+never flagged only because no diff since had touched its own lines).
+Recorded here rather than left as a bare config file with no citation,
+because a `.cargo/mutants.toml` a reader stumbles on later, with no
+finding to point back to, reads as an unexplained carve-out rather than a
+considered one.
 
 ---
 

@@ -207,6 +207,25 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         prerequisite was the whole scope, deliberately, so it could be
         verified on its own rather than folded into a larger, harder-to-
         review change.
+
+        **Found and fixed pushing it: a real CI gap, `db:W-20`.** The
+        `mutants (openehr-sqlite)` job turned red on this push —
+        `cargo build failed in an unmutated tree` — because
+        `cargo-mutants`'s isolated copy cannot resolve this crate's five
+        sibling dev-dependencies (`agents/auditing.md` already documented
+        the cause and the `--in-place` remedy; the CI workflow itself had
+        never used it, for any crate). This was the first direct push in a
+        long time to change mutable code in this crate's own `src/` rather
+        than a test, a doc, or a comment, so nothing had surfaced it before.
+        Fixed in `.github/workflows/ci.yml`, scoped to this one crate in the
+        matrix. A second, smaller gap closed the same way: `run_ehr_status`
+        (the new shared conformance test) has no `Store` to call inside
+        `openehr-store` itself, so its own mutation could not be caught
+        there either — excluded via a new `openehr-store/.cargo/mutants.toml`,
+        alongside `run` (the pre-existing composition half of the same
+        suite, carrying the identical characteristic unnoticed until now).
+        Both reproduced locally against the exact failing commit before
+        trusting the fix. Full account in `spec/audit.md`'s new **W-20**.
 - [ ] **PostgreSQL `Store`.** Every CDR in the thread runs on PostgreSQL
       18; this repository's only `Store` is SQLite. Implement
       `openehr-postgresql`'s store against the existing DDL, run

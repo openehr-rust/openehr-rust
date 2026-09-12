@@ -1104,7 +1104,22 @@ jobs:
           # The path guard above already covers the other way to get zero (a
           # diff whose paths do not resolve, which exits 0 saying "No mutants to
           # filter"). This says which zero it was.
-          cargo mutants --in-diff /tmp/pr.diff -j 2 --timeout 300 --output /tmp/mutants
+          if [ "${{ matrix.crate }}" = "openehr-sqlite" ]; then
+            # `openehr-sqlite` dev-depends on its five sibling engine crates
+            # so one test can compare all six dialects (`W-01`).
+            # `cargo-mutants`' isolated copy does not resolve
+            # `../openehr-mariadb` from inside it and reports "cargo build
+            # failed in an unmutated tree" before testing a single mutant —
+            # a false negative on the whole crate, not a real build failure
+            # (`agents/auditing.md`, found in CI 2026-09-12, the first time a
+            # push to `main` changed mutable code in this crate's own `src/`
+            # rather than a test, a doc, or a comment). `--in-place` mutates
+            # the real tree and restores it, and cannot run mutants in
+            # parallel — `-j` is dropped for this crate only.
+            cargo mutants --in-diff /tmp/pr.diff --in-place --timeout 300 --output /tmp/mutants
+          else
+            cargo mutants --in-diff /tmp/pr.diff -j 2 --timeout 300 --output /tmp/mutants
+          fi
           # `outcomes` includes the unmutated baseline run, which is not a
           # mutant. Counting it would report 16 where cargo-mutants says 15,
           # and a count that is off by one is a count nobody trusts twice.
