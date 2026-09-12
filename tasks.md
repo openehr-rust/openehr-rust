@@ -385,6 +385,35 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       item, 2026-09-12 note): no `EHR` this service has ever created has an
       established "current version" to require `If-Match` against, so a
       `PUT`'s first-time semantics cannot be decided until this is fixed.
+
+      **Same day, the fix's own scope investigated before starting it.**
+      Sized to see whether it was a same-cycle slice on top of the `GET`
+      work above. It is not, for one decision this crate cannot make up on
+      its own: minting `Ehr.system_id` fresh per request, the obvious way
+      to fill a field `Ehr::new` requires, would be **wrong**, not merely
+      untidy — `H5.7` states the reason the field exists at all: it "keeps
+      two systems' 'version 2' distinct", which only holds if one
+      deployment's records all carry the *same* `creating_system_id` over
+      time. Nothing in `openehr-loco` today reads a configured system
+      identity (`grep -rn "system_id" src config` finds nothing at all),
+      so fixing `POST /ehr` properly means adding one to
+      `config/production.yaml` and threading it through `AppContext`
+      first — genuinely a separate, small decision, not an inline default
+      to invent inside a handler. Three smaller, real costs stack on top
+      of it: no `uuid`-shaped crate is a dependency anywhere in this
+      eighteen-crate tree today (checked directly, not assumed), so minting
+      `ehr_id` and the two container identifiers needs one, justified the
+      way every other dependency in `openehr-loco/Cargo.toml` already is;
+      a default `EHR_STATUS`'s `is_queryable`/`is_modifiable` values are a
+      real, if small, policy choice; and `ehr_access`'s own container gets
+      an identifier under this fix but still nothing ever commits an
+      `EHR_ACCESS` version into it — `EhrAccess` is not a type this crate
+      models at all, so that residual is inherited, not introduced, and is
+      named here rather than silently carried forward again.
+
+      Not started. The system-identity decision blocks the rest, and is
+      the one a maintainer should make once rather than have invented
+      under it.
 - [ ] **Strict readers.** Thread #1's strictness list is the bar: refuse
       undeclared keys and duplicate keys on the canonical-JSON ingress path,
       and make every refusal name the JSON path and the requirement. Decide
