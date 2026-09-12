@@ -128,19 +128,29 @@ citations, and reported the distinct `versions` typing defect it surfaced
 upstream to FerroEHR's own tracker as their `#2674` (this project's own
 tracking of the sequencing question itself is FerroEHR's `#2673`).
 
-**Disposition.** Refuse content members only when the `EHR` is deactivated
-**and** the contribution being committed does not itself reactivate it —
-order-independent, evaluated against the state the contribution leaves the
-`EHR` in rather than the state it found it in. **Not yet implemented**:
-`tasks.md`'s own backlog carries this as an open item, re-scoped 2026-09-06
-once the prerequisite it did not originally name — versioned `EhrStatus`
-persistence, since `Ehr.ehr_status` is only an `ObjectRef` today and
-`openehr-store`'s `Store` trait has no method to create, commit, or read an
-`EhrStatus` version at all — turned out close in size to the composition-
-versioning work already done, not a small addition to it. No `db:H5.x`
-identifier has been allocated yet; one is reserved for the commit rule once
-it is written down as a requirement rather than only as a backlog
-adjudication.
+**Disposition, revised 2026-09-12 against what was actually built.** The
+adjudication above ("evaluated against the state the contribution leaves the
+`EHR` in") turned out to overclaim foresight no store here has: nothing
+commits every version of a `CONTRIBUTION` as one atomic unit, so a check
+cannot look ahead to a reactivation the same contribution has not committed
+yet. **Implemented as `db:H5.17`**
+([`spec/databases/05-versioning-and-history.md`](../../spec/databases/05-versioning-and-history.md)):
+a content commit is refused when the `EHR`'s current `EHR_STATUS` has
+`is_modifiable = false`, and the check re-reads `is_modifiable` **fresh on
+every commit**, never a value cached earlier in the same request or
+contribution. This still resolves the sequencing bug thread #5 found — a
+reactivation committed earlier in the same contribution is seen by the very
+next content commit, whichever order a caller made the two calls in — without
+requiring the store to know, in advance, what the rest of the contribution
+will do. The caller-visible obligation this leaves: a caller reactivating and
+adding content in one contribution must commit the reactivating `EHR_STATUS`
+version *before* the content it is meant to admit. `SqliteStore`'s own
+private `ehr_is_modifiable` is the implementation;
+`openehr_store::conformance::run_is_modifiable_gate` is the conformance test,
+covering both orderings, run against `openehr-sqlite` in CI.
+`openehr-loco`'s `GET`/`PUT …/ehr_status` HTTP endpoints remain undone —
+the store-level guarantee holds without them for every `Store` caller and
+for `openehr-loco`'s existing composition endpoints.
 
 **Filed upstream:** not this project's own tracking (`#2673`) — filed by
 thread #6 already, hence a number to cite rather than a gap to fill.

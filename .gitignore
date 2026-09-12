@@ -1,6 +1,7 @@
 target/
 tmp/
 .sota
+__pycache__/
 
 # cargo-mutants working directories: build logs and per-mutant diffs, thousands
 # of files per run. The result belongs in the audit register, not the tree.

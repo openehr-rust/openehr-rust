@@ -16,10 +16,10 @@ generated DDL of all six dialects compared byte for byte; the three engines that
 can be provisioned locally actually provisioned and the DDL run against them;
 crates.io queried for what is already published.
 
-Twenty findings: three High (**W-01**, **W-02**, **W-04**), eleven Medium
+Twenty-one findings: three High (**W-01**, **W-02**, **W-04**), eleven Medium
 (**W-03**, **W-05**, **W-06**, **W-09**, **W-11**, **W-12**, **W-13**,
-**W-14**, **W-16**, **W-18**, **W-20**), six Low (**W-07**, **W-08**, **W-10**,
-**W-15**, **W-17**, **W-19**). **Nineteen are fixed**; **W-03** is fixed going forward only, because the
+**W-14**, **W-16**, **W-18**, **W-20**), seven Low (**W-07**, **W-08**, **W-10**,
+**W-15**, **W-17**, **W-19**, **W-21**). **Twenty are fixed**; **W-03** is fixed going forward only, because the
 published `openehr` 0.1.0 is immutable and keeps its wrong `repository` field.
 
 **W-09 through W-18 were added on 2026-08-20 and -21**, outside the original audit date
@@ -985,6 +985,79 @@ Recorded here rather than left as a bare config file with no citation,
 because a `.cargo/mutants.toml` a reader stumbles on later, with no
 finding to point back to, reads as an unexplained carve-out rather than a
 considered one.
+
+## W-21 — `check-docs.py`'s own docstring claimed a prune that was actually a filter — **Low, fixed**
+
+**Found 2026-09-12**, when the same session that had just run `cargo test`/
+`RUSTFLAGS="-D warnings" cargo clippy --all-targets`/`cargo mutants` across
+every crate in one working tree re-ran `scripts/check-docs.py` to verify a
+small documentation edit, and it took over **nine minutes** — measured by
+wall-clock, start to the completed output — for a check that had run in
+about a second minutes earlier in the same session.
+
+**Cause.** `documents()`'s own docstring already said, in as many words,
+"`target/` is pruned during the walk rather than filtered after it" — a
+sentence describing a fix for exactly this symptom, made once already. But
+the code below it was `for path in sorted(ROOT.rglob("*.md")): ... if
+"target" in rel.parts: continue` — a match yielded by `Path.rglob`, tested
+and discarded, not a directory `target/` was ever excluded from descending
+into. `rglob("*.md")` still calls `os.scandir` on every directory under
+`target/` to see whether anything in it matches, exactly as if the `if`
+below did not exist; the `continue` only stops the script from *reading*
+what it finds there, after paying to find it. The comment stated the
+mechanism the author intended, not the one `Path.rglob` actually offers —
+and nothing had made that distinction expensive enough to notice until this
+repository's eighteen `target/` trees, grown across ordinary `cargo build`/
+`test`/`clippy`/`mutants` runs over the life of this audit, reached
+**917,548 files** at the moment this was found.
+
+**Consequence.** Local only — confirmed by reading `.github/workflows/
+ci.yml`'s `claims` job, which runs `check-docs.py` on a fresh
+`actions/checkout@v7` with no build step before it, so CI's own `target/`
+never grows large enough for this to matter there. The cost fell entirely on
+a working session that builds everything and then asks this script whether
+its documentation still agrees with the tree — which is exactly the shape
+of session this repository's own operating model expects to run continuously
+(`AGENTS.md`), so "local only" is not "rare."
+
+**Fixed.** `documents()` now walks with `os.walk`, which yields a
+directory's subdirectory names as a list *before* recursing into them, and
+removes `target`/`.git` from that list in place — a real prune: the walk
+never opens either directory, so its cost stops scaling with whatever has
+been built on top of the documentation tree. Timed after the fix, three
+consecutive runs: 3.2–3.5 seconds, down from over nine minutes, with
+identical output to the pre-fix run on the same tree (the same nine lines,
+the same 28 counts) — the fix changed the traversal, not what it found.
+
+**A second, unrelated gap surfaced writing this finding's own summary
+paragraph.** Fixing `W-21` pushed this file's own total past twenty for the
+first time, to "Twenty-one findings" — the first count in this register ever
+to need a hyphenated word. `check_audit_summary`'s own parsing regex used
+`(\w+) findings: (\w+) High \(...\), ...`, and `\w+` does not match a
+hyphen: against "Twenty-one findings", it did not fail to match — `re.search`
+retried starting mid-word, at "one findings: ...", and matched there,
+silently reading the total as `1` rather than refusing to parse. The
+`WORDS` dict this script's other checks already share had "twenty-one"
+in it — some earlier count claim elsewhere in the tree had already needed
+it — but `check_audit_summary`'s own capture groups had never been
+exercised past a one-word count before, so nobody had reason to notice
+they could not parse one. Fixed by widening the four count-group patterns
+and the "fixed" group from `\w+` to `[\w-]+`, verified against this exact
+sentence.
+
+**A third gap, same mechanism, smaller scale.** Cross-checking the fix by
+comparing `documents()`'s output against `git ls-files '*.md'` (they should
+name exactly the same files) turned up 83 more files this function had been
+reading that are not this repository's documentation at all:
+`openehr-rust.github.io`'s own `node_modules`/`build`/`.svelte-kit` — its
+gitignored SvelteKit build output, 3,221 files, carrying 83 vendored
+`README.md`/`LICENSE.md` files from npm packages. Not the reason `W-21` was
+opened, and never made the check take minutes the way `target/` did — but
+the identical defect (a directory that should never be walked, walked
+anyway) at a scale nobody had reason to notice by wall-clock alone. Folded
+into the same `PRUNED` set `target`/`.git` now live in, rather than treated
+as a separate finding, since fixing one without the other would have left
+this exact cross-check failing.
 
 ---
 

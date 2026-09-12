@@ -39,6 +39,7 @@ actually happened here, twice.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import sys
@@ -70,6 +71,12 @@ HISTORICAL = {
     "openehr/spec/audit.md",
     "CHANGELOG.md",
 }
+
+# Directory names `documents()` never descends into: build output and
+# dependency trees, none of it this repository's own documentation.
+# `target`/`.git` are every Rust crate's; `node_modules`/`build`/
+# `.svelte-kit` are `openehr-rust.github.io`'s (`W-21`).
+PRUNED = {"target", ".git", "node_modules", "build", ".svelte-kit"}
 
 
 def facts() -> dict[str, int]:
@@ -122,15 +129,35 @@ PATTERNS: list[tuple[str, str, str]] = [
 def documents(include_historical: bool = False) -> list[tuple[str, str]]:
     """Every Markdown file that is part of this repository, read once.
 
-    `target/` is pruned during the walk rather than filtered after it: a
-    `cargo doc` tree holds thousands of dependency READMEs, and walking them
-    took this script from under a second to over two minutes.
+    Every one of `PRUNED` is pruned **during** the walk — `os.walk`, not
+    `Path.rglob`, because that is the difference between the two. `rglob`
+    still descends into every directory looking for `*.md` matches before a
+    caller ever sees a result to filter; excluding `target` from the
+    *results* (this function's own prior shape) costs exactly the same
+    `os.scandir` call on every entry of every build directory as not
+    excluding it at all. `W-21` found this at 917,548 files across this
+    repository's eighteen `target/` trees, each grown by a routine `cargo
+    test`/`cargo clippy --all-targets` sweep: over nine minutes for a check
+    that a fresh clone runs in under a second. `os.walk` yields a
+    directory's subdirectory names as a mutable list *before* recursing into
+    them, so removing a name in `PRUNED` from that list in place is a real
+    prune — the walk never opens the directory at all, and the cost returns
+    to being proportional to the documentation tree, not to however much has
+    been built or vendored on top of it. `node_modules`/`build`/
+    `.svelte-kit` are `openehr-rust.github.io`'s own gitignored build
+    output — found alongside `W-21`, by the same symptom on a much smaller
+    scale (3,221 vendored `README.md`/`LICENSE.md` files, not this
+    finding's own reason for existing, but the identical mechanism).
     """
     out = []
-    for path in sorted(ROOT.rglob("*.md")):
+    paths = []
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = [d for d in dirnames if d not in PRUNED]
+        paths.extend(
+            pathlib.Path(dirpath, name) for name in filenames if name.endswith(".md")
+        )
+    for path in sorted(paths):
         rel = path.relative_to(ROOT)
-        if "target" in rel.parts or ".git" in rel.parts:
-            continue
         posix = rel.as_posix()
         if not include_historical and posix in HISTORICAL:
             continue
@@ -503,9 +530,15 @@ def check_audit_summary() -> int:
 
     flat = re.sub(r"\s+", " ", text)
     words = {v: k for k, v in WORDS.items()}
+    # `[\w-]+`, not `\w+`: a count word can be hyphenated ("twenty-one"),
+    # first needed the day this file's own count crossed twenty. `\w+`
+    # doesn't include `-`, so it silently matched "one" out of the middle of
+    # "Twenty-one" instead of failing to match at all -- found live, the day
+    # this register reached its twenty-first finding (`W-21`, itself found
+    # by a different regex making the same `\w+`-versus-hyphen mistake).
     claimed = re.search(
-        r"(\w+) findings: (\w+) High \(([^)]*)\), (\w+) Medium \(([^)]*)\), "
-        r"(\w+) Low \(([^)]*)\)\.\s*\*\*(\w+) are\s*fixed\*\*",
+        r"([\w-]+) findings: ([\w-]+) High \(([^)]*)\), ([\w-]+) Medium \(([^)]*)\), "
+        r"([\w-]+) Low \(([^)]*)\)\.\s*\*\*([\w-]+) are\s*fixed\*\*",
         flat,
     )
     if not claimed:
