@@ -465,6 +465,44 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       the one a maintainer should make once rather than have invented
       under it. Recorded in `plan.md` §Open decisions, the same footing
       the `regex` and RM-multiplicity decisions already stand on there.
+
+      **2026-09-12, the `DELETE` sub-item investigated, not started.**
+      Fetched the real spec (`ITS-REST` `ehr.html`, not a paraphrase)
+      rather than assuming the shape from EHRbase's own docs alone. One
+      real, confirmed divergence: `DELETE`'s own `uid_based_id` path
+      parameter is a full `OBJECT_VERSION_ID` — "taken from `VERSION.uid.
+      value`" — naming the *specific version* being superseded, not the
+      bare container uid `PUT /composition/{uid}` takes with `If-Match`
+      naming the version separately. This crate's routes have no such
+      parameter shape anywhere today.
+
+      **What remains genuinely unclear, checked against two sources that
+      disagreed rather than trusted from one.** A third-party course site
+      states services "MUST accept `openEHR-VERSION` and
+      `openEHR-AUDIT_DETAILS` custom request headers" so a caller can
+      supply the deletion's committer and reason — which would resolve
+      this crate's own stated reason for refusing `DELETE` outright ("a
+      bare `DELETE` carries no reason, and this service will not invent
+      one"). Fetching `ITS-REST`'s own `ehr.html` directly found the
+      `DELETE` endpoint's path, parameter, and response codes exactly as
+      above, but **no mention of either custom header in that section at
+      all** — so either the requirement lives elsewhere in the
+      specification and this fetch missed it, or the third-party
+      description is describing an `EHRbase` extension rather than
+      `ITS-REST` itself. The header's own value encoding, quoted by that
+      same third-party source as something like `change_type=(code_
+      string="251"), description=(value="..."), committer=(name="...",
+      external_ref.id="...", ...)` — an attribute-value grammar, not JSON
+      — is exactly the kind of detail this project's own culture requires
+      reading from the primary source before implementing against, not
+      from a course site's paraphrase, and that reading has not been done.
+
+      Not started. Implementing the path-parameter shape alone would not
+      change caller-visible behaviour (the endpoint still refuses
+      unconditionally), and implementing the header without confirming
+      its real grammar against the primary specification text risks
+      shipping a parser for a format that is not actually what `ITS-REST`
+      requires.
 - [ ] **Strict readers.** Thread #1's strictness list is the bar: refuse
       undeclared keys and duplicate keys on the canonical-JSON ingress path,
       and make every refusal name the JSON path and the requirement. Decide
