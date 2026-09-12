@@ -298,7 +298,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       module — so `GET` is done and correct on its own (it needs no change
       once `PUT` exists), and `PUT` waits on that larger, already-tracked
       fix rather than being forced now.
-- [ ] **PostgreSQL `Store`.** Every CDR in the thread runs on PostgreSQL
+- [x] **PostgreSQL `Store`.** Every CDR in the thread runs on PostgreSQL
       18; this repository's only `Store` is SQLite. Implement
       `openehr-postgresql`'s store against the existing DDL, run
       `conformance::run` against a real server in CI (the `schema` job
@@ -307,7 +307,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       *Evidence:* the matrix row moves Schema → Store → Verified with the
       job named. — **L**
 
-      **2026-09-12: Schema → Store, done; → Verified, not yet observed.**
+      **2026-09-12: Schema → Store → Verified, all three, same day.**
       `PostgresqlStore` (`postgres` crate, blocking, `NoTls` — a real
       connection needed a driver dependency this crate never had, unlike
       `SqliteStore`'s embedded `rusqlite`). The client sits behind a
@@ -344,11 +344,18 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
 
       A CI step now runs `verify-store.sh` on `schema`'s own `postgresql`
       matrix leg (a step, not a new job — the CI-job-count checks track
-      top-level jobs only). **Not yet Verified**: that step has not been
-      observed passing in a real CI run, which `openehr-store/spec/
-      conformance.md`'s own ladder requires before the claim moves past
-      Store. Checkbox left open pending that run; matrix, README, and
-      rustdoc all say Store, not Verified, until it happens.
+      top-level jobs only). The first push carrying it (`db3cbef`) failed
+      CI anyway, on an unrelated staleness check
+      (`llms.txt`/`llms.json` not regenerated after a `Cargo.toml`
+      description change) — a genuine reminder that "the commit that added
+      the job" and "a run that passed" are different claims, exactly the
+      distinction `openehr-store/spec/conformance.md`'s own `openehr-sqlite`
+      paragraph already makes. Fixed and repushed; the very next run,
+      [34710118312](https://github.com/openehr-rust/openehr-rust/actions/runs/34710118312),
+      went green in full, `schema / postgresql`'s new step included —
+      the real evidence Verified requires. Matrix, both READMEs, rustdoc,
+      and every other place a level is restated all now say Verified,
+      citing that run, checked by `check-docs.py`'s own cross-check.
 - [x] **MSSQL and Oracle parsed by a real server.** Two of six dialects had
       "never been parsed by a server" (`spec/databases/conformance-matrix
       .md`). Both now run in containers — `mcr.microsoft.com/mssql/server`

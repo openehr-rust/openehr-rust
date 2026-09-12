@@ -15,21 +15,20 @@
 //! constitute endorsement of this product by openEHR International or openEHR
 //! Foundation.
 //!
-//! # Conformance level: **Store**
+//! # Conformance level: **Verified**
 //!
 //! [`PostgresqlStore`] implements [`openehr_store::Store`] and passes the
 //! shared conformance suite (`conformance::run`/`run_ehr_status`/
 //! `run_is_modifiable_gate`) against a real `PostgreSQL` 18 server, plus every
 //! `openehr-sqlite`-only test this crate had an equivalent for — concurrency,
 //! the tamper-evident chain, the checkpoint, schema-version refusal —
-//! reproducibly, from `openehr-postgresql/scripts/verify-store.sh`.
+//! reproducibly, from `openehr-postgresql/scripts/verify-store.sh`. Re-checked
+//! in CI on every push (the `schema` job's own `postgresql` matrix leg), green
+//! run [34710118312](https://github.com/openehr-rust/openehr-rust/actions/runs/34710118312),
+//! 2026-09-12 — see `spec/databases/conformance-matrix.md`, the one file that
+//! owns this claim.
 //!
-//! Not yet **Verified**: that step runs in the `schema` job's own CI matrix
-//! now, but Verified means a real green run to cite, and this crate has not
-//! had one yet — see `spec/databases/conformance-matrix.md`, the one file
-//! that owns this claim.
-//!
-//! That distinction is stated plainly because the sibling FHIR monorepo in
+//! That level is checked, not asserted, because the sibling FHIR monorepo in
 //! this repository carries an audit finding (**F-01**) for six READMEs that
 //! claimed a working store, a CLI, and 7,399 round-tripped resources in ports
 //! where none of it existed. See `spec/conformance.md` for what each level

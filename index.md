@@ -73,7 +73,7 @@ this table restates it and is checked against it.
 | Crate | Level |
 | --- | --- |
 | [`openehr-sqlite`](openehr-sqlite/) | **Verified** |
-| [`openehr-postgresql`](openehr-postgresql/) | **Store** |
+| [`openehr-postgresql`](openehr-postgresql/) | **Verified** |
 | [`openehr-mysql`](openehr-mysql/) | **Schema** |
 | [`openehr-mariadb`](openehr-mariadb/) | **Schema** |
 | [`openehr-mssql`](openehr-mssql/) | **Schema** |
