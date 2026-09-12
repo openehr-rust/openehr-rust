@@ -1044,6 +1044,29 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       `A-72`–`A-77` by name) and needed no change. Checked and found nothing
       else stale in `A-40`'s text against the current `am::` module docs.
 
+      **2026-09-12 pass.** Five `am::`/`base::` capability commits landed
+      since the last pass — `A-45` (`C_DATE`/`C_TIME`/`C_DATE_TIME`/
+      `C_DURATION` in `am::validate`), `A-46` (`C_PRIMITIVE_OBJECT.node_id`),
+      `A-47` (`Terminology_code`/`Terminology_term`, `base::`, not §15),
+      `A-48` (`C_PRIMITIVE_OBJECT.assumed_value`), `A-49` (`ArchetypeHrid`,
+      fixing the ADL header readers' grammar) — the most since any prior
+      pass. Checked each against `A-40`'s own prose and every `K15.*` row
+      individually, by diff rather than by assumption, and found **no
+      drift this time**: `A-40` already speaks at a level none of the five
+      changes: the "unmodelled primitive kind" example in its `K15.18`–
+      `K15.23` paragraph was always generic, not naming date/time/duration,
+      so `A-45` narrows the real gap without falsifying the sentence
+      describing it; the two `node_id`/`assumed_value` additions
+      (`A-46`, `A-48`) are pure field additions `A-40` never asserted were
+      missing; `A-47` is a `base::` type outside §15 entirely; and `A-49`'s
+      header-reader fix changes what type a header field holds, not
+      whether the reader still stops at the header — exactly the boundary
+      `A-40` and the matrix's `K15.5`/`K15.6`–`K15.7` rows already state.
+      `am/validate.rs`'s own module doc, which `A-40` explicitly defers to,
+      was itself updated in the same commit as `A-45` and remains
+      consistent with `A-40`'s text. No matrix row touched by any of the
+      five commits.
+
 ### P3 — larger scope, or awaiting a decision
 
 - [ ] **ADL 1.4 body parsing and conversion** (`K15.8`, `K15.9`): the header
