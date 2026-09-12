@@ -4,10 +4,10 @@ use crate::dialect::SqliteDialect;
 use openehr::base::{HierObjectId, ObjectId, ObjectRef, ObjectVersionId};
 use openehr::rm::common::{CommitError, Contribution, Version};
 use openehr::rm::data_types::DvDateTime;
-use openehr::rm::ehr::{Composition, Ehr};
+use openehr::rm::ehr::{Composition, Ehr, EhrStatus};
 use openehr::validation::Validate as _;
 use openehr_store::record::{CompositionIndexRow, StoredInstant, VersionRow};
-use openehr_store::{CommitOutcome, Result, Store, StoreError, ddl_script};
+use openehr_store::{CommitOutcome, Result, Store, StoreError, check_commit_rules, ddl_script};
 use rusqlite::{Connection, OptionalExtension as _, params};
 
 /// The engine name used in errors.
@@ -439,7 +439,8 @@ impl Store for SqliteStore {
 
         // Gate two: the same commit rules the library enforces, in the same
         // order, so a caller sees the same refusal whether the history is in
-        // memory or in a database (V8.1–V8.5).
+        // memory or in a database (V8.1–V8.5). Shared with `commit_ehr_status`
+        // rather than re-derived beside it (`check_commit_rules`'s own doc).
         let uid = version.uid().to_string();
         let already: Option<String> = self
             .connection
@@ -450,20 +451,11 @@ impl Store for SqliteStore {
             )
             .optional()
             .map_err(|e| engine(&e))?;
-        if already.is_some() {
-            return Err(StoreError::Commit(CommitError::DuplicateVersion));
-        }
-        match (&head, version.preceding_version_uid()) {
-            (None, None) => {}
-            (None, Some(_)) | (Some(_), None) => {
-                return Err(StoreError::Commit(CommitError::PrecedingVersionMismatch));
-            }
-            (Some((latest, _)), Some(preceding)) => {
-                if latest != &preceding.to_string() {
-                    return Err(StoreError::Commit(CommitError::NotLatest));
-                }
-            }
-        }
+        check_commit_rules(
+            head.as_ref(),
+            already.is_some(),
+            version.preceding_version_uid(),
+        )?;
 
         // The chain links to the previous version *in this container*, which is
         // the head we already resolved for the commit rules. Reading it here
@@ -568,6 +560,140 @@ impl Store for SqliteStore {
                 )
                 .map_err(|e| engine(&e))?;
         }
+
+        transaction.commit().map_err(|e| engine(&e))?;
+        Ok(CommitOutcome {
+            version_uid: version.uid().clone(),
+            created_container,
+        })
+    }
+
+    // Mirrors `commit_composition` above deliberately rather than sharing its
+    // transaction: the two gates, the head lookup, and the version insert are
+    // identical in shape (both go through `check_commit_rules` and
+    // `VersionRow::project`, so the *logic* is not duplicated, only the SQL
+    // that drives it), and the one real difference is what `commit_composition`
+    // does after — no `openehr_composition_index` row exists for an
+    // `EHR_STATUS`, because it is not archetyped content for AQL to search
+    // (`M3.32`). Factoring the transaction itself into one function shared by
+    // both would need it to return a still-open `Transaction` for the caller
+    // to extend, which is a real option for a future third versioned class,
+    // not attempted here for a second one.
+    #[allow(clippy::too_many_lines)]
+    fn commit_ehr_status(
+        &mut self,
+        ehr_id: &HierObjectId,
+        version: &Version<EhrStatus>,
+        contribution_uid: &str,
+    ) -> Result<CommitOutcome> {
+        // Gate one, as `commit_composition`: the version, not just the status
+        // inside it (`A-23`).
+        version.validate_ok()?;
+
+        // The EHR must exist, for the same reason as `commit_composition`.
+        self.get_ehr(ehr_id)?;
+
+        let container_uid = version.uid().object_id().to_string();
+        let head: Option<(String, i64)> = self
+            .connection
+            .query_row(
+                "SELECT uid, trunk_version FROM openehr_version \
+                 WHERE versioned_object_uid = ?1 \
+                 ORDER BY trunk_version DESC, branch_number DESC, branch_version DESC LIMIT 1",
+                params![container_uid],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(|e| engine(&e))?;
+
+        // Gate two: the same shared rule `commit_composition` calls.
+        let uid = version.uid().to_string();
+        let already: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT uid FROM openehr_version WHERE uid = ?1",
+                params![uid],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| engine(&e))?;
+        check_commit_rules(
+            head.as_ref(),
+            already.is_some(),
+            version.preceding_version_uid(),
+        )?;
+
+        let previous_digest = head
+            .as_ref()
+            .map(|(uid, _)| self.chain_digest_of(uid))
+            .transpose()?;
+        let row = VersionRow::project(version, contribution_uid, previous_digest, None)?;
+        let created_container = head.is_none();
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(|e| engine(&e))?;
+
+        if created_container {
+            let created =
+                StoredInstant::from_date_time(version.commit_audit().time_committed().value());
+            transaction
+                .execute(
+                    "INSERT INTO openehr_versioned_object \
+                     (uid, ehr_id, rm_type, time_created_text, time_created_utc) \
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![
+                        container_uid,
+                        ehr_id.to_string(),
+                        "EHR_STATUS",
+                        created.text,
+                        created.utc_seconds
+                    ],
+                )
+                .map_err(|e| engine(&e))?;
+        }
+
+        transaction
+            .execute(
+                "INSERT INTO openehr_version \
+                 (uid, versioned_object_uid, creating_system_id, trunk_version, branch_number, \
+                  branch_version, preceding_version_uid, lifecycle_state_code, is_deleted, \
+                  contribution_uid, audit_system_id, audit_change_type_code, \
+                  audit_committer_name, audit_time_committed_text, audit_time_committed_utc, \
+                  data_json, audit_description, signature, attestations_json, \
+                  other_input_version_uids_json, chain_previous, chain_content, chain_digest, \
+                  chain_tag_key_id, chain_tag_mac) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, \
+                         ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
+                params![
+                    row.uid,
+                    row.versioned_object_uid,
+                    row.creating_system_id,
+                    row.trunk_version,
+                    row.branch_number,
+                    row.branch_version,
+                    row.preceding_version_uid,
+                    row.lifecycle_state_code,
+                    i64::from(row.is_deleted),
+                    row.contribution_uid,
+                    row.audit_system_id,
+                    row.audit_change_type_code,
+                    row.audit_committer_name,
+                    row.audit_time_committed.text,
+                    row.audit_time_committed.utc_seconds,
+                    row.data_json,
+                    row.audit_description,
+                    row.signature,
+                    row.attestations_json,
+                    row.other_input_version_uids_json,
+                    row.chain.previous.as_slice(),
+                    row.chain.content.as_slice(),
+                    row.chain.digest.as_slice(),
+                    row.chain.tag_key_id,
+                    row.chain.tag_mac.map(|m| m.to_vec()),
+                ],
+            )
+            .map_err(|e| engine(&e))?;
 
         transaction.commit().map_err(|e| engine(&e))?;
         Ok(CommitOutcome {

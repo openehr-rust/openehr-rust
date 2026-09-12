@@ -64,4 +64,4 @@ pub use error::{Result, StoreError};
 pub use integrity::{Breach, Integrity, verify_versions};
 pub use record::{CompositionIndexRow, StoredInstant, VersionRow};
 pub use schema::{ColTy, Column, Index, SCHEMA_VERSION, SCHEMA_VERSION_TABLE, TABLES, Table};
-pub use store::{CommitOutcome, Store};
+pub use store::{CommitOutcome, Store, check_commit_rules};

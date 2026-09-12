@@ -199,6 +199,25 @@ together.
   See `A-69` in `openehr/spec/audit.md`. `parent_archetype_id`,
   `ArchetypeRepository::resolve`, and `CArchetypeRoot.archetype_ref` are
   unchanged — reference forms, not the archetype's own declared identity.
+- **Breaking.** `openehr_store::Store` gains a new required method,
+  `commit_ehr_status`, versioning `EHR_STATUS` the same way
+  `commit_composition` already versions `COMPOSITION` — the schema's own
+  `openehr_versioned_object.rm_type` column already named `EHR_STATUS` as
+  admitted (`M3.21`'s own note), but nothing called it that way until now.
+  `get_version`/`latest_version`/`all_versions`/`version_at_time` needed no
+  change at all: nothing in their own implementation names `Composition`,
+  so they already served a second versioned class once one existed to
+  commit. The commit rules themselves — a duplicate, a mis-parented
+  version, a stale predecessor — are shared rather than duplicated beside
+  `commit_composition`'s own copy: a new public function,
+  `openehr_store::check_commit_rules`, factored out of the existing,
+  already-tested logic (behaviour-preserving; every existing test still
+  passes unchanged) and now called by both. An external `Store`
+  implementation with no `commit_ehr_status` will not compile against this
+  release. This is the storage prerequisite thread #5/#6's `is_modifiable`
+  sequencing item needs (`tasks.md`, re-scoped 2026-09-06); the commit rule
+  itself and `openehr-loco`'s `GET`/`PUT …/ehr_status` endpoints are not
+  part of this change.
 
 ## 0.9.0 — 2026-09-02
 

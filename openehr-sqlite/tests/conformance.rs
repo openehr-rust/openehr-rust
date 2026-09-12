@@ -15,6 +15,12 @@ fn the_shared_suite_passes_against_a_real_database() {
 }
 
 #[test]
+fn the_ehr_status_suite_passes_against_a_real_database() {
+    let mut store = SqliteStore::in_memory().expect("open");
+    conformance::run_ehr_status(&mut store).expect("EHR_STATUS conformance suite");
+}
+
+#[test]
 fn the_dialect_is_self_consistent() {
     conformance::check_dialect(&SqliteDialect);
 }

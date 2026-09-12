@@ -179,6 +179,34 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         itself, not a small addition to it. Re-sized **L**, and the `db:H5.x`
         commit rule itself is unaffected — it is one check on data this
         prerequisite must exist to supply.
+      - **2026-09-12, the prerequisite itself, done — smaller than the
+        2026-09-06 estimate.** Investigation before writing anything found
+        most of the "composition-versioning work" was already generic:
+        `VersionRow::project<T: Serialize>`, and every read method
+        (`get_version`/`latest_version`/`all_versions`/`version_at_time`/
+        `chain_checkpoint`) — none names `Composition` in its own
+        implementation, so none needed to change. The one real gap was a
+        write path: `Store::commit_ehr_status`, added alongside
+        `commit_composition`, sharing its commit-rule check
+        (`openehr_store::check_commit_rules`, factored out — behaviour-
+        preserving, every existing test unchanged) rather than duplicating
+        it. `openehr-store::conformance::run_ehr_status` is the new shared
+        test — commits two `EHR_STATUS` versions, reads each generic method
+        back, refuses a duplicate — and passes against `openehr-sqlite`.
+        Mutation-tested (`cargo mutants --in-place`, `agents/auditing.md`'s
+        own documented workaround for this crate's sibling path
+        dev-dependencies): `check_commit_rules` had no direct test in
+        `openehr-store` itself before this — added six, now catches both
+        mutants that survived; `commit_ehr_status`'s own one candidate
+        mutant is unviable for the same reason `commit_composition`'s
+        already-accepted one is (`CommitOutcome` has no `Default`), not a
+        new gap. **Breaking** (`CHANGELOG.md`): a new required trait
+        method. **Not done in this pass**: the `db:H5.x` commit rule itself
+        (refuse content only when deactivated *and* the contribution does
+        not reactivate) and `openehr-loco`'s `GET`/`PUT …/ehr_status` — the
+        prerequisite was the whole scope, deliberately, so it could be
+        verified on its own rather than folded into a larger, harder-to-
+        review change.
 - [ ] **PostgreSQL `Store`.** Every CDR in the thread runs on PostgreSQL
       18; this repository's only `Store` is SQLite. Implement
       `openehr-postgresql`'s store against the existing DDL, run

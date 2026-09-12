@@ -18,10 +18,10 @@ use crate::store::Store;
 use openehr::base::{HierObjectId, ObjectId, ObjectRef, ObjectVersionId};
 use openehr::rm::common::{
     Archetyped, AuditDetails, CommitError, Contribution, LocatableAttrs, OriginalVersion,
-    PartyIdentified, Version,
+    PartyIdentified, PartySelf, Version,
 };
 use openehr::rm::data_types::{CodePhrase, DvDateTime};
-use openehr::rm::ehr::{Composition, Ehr};
+use openehr::rm::ehr::{Composition, Ehr, EhrStatus};
 use openehr::terminology::{audit_change_type, composition_category, version_lifecycle_state};
 
 /// The record identifier the suite uses.
@@ -150,6 +150,76 @@ pub fn sample_contribution(uid: &str, versions: &[u32]) -> Contribution {
         .expect("literal"),
     )
     .expect("literal")
+}
+
+/// Builds a sample `EHR_STATUS`.
+///
+/// # Panics
+///
+/// Never: every input is a literal known to parse.
+#[must_use]
+pub fn sample_ehr_status(is_modifiable: bool) -> EhrStatus {
+    EhrStatus::new(
+        LocatableAttrs::named("EHR Status", "openEHR-EHR-EHR_STATUS.generic.v1")
+            .expect("literal")
+            .with_archetype_details(
+                Archetyped::new("openEHR-EHR-EHR_STATUS.generic.v1", "1.0.0").expect("literal"),
+            ),
+        PartySelf::anonymous(),
+        true,
+        is_modifiable,
+    )
+}
+
+/// Builds a version of the sample `EHR_STATUS`.
+///
+/// The container's own id is `RECORD` — the EHR's own id — matching the
+/// convention `EHR.ehr_status` follows ([`sample_ehr`]'s own `ObjectRef`):
+/// `commit_ehr_status` does not itself check this, so a caller could choose
+/// otherwise, but nothing in this suite does.
+///
+/// # Panics
+///
+/// Never: every input is a literal known to parse.
+#[must_use]
+pub fn sample_ehr_status_version(
+    n: u32,
+    preceding: Option<u32>,
+    minute: u32,
+    is_modifiable: bool,
+) -> Version<EhrStatus> {
+    let id = |v: u32| -> ObjectVersionId {
+        format!("{RECORD}::{SYSTEM}::{v}").parse().expect("literal")
+    };
+    let owner = ObjectRef::new(
+        "local",
+        "EHR",
+        ObjectId::HierObjectId(HierObjectId::from_uid_str(RECORD).expect("literal")),
+    )
+    .expect("literal");
+    let audit = AuditDetails::new(
+        SYSTEM,
+        DvDateTime::new(&format!("2026-08-01T09:{minute:02}:00Z")).expect("literal"),
+        if preceding.is_none() {
+            audit_change_type::CREATION
+        } else {
+            audit_change_type::AMENDMENT
+        },
+        PartyIdentified::named("Dr A Nurse")
+            .expect("literal")
+            .into(),
+    )
+    .expect("literal");
+    OriginalVersion::new(
+        id(n),
+        preceding.map(id),
+        version_lifecycle_state::COMPLETE,
+        Some(sample_ehr_status(is_modifiable)),
+        audit,
+        owner,
+    )
+    .expect("literal")
+    .into()
 }
 
 /// Runs every store test against one engine.
@@ -471,6 +541,109 @@ pub fn run<S: Store>(store: &mut S) -> Result<()> {
         store.latest_version(&absent),
         Err(crate::StoreError::NotFound { .. })
     ));
+
+    Ok(())
+}
+
+/// Runs the `EHR_STATUS` versioning story against one engine.
+///
+/// Separate from [`run`] rather than folded into it: this is a different
+/// class's narrative, not another beat in a composition's — `EHR_STATUS`
+/// has no `openehr_composition_index` row to check, and this suite is what
+/// found out `get_version`/`latest_version`/`all_versions`/`version_at_time`
+/// needed no changes at all to serve a second versioned class, because
+/// nothing in their own implementation names `Composition` (`M3.35`,
+/// `M3.20`).
+///
+/// # Errors
+///
+/// Returns the first engine error. A conformance failure panics instead.
+///
+/// # Panics
+///
+/// Panics when the engine fails a conformance assertion.
+pub fn run_ehr_status<S: Store>(store: &mut S) -> Result<()> {
+    let engine = store.engine();
+    store.install()?;
+
+    let ehr = sample_ehr();
+    let ehr_id = ehr.ehr_id().clone();
+    store.create_ehr(&ehr)?;
+
+    let contribution_uid = "33333333-4444-5555-6666-777777777777";
+    store.create_contribution(&ehr_id, &sample_contribution(contribution_uid, &[1, 2]))?;
+
+    // Commit the first version — active, modifiable — and read it back every
+    // way the trait offers, none of which was written with `EHR_STATUS` in
+    // mind.
+    let first = store.commit_ehr_status(
+        &ehr_id,
+        &sample_ehr_status_version(1, None, 10, true),
+        contribution_uid,
+    )?;
+    assert!(
+        first.created_container,
+        "{engine}: first EHR_STATUS commit did not create a container"
+    );
+
+    let by_id: ObjectVersionId = format!("{RECORD}::{SYSTEM}::1").parse()?;
+    let read = store.get_version(&by_id)?;
+    assert_eq!(
+        read.uid,
+        by_id.to_string(),
+        "{engine}: EHR_STATUS did not round-trip through get_version"
+    );
+    assert!(
+        read.data_json.is_some(),
+        "{engine}: EHR_STATUS content was not stored"
+    );
+
+    let container_uid = HierObjectId::from_uid_str(RECORD)?;
+    let latest = store.latest_version(&container_uid)?;
+    assert_eq!(
+        latest.uid, read.uid,
+        "{engine}: latest_version did not find the EHR_STATUS just committed"
+    );
+
+    // The same commit rules `commit_composition` enforces, against the same
+    // shared check (`check_commit_rules`) — proven here rather than assumed
+    // from the fact both call it.
+    assert!(
+        matches!(
+            store.commit_ehr_status(
+                &ehr_id,
+                &sample_ehr_status_version(1, None, 11, true),
+                contribution_uid,
+            ),
+            Err(crate::StoreError::Commit(CommitError::DuplicateVersion))
+        ),
+        "{engine}: a duplicate EHR_STATUS version id did not refuse"
+    );
+
+    // A second version — deactivating the record — and `all_versions`
+    // oldest first, exactly as it already is for compositions (`V8.7a`).
+    let second = store.commit_ehr_status(
+        &ehr_id,
+        &sample_ehr_status_version(2, Some(1), 20, false),
+        contribution_uid,
+    )?;
+    assert!(
+        !second.created_container,
+        "{engine}: second EHR_STATUS commit created a new container"
+    );
+
+    let all = store.all_versions(&container_uid)?;
+    assert_eq!(all.len(), 2, "{engine}: wrong EHR_STATUS version count");
+    assert_eq!(
+        all[0].trunk_version, 1,
+        "{engine}: EHR_STATUS all_versions must be oldest first"
+    );
+
+    let at_0915 = store.version_at_time(&container_uid, &DvDateTime::new("2026-08-01T09:15:00Z")?)?;
+    assert_eq!(
+        at_0915.trunk_version, 1,
+        "{engine}: EHR_STATUS version_at_time went forwards"
+    );
 
     Ok(())
 }

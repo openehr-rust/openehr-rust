@@ -12,13 +12,20 @@
 //! An engine is free to enforce them with a unique index instead of a query, and
 //! [`crate::conformance`] does not care how — only that the refusal happens and
 //! is distinguishable.
+//!
+//! [`check_commit_rules`] is the check itself, factored out so a second
+//! versioned class — [`Store::commit_ehr_status`], today — calls the same
+//! function rather than re-deriving the same three-way match beside it. Two
+//! copies of one rule are exactly the shape that let `openehr-mariadb`
+//! diverge from `openehr-mysql` unnoticed (`W-01`), one level down from DDL
+//! to logic.
 
-use crate::error::Result;
+use crate::error::{Result, StoreError};
 use crate::record::{CompositionIndexRow, VersionRow};
 use openehr::base::{HierObjectId, ObjectVersionId};
-use openehr::rm::common::{Contribution, Version};
+use openehr::rm::common::{CommitError, Contribution, Version};
 use openehr::rm::data_types::DvDateTime;
-use openehr::rm::ehr::{Composition, Ehr};
+use openehr::rm::ehr::{Composition, Ehr, EhrStatus};
 
 /// What a successful commit produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +34,42 @@ pub struct CommitOutcome {
     pub version_uid: ObjectVersionId,
     /// Whether the container was created by this commit.
     pub created_container: bool,
+}
+
+/// The commit rules every engine enforces, for every versioned class: refuse
+/// a duplicate, a version belonging to another container, or one that does
+/// not name the current head (`V8.1`–`V8.5`, see the module header).
+///
+/// Pure and connection-agnostic — `head` is the container's current head, if
+/// any, as `(uid, trunk_version)`; `already_exists` is whether a version
+/// with this exact uid is already stored; `preceding_version_uid` is what
+/// the version being committed claims to follow. An engine resolves these
+/// however it stores versions and then asks this one question.
+///
+/// # Errors
+///
+/// Returns [`StoreError::Commit`] naming which rule was broken.
+pub fn check_commit_rules(
+    head: Option<&(String, i64)>,
+    already_exists: bool,
+    preceding_version_uid: Option<&ObjectVersionId>,
+) -> Result<()> {
+    if already_exists {
+        return Err(StoreError::Commit(CommitError::DuplicateVersion));
+    }
+    match (head, preceding_version_uid) {
+        (None, None) => Ok(()),
+        (None, Some(_)) | (Some(_), None) => {
+            Err(StoreError::Commit(CommitError::PrecedingVersionMismatch))
+        }
+        (Some((latest, _)), Some(preceding)) => {
+            if latest == &preceding.to_string() {
+                Ok(())
+            } else {
+                Err(StoreError::Commit(CommitError::NotLatest))
+            }
+        }
+    }
 }
 
 /// A persistent openEHR repository.
@@ -90,6 +133,34 @@ pub trait Store {
         &mut self,
         ehr_id: &HierObjectId,
         version: &Version<Composition>,
+        contribution_uid: &str,
+    ) -> Result<CommitOutcome>;
+
+    /// Commits one version of an `EHR_STATUS`.
+    ///
+    /// The same commit rules as [`Store::commit_composition`]
+    /// ([`check_commit_rules`]), against the same `openehr_version` table —
+    /// openEHR versions every class the same way (module header). The
+    /// caller names the container by the version's own `uid`, exactly as
+    /// for a composition; `EHR.ehr_status` conventionally names it by the
+    /// EHR's own `ehr_id` (`EHR.Ehr_status_valid`), and
+    /// [`conformance::sample_ehr`](crate::conformance::sample_ehr) already
+    /// builds one this way, but this method does not itself check the
+    /// convention was followed. There is no per-`EHR_STATUS` index row to
+    /// project — `openehr_composition_index` exists for archetype search,
+    /// and an `EHR_STATUS` is not archetyped content (`M3.32`).
+    ///
+    /// # Errors
+    ///
+    /// - [`crate::StoreError::Invalid`] if the status breaks a Reference
+    ///   Model invariant.
+    /// - [`crate::StoreError::Commit`] if the version does not belong at the
+    ///   head of its container — see the module header.
+    /// - [`crate::StoreError::NotFound`] if the EHR does not exist.
+    fn commit_ehr_status(
+        &mut self,
+        ehr_id: &HierObjectId,
+        version: &Version<EhrStatus>,
         contribution_uid: &str,
     ) -> Result<CommitOutcome>;
 
@@ -170,4 +241,71 @@ pub trait Store {
         ehr_id: &HierObjectId,
         archetype_id: &str,
     ) -> Result<Vec<CompositionIndexRow>>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::check_commit_rules;
+    use crate::StoreError;
+    use openehr::base::ObjectVersionId;
+    use openehr::rm::common::CommitError;
+
+    fn uid(v: u32) -> ObjectVersionId {
+        format!("87284370-2D4B-4E3D-A3F3-F303D2F4F34B::ehr1.example.org::{v}")
+            .parse()
+            .expect("literal")
+    }
+
+    /// `check_commit_rules` is a pure function with no test of its own in
+    /// this crate — every crate that calls it (`openehr-sqlite`, today) is
+    /// what actually exercises it, which means a mutation here would go
+    /// unnoticed by `cargo mutants` run against this crate alone. Every
+    /// branch, directly.
+    #[test]
+    fn the_first_version_of_a_new_container_is_admitted() {
+        assert!(check_commit_rules(None, false, None).is_ok());
+    }
+
+    #[test]
+    fn a_first_version_naming_a_predecessor_is_refused() {
+        assert!(matches!(
+            check_commit_rules(None, false, Some(&uid(1))),
+            Err(StoreError::Commit(CommitError::PrecedingVersionMismatch))
+        ));
+    }
+
+    #[test]
+    fn a_successor_naming_no_predecessor_is_refused() {
+        let head = (uid(1).to_string(), 1);
+        assert!(matches!(
+            check_commit_rules(Some(&head), false, None),
+            Err(StoreError::Commit(CommitError::PrecedingVersionMismatch))
+        ));
+    }
+
+    #[test]
+    fn a_successor_naming_the_current_head_is_admitted() {
+        let head = (uid(1).to_string(), 1);
+        assert!(check_commit_rules(Some(&head), false, Some(&uid(1))).is_ok());
+    }
+
+    #[test]
+    fn a_successor_naming_a_stale_predecessor_is_refused() {
+        let head = (uid(2).to_string(), 2);
+        assert!(matches!(
+            check_commit_rules(Some(&head), false, Some(&uid(1))),
+            Err(StoreError::Commit(CommitError::NotLatest))
+        ));
+    }
+
+    /// Checked before either match arm, and independently of both: a
+    /// duplicate is refused even when it would otherwise look like the
+    /// first version of a new container.
+    #[test]
+    fn a_duplicate_uid_is_refused_even_as_a_first_version() {
+        assert!(matches!(
+            check_commit_rules(None, true, None),
+            Err(StoreError::Commit(CommitError::DuplicateVersion))
+        ));
+    }
 }
