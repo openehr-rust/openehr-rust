@@ -1096,6 +1096,67 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       as deliberately absent — would catch the next `db:D-07` (four `VERSION`
       attributes silently dropped) before a reviewer does. — **M**
 
+      **Scope investigated, not started, 2026-09-12.** Two premises checked
+      before writing anything, one confirmed easier than expected and one
+      confirmed harder.
+
+      **Easier: the BMM itself.** `openEHR/specifications-ITS-BMM` is
+      Apache-2.0 (unlike `adl-archetypes`, which has no licence file and is
+      therefore read where it sits, never vendored — `openehr/spec/
+      corpus.md` §Licence) — a specific `.bmm.json` file could actually be
+      committed as a fixture, not only pointed at through an env var. The
+      RM's own JSON serialisation (`components/RM/json/
+      openehr_rm_1.2.0.bmm.json`, ~90 classes, ~20,000 lines) is a regular,
+      parseable schema: `class_definitions.<NAME>.properties.<name>` is
+      either `P_BMM_SINGLE_PROPERTY` (`type`, `is_mandatory`) or
+      `P_BMM_CONTAINER_PROPERTY` (`type_def.container_type`/`type_def.type`,
+      `cardinality`). `serde_json` reads this with no new parser and no new
+      dependency.
+
+      **Harder: there is no RM-side list to compare it against.** The
+      task's own premise — "asserts every class and attribute has a field
+      in `openehr::rm`" — needs, for each of ~90 Rust types, the list of
+      field names `serde` actually (de)serialises. Rust has no runtime
+      reflection, and this crate derives `Serialize`/`Deserialize` directly
+      on hand-written structs rather than through a schema-generating macro,
+      so nothing today can answer "what are `Composition`'s field names" by
+      inspection. Two ways to get one, both real costs rather than a test
+      body:
+
+      1. A `schemars`-shaped dependency, deriving a JSON Schema per RM type
+         and reading field names back out of *that*. A genuine new
+         dependency in `openehr`'s own `Cargo.toml` — every one there
+         carries a justifying comment — which puts this on the same footing
+         as the still-undecided `regex` item above: a maintainer decision
+         about what this crate depends on, not something to add silently
+         inside an unrelated test.
+      2. A hand-maintained table, `RM class → field list`, checked by eye
+         against `openehr::rm`'s own source once and then trusted. This is
+         exactly the shape `W-13` already named a defect in this repository:
+         "a guard whose input list was written by hand" — a second,
+         independent list that agrees with the code on the day it is
+         written and silently stops being checked the day either one
+         changes without the other.
+
+      Neither is a small addition to what the task describes; both are
+      decisions, not code, the same footing `tasks.md`'s own `regex` item
+      already stands on. Re-sized **L**.
+
+      **The narrow pilot this re-scoping would otherwise propose has
+      already been run, once, by hand — that is what `db:D-07` is.**
+      Checked while investigating this item rather than assumed: `D-07`'s
+      own finding text reads the RM 1.1.0 BMM for exactly `VERSION`,
+      `ORIGINAL_VERSION`, and `AUDIT_DETAILS`, and found and fixed the same
+      four dropped attributes this task's own motivating example names —
+      it is not a hypothetical near-miss this task is worried about, it is
+      the one real instance of the exact defect class this task exists to
+      prevent from recurring. What `D-07` did not do, and what remains the
+      actual gap, is make that check *standing*: it read one class family
+      once, by a person, rather than every class, automatically, on every
+      push. Turning it into that is exactly the two-way dependency decision
+      above — a one-off manual read does not need Rust reflection, because
+      a person did the field-matching; a repeatable one does.
+
 ## Done (condensed; full evidence in `git show 4761700:tasks.md`)
 
 All verified on the dates given; none is re-asserted here without the source.
