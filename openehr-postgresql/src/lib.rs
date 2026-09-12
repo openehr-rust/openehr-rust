@@ -1,10 +1,12 @@
-//! openEHR persistence for **`PostgreSQL` 18**.
+//! openEHR persistence for **`PostgreSQL` 18**, with a real [`PostgresqlStore`].
 //!
-//! This crate supplies one [`Dialect`]. Everything else — the storage model,
-//! the projection from openEHR objects onto rows, the commit rules, the
-//! conformance suite — lives in [`openehr_store`], which all five engine crates
-//! share. A dialect owns four things and no more: type spellings, identifier
-//! quoting, placeholder style, and how the engine enforces append-only.
+//! This crate supplies one [`Dialect`] and one [`Store`](openehr_store::Store)
+//! implementation. The storage model, the projection from openEHR objects onto
+//! rows, the commit rules, and the conformance suite live in [`openehr_store`],
+//! which all six engine crates share — a dialect owns type spellings,
+//! identifier quoting, placeholder style, and how the engine enforces
+//! append-only; [`PostgresqlStore`] owns the driver glue that runs the shared
+//! logic against a real connection.
 //!
 //! # Trademarks
 //!
@@ -13,22 +15,25 @@
 //! constitute endorsement of this product by openEHR International or openEHR
 //! Foundation.
 //!
-//! # Conformance level: **Schema**
+//! # Conformance level: **Store**
 //!
-//! This crate emits DDL, and that DDL has been executed against
-//! **`PostgreSQL` 18**: five tables and seven indexes created, the script
-//! re-applied as a no-op, foreign keys enforced, and both append-only tables
-//! observed refusing `UPDATE` and `DELETE` with a row present and unchanged
-//! afterwards. `openehr-store/scripts/verify-schema.sh postgresql` reproduces
-//! it from a fresh container.
+//! [`PostgresqlStore`] implements [`openehr_store::Store`] and passes the
+//! shared conformance suite (`conformance::run`/`run_ehr_status`/
+//! `run_is_modifiable_gate`) against a real `PostgreSQL` 18 server, plus every
+//! `openehr-sqlite`-only test this crate had an equivalent for — concurrency,
+//! the tamper-evident chain, the checkpoint, schema-version refusal —
+//! reproducibly, from `openehr-postgresql/scripts/verify-store.sh`.
 //!
-//! It does **not** contain a store: there is no driver dependency, no
-//! connection handling, and no implementation of [`openehr_store::Store`].
+//! Not yet **Verified**: that step runs in the `schema` job's own CI matrix
+//! now, but Verified means a real green run to cite, and this crate has not
+//! had one yet — see `spec/databases/conformance-matrix.md`, the one file
+//! that owns this claim.
 //!
-//! That is stated plainly because the sibling FHIR monorepo in this repository
-//! carries an audit finding (**F-01**) for six READMEs that claimed a working
-//! store, a CLI, and 7,399 round-tripped resources in ports where none of it
-//! existed. See `spec/conformance.md` for what each level means.
+//! That distinction is stated plainly because the sibling FHIR monorepo in
+//! this repository carries an audit finding (**F-01**) for six READMEs that
+//! claimed a working store, a CLI, and 7,399 round-tripped resources in ports
+//! where none of it existed. See `spec/conformance.md` for what each level
+//! means.
 //!
 //! ```
 //! use openehr_postgresql::PostgresqlDialect;
@@ -45,8 +50,11 @@
 
 #![forbid(unsafe_code)]
 
+pub mod store;
+
 use openehr_store::schema::Table;
 use openehr_store::{ColTy, Dialect, Placeholder};
+pub use store::PostgresqlStore;
 
 /// The `PostgreSQL` dialect.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

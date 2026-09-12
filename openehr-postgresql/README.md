@@ -1,26 +1,35 @@
 # openehr-postgresql
 
-openEHR® persistence for **PostgreSQL 18** — the schema dialect.
+openEHR® persistence for **PostgreSQL 18** — the schema dialect and a real
+`Store`.
 
 > openEHR® is the registered trademark of the openEHR Foundation and is used
 > with the permission of openEHR International. Use of the trademark does not
 > constitute endorsement of this product by openEHR International or openEHR
 > Foundation.
 
-## Conformance level: Schema
+## Conformance level: Store
 
-This crate emits DDL for the shared openEHR schema, and a PostgreSQL 18 server
-has executed it: five tables, seven indexes, idempotent on re-application,
-foreign keys enforced, and both append-only tables refusing `UPDATE` and
-`DELETE` with a row present and intact afterwards.
+`PostgresqlStore` implements `openehr_store::Store` and passes the shared
+conformance suite — `conformance::run`, `run_ehr_status`,
+`run_is_modifiable_gate` — against a real PostgreSQL 18 server, plus every
+`openehr-sqlite`-only test this crate had an equivalent for: concurrency,
+the tamper-evident chain, the checkpoint, schema-version refusal.
 
 ```sh
-../openehr-store/scripts/verify-schema.sh postgresql
+sh scripts/verify-store.sh
 ```
 
-**It does not contain a store.** There is no driver dependency, no connection
-handling, and no implementation of `Store`. Schema level means the database
-accepts the schema, not that this crate can talk to it.
+Provisions a disposable `postgres:18-alpine` container with its port
+published to the host, runs the full suite against it, and tears it down —
+reproducible from a fresh checkout, the same discipline
+`../openehr-store/scripts/verify-schema.sh` already holds this crate's DDL
+to.
+
+**Not yet Verified.** That step now runs in CI, in the `schema` job's own
+matrix, but Verified means a real green run to cite — see
+[`spec/databases/conformance-matrix.md`](../spec/databases/conformance-matrix.md),
+the one file that owns this claim.
 
 See [`openehr-store/spec/conformance.md`](../openehr-store/spec/conformance.md)
 for what each level means and why they are stated this bluntly.
@@ -44,11 +53,13 @@ Requires Rust 1.96+ (edition 2024).
 
 ## What this crate owns
 
-Four things: type spellings, identifier quoting, placeholder style, and how the
-engine enforces append-only. Everything else — which tables exist, which
-columns, which indexes, the projection from openEHR objects onto rows, the
-commit rules, the conformance suite — lives in
-[`openehr-store`](../openehr-store) and is shared by all six engines.
+Two things: the dialect — type spellings, identifier quoting, placeholder
+style, and how the engine enforces append-only — and `PostgresqlStore`, the
+driver glue that runs the shared logic against a real connection. Everything
+in between — which tables exist, which columns, which indexes, the
+projection from openEHR objects onto rows, the commit rules, the conformance
+suite — lives in [`openehr-store`](../openehr-store) and is shared by all six
+engines; this crate does not reimplement any of it.
 
 That boundary is deliberate. The sibling FHIR monorepo in this repository gave
 each of six ports a full copy of the DDL generator, and one of the copies spent
@@ -61,9 +72,10 @@ owns only spellings cannot do that, and
 | Decision | Why |
 | --- | --- |
 | `text`, not `varchar(n)` | PostgreSQL stores both identically; the length would only add a check that rejects a long-but-legal `ARCHETYPE_ID`. |
-| `jsonb`, not `json` | The canonical byte form is regenerated from the parsed object, never read back from the column, so preserving whitespace buys nothing and containment indexes buy a lot. |
-| `timestamptz` for derived instants | The authoritative instant is stored as `text` alongside it — see below. |
+| `text`, **not** `jsonb`, for canonical JSON | `jsonb` reorders keys and rewrites numbers — measured on PostgreSQL 18, not assumed. The chain's content digest is SHA-256 over the exact bytes committed (`M3.16`), so those bytes must be reproducible from storage; `jsonb` produces an equivalent document, not the same one (`M3.43`, `D-08`). |
+| `timestamptz` for derived instants | The authoritative instant is stored as `text` alongside it — see below. `PostgresqlStore` converts through `time::OffsetDateTime` on both sides, since `postgres-types` has no `ToSql`/`FromSql` between a raw integer and `timestamptz`. |
 | An append-only trigger | The guarantee lives in the database, not in application code, where it would end the first time somebody opened `psql`. |
+| `postgres`, blocking, `NoTls` | A synchronous driver matches `Store`'s own synchronous trait — no async runtime for a caller to bring. `NoTls`: this crate connects to a server the deployment already trusts on its own network; TLS to a database is a separate decision this crate does not make on a caller's behalf. |
 
 ## Every instant is stored twice, and that is the point
 
@@ -80,20 +92,22 @@ cannot disagree about one record.
 ## Testing
 
 ```sh
-cargo test
+cargo test              # golden DDL tests: no server needed
+sh scripts/verify-store.sh   # the Store, against a real, disposable server
 ```
 
-The tests are golden: they assert the SQL this crate emits, including
-assertions that it is *not* another engine's SQL.
+The golden tests assert the SQL this crate's dialect emits, including that it
+is *not* another engine's SQL. The `Store` tests are `#[ignore]`d — they need
+`OPENEHR_POSTGRESQL_URL` pointing at a real server, which `verify-store.sh`
+provisions, uses, and tears down.
 
 ## What is not here
 
 | Not here | Why |
 | --- | --- |
-| A `Store` | This crate is a dialect. Level **Schema** means the schema is emitted and the engine has executed it, not that this crate can talk to a database. |
-| A driver dependency | A dependency implies a capability, and readers reasonably infer one (`W16.4`). |
 | Archetype or template validation | Not implemented anywhere in this project (`lib:S1.4`). |
 | AQL execution | Parsed and statically checked by `openehr`, never executed (`S1.6`). |
+| A keyed-chain or two-system-race test | Gaps in `openehr_store::conformance`'s own shared fixtures, not in this crate — `db:D-14`. |
 
 ## Fuzzing
 

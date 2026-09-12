@@ -491,6 +491,18 @@ jobs:
       - name: Verify generated DDL against a real ${{ matrix.engine }} server
         run: sh openehr-store/scripts/verify-schema.sh ${{ matrix.engine }}
 
+      # `openehr-postgresql` is the only engine crate with a real `Store`
+      # today — an extra step on its own matrix leg rather than a new job, so
+      # this doesn't move the CI-job count `check-docs.py` and two agent-
+      # facing docs track. `openehr-postgresql` claims level Store because
+      # of this step; Verified needs the claim to survive this running green
+      # in CI at least once (`openehr-store/spec/conformance.md`'s own
+      # ladder), which is why the conformance matrix names a real run rather
+      # than dating the commit that added it.
+      - name: Run the shared conformance suite against a real PostgreSQL server
+        if: matrix.engine == 'postgresql'
+        run: sh openehr-postgresql/scripts/verify-store.sh
+
   # T11.9: fuzz targets must be RUN, not merely committed. A committed target
   # nobody executes is a claim, and this repository's whole audit register is
   # about the difference between a claim and a check.

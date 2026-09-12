@@ -1065,6 +1065,53 @@ It is not, for this pass. A future review against the primary sources is the way
 to close that — and the library register records that every such review so far
 found the primary source contradicting what had been implemented.
 
+### D-14 — The shared conformance suite never exercises a keyed chain or a two-system race — **Low, open**
+
+**Found 2026-09-12**, mutation-testing `openehr-postgresql::PostgresqlStore`
+once it gained a real implementation
+(`openehr-postgresql/scripts/verify-store.sh`, `cargo mutants --in-place`
+against a live server): four of its 54 diff mutants survived, and all four
+trace to gaps in `openehr_store::conformance` itself rather than to anything
+specific to this one engine — the same mutations would almost certainly
+survive against `SqliteStore` too, checked by reading rather than assumed:
+its own equivalent logic (inline in `read_version`, not a separate function)
+runs against the identical fixtures.
+
+**The two gaps, both in the fixtures every engine's suite shares:**
+
+1. **No fixture ever commits a keyed chain.** `VersionRow::project`'s `key:
+   Option<&ChainKey>` parameter is `None` in every call
+   `openehr_store::conformance` makes, so `chain_tag_key_id`/`chain_tag_mac`
+   are `NULL` in every row any conformance test reads back. A mutant that
+   makes the tag-reading path return the wrong thing — three of the four
+   survivors, all on `PostgresqlStore::optional_digest_column` — cannot be
+   caught by a suite that never exercises the `Some` case at all.
+2. **No fixture has two racing writers with different `creating_system_id`s.**
+   `commit_conflict`'s two branches distinguish "the same version identity
+   twice" (`openehr_version_pkey`) from "two different identities at the same
+   tree position" (`ix_version_container_trunk`, `db:H5.10`'s own index) —
+   but `conformance::sample_version` always uses the one `SYSTEM` constant,
+   so `openehr-postgresql/tests/concurrency.rs`'s racing writers (ported from
+   `openehr-sqlite/tests/concurrency.rs`) all attempt the *identical* uid.
+   They can only ever collide on the first constraint. The second — the
+   realistic case of two offline systems each independently computing
+   "version 2" — has no test anywhere in this tree.
+
+**Why Low, not Medium.** Both gaps are in test coverage, not in behaviour:
+`commit_conflict`'s second branch was written by reading AOM2/`H5.10`
+directly, not inferred from a passing test, and nothing here suggests either
+engine mishandles the case the coverage is missing. The severity this
+register reserves for an actually-wrong behaviour does not apply to a gap in
+how confidently that behaviour is known to be right.
+
+**Not fixed.** Closing either needs a change to `openehr_store::conformance`
+itself — a keyed-chain fixture, and a `sample_version` variant taking a
+`creating_system_id` — which would then need re-verifying against every
+engine with a `Store`, not only the one whose mutation testing found the
+gap. Left open rather than patched narrowly for `PostgresqlStore` alone,
+which would make the shared suite's own blind spot harder to see the next
+time an engine is added.
+
 ## What this audit did not cover
 
 Stated so "not examined" and "examined and sound" stay distinguishable (`W0.3`):

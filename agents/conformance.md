@@ -22,7 +22,7 @@ The table below is a **marked copy**: `db:C0.8` owns it, and
 | Crate | Level | Why not higher |
 | --- | --- | --- |
 | `openehr-sqlite` | **Verified** | — |
-| `openehr-postgresql` | **Schema** | No driver, no `Store`. |
+| `openehr-postgresql` | **Store** | `Store` implemented and passing against a real server, 2026-09-12; not yet run in CI to reach Verified (`db:D-14`'s own residual). |
 | `openehr-mysql` | **Schema** | as above |
 | `openehr-mariadb` | **Schema** | as above |
 | `openehr-mssql` | **Schema** | Verified 2026-09-06 in CI, `schema / mssql` (`M14.6`, met) — SQL Server 2022 segfaults under qemu, so still unverifiable on an arm64 machine locally. The live run found a real defect (`CREATE TRIGGER` sharing a batch with prior statements, `Msg 111`), fixed and recorded as `db:D-12`. |

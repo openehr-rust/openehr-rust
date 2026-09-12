@@ -6,7 +6,7 @@ version = "0.9.0"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
-description = "openEHR® persistence for PostgreSQL: schema dialect and DDL. openEHR® is the registered trademark of the openEHR Foundation and is used with the permission of openEHR International. Use of the trademark does not constitute endorsement of this product by openEHR International or openEHR Foundation. This project is an independent work."
+description = "openEHR® persistence for PostgreSQL: schema dialect and a real Store. openEHR® is the registered trademark of the openEHR Foundation and is used with the permission of openEHR International. Use of the trademark does not constitute endorsement of this product by openEHR International or openEHR Foundation. This project is an independent work."
 keywords = ["openehr", "ehr", "postgresql", "healthcare", "sql"]
 categories = ["database"]
 repository = "https://github.com/openehr-rust/openehr-rust"
@@ -15,7 +15,18 @@ readme = "README.md"
 [dependencies]
 openehr = { path = "../openehr", version = "0.9.0" }
 openehr-store = { path = "../openehr-store", version = "0.9.0" }
+# The driver `PostgresqlStore` runs on: blocking, matching `Store`'s own
+# synchronous trait, so nothing here needs its own async runtime -- the
+# `postgres` crate manages one internally. `with-time-0_3`: the one feature
+# this crate needs, converting a `timestamptz` column through `time`'s
+# `OffsetDateTime` rather than a raw integer, which `postgres-types` has no
+# `ToSql`/`FromSql` for directly.
+postgres = { version = "0.19.14", features = ["with-time-0_3"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip", "arbitrary_precision"] }
+# The other half of `with-time-0_3` above: this crate's own conversion code
+# calls `OffsetDateTime::from_unix_timestamp`/`unix_timestamp` directly, not
+# only through `postgres`'s own `ToSql`/`FromSql` impls.
+time = "0.3.55"
 
 
 [lints.rust]

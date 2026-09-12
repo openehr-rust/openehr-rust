@@ -37,7 +37,7 @@ evidence (`W0.3`).
 | Crate | Level | Evidence |
 | --- | --- | --- |
 | `openehr-sqlite` | **Verified** | `conformance::run` against a real in-process database, in CI on every push |
-| `openehr-postgresql` | **Schema** | DDL executed against PostgreSQL 18, in CI on every push |
+| `openehr-postgresql` | **Store** | `PostgresqlStore` implements `Store`; `conformance::run`/`run_ehr_status`/`run_is_modifiable_gate` plus every `SqliteStore`-only test ported (concurrency, tamper, checkpoint) pass against a real PostgreSQL 18 server, reproducibly (`openehr-postgresql/scripts/verify-store.sh`). A step in the `schema` job's own CI matrix now runs this on every push; not yet promoted to Verified pending a real green run to cite (`openehr-store/spec/conformance.md`'s own ladder) |
 | `openehr-mysql` | **Schema** | DDL executed against MySQL 8.4, in CI on every push |
 | `openehr-mariadb` | **Schema** | DDL executed against MariaDB 11.4, in CI on every push |
 | `openehr-mssql` | **Schema** | DDL executed against SQL Server 2022, in CI on every push |
@@ -58,6 +58,27 @@ job `schema / mssql`), after seven rounds of real fixes — most in
 crate's own DDL: `append_only_sql`'s `CREATE OR ALTER TRIGGER` shared a batch
 with every statement before it, which SQL Server refuses outright. See
 `spec/databases/audit.md` **D-12** for the full account.
+
+**`openehr-postgresql` reached Store, 2026-09-12** — the first engine besides
+`SQLite` to implement `Store` at all. `PostgresqlStore` uses the `postgres`
+crate (blocking, `NoTls`), with the client behind a `RefCell` because every
+one of its methods takes `&mut self` where `rusqlite::Connection` allows a
+shared borrow — the shared trait's read methods take `&self` regardless of
+engine, so the interior mutability has to live somewhere. Verified locally
+against a real, disposable `postgres:18-alpine` container
+(`scripts/verify-store.sh`): the three shared conformance suites, plus every
+`SqliteStore`-only test this crate had (concurrency, tamper-chain, checkpoint,
+schema-version refusal) ported rather than assumed to hold unchanged.
+Mutation-tested (`cargo mutants --in-place`, a live server, `--ignored
+--test-threads=1`): 54 diff mutants, 35 caught, 15 unviable (the same
+`Result`-return-type shape already accepted for every other handler in this
+tree), 4 missed — all four traced to `db:D-14`, a gap in
+`openehr_store::conformance`'s own fixtures (no keyed chain, no two-system
+race) rather than in this engine's code, and left open there rather than
+patched narrowly here. Not yet **Verified**: the CI step exists
+(`schema` job, `matrix.engine == 'postgresql'`) but has not yet been observed
+passing in a real run to cite, the same bar every other level change on this
+page is held to.
 
 ## Per-engine requirements
 

@@ -113,7 +113,7 @@ each engine crate stands, under the ladder set out in
 | Crate | Level |
 | --- | --- |
 | `openehr-sqlite` | **Verified** — the full suite against a real in-process database, in CI on every push |
-| `openehr-postgresql` | **Schema** — DDL executed against PostgreSQL 18 |
+| `openehr-postgresql` | **Store** — `Store` implemented, passing against a real server |
 | `openehr-mysql` | **Schema** — DDL executed against MySQL 8.4 |
 | `openehr-mariadb` | **Schema** — DDL executed against MariaDB 11.4 |
 | `openehr-mssql` | **Schema** — DDL executed against SQL Server 2022 |

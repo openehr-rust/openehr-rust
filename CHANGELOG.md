@@ -7,6 +7,23 @@ together.
 
 ## Unreleased
 
+- `openehr-postgresql` reaches conformance level **Store**: `PostgresqlStore`
+  implements `openehr_store::Store` (blocking, via the `postgres` crate,
+  `NoTls`) and passes the shared conformance suite —
+  `conformance::run`/`run_ehr_status`/`run_is_modifiable_gate` — against a
+  real PostgreSQL 18 server, plus every `openehr-sqlite`-only test this
+  crate had an equivalent for (concurrency, the tamper-evident chain, the
+  checkpoint, schema-version refusal), reproducibly from
+  `openehr-postgresql/scripts/verify-store.sh`. Mutation-tested: 35 of 39
+  viable diff mutants caught; the remaining 4 trace to a gap in
+  `openehr_store::conformance`'s own shared fixtures (no keyed-chain test,
+  no two-system-race test) rather than to this crate, recorded as `db:D-14`
+  and left open. Not yet **Verified** — the `schema` job's CI matrix now
+  runs `verify-store.sh` for `postgresql`, but that has not yet been
+  observed passing in a real run. New public items:
+  `openehr_postgresql::store` and its re-export, `PostgresqlStore`; two new
+  dependencies, `postgres` (`with-time-0_3`) and `time`. Not breaking —
+  purely additive. See `spec/databases/conformance-matrix.md`.
 - `openehr-oracle` reaches conformance level **Schema**: its DDL has been
   executed against a real Oracle server (`gvenzl/oracle-free`, Oracle
   Database Free 26ai) — parses, is idempotent, round-trips canonical JSON

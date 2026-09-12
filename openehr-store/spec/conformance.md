@@ -51,8 +51,10 @@ that run — not the commit that added the file — is what closed
 a working one would have repeated the error this passage records; it took three
 attempts to get the MySQL job passing, and the two failed ones were guesses.
 
-`openehr-sqlite` is therefore at **Verified**. It is the only crate at Store
-level and so the only one eligible.
+`openehr-sqlite` is therefore at **Verified**. It was the only crate at Store
+level, and so the only one eligible, until `openehr-postgresql` reached Store
+2026-09-12 — real locally, not yet run in CI to cite, which is what
+Verified itself requires.
 
 The "with a row present" clause is not pedantry. The first enforcement run
 looked like a pass and proved nothing: the `DELETE` matched zero rows, and a
@@ -66,7 +68,7 @@ reports the silence as success.
 | Crate | Level | What is verified | What is not |
 | --- | --- | --- | --- |
 | `openehr-sqlite` | **Verified** | The full suite against a real in-process database, run in CI on every push: every commit rule, every read, the archetype index, the append-only triggers, DDL idempotence. | Concurrency **is** exercised, by `openehr-sqlite/tests/concurrency.rs` (`D-02`, `D-06`) — but only for SQLite, and only for the two races `R4.5` and `H5.4` name. |
-| `openehr-postgresql` | **Schema** | DDL executed against **PostgreSQL 18**: 5 tables, 7 indexes, idempotent across repeated runs, foreign keys enforced, and both append-only tables refused `UPDATE` and `DELETE` with the row surviving unmodified. | No driver and no `Store`. |
+| `openehr-postgresql` | **Store** | `PostgresqlStore` implements `Store` against **PostgreSQL 18**: the same three conformance suites `openehr-sqlite` runs, plus concurrency, tamper-chain, and checkpoint tests ported from it, all passing against a real, disposable server (`scripts/verify-store.sh`). Mutation-tested: 35/39 viable diff mutants caught (`db:D-14`'s own residual for the rest). | Not run in CI on every push yet — the step exists but has not been observed green, so this is Store, not Verified. |
 | `openehr-mysql` | **Schema** | The same, against **MySQL 8.4**. | as above |
 | `openehr-mariadb` | **Schema** | The same, against **MariaDB 11.4**. | as above. This crate was a name-substituted copy of `openehr-mysql` until 2026-08-01, claiming Schema against a "MariaDB 8.4" that does not exist; see [`spec/audit.md`](../../spec/audit.md) **W-01**. The current claim was earned by an actual run. |
 | `openehr-mssql` | **Schema** | DDL executed against **SQL Server 2022**: tables and indexes created, idempotent across repeated runs, a seed row's canonical JSON round-tripped byte for byte, and both append-only tables refused `UPDATE`/`DELETE` with the row surviving unmodified. Verified 2026-09-06, in CI (`schema / mssql`, `M14.6`) — SQL Server 2022 segfaults under qemu, so this crate still cannot be checked on an arm64 machine locally. | No driver and no `Store`. |

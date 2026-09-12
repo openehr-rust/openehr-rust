@@ -306,6 +306,49 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       conformance-matrix.md` — the one file that owns a level (`W0.40`).
       *Evidence:* the matrix row moves Schema → Store → Verified with the
       job named. — **L**
+
+      **2026-09-12: Schema → Store, done; → Verified, not yet observed.**
+      `PostgresqlStore` (`postgres` crate, blocking, `NoTls` — a real
+      connection needed a driver dependency this crate never had, unlike
+      `SqliteStore`'s embedded `rusqlite`). The client sits behind a
+      `RefCell`: `Store`'s shared trait gives every read method `&self`,
+      which `rusqlite::Connection` tolerates and `postgres::Client` does
+      not — every one of its methods, reads included, takes `&mut self`.
+      The one real conversion this engine needs that `SqliteStore` does
+      not: `timestamptz` has no `ToSql`/`FromSql` against a raw `i64`, so
+      the derived UTC column goes through `time::OffsetDateTime` on both
+      sides — found needing its own dedicated test
+      (`the_derived_utc_instant_round_trips_to_the_exact_value_committed`)
+      after `cargo mutants` showed nothing else asserted the *value*, only
+      orderings the database itself computes over the stored column.
+
+      Verified locally, reproducibly: `openehr-postgresql/scripts/
+      verify-store.sh` provisions a disposable `postgres:18-alpine`
+      container with its port published to the host (`verify-schema.sh`'s
+      own container only ever needs `podman exec`, since nothing there is
+      a real client) and runs the three shared suites plus every
+      `SqliteStore`-only test this crate had an equivalent for —
+      concurrency (`tests/concurrency.rs`, ported), the tamper-evident
+      chain, the checkpoint, schema-version refusal (all ported into
+      `tests/store.rs`, `#[ignore]`d, needing `OPENEHR_POSTGRESQL_URL`).
+      Mutation-tested against the live server (`cargo mutants --in-place`,
+      `-- -- --ignored --test-threads=1` — the double `--` is required,
+      the first ending cargo-mutants' own options and the second `cargo
+      test`'s): 54 diff mutants, 35 caught, 15 unviable, 4 missed — traced
+      to a real gap, but in the *shared* conformance suite's own fixtures
+      (no keyed chain, no two-system race, so nothing exercises either
+      engine's equivalent logic for those two cases), not in this crate.
+      Recorded as `db:D-14` rather than patched narrowly here, since a real
+      fix needs a fixture change re-verified against every engine with a
+      `Store`, not just the one whose mutation testing happened to find it.
+
+      A CI step now runs `verify-store.sh` on `schema`'s own `postgresql`
+      matrix leg (a step, not a new job — the CI-job-count checks track
+      top-level jobs only). **Not yet Verified**: that step has not been
+      observed passing in a real CI run, which `openehr-store/spec/
+      conformance.md`'s own ladder requires before the claim moves past
+      Store. Checkbox left open pending that run; matrix, README, and
+      rustdoc all say Store, not Verified, until it happens.
 - [x] **MSSQL and Oracle parsed by a real server.** Two of six dialects had
       "never been parsed by a server" (`spec/databases/conformance-matrix
       .md`). Both now run in containers — `mcr.microsoft.com/mssql/server`
