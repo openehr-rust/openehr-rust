@@ -155,6 +155,47 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       (thread #1). *Evidence:* a CKM-published OPT round-trips; `am::
       validate` runs against it in the commit path; matrix rows for `K15.16`,
       `K15.18` flip. — **L**
+
+      **Scope investigated 2026-09-13, before writing any of it.** This
+      item's own premise — "read OPT 1.4 into the AOM2 types this tree
+      already has" — does not hold, checked against the primary
+      specification rather than assumed. openEHR's own `AM` specification
+      states it directly: "This specification describes an Operational
+      Template based on ADL2/AOM2, rather than the original OPT, which is
+      an XML-schema format based on ADL 1.4 archetypes"
+      ([`AM/OPT2.html`](https://specifications.openehr.org/releases/AM/Release-2.3.0/OPT2.html)).
+      **OPT 1.4 and AOM2 are two different meta-model generations, not two
+      serialisations of one model.** `openehr::am` — every type this crate
+      has, `ArchetypeHrid` included — is AOM2-only; there is no AOM1.4
+      representation anywhere in this tree to read OPT 1.4 *into*. Reading
+      a real OPT 1.4 file therefore needs a genuine AOM1.4→AOM2 translation
+      layer, not an XML deserialiser alone — the two meta-models differ in
+      documented, non-cosmetic ways (this session did not enumerate them;
+      that enumeration is itself part of the missing scope). Checked
+      directly rather than assumed: no XML-parsing crate is a dependency
+      anywhere in this eighteen-crate tree, so even the deserialisation
+      half needs one — a new dependency for `openehr`, the same weight
+      class as the still-undecided `regex` item above.
+
+      **The newer alternative, `OPT2` (AOM2-native, embeds `cadl_text`
+      `am::cadl::parse_definition` could plausibly read close to as-is),
+      side-steps the translation problem entirely — at the cost of
+      dropping the task's own stated motivation.** Real-world CKM-published
+      templates and every CDR the thread names (EHRbase, FerroEHR, openEHR
+      Explorer) publish and consume OPT 1.4 today, not `OPT2` — a claim
+      this file already carried from the thread and not re-verified here,
+      but not contradicted by anything this pass found either. Building
+      against `OPT2` would be the smaller, cleaner engineering task and
+      the wrong one for interop with anything a real deployment actually
+      has.
+
+      **Not started.** Two decisions this session cannot make on its own
+      stack before code: which format this crate targets (`OPT 1.4`, real
+      interop, AOM1.4→AOM2 translation plus a new XML dependency; or
+      `OPT2`, smaller, AOM2-native, but unproven against real templates),
+      and — if `OPT 1.4` — the same XML-dependency decision the `regex`
+      item already stands on, for a different crate. Re-sized **XL**;
+      recorded in `plan.md` §Open decisions.
 - [ ] **`is_modifiable` at commit, order-independent.** Thread #5/#6 found
       the sequencing bug and #6 published the adjudication with spec
       citations (FerroEHR's own tracker, `#2673`; the `versions` List-vs-Set

@@ -208,8 +208,23 @@ posture. Open items for each are in `tasks.md`.
   policy (`is_queryable`/`is_modifiable`) for a `POST /ehr` that omits one.
   Blocks `POST /ehr`'s own fix and, through it, `PUT …/ehr_status`
   (`tasks.md`'s `is_modifiable` item).
-
-## Non-goals (for now)
+- **Which operational-template generation this crate targets** — opened
+  2026-09-13, investigating `tasks.md`'s "OPT 1.4 ingestion" item. openEHR's
+  own `AM` specification states OPT 1.4 and `OPT2` are different
+  meta-model generations, not two serialisations of one model: OPT 1.4 is
+  "an XML-schema format based on ADL 1.4 archetypes" (AOM1.4), and `OPT2`
+  is "based on ADL2/AOM2". `openehr::am` is AOM2-only — there is no AOM1.4
+  representation anywhere in this tree — so reading a real OPT 1.4 file
+  needs a genuine model-translation layer, not only an XML deserialiser
+  (which itself would be a new dependency; none exists in this tree
+  today). `OPT2` embeds `cadl_text`, which `am::cadl::parse_definition`
+  could plausibly read close to as-is — smaller, and AOM2-native — but
+  every CDR the FerroEHR thread names (EHRbase, FerroEHR, openEHR
+  Explorer) and CKM's own published templates use OPT 1.4 today, not
+  `OPT2`, so building against `OPT2` alone would not serve the
+  interoperability reason this item exists. The decision is which one
+  this crate targets, or whether both are eventually needed and in what
+  order — a real product-direction call, not a default to pick under it.
 
 - No claim of openEHR conformance beyond the project's own ladder, ever.
 - No new engines until the professionalization workstreams close; the
