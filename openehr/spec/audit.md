@@ -2351,12 +2351,40 @@ believing its own documentation twice (**W-09**, **A-26**). The register is wher
 the distance between the specification and the code is kept visible, and 32
 requirements was the largest such distance this crate has carried.
 
-**Evidence a reader can check.** `grep -rln "K15\." openehr/src` returns the
-`am` module and `lib.rs`, and nothing else — no parser module, no flattening, no
-retrieval. Twenty-two §15 rows in
-[`conformance-matrix.md`](conformance-matrix.md) read `spec`, a status that did
-not exist before this reversal and means exactly this; fourteen read `•` and
-name the tests that earn them.
+**Evidence a reader can check, corrected 2026-09-13 — stale since the module it
+describes grew past it.** `grep -rln "K15\." openehr/src` returns fourteen files,
+all under `am/`, plus `lib.rs` and `validation.rs` — still no flattening module,
+which is the one absence that has held throughout. It is **not** still true, and
+had not been since 2026-08-30, that there is "no parser module, no ...
+retrieval": `am::cadl`/`am::adl2`/`am::adl14` (parsers, `K15.5`–`K15.7`) and
+`am::repository` (retrieval, `K15.24`–`K15.27`) are two of those fourteen files,
+both already named by this finding's own status line above. This sentence was
+written at the 2026-08-26 reversal, before either existed, and nobody re-read it
+against the module once they did — exactly the drift the recurring "close
+`A-40`'s own residual wording" backlog item exists to catch, caught here for the
+first time against *this* sentence specifically (the closed-slot sentence was
+caught the same way on 2026-09-07, above).
+
+The row count is corrected the same day, mechanically re-derived rather than
+hand-counted: [`conformance-matrix.md`](conformance-matrix.md) has fourteen §15
+rows covering all thirty-two `K15.x` ids (a row may bundle several, as
+`K15.18`–`K15.23` does); expanding every row, **fifteen ids read `spec`,
+seventeen read `•`** and name the tests that earn them — not "twenty-two … read
+`spec` … fourteen read `•`", the original 2026-08-26 sentence, describing the
+reversal's very first moment before any of `K15.1`–`K15.4`, the header readers,
+`am::cadl`, `am::validate`, or `am::repository` existed to move a row off
+`spec`. The **sixteen**-requirement count in this finding's own next paragraph
+(dated 2026-09-03) is a full step closer to today's actual fifteen and is left
+as written — re-checked against `git log` on `conformance-matrix.md` before
+touching it, which shows no `K15.x` row has changed *status* since 2026-09-03
+(only citation lists inside `K15.5`/`K15.6`–`K15.7`'s own descriptions grew, as
+`A-72`–`A-82` were each folded in); the one-id difference is `K15.32`, born
+already `•` the same day (`A-71`, same commit that carried the corpus finding
+the "sixteen" recount responded to) — a same-day sequencing artefact between two
+edits, not a requirement quietly satisfied and never counted. The substantive
+gap this finding exists to state — header, specialisation, terminology, rules,
+annotations parsing; ADL 1.4 ingestion; flattening; template expansion, all
+still absent — is unchanged by any of the arithmetic above.
 
 **What holds in the meantime.** `K15.30`: every entry point that would implement
 an unbuilt part of §15 refuses explicitly, and no documentation may state or

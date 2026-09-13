@@ -1361,6 +1361,41 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       consistent with `A-40`'s text. No matrix row touched by any of the
       five commits.
 
+      **2026-09-13 pass.** Two P1 items landed since the last pass — bounded
+      AQL execution (`db:S1.6`, `openehr-store`) and `A-82` (two corpus
+      refusal messages, `am::cadl`) — neither touching §15 scope: the AQL
+      work is the *store's* own spec tree, a different requirement
+      namespace (`db:` not `lib:`), and `A-82` only renamed two messages a
+      construct outside ADL 2's grammar already correctly refused, not a
+      construct §15 tracks as missing. Checked and confirmed no drift from
+      either, the same way the 2026-09-12 pass checked its own five
+      commits — by diff, not assumption.
+
+      That check turned up something the two prior passes had not, because
+      neither had re-read this far back: `A-40`'s own **"Evidence a reader
+      can check"** paragraph, written at the original 2026-08-26 reversal
+      and never revisited by either pass since, claimed "no parser module,
+      no flattening, no retrieval" — false, and had been since 2026-08-30
+      (`am::repository`, `K15.24`–`K15.27`) and 2026-09-02 (`am::cadl`,
+      `K15.5`–`K15.7`), both landed and both already named by `A-40`'s own
+      status line, just never checked against this older sentence. Its
+      row count ("twenty-two … spec … fourteen … •") was the same
+      original-day snapshot, also unrefreshed. Both corrected in place in
+      `openehr/spec/audit.md`, dated, with the real count re-derived
+      mechanically (32 `K15.x` ids: 15 `spec`, 17 `•`, expanding every
+      ranged row) rather than retyped from memory, and reconciled against
+      the existing "sixteen … 2026-09-03" figure via `git log` on
+      `conformance-matrix.md` — no `K15.x` row has changed *status* since
+      that date; the one-id difference is `K15.32`, born already `•` the
+      same day (`A-71`), a same-day sequencing artefact between two edits
+      rather than a requirement satisfied and never counted.
+      `conformance-matrix.md` itself needed no change: its own 2026-09-03
+      derivation (`S1.21`'s row, "seventeen of thirty-three … sixteen
+      spec") already includes `S1.21` in the denominator the way `A-40`'s
+      §15-only count does not, and both are still correct today — verified
+      by the same `git log` pass, not assumed because the arithmetic
+      happened to reconcile.
+
 ### P3 — larger scope, or awaiting a decision
 
 - [ ] **ADL 1.4 body parsing and conversion** (`K15.8`, `K15.9`): the header
