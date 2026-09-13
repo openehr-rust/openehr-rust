@@ -27,6 +27,12 @@ fn the_is_modifiable_gate_suite_passes_against_a_real_database() {
 }
 
 #[test]
+fn the_bounded_aql_executor_passes_against_a_real_database() {
+    let mut store = SqliteStore::in_memory().expect("open");
+    conformance::run_aql(&mut store).expect("AQL conformance suite");
+}
+
+#[test]
 fn the_dialect_is_self_consistent() {
     conformance::check_dialect(&SqliteDialect);
 }

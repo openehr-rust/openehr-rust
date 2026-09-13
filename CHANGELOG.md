@@ -7,6 +7,31 @@ together.
 
 ## Unreleased
 
+- `openehr-store` executes a bounded subset of AQL: `db:S1.6` — "the core
+  MUST NOT execute AQL" — is amended to permit exactly one `EHR`, one
+  archetype-predicated containment level, `WHERE`/`SELECT`/`ORDER BY` over
+  scalar leaves, with every other construct refused by name before any
+  store is queried (new requirements `P6.20`–`P6.24`). The new
+  `openehr_store::aql` module (`execute`, re-exported as
+  `execute_aql`, plus `Cell` and `QueryResult`) calls only
+  `Store::find_compositions_by_archetype` and `Store::latest_version` —
+  no dialect, no SQL, no driver — so it works against any engine with a
+  `Store` today: `SQLite` and `PostgreSQL`, both passing the new shared
+  conformance test, `conformance::run_aql`. `openehr-loco` gains
+  `POST /openehr/v1/query/aql` (ITS-REST's own request/response shape —
+  `q` and `query_parameters` in, `q`/`columns`/`rows` out), mapping the
+  new `StoreError::AqlUnsupported` to `400` — a caller-fixable request,
+  not a capability this service lacks outright. A real bug was found and
+  fixed building this, not merely a gap: the archetype index keeps one
+  row per version ever committed with content, never rewritten or removed
+  by a later amendment or deletion, so reading a candidate's own indexed
+  version directly could answer with content a composition no longer has;
+  the executor reads each candidate's *current* version instead, and
+  `conformance::run_aql` commits and then deletes a fourth composition to
+  keep that regression covered. Not breaking — `StoreError` is
+  `#[non_exhaustive]`, and every other item is new. See
+  `spec/databases/06-search.md` (`P6.20`–`P6.24`) and
+  `spec/databases/01-scope.md` (`S1.6`, amended).
 - `openehr-postgresql` reaches conformance level **Verified**:
   `PostgresqlStore` implements `openehr_store::Store` (blocking, via the
   `postgres` crate, `NoTls`) and passes the shared conformance suite —

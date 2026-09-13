@@ -46,10 +46,32 @@ reader deciding whether to use these crates needs the reason more than the fact.
   between storing FHIR and storing openEHR, and getting it wrong is not a
   performance mistake but an architectural one.
 
-- **S1.6** The core MUST NOT execute AQL. Executing AQL means resolving archetype
-  paths against stored content, which needs an archetype engine. What the schema
-  offers instead is an index over the attributes the Reference Model fixes, which
-  is what an AQL `FROM` clause filters on before it reaches into content (§6).
+- **S1.6** *(amended 2026-09-13)* The core MUST NOT execute AQL **beyond the
+  bounded subset §6 states**, and MUST refuse — by naming the construct, not
+  by silently ignoring it or partially executing it — anything outside that
+  subset.
+
+  This reverses the blanket prohibition, not its own original reasoning:
+  "executing AQL means resolving archetype paths against stored content"
+  was true, and still is, of the general case — an archetype-authored
+  `WHERE` clause over arbitrary nested structure genuinely needs an
+  archetype engine this crate does not have (`lib:A-40`). What changed is
+  the discovery that a **narrower, real, useful** case does not: one
+  `EHR`, one archetype-predicated containment level, comparisons against
+  scalar leaves — needs only the archetype index this schema already
+  builds (`P6.12`) to find candidates, and [`openehr::path`], already
+  built for validation and RM navigation, to read the fields a `WHERE`
+  clause and a `SELECT` list name. Nothing here parses ADL, resolves a
+  specialisation, or checks a constraint — `am`'s own boundary (`lib:A-40`)
+  is untouched, because none of that is what the bounded subset needs.
+
+  `S1.5`'s own prohibition — no per-attribute shredding — is undisturbed:
+  the database's own queryable, indexed surface stays exactly what
+  `P6.10`/`P6.19` already say it is, index-only. What executes AQL is
+  application code in `openehr-store`, reading a canonical-JSON document
+  the index already narrowed the search to, the same way any caller of
+  `Store::get_version` already could — this requirement is about a new
+  *capability offered*, not a new thing the *database* does.
 - **S1.7** *(amended 2026-08-02)* The **core** MUST NOT implement an HTTP
   service or a command-line tool. `openehr`, `openehr-store`, and the six engine
   crates MUST have no HTTP dependency, no async runtime, and no server.

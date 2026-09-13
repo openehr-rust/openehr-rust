@@ -110,6 +110,7 @@ impl Hooks for App {
             .add_route(controllers_routes::ehr_status())
             .add_route(controllers_routes::contribution())
             .add_route(controllers_routes::composition())
+            .add_route(controllers_routes::query())
     }
 
     /// Opens the store and builds the verifier, **here and not in
@@ -215,6 +216,9 @@ mod controllers_routes {
     }
     pub fn contribution() -> Routes {
         crate::controllers::contribution::routes()
+    }
+    pub fn query() -> Routes {
+        crate::controllers::query::routes()
     }
 }
 

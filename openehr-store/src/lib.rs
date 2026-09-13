@@ -51,6 +51,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod aql;
 pub mod conformance;
 pub mod dialect;
 pub mod error;
@@ -59,6 +60,7 @@ pub mod record;
 pub mod schema;
 pub mod store;
 
+pub use aql::{Cell, QueryResult, execute as execute_aql};
 pub use dialect::{Dialect, Idempotence, ObjectKind, Placeholder, ddl_script};
 pub use error::{Result, StoreError};
 pub use integrity::{Breach, Integrity, verify_versions};

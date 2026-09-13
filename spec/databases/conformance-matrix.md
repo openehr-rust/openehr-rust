@@ -185,6 +185,11 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `P6.11` a store offers version-by-id, latest, at-time, every-version, and archetype search | • | all five exercised in `openehr-store/src/conformance.rs`, including `find_compositions_by_archetype` |
 | `P6.14` time-ranged queries use the derived UTC column | • | the same `M3.28` evidence |
 | `P6.15` no silent truncation of a result set | ? | vacuously true at this layer — the store applies no bound to `find_compositions_by_archetype` at all, so nothing here truncates; the caller-facing page/cap (`_count`/`_offset`, capped at 100) is `openehr-loco`'s own, above the store |
+| `P6.20` the executor calls only `Store` trait methods, never SQL | • | `openehr-store::aql` depends on `openehr::aql`/`openehr::path` and `Store::find_compositions_by_archetype`/`latest_version` alone — no dialect, no driver |
+| `P6.21` `FROM` limited to one `EHR`-scoped, archetype-predicated `COMPOSITION` | • | `single_containment`/`ehr_id_from_predicate` in `openehr-store::aql`, refusing every other `FROM` shape by name |
+| `P6.22` `WHERE` limited to `Compare`/`And`/`Or`/`Not` over scalar leaves; no match is `false`, an ambiguous or non-scalar match aborts the query | • | `check_expr_shape` (shape, before any store call) and `resolve_scalar` (the three per-row outcomes); every `CompareOp` `db:P6.22` permits exercised individually (`=`, `!=`, `>`, `>=`, `<`, `<=`) plus `AND`/`OR`/`NOT`, not only `=` alone; the abort case found and fixed a real bug in the same pass — the archetype index's own indexed version can be stale (superseded or deleted) once a container is amended, and `run_aql`'s own fourth container, committed then deleted, is the regression test |
+| `P6.23` `SELECT`/`ORDER BY` limited the same way; `LIMIT` required | • | the same shape checks, plus a dedicated "no `LIMIT`" refusal test |
+| `P6.24` every other construct refused by name before any store is queried | • | `DISTINCT`, `TOP`, a second `CONTAINS` level, a function call, `EXISTS`, `MATCHES`, an unrooted path — each its own `StoreError::AqlUnsupported` |
 | `S1.13` `openehr-sqlite` pins its engine rather than discovering it | • | the `bundled` `rusqlite` feature (`Cargo.toml`) |
 
 ## Service requirements
@@ -233,7 +238,7 @@ states evidence and takes no level. Nothing here is published.
 | `S1.2` targets RM 1.1.0, matching `openehr` | • | inherited from `openehr` (`lib:S1.16`); `Cargo.toml`'s version dependency is what would break first if the two drifted |
 | `S1.3` stores every class `openehr` models, without loss | • | `R4.2`'s lossless round-trip, including the four `VERSION`/`AUDIT_DETAILS` attributes `D-07` found dropped |
 | `S1.5` no per-attribute shredding | • | six tables total (`M3.21`), none per-attribute; archetyped content stays in `data_json` (`M3.43`) |
-| `S1.6` no AQL execution in the core | ? | no AQL executor exists in `openehr-store` — stated on `Store`'s own doc comment — but nothing tests the absence directly |
+| `S1.6` *(amended 2026-09-13)* `AQL` execution limited to the bounded subset `P6.20`–`P6.24` state, refusing every other construct by name | • | `openehr_store::aql::execute`; `conformance::run_aql` covers a plain query, `WHERE`, `LIMIT`/`OFFSET`, a missing-`LIMIT` refusal, and a two-level `CONTAINS` refusal, run against both `openehr-sqlite` and `openehr-postgresql` — see `P6.20`–`P6.24` below for the subset itself |
 | `S1.7` no HTTP dependency or server in the core | ? | no `axum`/`hyper`/`tokio`/`tower` line in `openehr`, `openehr-store`, or any of the six engine crates' `Cargo.toml` — checked by hand for this assessment, not yet a named CI check; `openehr-loco` is the stated exception |
 | `S1.8` the core does not authenticate or authorize | ? | no credential, key, or principal type anywhere in the core; `openehr-loco` verifies without authenticating (`PR12.13`–`PR12.15`, service table), which is a different crate |
 | `S1.9` no terminology resolution, unit conversion, or timing interpretation | ? | inherited exclusion from `openehr` (`lib:S1.8`–`lib:S1.10`); unchecked at this layer specifically |

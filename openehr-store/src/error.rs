@@ -114,6 +114,32 @@ pub enum StoreError {
         /// The record.
         ehr_id: String,
     },
+
+    /// An `AQL` query names a construct outside the bounded subset
+    /// [`crate::aql`] executes (`db:P6.20`–`P6.24`).
+    ///
+    /// Refused before any store is queried — never partially executed and
+    /// never silently ignored (`db:P6.24`) — except for the two outcomes
+    /// `db:P6.22` names as inherently data-dependent (an ambiguous or
+    /// non-scalar match), which this same variant also carries, since
+    /// neither can be known from the query text alone.
+    #[error("AQL: {0}")]
+    AqlUnsupported(String),
+}
+
+/// A query that does not even parse is, from a caller's point of view, the
+/// same refusal as one that parses but names a construct this crate does
+/// not execute — both mean "this text is not a query I can run" — so this
+/// folds into [`StoreError::AqlUnsupported`] rather than adding a second
+/// variant a caller would have to match on to tell the two apart.
+///
+/// A manual `impl` rather than `#[from]`: this carries the error's rendered
+/// text, not the `AqlError` value itself, since `AqlUnsupported` is shared
+/// with refusals that never had one.
+impl From<openehr::aql::AqlError> for StoreError {
+    fn from(error: openehr::aql::AqlError) -> Self {
+        Self::AqlUnsupported(error.to_string())
+    }
 }
 
 /// This crate's result alias.

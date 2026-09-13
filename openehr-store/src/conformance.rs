@@ -728,6 +728,256 @@ pub fn run_is_modifiable_gate<S: Store>(store: &mut S) -> Result<()> {
     Ok(())
 }
 
+/// The bounded AQL executor (`db:P6.20`–`P6.24`, `crate::aql`): one `EHR`
+/// scope, one archetype-predicated containment, `WHERE`/`SELECT`/
+/// `ORDER BY`/`LIMIT` over scalar leaves, and refusal by name for every
+/// construct outside that.
+///
+/// # Errors
+///
+/// Returns the first unexpected engine error. A conformance failure panics.
+///
+/// # Panics
+///
+/// Panics when the engine fails a conformance assertion.
+// Long on purpose, the same reason `run`/`run_ehr_status` already are: one
+// narrative — seed three compositions, then run each query shape `db:P6.21`–
+// `P6.24` distinguishes — and splitting it into helpers would hide which
+// assertion belongs to which query.
+#[allow(clippy::too_many_lines)]
+pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
+    // Three distinct COMPOSITION containers, not three versions of one —
+    // `find_compositions_by_archetype` (`db:P6.11`, `P6.12`) is a query over
+    // an EHR's compositions, and a query that only ever saw one container
+    // could not tell "found the row" from "found the only row there is".
+    const CONTAINERS: [&str; 3] = [
+        "10000000-0000-0000-0000-000000000001",
+        "10000000-0000-0000-0000-000000000002",
+        "10000000-0000-0000-0000-000000000003",
+    ];
+
+    use openehr::aql::{AqlQuery, Literal};
+    use std::collections::HashMap;
+
+    let engine = store.engine();
+    store.install()?;
+
+    let ehr = sample_ehr();
+    let ehr_id = ehr.ehr_id().clone();
+    store.create_ehr(&ehr)?;
+
+    let contribution_uid = "55555555-6666-7777-8888-999999999999";
+    store.create_contribution(&ehr_id, &sample_contribution(contribution_uid, &[1, 2, 3]))?;
+
+    for (i, container) in CONTAINERS.iter().enumerate() {
+        let n = u32::try_from(i).expect("three fits");
+        let id: ObjectVersionId = format!("{container}::{SYSTEM}::1").parse()?;
+        let owner = ObjectRef::new(
+            "local",
+            "EHR",
+            ObjectId::HierObjectId(ehr_id.clone()),
+        )?;
+        let audit = AuditDetails::new(
+            SYSTEM,
+            DvDateTime::new(&format!("2026-08-01T09:{:02}:00Z", 10 + n))?,
+            audit_change_type::CREATION,
+            PartyIdentified::named("Dr A Nurse")?.into(),
+        )?;
+        let version: Version<Composition> = OriginalVersion::new(
+            id,
+            None,
+            version_lifecycle_state::COMPLETE,
+            Some(sample_composition(&format!("Encounter {n}"))),
+            audit,
+            owner,
+        )?
+        .into();
+        store.commit_composition(&ehr_id, &version, contribution_uid)?;
+    }
+
+    // A fourth container, committed and then logically deleted (`db:H5.2`).
+    // `openehr_composition_index` keeps the row from its first, content-
+    // bearing commit forever — nothing rewrites or removes it when a later
+    // version supersedes or deletes the container — so this is the case a
+    // naive executor gets wrong: trusting the index's own indexed version
+    // uid instead of asking the store for the container's *current* one
+    // would answer with a composition this record no longer has. Found
+    // exactly this way, via `openehr-loco`'s own HTTP fixture reusing
+    // `Encounter 1` for two different containers, one of which was later
+    // deleted — the shared suite gets its own direct case for it here
+    // rather than relying on that coincidence to keep catching it.
+    let deleted_container = "10000000-0000-0000-0000-000000000004";
+    let v1: ObjectVersionId = format!("{deleted_container}::{SYSTEM}::1").parse()?;
+    let v2: ObjectVersionId = format!("{deleted_container}::{SYSTEM}::2").parse()?;
+    let owner = ObjectRef::new("local", "EHR", ObjectId::HierObjectId(ehr_id.clone()))?;
+    let create: Version<Composition> = OriginalVersion::new(
+        v1.clone(),
+        None,
+        version_lifecycle_state::COMPLETE,
+        Some(sample_composition("Encounter 3")),
+        AuditDetails::new(
+            SYSTEM,
+            DvDateTime::new("2026-08-01T09:13:00Z")?,
+            audit_change_type::CREATION,
+            PartyIdentified::named("Dr A Nurse")?.into(),
+        )?,
+        owner.clone(),
+    )?
+    .into();
+    store.commit_composition(&ehr_id, &create, contribution_uid)?;
+    let delete: Version<Composition> = OriginalVersion::new(
+        v2,
+        Some(v1),
+        version_lifecycle_state::DELETED,
+        None,
+        AuditDetails::new(
+            SYSTEM,
+            DvDateTime::new("2026-08-01T09:14:00Z")?,
+            audit_change_type::DELETED,
+            PartyIdentified::named("Dr A Nurse")?.into(),
+        )?,
+        owner,
+    )?
+    .into();
+    store.commit_composition(&ehr_id, &delete, contribution_uid)?;
+
+    let params = |ehr: &str| -> HashMap<String, Literal> {
+        let mut p = HashMap::new();
+        p.insert("ehrUid".to_owned(), Literal::String(ehr.to_owned()));
+        p
+    };
+
+    // The plain case: every composition of the archetype, in the record.
+    let all: AqlQuery = "
+        SELECT c/name/value AS name
+        FROM EHR e[ehr_id/value=$ehrUid]
+            CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+        ORDER BY c/name/value
+        LIMIT 10
+    "
+    .parse()?;
+    let result = crate::aql::execute(store, &all, &params(&ehr_id.to_string()))?;
+    assert_eq!(
+        result.columns,
+        vec!["name"],
+        "{engine}: SELECT AS alias not used as the column header"
+    );
+    assert_eq!(
+        result.rows,
+        vec![
+            vec![crate::aql::Cell::Str("Encounter 0".to_owned())],
+            vec![crate::aql::Cell::Str("Encounter 1".to_owned())],
+            vec![crate::aql::Cell::Str("Encounter 2".to_owned())],
+        ],
+        "{engine}: three distinct compositions, ORDER BY c/name/value ascending \
+         — 'Encounter 3' must not appear, its container having since been \
+         deleted (above)"
+    );
+
+    // `WHERE`, narrowing to one.
+    let filtered: AqlQuery = "
+        SELECT c/name/value AS name
+        FROM EHR e[ehr_id/value=$ehrUid]
+            CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+        WHERE c/name/value = 'Encounter 1'
+        LIMIT 10
+    "
+    .parse()?;
+    let result = crate::aql::execute(store, &filtered, &params(&ehr_id.to_string()))?;
+    assert_eq!(
+        result.rows.len(),
+        1,
+        "{engine}: WHERE c/name/value = 'Encounter 1' matched {} rows",
+        result.rows.len()
+    );
+
+    // Every comparison operator `db:P6.22` covers, and `AND`/`OR`/`NOT` —
+    // not merely `=`, which the test above already exercises alone.
+    for (clause, expected) in [
+        ("c/name/value != 'Encounter 1'", 2),
+        ("c/name/value > 'Encounter 1'", 1),
+        ("c/name/value >= 'Encounter 1'", 2),
+        ("c/name/value < 'Encounter 1'", 1),
+        ("c/name/value <= 'Encounter 1'", 2),
+        (
+            "c/name/value >= 'Encounter 1' AND c/name/value <= 'Encounter 1'",
+            1,
+        ),
+        (
+            "c/name/value = 'Encounter 0' OR c/name/value = 'Encounter 2'",
+            2,
+        ),
+        ("NOT c/name/value = 'Encounter 1'", 2),
+    ] {
+        let q: AqlQuery = format!(
+            "SELECT c/name/value AS name \
+             FROM EHR e[ehr_id/value=$ehrUid] \
+                 CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] \
+             WHERE {clause} \
+             LIMIT 10"
+        )
+        .parse()?;
+        let result = crate::aql::execute(store, &q, &params(&ehr_id.to_string()))?;
+        assert_eq!(
+            result.rows.len(),
+            expected,
+            "{engine}: WHERE {clause} matched {} rows, expected {expected}",
+            result.rows.len()
+        );
+    }
+
+    // `LIMIT`/`OFFSET` together.
+    let paged: AqlQuery = "
+        SELECT c/name/value AS name
+        FROM EHR e[ehr_id/value=$ehrUid]
+            CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+        ORDER BY c/name/value
+        LIMIT 1 OFFSET 1
+    "
+    .parse()?;
+    let result = crate::aql::execute(store, &paged, &params(&ehr_id.to_string()))?;
+    assert_eq!(
+        result.rows,
+        vec![vec![crate::aql::Cell::Str("Encounter 1".to_owned())]],
+        "{engine}: LIMIT 1 OFFSET 1 did not skip exactly one row"
+    );
+
+    // A query with no `LIMIT` is refused, not silently capped (`db:P6.15`).
+    let unbounded: AqlQuery = "
+        SELECT c/name/value
+        FROM EHR e[ehr_id/value=$ehrUid]
+            CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+    "
+    .parse()?;
+    assert!(
+        matches!(
+            crate::aql::execute(store, &unbounded, &params(&ehr_id.to_string())),
+            Err(crate::StoreError::AqlUnsupported(_))
+        ),
+        "{engine}: a query with no LIMIT was executed rather than refused"
+    );
+
+    // A construct outside the bounded subset is refused by name, not
+    // partially executed (`db:P6.24`) — a second containment level, here.
+    let too_deep: AqlQuery = "
+        SELECT o/value
+        FROM EHR e[ehr_id/value=$ehrUid]
+            CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+                CONTAINS OBSERVATION o[openEHR-EHR-OBSERVATION.blood_pressure.v2]
+        LIMIT 10
+    "
+    .parse()?;
+    assert!(
+        matches!(
+            crate::aql::execute(store, &too_deep, &params(&ehr_id.to_string())),
+            Err(crate::StoreError::AqlUnsupported(_))
+        ),
+        "{engine}: a two-level CONTAINS tree was executed rather than refused"
+    );
+
+    Ok(())
+}
+
 /// Checks one dialect's DDL without a database.
 ///
 /// # Panics

@@ -90,6 +90,44 @@ The runnable demonstration therefore lives one crate over:
 cd ../openehr-sqlite && cargo run --example 01_store_a_record
 ```
 
+## AQL, bounded
+
+`Store` is not an archetype engine, and general AQL execution still needs
+one this tree does not have. A narrower, real case does not: one `EHR`,
+one archetype-predicated containment level, `WHERE`/`SELECT`/`ORDER BY`
+over scalar leaves — needs only the archetype index every `Store` already
+builds and [`openehr::path`], already built for validation and RM
+navigation. `openehr_store::aql::execute` implements exactly that subset,
+calling only `Store::find_compositions_by_archetype` and
+`Store::latest_version` — no dialect, no SQL, no driver — and refuses
+every other construct by name before issuing a single store call
+(`db:S1.6`, amended; `P6.20`–`P6.24`).
+
+Illustrative — `store` is any `impl Store`, already holding the composition
+this query names:
+
+```rust
+fn run_it(store: &impl openehr_store::Store, ehr_id: &str) -> openehr_store::Result<()> {
+    use openehr_store::aql::execute;
+    use std::collections::HashMap;
+
+    let query = "
+        SELECT c/name/value AS name
+        FROM EHR e[ehr_id/value=$ehrUid]
+            CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+        LIMIT 10
+    ".parse()?;
+    let mut params = HashMap::new();
+    params.insert("ehrUid".to_owned(), openehr::aql::Literal::String(ehr_id.to_owned()));
+    let result = execute(store, &query, &params)?;
+    println!("{} row(s)", result.rows.len());
+    Ok(())
+}
+```
+
+`conformance::run_aql` is the shared test, run against every engine that has
+a `Store` — `SQLite` and `PostgreSQL` today, both passing.
+
 ## The conformance suite
 
 Written once, here, and called by each engine's own tests against a real

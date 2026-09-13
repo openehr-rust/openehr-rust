@@ -76,11 +76,16 @@ pub fn check_commit_rules(
 ///
 /// # What this trait is not
 ///
-/// It is not an `AQL` engine. Executing AQL means resolving archetype paths
-/// against stored content, and neither this crate nor `openehr` implements
-/// archetypes (`S1.4`, `S1.5`). What the schema offers instead is an index over
-/// the attributes the Reference Model fixes, which is what an `AQL` `FROM` clause
-/// filters on before it reaches into content.
+/// It is not an `AQL` engine, though this crate now has one:
+/// [`crate::aql::execute`], one `EHR`, one archetype-predicated containment
+/// level, over exactly the trait methods below (`db:S1.6`, amended
+/// 2026-09-13, `P6.20`–`P6.24`). General AQL execution — an
+/// archetype-authored `WHERE` clause over arbitrary nested structure —
+/// still needs an archetype engine neither this crate nor `openehr`
+/// implements (`lib:A-40`). What the schema offers a query beyond that
+/// bounded subset is only an index over the attributes the Reference Model
+/// fixes, which is what an `AQL` `FROM` clause filters on before it reaches
+/// into content.
 pub trait Store {
     /// Which engine backs this store, for error messages.
     fn engine(&self) -> &'static str;

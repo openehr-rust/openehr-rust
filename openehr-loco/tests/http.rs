@@ -1169,6 +1169,112 @@ async fn ehr_status_malformed_version_at_time_is_the_callers_fault() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
+// --- AQL ---------------------------------------------------------------
+
+/// A request carrying the valid token, with a JSON body of any shape —
+/// `send_json` is fixed to `Version<Composition>`, and `/query/aql`'s own
+/// body is a different shape entirely.
+async fn post_json(served: &Served, path: &str, body: &serde_json::Value) -> (StatusCode, String, Option<String>) {
+    served
+        .send(
+            Request::builder()
+                .method("POST")
+                .uri(path)
+                .header(header::AUTHORIZATION, &served.authorization)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(body).expect("json")))
+                .expect("request"),
+        )
+        .await
+}
+
+#[tokio::test]
+async fn an_aql_query_returns_the_composition_it_names() {
+    let served = Served::new();
+    let (status, body, _) = post_json(
+        &served,
+        "/openehr/v1/query/aql",
+        &serde_json::json!({
+            "q": "SELECT c/name/value AS name \
+                  FROM EHR e[ehr_id/value=$ehrUid] \
+                      CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] \
+                  LIMIT 10",
+            "query_parameters": { "ehrUid": served.ehr_id() },
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let parsed: serde_json::Value = serde_json::from_str(&body).expect("json");
+    assert_eq!(parsed["columns"], serde_json::json!([{"name": "name"}]));
+    assert_eq!(parsed["rows"], serde_json::json!([["Encounter 1"]]));
+    // The request's own `q` is echoed back, matching ITS-REST's own shape.
+    assert!(parsed["q"].as_str().expect("q").contains("SELECT"));
+}
+
+#[tokio::test]
+async fn an_aql_query_outside_the_bounded_subset_is_refused_with_400() {
+    let served = Served::new();
+    let (status, body, _) = post_json(
+        &served,
+        "/openehr/v1/query/aql",
+        &serde_json::json!({
+            "q": "SELECT c/name/value \
+                  FROM EHR e[ehr_id/value=$ehrUid] \
+                      CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] \
+                  ORDER BY c/name/value \
+                  LIMIT 10 OFFSET 0",
+            "query_parameters": { "ehrUid": served.ehr_id() },
+        }),
+    )
+    .await;
+    // This one is inside the bounded subset (ORDER BY is supported) and
+    // exists to prove the *next* test's refusal is about DISTINCT
+    // specifically, not about something else in the same query shape.
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (status, body, _) = post_json(
+        &served,
+        "/openehr/v1/query/aql",
+        &serde_json::json!({
+            "q": "SELECT DISTINCT c/name/value \
+                  FROM EHR e[ehr_id/value=$ehrUid] \
+                      CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] \
+                  LIMIT 10",
+            "query_parameters": { "ehrUid": served.ehr_id() },
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(body.contains("DISTINCT"), "{body}");
+}
+
+#[tokio::test]
+async fn malformed_aql_text_is_the_callers_fault() {
+    let served = Served::new();
+    let (status, body, _) = post_json(
+        &served,
+        "/openehr/v1/query/aql",
+        &serde_json::json!({ "q": "SELECT FROM WHERE" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+}
+
+#[tokio::test]
+async fn the_aql_endpoint_requires_authentication() {
+    let served = Served::new();
+    let request = Request::builder()
+        .method("POST")
+        .uri("/openehr/v1/query/aql")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::to_vec(&serde_json::json!({ "q": "SELECT 1" })).expect("json"),
+        ))
+        .expect("request");
+    let (status, _, _) = served.send(request).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
 #[test]
 fn every_store_error_maps_to_a_distinct_status() {
     // The mapping is what this crate is *for* (`db:S1.19`), and three of its
@@ -1202,6 +1308,10 @@ fn every_store_error_maps_to_a_distinct_status() {
         (
             StoreError::Engine { engine: "e", message: "m".to_owned() },
             StatusCode::INTERNAL_SERVER_ERROR,
+        ),
+        (
+            StoreError::AqlUnsupported("DISTINCT".to_owned()),
+            StatusCode::BAD_REQUEST,
         ),
     ];
     for (error, expected) in cases {

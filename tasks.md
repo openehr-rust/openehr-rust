@@ -134,7 +134,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
 
 ### P1 — the capabilities a CDR reader looks for, specification first
 
-- [ ] **AQL execution over the SQLite store.** `S1.5`/`K15.29` forbid it
+- [x] **AQL execution over the SQLite store.** `S1.5`/`K15.29` forbid it
       today; amend under `C0.19` with the reasoning kept, then specify in
       `spec/databases/` before writing code: candidate compositions selected
       through the archetype index (`db:P6.12`), `CONTAINS`/`WHERE` evaluated
@@ -145,6 +145,71 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       *Evidence:* new `Q12.x`/`db:` requirements, a conformance-suite test
       per operator, the matrix row, and `POST /query/aql` in `openehr-loco`.
       — **XL**
+
+      **2026-09-13, done — as a deliberately bounded first slice, not
+      general AQL.** First checked which requirement actually forbids
+      this: the task's own citation, `S1.5`/`lib:K15.29`, turned out to be
+      the *library's* boundary (`openehr` has no repository, so it
+      genuinely cannot execute AQL, and that stays true and unamended) —
+      the real blocker was `db:S1.6`, "the core MUST NOT execute AQL",
+      which the two share no relationship to beyond the coincidence of
+      thread notes conflating them. Amended `db:S1.6` (`spec/databases/
+      01-scope.md`) from a blanket prohibition to a bounded permission,
+      and specified the bound itself as new requirements `P6.20`–`P6.24`
+      (`spec/databases/06-search.md`) before writing any code (`W0.19`):
+      one `EHR`, scoped by a predicate naming its `ehr_id` (a literal or a
+      parameter — `find_compositions_by_archetype` takes exactly one),
+      one archetype-predicated `COMPOSITION` containment level, `WHERE`/
+      `SELECT`/`ORDER BY` over scalar leaves resolved through
+      `openehr::path::Pathable`, `LIMIT` required rather than silently
+      defaulted (`P6.15`). Everything else — a second containment level,
+      `NOT CONTAINS`, `OR` in `FROM`, any function call, `EXISTS`,
+      `MATCHES {…}`, `DISTINCT`, `TOP`, a missing `EHR` scope or `LIMIT`,
+      a path rooted at any alias but the `COMPOSITION`'s — refused by
+      name, before any store is queried, exactly `Q12.9`'s own discipline
+      applied a second time at the planning boundary.
+
+      New `openehr_store::aql` module (`execute`, re-exported
+      `execute_aql`; `Cell`/`QueryResult`) calling only
+      `Store::find_compositions_by_archetype` and `Store::latest_version`
+      — no dialect, no SQL, so **not SQLite-specific after all**: the
+      shared conformance test, `conformance::run_aql`, passes against
+      both `openehr-sqlite` and `openehr-postgresql`, proving the
+      engine-agnostic design rather than assuming it. Covers a plain
+      query, every `CompareOp` `P6.22` permits individually (not only
+      `=`), `AND`/`OR`/`NOT`, `LIMIT`/`OFFSET`, a missing-`LIMIT` refusal,
+      and a two-level-`CONTAINS` refusal.
+
+      **A real bug found and fixed building it, not merely a gap left
+      open.** `openehr_composition_index` keeps one row per version ever
+      committed with content — nothing rewrites or removes an older row
+      when a container is later amended or logically deleted (`H5.2`) —
+      so a first draft that read a candidate's own *indexed* version
+      directly could answer a query with content a record no longer has.
+      Found by `openehr-loco`'s own HTTP fixture, which happened to reuse
+      one composition name across two containers, one later deleted;
+      fixed by reading each candidate's *container* current state
+      (`Store::latest_version`) instead, and given its own direct
+      regression case in `run_aql` (a fourth container, committed then
+      deleted) rather than left to that coincidence to keep catching it.
+
+      `POST /openehr/v1/query/aql` in `openehr-loco`, ITS-REST's own
+      request/response shape (`q`/`query_parameters` in,
+      `q`/`columns`/`rows` out); the new `StoreError::AqlUnsupported`
+      maps to `400`, a caller-fixable request, not the `501` this service
+      uses for a capability it lacks outright. Mutation-tested: the
+      executor itself is architecturally unreachable from inside
+      `openehr-store`'s own test suite (the same shape `run`/
+      `run_ehr_status`/`run_is_modifiable_gate` already have, and now
+      excluded the same way, `.cargo/mutants.toml`); `openehr-loco`'s new
+      controller: 6 caught, 6 unviable, 0 missed.
+
+      **Deliberately not attempted**: anything the bounded subset
+      excludes by design — a second containment level, functions,
+      `EXISTS`, `MATCHES`, cross-`EHR` queries. Each would need either a
+      new index this schema does not build or the archetype engine
+      `lib:A-40` already tracks as absent; extending the bound is a
+      separate, later decision, not a residual of this one.
 - [ ] **OPT 1.4 ingestion and validation at commit.** `K15.16` is in force
       with no code. Every client in the thread — EHRbase, FerroEHR, openEHR
       Explorer — uploads an operational template 1.4 XML first and commits

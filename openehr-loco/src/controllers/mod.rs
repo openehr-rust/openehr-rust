@@ -10,6 +10,7 @@ pub mod contribution;
 pub mod ehr;
 pub mod ehr_status;
 pub mod metadata;
+pub mod query;
 
 use axum::http::StatusCode;
 use loco_rs::app::AppContext;
@@ -77,6 +78,11 @@ pub fn status_for(error: &StoreError) -> (StatusCode, String) {
         // silently (`db:D-07`). `501` rather than `400`: the request is
         // well-formed and this service cannot honour it.
         StoreError::Unsupported { .. } => StatusCode::NOT_IMPLEMENTED,
+        // `400`, not `501`: an AQL query outside the bounded subset
+        // (`db:P6.20`–`P6.24`) is a malformed *request* — the caller wrote a
+        // query this executor does not run — not a capability this service
+        // is missing across the board the way `Unsupported` names.
+        StoreError::AqlUnsupported(_) => StatusCode::BAD_REQUEST,
         StoreError::SchemaVersionMismatch { .. } => StatusCode::SERVICE_UNAVAILABLE,
         // Everything else, including variants added after this was written.
         //

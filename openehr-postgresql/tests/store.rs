@@ -67,6 +67,19 @@ fn the_is_modifiable_gate_suite_passes_against_a_real_database() {
     conformance::run_is_modifiable_gate(&mut store).expect("is_modifiable gate conformance suite");
 }
 
+/// The bounded AQL executor (`db:P6.20`–`P6.24`) is engine-agnostic — it
+/// calls only `Store::find_compositions_by_archetype` and
+/// `Store::get_version` — so this is the same suite `openehr-sqlite` runs,
+/// proving that claim against a second, real engine rather than assuming it
+/// from the fact both share one `Store` trait.
+#[test]
+#[ignore = "needs a real PostgreSQL server, see this file's own module doc"]
+fn the_bounded_aql_executor_passes_against_a_real_database() {
+    let mut store = connect();
+    reset(&mut store);
+    conformance::run_aql(&mut store).expect("AQL conformance suite");
+}
+
 /// Installing twice must be safe: a deployment runs migrations on every
 /// boot. `SqliteStore`'s own suite checks this inline (`conformance::run`);
 /// checked again here because `install`'s idempotence rests on

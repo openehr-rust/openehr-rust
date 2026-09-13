@@ -87,6 +87,70 @@ Added 2026-08-02. `D-08` changed a premise this section was rewritten under.
   somebody who has read `P6.10` and concluded that indexing content is merely
   unimplemented rather than excluded.
 
+## AQL execution
+
+Added 2026-09-13, amending `S1.6` (§1) from a blanket prohibition to a
+bounded permission — see that requirement for why the reversal does not
+touch `S1.5`, `P6.10`, or `P6.19`, all of which stay exactly as written.
+
+- **P6.20** `openehr-store` MUST provide an AQL executor implementing
+  exactly the subset `P6.21`–`P6.23` state, over `openehr::aql`'s own
+  parsed, statically-checked `AqlQuery` — never a second parser, and never
+  a query the library's own `check` (`lib:Q12.x`) has not already passed.
+- **P6.21** The executor MUST accept only a `FROM` clause of the shape
+  `EHR alias[predicate] CONTAINS COMPOSITION alias[archetype_id]` — one
+  `EHR`, scoped by a predicate naming a literal or parameter compared
+  against `ehr_id/value`, containing exactly one archetype-predicated
+  `COMPOSITION`. `Store::find_compositions_by_archetype` (`P6.11`,
+  `P6.12`) takes one `EHR` and one archetype id; a `FROM` clause naming
+  neither, or naming more than one containment level, has no query this
+  executor can serve without a cross-`EHR` or cross-archetype index this
+  schema does not build.
+- **P6.22** `WHERE` MUST be limited to `Compare`, `And`, `Or`, and `Not`
+  over an `IdentifiedPath` rooted at the `COMPOSITION` alias and a
+  `Literal` or parameter operand, evaluated by resolving the path with
+  `openehr::path::Pathable::item_at_path` against the committed content
+  and comparing the `Scalar` it names. The *shape* of `WHERE` — which
+  operands and combinators it uses — is exactly what `P6.24`'s "before any
+  store is queried" refusal applies to, and is checked once, from the
+  query alone. Whether a *given path*, on a *given composition*, matches
+  nothing, matches more than once, or names something that is not a
+  `Scalar` cannot be known until that composition is actually read — no
+  amount of reading the query decides it — so these three are per-row
+  outcomes of evaluation, not failures of planning:
+
+  - **Nothing** MUST evaluate the comparison as `false`, not as an error —
+    the same answer `crate::path` already gives a wrong attribute (`lib:`
+    `Node::children`'s own convention) — because a composition simply
+    lacking an optional structure is not malformed data.
+  - **More than one** match, or a match that is not a `Scalar` (an
+    interval, a whole `DATA_VALUE`), MUST abort evaluating the *whole*
+    query with an error naming the path and the container — never skip
+    only that row, which would silently under-report rather than refuse.
+    Guessing which of several repeated nodes was meant is exactly the
+    silent choice `Pathable::item_at_path` itself already refuses to
+    make; extending that refusal to one row and answering with the rest
+    would just move the silent choice from "which node" to "which rows".
+- **P6.23** `SELECT` MUST be limited to a list of `IdentifiedPath` columns
+  rooted at the `COMPOSITION` alias, each optionally aliased with `AS`, and
+  `ORDER BY` (when present) to `IdentifiedPath` terms rooted the same way —
+  both resolved and reported exactly as `P6.22` states for `WHERE`: nothing
+  matched projects or sorts as `NULL`/first, more than one match or a
+  non-`Scalar` match aborts the whole query. `LIMIT` MUST be present and
+  MUST be honoured; a query with no `LIMIT` MUST be refused at planning
+  time rather than answered with a silently-applied default (`P6.15`) or
+  an unbounded scan (`P6.7`).
+- **P6.24** Every construct outside `P6.21`–`P6.23` — a second containment
+  level, `NOT CONTAINS`, `OR` in `FROM`, a function call anywhere, `EXISTS`,
+  `MATCHES {…}`, `DISTINCT`, `TOP`, an absent `EHR` scope, an absent
+  `LIMIT`, a `SELECT`/`ORDER BY`/`WHERE` path rooted at any alias but the
+  `COMPOSITION`'s — MUST be refused **before** any store is queried, in an
+  error naming the specific construct, never executed partially and never
+  silently ignored. This is `Q12.9`'s own discipline (refuse by name, at
+  the front end, rather than skip or return a partial tree) applied a
+  second time, at the planning boundary between a query that parses and a
+  query this executor can run.
+
 ## Query construction
 
 - **P6.8** Every predicate MUST bind user-supplied values as **parameters**,
