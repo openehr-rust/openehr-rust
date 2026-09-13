@@ -32,6 +32,17 @@ together.
   `#[non_exhaustive]`, and every other item is new. See
   `spec/databases/06-search.md` (`P6.20`–`P6.24`) and
   `spec/databases/01-scope.md` (`S1.6`, amended).
+- `am::cadl` names two refusals it already made correctly, but not
+  helpfully: an ADL 1.5-form `use_archetype` with no id code (`` `CIMI` is
+  not a valid id-, at-, or ac-code ``, blaming the archetype reference's
+  first word for not being a code) now names the missing code instead,
+  and ADL 1.4's `matches {*}` wildcard — no counterpart in the ADL 2
+  grammar this parser implements — now names that construct instead of
+  reporting the token as a malformed attribute name. Both were open since
+  the first external corpus run's own third candidate. See `A-82`. Not a
+  breaking change: message text only, verified against a full corpus
+  re-run to change nothing else — the same files parse and the same
+  files refuse.
 - `openehr-postgresql` reaches conformance level **Verified**:
   `PostgresqlStore` implements `openehr_store::Store` (blocking, via the
   `postgres` crate, `NoTls`) and passes the shared conformance suite —

@@ -93,6 +93,17 @@
 //!   corpus file uses `+/-`; 134 use `|>=0.0|`.
 //! - **Generic RM type parameters** (`LIST<DV_TEXT>`) — `rm_type_id` accepts
 //!   only a bare `ALPHA_UC_ID` here.
+//! - **ADL 1.4's `matches {*}` wildcard** ("any value of this RM type, no
+//!   further constraint") is refused by name, correctly: `cComplexObjectDef`
+//!   has a `'*'` alternative in ADL 1.4's own grammar (`Cadl14Parser.g4`) but
+//!   not in ADL 2's (`cComplexObjectDef: ( defaultValue | cAttributes
+//!   defaultValue? )`, `cadl2.g4`) — checked against both grammars directly,
+//!   not assumed — so a real ADL 1.4 fixture using it is correctly refused by
+//!   the ADL 2 grammar this parser implements. Named specifically
+//!   ([`c_complex_object`](self::c_complex_object)) rather than left to read
+//!   as "expected an attribute name, found `*`", which is true of the token
+//!   but not of the construct (corpus run 1, candidate 3; closed alongside
+//!   the id-less `use_archetype` case below).
 //!
 //! # Some literals need their own lexer scan
 //!
@@ -299,6 +310,63 @@ fn expect_node_id(lexer: &mut Lexer<'_>) -> Result<String, CadlError> {
     Ok(code)
 }
 
+/// [`expect_node_id`], specialised to `use_archetype`'s own
+/// `'[' ID_CODE ',' archetype_ref ']'` shape, so its refusal names the
+/// right problem rather than a technically-true but unhelpful one.
+///
+/// ADL 1.5's `use_archetype` omits the id code entirely —
+/// `[CIMI-CORE-CLUSTER.something.v1]`, no comma anywhere before the
+/// closing `]` — and this lexer's word-scanner stops at `-`
+/// ([`Lexer::text_since`]'s own documentation), so the first word read
+/// here is `CIMI`, which [`NodeIdSyntax::of`] correctly rejects. Reporting
+/// that verbatim ("`CIMI` is not a valid id-, at-, or ac-code") is
+/// accurate and useless: `CIMI` was never meant to be one. Corpus run 1
+/// found this by name (candidate 3, `openehr/spec/corpus.md`) and it stayed
+/// open through run 6 unfixed.
+///
+/// The fix distinguishes the two cases by looking for the comma ADL 2's
+/// grammar requires: a clone of the lexer scans ahead (cheap — both its
+/// fields are `&str`) to the next top-level `,` or `]` without consuming
+/// the real lexer's position, since deciding which message to write must
+/// not itself change what gets parsed.
+fn expect_use_archetype_node_id(lexer: &mut Lexer<'_>) -> Result<String, CadlError> {
+    let offset = lexer.offset();
+    let code = expect_word(lexer, "an id-, at-, or ac-code")?;
+    if NodeIdSyntax::of(&code).is_none() {
+        // `while let`, not `loop`/`match`, for the same reason
+        // `expect_archetype_ref`'s own lookahead loop just above is one:
+        // the loop's *own* exit condition is running out of tokens, not an
+        // arm inside it that a mutation could delete — cargo-mutants
+        // deleting `Some(']') | None => break false` here once hung the
+        // whole run for its full timeout instead of failing (found testing
+        // this very function, mirroring CI run 33775455452's own finding).
+        let mut probe = lexer.clone();
+        let mut has_comma = false;
+        while let Some(token) = probe.next() {
+            if matches!(token, Token::Symbol(',')) {
+                has_comma = true;
+                break;
+            }
+            if matches!(token, Token::Symbol(']')) {
+                break;
+            }
+        }
+        if has_comma {
+            return Err(CadlError::at(
+                offset,
+                format!("`{code}` is not a valid id-, at-, or ac-code"),
+            ));
+        }
+        return Err(CadlError::at(
+            offset,
+            "expected an id code before the archetype reference, found none -- \
+             ADL 1.5's `use_archetype` omits it; this parser implements ADL 2's \
+             `use_archetype rm_type_id '[' ID_CODE ',' archetype_ref ']'`",
+        ));
+    }
+    Ok(code)
+}
+
 fn expect_signed_integer(lexer: &mut Lexer<'_>) -> Result<i64, CadlError> {
     let offset = lexer.offset();
     let negative = consume_symbol_if(lexer, '-');
@@ -361,6 +429,22 @@ fn c_complex_object(lexer: &mut Lexer<'_>, is_root: bool) -> Result<CComplexObje
                 return Err(CadlError::at(
                     lexer.offset(),
                     "default_value (`_default = <...>`) is not implemented by this parser",
+                ));
+            }
+            // ADL 1.4's own alternative for this body, `cComplexObjectDef:
+            // cAttribute+ | '*'` — ADL 2's grammar has no such alternative
+            // (module documentation, above), so this is refused, but by its
+            // own name rather than as a mis-parsed attribute: without this
+            // check, `c_attribute_def` would read the `*` as the start of an
+            // attribute name and fail with "expected an attribute name,
+            // found `*`", true of the token but not of what the author
+            // wrote (corpus run 1, candidate 3).
+            if matches!(lexer.peek(), Some(Token::Symbol('*'))) {
+                return Err(CadlError::at(
+                    lexer.offset(),
+                    "ADL 1.4's `matches {*}` wildcard (\"any value of this \
+                     RM type, no further constraint\") is not implemented by \
+                     this parser -- ADL 2's own grammar has no such alternative",
                 ));
             }
             match c_attribute_def(lexer)? {
@@ -1022,6 +1106,17 @@ fn c_regular_object(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
                     "default_value (`_default = <...>`) is not implemented by this parser",
                 ));
             }
+            // See `c_complex_object`'s identical check, just above in this
+            // file — this is its "duplicated tail" (`A-40`'s own residual
+            // note), not a second, independent copy of the reasoning.
+            if matches!(lexer.peek(), Some(Token::Symbol('*'))) {
+                return Err(CadlError::at(
+                    lexer.offset(),
+                    "ADL 1.4's `matches {*}` wildcard (\"any value of this \
+                     RM type, no further constraint\") is not implemented by \
+                     this parser -- ADL 2's own grammar has no such alternative",
+                ));
+            }
             match c_attribute_def(lexer)? {
                 AttributeDef::Attribute(a) => attributes.push(a),
                 AttributeDef::Tuple(t) => attribute_tuples.push(t),
@@ -1095,7 +1190,7 @@ fn c_archetype_root(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
     expect_keyword(lexer, "use_archetype")?;
     let rm_type_name = expect_rm_type_id(lexer)?;
     expect_symbol(lexer, '[')?;
-    let node_id = expect_node_id(lexer)?;
+    let node_id = expect_use_archetype_node_id(lexer)?;
     expect_symbol(lexer, ',')?;
     let archetype_ref = expect_archetype_ref(lexer)?;
     expect_symbol(lexer, ']')?;
@@ -2234,6 +2329,68 @@ mod tests {
         };
         assert_eq!(filled.node_id(), Some("id2"));
         assert_eq!(filled.archetype_ref(), "openEHR-EHR-CLUSTER.device.v1");
+    }
+
+    /// ADL 1.5's `use_archetype` omits the id code the ADL 2 grammar this
+    /// parser implements requires — `CIMI-CORE-CLUSTER...` with no comma
+    /// anywhere before the closing `]` — and the refusal must name *that*
+    /// problem, not misreport `CIMI` as a badly-formed id code (corpus run
+    /// 1, candidate 3; open through run 6, closed here).
+    #[test]
+    fn a_use_archetype_with_no_id_code_names_the_missing_code_not_cimi() {
+        let source = "CLUSTER[id1] matches { items matches { \
+                       use_archetype ITEM_GROUP[CIMI-CORE-CLUSTER.panel.v0] \
+                       occurrences matches {0..1} } }";
+        let err = parse_definition(source).unwrap_err();
+        let message = err.to_string();
+        assert!(
+            message.contains("expected an id code before the archetype reference"),
+            "unexpected message: {message}"
+        );
+        assert!(!message.contains("`CIMI`"), "still blaming CIMI: {message}");
+    }
+
+    /// The generic message survives for an id code that is simply
+    /// malformed — a comma still follows it, so this is not the ADL 1.5
+    /// no-id-code shape [`expect_use_archetype_node_id`] special-cases.
+    #[test]
+    fn a_use_archetype_with_a_malformed_id_code_keeps_the_generic_message() {
+        let source = "CLUSTER[id1] matches { items matches { \
+                       use_archetype ITEM_GROUP[banana, openEHR-EHR-CLUSTER.device.v1] \
+                       occurrences matches {0..1} } }";
+        let err = parse_definition(source).unwrap_err();
+        let message = err.to_string();
+        assert!(
+            message.contains("`banana` is not a valid id-, at-, or ac-code"),
+            "unexpected message: {message}"
+        );
+    }
+
+    /// ADL 1.4's `matches {*}` wildcard has no ADL 2 counterpart (module
+    /// documentation) and must be refused by its own name, not misreported
+    /// as a malformed attribute (corpus run 1, candidate 3; closed here
+    /// alongside the id-less `use_archetype` case above).
+    #[test]
+    fn a_bare_wildcard_matches_body_names_the_adl14_construct() {
+        let source = "CLUSTER[id1] matches {*}";
+        let err = parse_definition(source).unwrap_err();
+        let message = err.to_string();
+        assert!(
+            message.contains("ADL 1.4's `matches {*}` wildcard"),
+            "unexpected message: {message}"
+        );
+        assert!(!message.contains("expected an attribute name"), "still the generic message: {message}");
+    }
+
+    /// The same wildcard, one level deeper, through `c_regular_object`'s own
+    /// duplicated tail (`A-40`'s residual) rather than the top-level
+    /// `c_complex_object` — both copies must refuse it identically.
+    #[test]
+    fn a_bare_wildcard_matches_body_is_refused_from_a_nested_object_too() {
+        let source = "CLUSTER[id1] matches { items matches { \
+                       ELEMENT[id2] occurrences matches {0..1} matches {*} } }";
+        let err = parse_definition(source).unwrap_err();
+        assert!(err.to_string().contains("ADL 1.4's `matches {*}` wildcard"));
     }
 
     /// `c_complex_object_proxy`'s trailing `ADL_PATH` is read as raw text up

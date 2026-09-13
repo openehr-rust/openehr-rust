@@ -781,6 +781,26 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       decisions, where a design call belongs. *Evidence:* run 6 in
       `corpus.md`, dated, with the counts. — **M**
 
+      **2026-09-13: (3) closed too (`A-82`) — "neither has a next action" was
+      wrong for this one, corrected rather than left standing.** Checked
+      both halves against the real grammars (`openEHR/openEHR-antlr4`)
+      rather than trusted from this item's own six-run-old wording, which
+      turned out stale for the second case (the corpus's current message is
+      "expected an attribute name", not "RM type name" as first recorded).
+      Both constructs are genuinely outside ADL 2's grammar, so the
+      refusals were never wrong — only the names, which now say what the
+      writer actually did (an ADL 1.5-form `use_archetype` with no id code;
+      ADL 1.4's `matches {*}` wildcard) instead of what the token happens
+      to look like out of context. Message-only: run 7 (`corpus.md`)
+      confirms the totals unchanged, byte-for-byte run 6's. (6) remains
+      open, still unused in the corpus. Mutation-testing the fix found a
+      real hang, not just a style question: the first lookahead loop hid
+      its own exit condition in a match arm cargo-mutants could delete,
+      the identical shape CI run 33775455452 already found once in this
+      same module; rewritten as a `while let`, whose exit condition is
+      the loop itself running out of tokens, matching that fix exactly
+      (`A-82`, `spec/audit.md`).
+
 ### P2 — operability and evidence
 
 - [x] **`Dockerfile`, `docker-compose.yml`, `.devcontainer/`.** Thread #9

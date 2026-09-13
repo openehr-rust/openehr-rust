@@ -15,7 +15,7 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**80 findings, 80 in the table below: 7 High, 44 Medium, 29 Low. 73 fixed or
+**81 findings, 81 in the table below: 7 High, 44 Medium, 30 Low. 74 fixed or
 classified, 7 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
@@ -167,6 +167,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-78 | Medium | `Time`/`DateTime`/`Duration::from_str` accepted only `.` as a fractional-second decimal sign, though `openEHR/adl-antlr`'s own `fragment SECOND_DEC_SEP : '.' \| ',' ;` (`base_lexer.g4`) states both, and ISO 8601 itself permits either — found running `EHRbase`'s own reference canonical-JSON test corpus (`tests/json_corpus.rs`, the JSON half of `tasks.md`'s external-corpus item): 21 of 57 real fixtures write `,` and none of them parsed | **fixed** (`D3.10b`) — the fractional-second split in `Time::from_str` and the decimal-sign check in `Duration::from_str`'s scanner both accept either character; the exact input text, separator included, is still what `Display` prints either way (`D3.10`), since neither type ever reconstructs its `Display` form from the parsed digits |
 | A-79 | Medium | `TEMPLATE_ID` refused any value containing whitespace (`I2.16`), though openEHR gives its lexical form as "to be determined" and the requirement's own reasoning already warned that "inventing a stricter grammar would reject valid identifiers from conformant tools" — found by exactly that: `EHRbase`'s own corpus names a real template `Virologischer Befund`, refused by every version of this crate before this fix, in 8 of 57 fixtures | **fixed** — the whitespace check is removed; only emptiness is refused, the one floor `I2.16`'s reasoning actually supports. `I2.16`'s text corrected in place, id unchanged (`C0.5`) |
 | A-81 | Medium | `DV_CODED_TEXT.check_openehr_rubric` compares `value` against an **English-only** rubric table (`terminology::Group::rubric`'s own doc comment already says so), with no way to know the enclosing record's declared `language` — so a valid Spanish rubric (`"evento"` for openEHR code `433`, English `"event"`) is reported as a `Value_is_rubric` *violation*, not *unchecked*, which is exactly the false claim `D3.7` says this check must never make, in the refusing direction. Found running the JSON corpus: `EHRbase`'s own `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, declared `language: es` | **open, by decision** — closing it needs either threading the record's language through the validation walk and reporting unchecked for anything but English, or sourcing and citing real multi-language rubric data; new `D3.7a` states the gap |
+| A-82 | Low | `am::cadl` refused two real constructs *correctly* but *unhelpfully* — an ADL 1.5-form `use_archetype` with no id code named the archetype's own first word (`` `CIMI` is not a valid id-, at-, or ac-code ``), and ADL 1.4's `matches {*}` wildcard named the token, not the construct (`` expected an attribute name, found `*` ``, 38 files) — both stated as open since corpus run 1's own candidate 3, neither reproduced against the real grammars this parser targets (`openEHR/openEHR-antlr4`'s `Cadl2Parser.g4`/`Cadl14Parser.g4`) until this pass | **fixed** — message only, nothing reparsed; `expect_use_archetype_node_id` clones the lexer to look ahead for the comma ADL 2's grammar requires before choosing which message applies, so a genuinely malformed id code (a comma *does* follow) keeps the original message; `c_complex_object` and its own duplicated tail (`A-40`'s residual) both name the `*` wildcard specifically, confirmed against `Cadl14Parser.g4`'s `cComplexObjectDef` production (one or more `cAttribute`, or a bare `'*'`) having no ADL 2 counterpart at all |
 
 
 ---
@@ -4728,3 +4729,71 @@ publishes, the same sourcing discipline `03-data-types.md`'s own
 to — not something to approximate from a single corpus fixture. New
 `D3.7a` states the gap in the specification itself, since `D3.7` alone
 now reads as satisfied when it is not, for any language but English.
+
+## A-82 — two refusals correct in substance, wrong in name
+
+**Severity: Low. Status: fixed.**
+
+**Corpus run 1's own third candidate, unfixed for six runs.** `corpus.md`
+named it on day one: `` `CIMI` is not a valid id-, at-, or ac-code `` for an
+id-less `use_archetype`, and `` expected an RM type name, found `*` `` for
+ADL 1.4's `matches {*}` wildcard — "both are right to refuse; both could
+say what the writer actually did." Every run from 1 through 6 repeated
+"open" with no next action, because neither half is a parsing defect:
+both constructs are genuinely outside the ADL 2 grammar this parser
+implements, so the refusal itself was never wrong, only its name.
+
+**Checked against the real grammars before writing either message**,
+not assumed from this file's own six-run-old wording, which turned out to
+be stale for the second case: `openEHR/openEHR-antlr4`'s `Cadl2Parser.g4`
+gives `cComplexObjectDef: ( defaultValue | cAttributes defaultValue? )`,
+no `'*'` alternative anywhere; `Cadl14Parser.g4` gives `cComplexObjectDef:
+cAttribute+ | '*'` — the wildcard is real, but only in ADL 1.4, one grammar
+generation this parser does not implement (module documentation,
+`am::cadl`). The corpus's own current wording for this case is `expected
+an attribute name, found `\*`` — not `RM type name` as candidate 3
+originally said — so the fix names what the parser today actually says,
+verified against a live corpus run rather than the six-run-old
+description.
+
+**Fixed, in two places, both message-only — no fixture that used to
+refuse now parses, and none that used to parse now refuses.**
+
+- `expect_use_archetype_node_id` (`am::cadl`), used only by
+  `c_archetype_root`'s own `[ID_CODE, archetype_ref]`: on a `NodeIdSyntax`
+  failure, clones the lexer (cheap — both its fields are `&str`, and the
+  clone is why `Lexer` now derives it) to look ahead, without consuming
+  the real lexer's position, for the comma ADL 2's grammar requires
+  before the archetype reference. No comma anywhere before the closing
+  `]` means the id code was never there to begin with — ADL 1.5's own
+  shorthand — and the message says so by name; a comma that *does* follow
+  means `code` was meant as an id code and simply is not one, and the
+  original, still-correct message is kept.
+- `c_complex_object` and its own duplicated tail inside `c_regular_object`
+  (`A-40`'s residual — two copies of the same loop, not refactored here)
+  both check for a bare `Symbol('*')` as the first token of a `matches {`
+  body before calling `c_attribute_def`, which has no way to recognise it
+  as anything but a malformed attribute name.
+
+**Tests.** Four: the two id-code cases (a genuine ADL 1.5 no-code archetype
+reference names the missing code; a malformed-but-comma-followed code
+keeps the generic message) and the two wildcard cases (the top-level
+`c_complex_object` path and the nested `c_regular_object` duplicated-tail
+path both name the ADL 1.4 construct). Re-ran the full corpus
+(`corpus.md`, run 7) to confirm the totals are unchanged — 969/1,379
+`.adls` parsed, 33/593 `.adl`, byte-for-byte run 6's — which is the
+expected result of a message change, not a parsing one.
+
+**Mutation-tested (`cargo mutants --in-diff`, this diff): found, and
+fixed, the exact hang this file already documents the shape of.** The
+lookahead loop's first draft was a `loop { match probe.next() { ... } }`
+with the terminating arm `Some(Token::Symbol(']')) | None => break false`
+— cargo-mutants deleted that arm and the run hung for its own timeout
+rather than failing, the identical shape CI run 33775455452 already found
+in `expect_archetype_ref`'s loop (`am::cadl`'s own module documentation,
+above `parse_slot_assertion`). Rewritten as a `while let Some(token) =
+probe.next()`, whose exit condition is running out of tokens — not an arm
+inside the body a mutation can remove — matching `expect_archetype_ref`'s
+own already-documented technique exactly. `--re
+'expect_use_archetype_node_id'` over the whole function afterward: 2
+mutants, both caught, 0 missed, 0 timeouts.

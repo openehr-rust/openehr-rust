@@ -70,6 +70,13 @@ fn is_iso8601_char(c: char) -> bool {
         )
 }
 
+/// `Clone`, not `Copy`: cloning is deliberately visible at each call site
+/// (`expect_use_archetype_node_id`'s own lookahead) rather than implicit,
+/// even though both fields are `&str` and the clone is free — a caller
+/// scanning ahead on a clone must not accidentally mutate the real lexer
+/// by writing to the wrong binding, which `Copy`'s auto-substitution could
+/// let happen unnoticed.
+#[derive(Clone)]
 pub(super) struct Lexer<'a> {
     source: &'a str,
     rest: &'a str,

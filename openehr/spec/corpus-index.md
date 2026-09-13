@@ -37,6 +37,7 @@ A reverse index from a requirement or finding id to where [`corpus.md`](corpus.m
 | `A-72` | `corpus.md` | Run 4 — 2026-09-04, after `A-75` | 5 (was 3) \| an unwrapped temporal interval … is not implemented \| Up: `A-75`'s unwrapped dispatch... |
 | `A-72` | `corpus.md` | Run 5 — 2026-09-04, after `A-76` | 4. Unwrapped interval kind: **closed, `A-72`**. |
 | `A-72` | `corpus.md` | Run 6 — 2026-09-04, after `A-77` | 4. Unwrapped interval kind: **closed, `A-72`**. |
+| `A-72` | `corpus.md` | Run 7 — 2026-09-13, candidate 3 closed (`A-82`) | 4. Unwrapped interval kind: **closed, `A-72`**. |
 | `A-73` | `corpus.md` | Run 3 — 2026-09-03, after `A-72`, `A-73`, `A-74` | its first bound's token), `A-73` (`allow_archetype … closed` parsed), and |
 | `A-73` | `corpus.md` | Run 3 — 2026-09-03, after `A-72`, `A-73`, `A-74` | - **`A-73`** (fixed): the closed slot stayed refused after `A-71` removed |
 | `A-74` | `corpus.md` | Run 3 — 2026-09-03, after `A-72`, `A-73`, `A-74` | `A-74` (the relop interval spelling `\|>=0.0\|`), the last found by the |
@@ -50,6 +51,8 @@ A reverse index from a requirement or finding id to where [`corpus.md`](corpus.m
 | `A-75` | `corpus.md` | Run 5 — 2026-09-04, after `A-76` | 5. Unwrapped temporal literals: **closed, `A-75`**. |
 | `A-75` | `corpus.md` | Run 6 — 2026-09-04, after `A-77` | 1. `DATE_CONSTRAINT_PATTERN`: **closed, `A-75`**. |
 | `A-75` | `corpus.md` | Run 6 — 2026-09-04, after `A-77` | 5. Unwrapped temporal literals: **closed, `A-75`**. |
+| `A-75` | `corpus.md` | Run 7 — 2026-09-13, candidate 3 closed (`A-82`) | 1. `DATE_CONSTRAINT_PATTERN`: **closed, `A-75`**. |
+| `A-75` | `corpus.md` | Run 7 — 2026-09-13, candidate 3 closed (`A-82`) | 5. Unwrapped temporal literals: **closed, `A-75`**. |
 | `A-76` | `corpus.md` | Run 4 — 2026-09-04, after `A-75` | but not to zero, which is what led straight to `A-76`: one file still |
 | `A-76` | `corpus.md` | Run 5 — 2026-09-04, after `A-76` | - Crate: run 4's tree plus `A-76`: `primitive_kind` matches exactly, not |
 | `A-76` | `corpus.md` | Run 5 — 2026-09-04, after `A-76` | - **`A-76`** (fixed): `primitive_kind`'s case-insensitive match, corpus run |
@@ -57,8 +60,10 @@ A reverse index from a requirement or finding id to where [`corpus.md`](corpus.m
 | `A-76` | `corpus.md` | Run 5 — 2026-09-04, after `A-76` | 8. **New — a `VACMCU` cardinality violation** surfaced by `A-76`, 8 files, |
 | `A-76` | `corpus.md` | Run 6 — 2026-09-04, after `A-77` | 2. `primitive_kind` case-insensitivity: **closed, `A-76`**. |
 | `A-76` | `corpus.md` | Run 6 — 2026-09-04, after `A-77` | 8. A `VACMCU` cardinality violation surfaced by `A-76`, 8 files, all ISO |
+| `A-76` | `corpus.md` | Run 7 — 2026-09-13, candidate 3 closed (`A-82`) | 2. `primitive_kind` case-insensitivity: **closed, `A-76`**. |
 | `A-77` | `corpus.md` | Run 6 — 2026-09-04, after `A-77` | - Crate: run 5's tree plus `A-77`: a negative unwrapped number |
 | `A-77` | `corpus.md` | Run 6 — 2026-09-04, after `A-77` | 7. A negative unwrapped integer in a tuple row: **closed, `A-77`**. |
+| `A-77` | `corpus.md` | Run 7 — 2026-09-13, candidate 3 closed (`A-82`) | 7. A negative unwrapped integer in a tuple row: **closed, `A-77`**. |
 | `A-78` | `json_corpus.md` | Run 1 — 2026-09-05 | before any fix, after `A-78`, and after `A-79` — recorded as one run |
 | `A-78` | `json_corpus.md` | Run 1 — 2026-09-05 | After `A-78` (comma decimal sign) \| 8 \| 13 \| 36 |
 | `A-78` | `json_corpus.md` | Run 1 — 2026-09-05 | - **`A-78`** (fixed): a comma decimal sign in a fractional second, refused |
@@ -68,6 +73,8 @@ A reverse index from a requirement or finding id to where [`corpus.md`](corpus.m
 | `A-81` | `json_corpus.md` | Run 1 — 2026-09-05 | - **`A-81`** (open, by decision): `Value_is_rubric` reports a violation |
 | `A-81` | `json_corpus.md` | Run 1 — 2026-09-05 | `Value_is_rubric` \| 1 \| `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, declared `language: es... |
 | `A-81` | `json_corpus.md` | Run 1 — 2026-09-05 | `A-81`. |
+| `A-82` | `corpus.md` | Run 7 — 2026-09-13, candidate 3 closed (`A-82`) | reparsed: `A-82`. |
+| `A-82` | `corpus.md` | Run 7 — 2026-09-13, candidate 3 closed (`A-82`) | 3. Refusal names that are correct but unhelpful: **closed, `A-82`**. |
 | `D3.7` | `json_corpus.md` | Run 1 — 2026-09-05 | `Value_is_rubric` \| 1 \| `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, declared `language: es... |
 | `D3.7a` | `json_corpus.md` | Run 1 — 2026-09-05 | `Value_is_rubric` \| 1 \| `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, declared `language: es... |
 | `D3.13a` | `json_corpus.md` | Run 1 — 2026-09-05 | 3 \| `all_types_no_multimedia.json` and two siblings: `DV_DATE.value` is `"20190114"`, ISO 8601's ... |
