@@ -7,6 +7,13 @@ together.
 
 ## Unreleased
 
+## 0.10.0 - 2026-10-16
+
+Three breaking changes to the Archetype Model surface (`lib:A-63`, `lib:A-69`,
+`lib:A-71`) and the bounded AQL executor, listed below; plus dependency
+updates (`hmac` 0.13, `sha2` 0.11, `rusqlite` 0.40, lockfile refresh). The
+`clippy::assert_is_empty` pedantic lint is allowed crate-wide.
+
 - `openehr-store` executes a bounded subset of AQL: `db:S1.6` — "the core
   MUST NOT execute AQL" — is amended to permit exactly one `EHR`, one
   archetype-predicated containment level, `WHERE`/`SELECT`/`ORDER BY` over

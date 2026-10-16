@@ -43,8 +43,8 @@ println!("{}", ddl_script(&MysqlDialect));
 
 ```toml
 [dependencies]
-openehr-mysql = "0.9"
-openehr-store = "0.9"
+openehr-mysql = "0.10"
+openehr-store = "0.10"
 ```
 
 Requires Rust 1.96+ (edition 2024).

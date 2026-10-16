@@ -40,8 +40,8 @@ println!("{}", ddl_script(&MssqlDialect));
 
 ```toml
 [dependencies]
-openehr-mssql = "0.9"
-openehr-store = "0.9"
+openehr-mssql = "0.10"
+openehr-store = "0.10"
 ```
 
 Requires Rust 1.96+ (edition 2024).

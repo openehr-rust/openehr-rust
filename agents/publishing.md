@@ -19,6 +19,9 @@ publish a crate with an open finding against its claims (`W0.21`).
 
 ## State today
 
+**Staged 2026-10-16: Local is 0.10.0 and NOT yet published.** The bump is
+breaking (`lib:A-63`, `lib:A-69`, `lib:A-71`), hence 0.10.0 and not 0.9.1.
+
 **Published 2026-09-02.** All eight publishable crates are live at **0.9.0**
 on crates.io, in the order below, and local matches published. Verified
 against the registry API rather than read off `cargo publish`'s output —
