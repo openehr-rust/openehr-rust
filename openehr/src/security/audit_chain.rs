@@ -54,7 +54,7 @@ use crate::security::canonical::to_canonical_bytes;
 use core::fmt;
 // The trait is imported anonymously so its name does not collide with this
 // module's `Mac` type, which is the tag itself rather than the algorithm.
-use hmac::{Hmac, Mac as _};
+use hmac::{Hmac, KeyInit as _, Mac as _};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;

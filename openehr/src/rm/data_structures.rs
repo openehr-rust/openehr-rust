@@ -552,7 +552,6 @@ impl ItemStructure {
     ///
     /// The one traversal that works across all four shapes, which is what
     /// de-identification and value extraction both need.
-    #[must_use]
     pub fn elements(&self) -> Box<dyn Iterator<Item = &Element> + '_> {
         match self {
             Self::Single(s) => Box::new(core::iter::once(s.item())),

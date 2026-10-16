@@ -14,15 +14,15 @@
   "private": "true",
   "packageManager": "pnpm@11.0.8",
   "devDependencies": {
-    "@sveltejs/adapter-static": "^4.0.0-next.0",
-    "@sveltejs/kit": "^3.0.0-next.0",
-    "@sveltejs/vite-plugin-svelte": "^7.3.0",
-    "svelte": "^5.56.9",
-    "vite": "^8.2.1"
+    "@sveltejs/adapter-static": "^4.0.0",
+    "@sveltejs/kit": "^3.1.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "svelte": "^5.57.2",
+    "vite": "^8.3.4"
   },
   "dependencies": {
     "github-slugger": "^2.0.0",
-    "marked": "^18.0.10"
+    "marked": "^18.1.1"
   },
   "pnpm": {
     "overrides": {

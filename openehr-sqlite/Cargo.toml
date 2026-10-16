@@ -19,7 +19,7 @@ serde_json = { version = "1", features = ["preserve_order", "float_roundtrip", "
 # `bundled` compiles a known SQLite rather than linking whatever the host
 # ships. The generated DDL and the JSON1 functions the store uses are
 # version-dependent, so the engine is pinned rather than discovered.
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 [dev-dependencies]
 # The five other dialects, so one test can compare all six. The comparison has
@@ -54,5 +54,7 @@ unsafe_code = "forbid"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
+# `assert!(x.is_empty())` states the claim directly; the lint's `assert_eq!(x, [])` suggestion needs type annotations for no clarity gain.
+assert_is_empty = "allow"
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"

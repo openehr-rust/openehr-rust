@@ -1,2 +1,3 @@
-overrides:
-  cookie: "0.7.2"
+# No dependency overrides. The former `cookie` pin broke @sveltejs/kit 3, which
+# depends on cookie ^2 directly.
+overrides: {}

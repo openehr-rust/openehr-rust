@@ -30,5 +30,7 @@ unsafe_code = "forbid"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
+# `assert!(x.is_empty())` states the claim directly; the lint's `assert_eq!(x, [])` suggestion needs type annotations for no clarity gain.
+assert_is_empty = "allow"
 
 [workspace]
