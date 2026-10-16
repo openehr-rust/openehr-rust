@@ -38,7 +38,7 @@ openehr-store = "0.10"
 openehr = "0.10"
 ```
 
-Requires Rust 1.96+ (edition 2024). This crate emits DDL and defines the traits;
+Requires Rust 1.97+ (edition 2024). This crate emits DDL and defines the traits;
 it opens no connections and depends on no driver.
 
 ## The storage model
