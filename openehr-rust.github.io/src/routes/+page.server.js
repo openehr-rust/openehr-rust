@@ -1,4 +1,4 @@
-import { crates, specPages } from '$lib/docs.js';
+import { crates, specPages } from '#lib/docs.js';
 
 export function load() {
 	return {

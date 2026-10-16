@@ -1,9 +1,9 @@
 <script>
-	import ArticleLayout from '$lib/lily/components/ArticleLayout.svelte';
-	import BreadcrumbNav from '$lib/lily/components/BreadcrumbNav.svelte';
-	import BreadcrumbList from '$lib/lily/components/BreadcrumbList.svelte';
-	import BreadcrumbListItem from '$lib/lily/components/BreadcrumbListItem.svelte';
-	import { SITE_NAME, SITE_URL } from '$lib/site.js';
+	import ArticleLayout from '#lib/lily/components/ArticleLayout.svelte';
+	import BreadcrumbNav from '#lib/lily/components/BreadcrumbNav.svelte';
+	import BreadcrumbList from '#lib/lily/components/BreadcrumbList.svelte';
+	import BreadcrumbListItem from '#lib/lily/components/BreadcrumbListItem.svelte';
+	import { SITE_NAME, SITE_URL } from '#lib/site.js';
 
 	let { data } = $props();
 

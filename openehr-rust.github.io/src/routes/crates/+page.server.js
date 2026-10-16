@@ -1,4 +1,4 @@
-import { crates } from '$lib/docs.js';
+import { crates } from '#lib/docs.js';
 
 export function load() {
 	return {

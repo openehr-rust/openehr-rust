@@ -1,7 +1,7 @@
 <script>
-	import Card from '$lib/lily/components/Card.svelte';
-	import Badge from '$lib/lily/components/Badge.svelte';
-	import { REPOSITORIES, SITE_NAME, SITE_URL } from '$lib/site.js';
+	import Card from '#lib/lily/components/Card.svelte';
+	import Badge from '#lib/lily/components/Badge.svelte';
+	import { REPOSITORIES, SITE_NAME, SITE_URL } from '#lib/site.js';
 
 	let { data } = $props();
 
