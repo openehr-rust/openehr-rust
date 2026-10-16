@@ -220,7 +220,7 @@ warnings — keep it there.**
   `openehr` and `openehr-store`; CI runs them with `--test`, one iteration, and
   asserts nothing about wall-clock. Do not add a timing threshold — on a shared
   runner it fails for unrelated reasons and gets silenced.
-- **The MSRV is a formula, not a number** (`RV1`): N−2, currently 1.96 (raised
+- **The MSRV is a formula, not a number** (`RV1`): N−2, currently 1.97 (raised
   from N−3 on 2026-08-29). The `msrv` job re-derives it from the stable
   toolchain, so it goes red within six weeks of every Rust release. That is
   deliberate; fix the number, do not pin the toolchain

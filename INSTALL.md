@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **Requires Rust 1.96+ (edition 2024).** The minimum supported version is a
+- **Requires Rust 1.97+ (edition 2024).** The minimum supported version is a
   formula, not a number — N−2, where N is current stable — and it moves on the
   Rust release schedule rather than on this project's
   ([`spec/rust-msrv-n-minus-2/index.md`](spec/rust-msrv-n-minus-2/index.md)).

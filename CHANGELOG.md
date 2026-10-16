@@ -14,6 +14,10 @@ Three breaking changes to the Archetype Model surface (`lib:A-63`, `lib:A-69`,
 updates (`hmac` 0.13, `sha2` 0.11, `rusqlite` 0.40, lockfile refresh). The
 `clippy::assert_is_empty` pedantic lint is allowed crate-wide.
 
+**The MSRV moves from 1.96 to 1.97** (N−2 of current stable 1.99), in every
+manifest — a breaking change for a consumer building below the new floor, which
+is why this is a minor bump (`RV6`).
+
 - `openehr-store` executes a bounded subset of AQL: `db:S1.6` — "the core
   MUST NOT execute AQL" — is amended to permit exactly one `EHR`, one
   archetype-predicated containment level, `WHERE`/`SELECT`/`ORDER BY` over

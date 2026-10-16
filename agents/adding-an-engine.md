@@ -57,7 +57,7 @@ a sibling too; the `msrv` job checks that every manifest agrees.
 name = "openehr-<engine>"
 version = "0.3.0"
 edition = "2024"
-rust-version = "1.96"
+rust-version = "1.97"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
 description = "openEHR persistence for <Engine>: schema dialect and DDL"
 keywords = ["openehr", "ehr", "<engine>", "healthcare", "sql"]

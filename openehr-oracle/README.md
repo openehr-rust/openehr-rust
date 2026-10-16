@@ -38,7 +38,7 @@ openehr-oracle = "0.10"
 openehr-store = "0.10"
 ```
 
-Requires Rust 1.96+ (edition 2024).
+Requires Rust 1.97+ (edition 2024).
 
 ## What this crate owns
 

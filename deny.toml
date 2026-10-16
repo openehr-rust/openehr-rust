@@ -38,6 +38,13 @@ ignore = [
     # silenced. Revisit when `loco-rs`/`opendal` widen the pin.
     { id = "RUSTSEC-2026-0194", reason = "transitive via opendal's pinned quick-xml; unreached by this crate's own code; no compatible fix available upstream" },
     { id = "RUSTSEC-2026-0195", reason = "transitive via opendal's pinned quick-xml; unreached by this crate's own code; no compatible fix available upstream" },
+    # `unsafe-libyaml` 0.2.11 (RUSTSEC-2024-0449, "unmaintained", not a
+    # vulnerability), via `serde_yaml`/`serde_yaml_ng`, via `loco-rs` and its
+    # `loco-gen`/`rrgen` code generator, in `openehr-loco`. Both parents are
+    # `loco-rs` 1.2.0's own dependencies, so nothing in this repository can
+    # replace it; `openehr-loco` parses no YAML from openEHR data. Revisit
+    # when `loco-rs` moves off `serde_yaml`.
+    { id = "RUSTSEC-2024-0449", reason = "unmaintained (not vulnerable); transitive via loco-rs's serde_yaml; unreachable from this crate's own code" },
 ]
 
 # Every licence actually present in the graph is named here explicitly, not

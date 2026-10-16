@@ -4,7 +4,7 @@
 [`index.md`](../index.md).
 
 **The minimum supported Rust version (MSRV) of this repository is N−2**, where N
-is the current stable release. N is **1.98**, so the MSRV is **1.96**.
+is the current stable release. N is **1.99**, so the MSRV is **1.97**.
 
 *(Raised from N−3 to N−2 on 2026-08-29. The identifiers below — `RV1`–`RV8` —
 are unchanged, per `C0.5`: identifiers are permanent, and moving the document
