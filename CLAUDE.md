@@ -17,37 +17,23 @@ is a different skill: openEHR concepts, not this repository's conventions.
 ## Layout
 
 Eighteen crates, **each its own Cargo workspace**. There is no root workspace —
-run cargo from inside a crate directory. Eight are published at 0.9.0; the other
+run cargo from inside a crate directory. Eight are published at 0.10.0; the other
 ten are `publish = false`.
 
-**Local matches published: 0.9.0, out 2026-09-02.** 0.9.0 is the one to know
-about: `CObject::occurrences()` now returns `Option<&MultiplicityInterval>`
-rather than `&MultiplicityInterval`, and `CPrimitive::TerminologyCode` lost
-its `code_list` field — two breaking changes to the Archetype Model surface
-0.7.0/0.8.0 shipped, decided rather than left open again (`lib:A-54`,
-`lib:A-55`), which is why this is a minor bump and not a patch. The same
-release also fixed a real defect found while preparing it: a
-side-effecting call inside `debug_assert!` silently broke ADL header
-parsing in every release-profile build (`lib:A-57`) — `cargo test` never
-caught it, since it always builds in the `dev` profile where
-`debug_assert!` is live. Earlier the same season: 0.8.0 moved the MSRV
-floor from N−3 to N−2 — 1.95 to 1.96 — which `RV6` required to ship as a
-minor bump, not a patch, because it breaks a consumer building below the
-new floor (`spec/rust-msrv-n-minus-2/index.md` replaced the N−3 document;
-the `RV1`–`RV8` requirement identifiers carried over unchanged); 0.7.0
-brought the Archetype Model into scope (`openehr::am`, `lib:A-40`); 0.6.0
-made the Reference Model's reals `base::Real` rather than `f64`, so
-`1.50 mg` and `1.5 mg` are different records and hash differently
-(`lib:D3.18d`) — the `f64` accessors are unchanged, and `magnitude_real()`
-is the new one; 0.4.0 removed `PartialOrd` from every `DV_ORDERED`
-(`lib:A-35`) and moved the MSRV to N−3 in the first place, and 0.5.0 added
-negative AQL literals (`lib:A-27`). Read
+**Local matches published: 0.10.0, out 2026-10-16.** 0.10.0 is the one to know
+about: three breaking changes to the Archetype Model surface (`lib:A-63`,
+`lib:A-69`, `lib:A-71` -- the last makes `occurrences` an `Option` on every
+`C_OBJECT` constructor), the bounded AQL executor in `openehr-store`, and an
+MSRV raise from 1.96 to 1.97 (the N-2 formula; `RV6` makes that a minor bump).
+0.9.0 (2026-09-02) made `CObject::occurrences()` return
+`Option<&MultiplicityInterval>` and fixed a side-effecting call inside
+`debug_assert!` that silently broke ADL header parsing in release builds
+(`lib:A-57`) -- `cargo test` never caught it, since it builds in the `dev`
+profile. Earlier history, including 0.8.0's MSRV move and the `Real` /
+`PartialOrd` changes, is in [`CHANGELOG.md`](CHANGELOG.md). Read
 [`agents/publishing.md`](agents/publishing.md) before touching a version
 number; it is the only file that tracks this, and four others state the version
-without tracking it (`spec/audit.md` **W-10**). **Unreleased on `main` as of
-2026-09-03: three breaking changes** (`lib:A-63`, `lib:A-69`, `lib:A-71` —
-the last makes `occurrences` an `Option` on every `C_OBJECT` constructor), so
-the next release is 0.10.0, not 0.9.1.
+without tracking it (`spec/audit.md` **W-10**).
 
 | Crate | Role | Level |
 | --- | --- | --- |
