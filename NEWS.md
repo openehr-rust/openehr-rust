@@ -3,6 +3,14 @@
 Release notes with their reasoning live in [`CHANGELOG.md`](CHANGELOG.md); this
 page is the short form, plus what is coming and how to reach a human.
 
+## 0.10.0, 2026-10-16
+
+All eight crates move to 0.10.0: the Archetype Model breaking changes
+(`lib:A-63`, `lib:A-69`, `lib:A-71`) and the bounded AQL executor that had been
+accumulating on `main`, plus a dependency refresh (`hmac` 0.13, `sha2` 0.11,
+`rusqlite` 0.40). The MSRV moves to 1.97 as the N−2 formula requires.
+[`CHANGELOG.md`](CHANGELOG.md) has the detail.
+
 ## Five more corpus findings, 967 of 1,379 now parsing, 2026-09-04
 
 Continuing from the day before: three more runs against
@@ -141,7 +149,7 @@ miscompiling, but a dependency silently dropping support for a toolchain
 is a thing worth reading about before it happens, not discovering from a
 build error.
 
-`rust-version = "1.96"` in all eighteen manifests, the `msrv` CI job's
+`rust-version` set to 1.96 in all eighteen manifests, the `msrv` CI job's
 derivation moved from `stable − 3` to `stable − 2`, and every prose
 statement of the floor updated to match. Verified before publishing, not
 only declared: `cargo +1.96 test --all-features` run for real across all
