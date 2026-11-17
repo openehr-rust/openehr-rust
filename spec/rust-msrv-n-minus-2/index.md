@@ -4,7 +4,7 @@
 [`index.md`](../index.md).
 
 **The minimum supported Rust version (MSRV) of this repository is N−2**, where N
-is the current stable release. N is **1.99**, so the MSRV is **1.97**.
+is the current stable release. N is **1.100**, so the MSRV is **1.98**.
 
 *(Raised from N−3 to N−2 on 2026-08-29. The identifiers below — `RV1`–`RV8` —
 are unchanged, per `C0.5`: identifiers are permanent, and moving the document
@@ -142,7 +142,7 @@ Stated so that "not examined" and "examined and sound" stay distinguishable
   whatever nightly `cargo-fuzz` needs, which no job here pins.
 
 - **N−2 is verified; nothing between N−2 and N is.** The job builds exactly two
-  toolchains, stable and N−2. A break that appears only on 1.97 would reach a
+  toolchains, stable and N−2. A break that appears only on 1.99 would reach a
   user before it reached CI. This is judged an acceptable gap — the compiler is
   not that discontinuous — rather than an unnoticed one. It is a narrower gap
   than N−3's, by exactly the one release the offset moved.

@@ -1632,9 +1632,9 @@ dependencies = [
 
 [[package]]
 name = "notify-types"
-version = "2.3.0"
+version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c491a384baf9fec20df565cdb8138a12809d4c7439763b566eb8114c5d59979"
+checksum = "cbd044e85df3d939d8e32a1c35a3b737c7d0a4eeb7acd737bd207644e00f4e5f"
 dependencies = [
  "bitflags",
 ]
@@ -1702,7 +1702,7 @@ checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
 name = "openehr"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "hmac",
  "serde",
@@ -1715,7 +1715,7 @@ dependencies = [
 
 [[package]]
 name = "openehr-loco"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1736,7 +1736,7 @@ dependencies = [
 
 [[package]]
 name = "openehr-sqlite"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "openehr",
  "openehr-store",
@@ -1746,7 +1746,7 @@ dependencies = [
 
 [[package]]
 name = "openehr-store"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "openehr",
  "serde",

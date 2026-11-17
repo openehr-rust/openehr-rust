@@ -7,6 +7,13 @@ together.
 
 ## Unreleased
 
+## 0.11.0 - 2026-11-17
+
+**The MSRV moves from 1.97 to 1.98** (N−2 of current stable 1.100), in every
+manifest — a breaking change for a consumer building below the new floor, which
+is why this is a minor bump (`RV6`). Lockfiles refreshed within the two-day
+publish-age floor; no API changes.
+
 ## 0.10.0 - 2026-10-16
 
 Three breaking changes to the Archetype Model surface (`lib:A-63`, `lib:A-69`,

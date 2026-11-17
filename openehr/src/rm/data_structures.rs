@@ -806,7 +806,7 @@ fn subtract_seconds(
             d = iso8601::days_in_month(y, m);
         }
     }
-    let offset = time.offset().map(|o| o.to_string()).unwrap_or_default();
+    let offset = time.offset().map_or_else(String::new, |o| o.to_string());
     Ok(format!(
         "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}{offset}",
         remaining / 3600,

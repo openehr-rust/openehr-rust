@@ -106,7 +106,7 @@ python3 scripts/check-docs.py          # --fix rewrites copies from their owner
 (cd openehr-store && cargo bench -- --test)
 ```
 
-The MSRV is **N−2** — two Rust releases behind stable, currently 1.97 (raised
+The MSRV is **N−2** — two Rust releases behind stable, currently 1.98 (raised
 from N−3 on 2026-08-29) — and the `msrv` job re-derives that number rather than
 trusting a constant, so it goes red within six weeks of every Rust release. Fix
 the number; do not pin the toolchain. See

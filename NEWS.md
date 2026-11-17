@@ -3,6 +3,12 @@
 Release notes with their reasoning live in [`CHANGELOG.md`](CHANGELOG.md); this
 page is the short form, plus what is coming and how to reach a human.
 
+## 0.11.0, 2026-11-17
+
+All eight crates move to 0.11.0: the MSRV moves to 1.98 as the N−2 formula
+requires (stable is 1.100), and the lockfiles are refreshed. No API changes.
+[`CHANGELOG.md`](CHANGELOG.md) has the detail.
+
 ## 0.10.0, 2026-10-16
 
 All eight crates move to 0.10.0: the Archetype Model breaking changes
