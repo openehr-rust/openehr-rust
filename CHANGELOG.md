@@ -14,6 +14,10 @@ manifest — a breaking change for a consumer building below the new floor, whic
 is why this is a minor bump (`RV6`). Lockfiles refreshed within the two-day
 publish-age floor; no API changes.
 
+`rusqlite` 0.40 to 0.43 in `openehr-sqlite`, which moves the bundled SQLite
+(`libsqlite3-sys` 0.38.2 to 0.40.0) past RUSTSEC-2026-0459 / CVE-2026-119375
+(uninitialised page-cache memory returned for a mismatched `-wal` file).
+
 ## 0.10.0 - 2026-10-16
 
 Three breaking changes to the Archetype Model surface (`lib:A-63`, `lib:A-69`,
