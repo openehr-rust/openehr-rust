@@ -41,8 +41,7 @@ Its own workspace, matching the others:
 
 Match the *current* version the rest of the workspace is on — read it from a
 sibling dialect crate's `Cargo.toml` rather than copying the numbers below,
-which will drift. As of this writing that is `0.3.0`, published 2026-08-04
-(`agents/publishing.md`); a new crate's own version starts wherever the others
+which will drift. As of this writing that is `0.11.0` (`CHANGELOG.md`, `agents/publishing.md`); a new crate's own version starts wherever the others
 are, not at `0.1.x`.
 
 The same applies to `rust-version`, which is **N−2** and changes on Rust's
@@ -55,7 +54,7 @@ a sibling too; the `msrv` job checks that every manifest agrees.
 
 [package]
 name = "openehr-<engine>"
-version = "0.3.0"
+version = "0.11.0"
 edition = "2024"
 rust-version = "1.98"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"
@@ -66,8 +65,8 @@ repository = "https://github.com/openehr-rust/openehr-rust"
 readme = "README.md"
 
 [dependencies]
-openehr = { path = "../openehr", version = "0.3.0" }
-openehr-store = { path = "../openehr-store", version = "0.3.0" }
+openehr = { path = "../openehr", version = "0.11.0" }
+openehr-store = { path = "../openehr-store", version = "0.11.0" }
 serde_json = { version = "1", features = ["preserve_order"] }
 
 [lints.rust]

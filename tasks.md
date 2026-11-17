@@ -1302,11 +1302,11 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       ITS-REST at all, absent from EHRbase's own OpenAPI paths, with nothing
       to check them against. What is genuinely shared, checked and
       landed: reading an EHR that exists, and reading one that does not —
-      [`openehr-loco/scripts/conformance.sh`](../openehr-loco/scripts/conformance.sh)
-      plus [`openehr-loco/examples/generate_test_token.rs`](../openehr-loco/examples/generate_test_token.rs)
+      [`openehr-loco/scripts/conformance.sh`](openehr-loco/scripts/conformance.sh)
+      plus [`openehr-loco/examples/generate_test_token.rs`](openehr-loco/examples/generate_test_token.rs)
       (a throwaway PASETO keypair and token, for running it by hand), with
       both required runs committed and dated in
-      [`openehr-loco/spec/conformance-runs.md`](../openehr-loco/spec/conformance-runs.md)
+      [`openehr-loco/spec/conformance-runs.md`](openehr-loco/spec/conformance-runs.md)
       — `2 passed, 0 failed` against `openehr-loco` (a keypair from the new
       example, `cargo run -- start`) and against a real EHRbase 2.35.1
       (`podman`, no Keycloak needed despite the upstream compose file making

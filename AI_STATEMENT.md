@@ -98,9 +98,9 @@ because no defensible way to measure one exists.
 AI-produced work gets no shortcut around process. The gates are committed
 scripts, not intentions, and they are the reason this disclosure is checkable:
 
-- **Continuous integration runs ten jobs** on every change: `test`, `msrv`,
-  `examples`, `bench`, `schema`, `fuzz`, `assets`, `layering`, `claims`, and
-  `mutants`. Their names and purposes are tabulated in [`AGENTS.md`](AGENTS.md)
+- **Continuous integration runs twelve jobs** on every change: `test`, `supply-chain`, `msrv`,
+  `examples`, `bench`, `schema`, `fuzz`, `assets`, `layering`, `trademarks`,
+  `claims`, and `mutants`. Their names and purposes are tabulated in [`AGENTS.md`](AGENTS.md)
   and in [`spec/audit.md`](spec/audit.md), and `scripts/check-docs.py` fails if
   the tables and the workflow disagree.
 - **Mutation testing is the control that catches plausible-but-untested code**,
