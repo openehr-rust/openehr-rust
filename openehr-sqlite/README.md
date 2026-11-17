@@ -11,9 +11,9 @@ openEHR® persistence for **SQLite 3** — a complete embedded store.
 
 ```toml
 [dependencies]
-openehr-sqlite = "0.10"
-openehr-store = "0.10"
-openehr = "0.10"
+openehr-sqlite = "0.11"
+openehr-store = "0.11"
+openehr = "0.11"
 ```
 
 Requires Rust 1.98+ (edition 2024). SQLite itself is compiled in — no system

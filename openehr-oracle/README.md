@@ -34,8 +34,8 @@ println!("{}", ddl_script(&OracleDialect));
 
 ```toml
 [dependencies]
-openehr-oracle = "0.10"
-openehr-store = "0.10"
+openehr-oracle = "0.11"
+openehr-store = "0.11"
 ```
 
 Requires Rust 1.98+ (edition 2024).

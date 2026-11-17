@@ -19,6 +19,8 @@ publish a crate with an open finding against its claims (`W0.21`).
 
 ## State today
 
+**Local is 0.11.0 and NOT yet published.** The 0.11.0 bump is the MSRV move from 1.97 to 1.98 (`RV6`: breaking, hence minor) plus a lockfile refresh; no API change.
+
 **Published 2026-10-16.** All eight publishable crates are live at **0.10.0**
 on crates.io, in the order below; the bump is breaking (`lib:A-63`, `lib:A-69`,
 `lib:A-71`), hence 0.10.0 and not 0.9.1. CI ran green on `ef518c6`'s successor

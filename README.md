@@ -73,11 +73,11 @@ Full definitions in [`spec/index.md`](spec/index.md); current status in
 
 ```toml
 [dependencies]
-openehr = "0.10"
+openehr = "0.11"
 
 # and, if you want persistence:
-openehr-store = "0.10"
-openehr-sqlite = "0.10"
+openehr-store = "0.11"
+openehr-sqlite = "0.11"
 ```
 
 Requires Rust 1.98+ (edition 2024). There are no Cargo features to choose, and

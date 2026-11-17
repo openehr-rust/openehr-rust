@@ -34,8 +34,8 @@ fixed; the lesson kept is that a guard is only as wide as its input list. See
 
 ```toml
 [dependencies]
-openehr-store = "0.10"
-openehr = "0.10"
+openehr-store = "0.11"
+openehr = "0.11"
 ```
 
 Requires Rust 1.98+ (edition 2024). This crate emits DDL and defines the traits;
