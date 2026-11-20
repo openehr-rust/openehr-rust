@@ -80,7 +80,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       Focused tests for parser refusals, identifier and serde boundaries,
       intervals, temporal values, access control, audit-chain reconstruction,
       and public accessors raised that to **92.76% physical lines
-      (9,636/10,388) / 94.05% functions (1,501/1,596)**; only 15 production
+      (9,630/10,382) / 94.16% functions (1,499/1,592)**; only 14 production
       files retain uncovered executable lines at this checkpoint.
       It also found and fixed `lib:A-84`: serializing a directly constructed
       non-finite `Real` could silently substitute zero. `lib:D3.18g` now
@@ -91,13 +91,16 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       pass locked tests and strict Clippy; all four benchmark suites run in
       smoke mode; generated assets, formatting, shell syntax, documentation
       claims, and patch hygiene pass. **Continuation checkpoint:** `lib:A-84`
-      is specified and fixed; its focused production integration test passes.
-      The full crate suite and refreshed LCOV totals have not been rerun after
-      that API change. Resume with those two checks, cover the remaining 15
-      `openehr` production files, then measure and close `openehr-sqlite`,
-      `openehr-postgresql`, the four schema-only dialect crates,
-      `openehr-loco`, and `openehr-assets`. Finish by making the tree-derived
-      line-and-function coverage checker a required CI gate.
+      is specified and fixed; the full locked suite (500 unit tests, all local
+      integration suites, and 90 doctests) and the refreshed production-only
+      LCOV run pass after the API change. `Real` now has no uncovered line.
+      Resume with an external `parse_definition` contract suite: `am/cadl.rs`
+      is the largest remaining owner gap at 241 lines because its extensive
+      inline tests are correctly excluded from the production denominator.
+      Then close the other 13 `openehr` files; measure and close
+      `openehr-sqlite`, `openehr-postgresql`, the four schema-only dialect
+      crates, `openehr-loco`, and `openehr-assets`; and finally make the
+      tree-derived line-and-function coverage checker a required CI gate.
 
 - [x] **Check chronology and readiness claims across boundaries** (2026-11-19).
       The UTC day-boundary regression failed before the fix and passed after

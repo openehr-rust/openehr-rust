@@ -8,8 +8,8 @@ together.
 ## Unreleased
 
 - Raised honest production-only owner-workspace coverage in `openehr` from
-  90.77% lines / 91.40% functions to **92.76% (9,636/10,388) / 94.05%
-  (1,501/1,596)**. New tests cover exact parser refusals, identifier and serde
+  90.77% lines / 91.40% functions to **92.76% (9,630/10,382) / 94.16%
+  (1,499/1,592)**. New tests cover exact parser refusals, identifier and serde
   boundaries, interval shapes, temporal values, stored archetype HRIDs,
   access-control dispatch, and audit-chain reconstruction. The pass also found
   and fixed `lib:A-84`: computed non-finite `Real` values could serialize as

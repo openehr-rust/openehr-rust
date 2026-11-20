@@ -1124,16 +1124,17 @@ stale-exclusion, and incomplete-function inputs. `W-23` remains open for the
 other nine buildable workspaces and the tree-derived CI gate.
 
 **Further progress 2026-11-20.** The `openehr` owner workspace now measures
-**9,636/10,388 executable physical source lines (92.76%) and 1,501/1,596
-functions (94.05%)**, up from its honest 90.77% / 91.40% baseline. Test modules
+**9,630/10,382 executable physical source lines (92.76%) and 1,499/1,592
+functions (94.16%)**, up from its honest 90.77% / 91.40% baseline. Test modules
 remain excluded rather than inflating the denominator, and LCOV records are
 coalesced by physical line. Focused owner tests closed the production gaps in
 ADL 1.4/2 header refusals, time specifications, identifiers and serde glue,
 intervals, archetype HRIDs, access control, and audit-chain storage boundaries;
-only fifteen production files retain uncovered executable lines. Coverage
-also exposed `lib:A-84`, so the three non-finite-`Real` fallback lines remain
-uncovered pending a specified refusal rather than being normalized into a test
-contract.
+only fourteen production files retain uncovered executable lines. Coverage
+also exposed and then closed `lib:A-84`: `lib:D3.18g` now refuses computed
+non-finite `Real` values at construction and never substitutes zero during
+serialization. The full locked suite and this refreshed LCOV run pass after
+that API change.
 
 ## What this audit did not cover
 

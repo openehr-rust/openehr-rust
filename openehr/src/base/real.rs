@@ -155,22 +155,19 @@ impl From<serde_json::Number> for Real {
     }
 }
 
-impl TryFrom<&Real> for serde_json::Number {
-    type Error = crate::ParseError;
-
-    fn try_from(r: &Real) -> Result<Self, Self::Error> {
+impl From<&Real> for serde_json::Number {
+    fn from(r: &Real) -> Self {
         // Reconstructed from the authoritative text, so the bytes out are the
         // bytes in. Every public construction path establishes this invariant;
-        // keeping the conversion fallible ensures a future path cannot replace
-        // broken text with a plausible clinical number (`D3.18g`).
-        serde_json::from_str(&r.text)
-            .map_err(|_| crate::ParseError::invariant("REAL", "Number_text_valid"))
+        // if an internal edit breaks it, fail rather than replace the text with
+        // a plausible clinical number (`D3.18g`).
+        serde_json::from_str(&r.text).expect("Real authoritative text is a JSON number")
     }
 }
 
 impl Serialize for Real {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let number = serde_json::Number::try_from(self).map_err(serde::ser::Error::custom)?;
+        let number = serde_json::Number::from(self);
         number.serialize(serializer)
     }
 }

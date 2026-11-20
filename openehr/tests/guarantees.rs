@@ -453,18 +453,13 @@ fn computed_reals_refuse_non_finite_values_without_substitution() {
 
     let computed = Real::from_f64(12.5).expect("finite real");
     assert_eq!(serde_json::to_string(&computed).unwrap(), "12.5");
-    assert_eq!(
-        serde_json::Number::try_from(&computed).unwrap().to_string(),
-        "12.5"
-    );
+    assert_eq!(serde_json::Number::from(&computed).to_string(), "12.5");
 
     let beyond_range: Real = serde_json::from_str("1e400").expect("valid JSON number");
     assert!(!beyond_range.is_finite());
     assert_eq!(serde_json::to_string(&beyond_range).unwrap(), "1e+400");
     assert_eq!(
-        serde_json::Number::try_from(&beyond_range)
-            .unwrap()
-            .to_string(),
+        serde_json::Number::from(&beyond_range).to_string(),
         "1e+400"
     );
 }
