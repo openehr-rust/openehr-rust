@@ -97,6 +97,14 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       Resume with an external `parse_definition` contract suite: `am/cadl.rs`
       is the largest remaining owner gap at 241 lines because its extensive
       inline tests are correctly excluded from the production denominator.
+      The suite mapping is complete: exercise the public parser with nested
+      complex objects; wrapped and inline primitive kinds; occurrences,
+      existence, and cardinality modifiers; archetype roots, proxies, and
+      slots; attribute tuples and differential paths; then the named refusal
+      boundaries for malformed delimiters, multiplicities, wildcards,
+      unsupported sibling order, and trailing input. Leave microtests that
+      call private lexer/pattern helpers inline; do not expose internals or
+      count those test helpers as production merely to raise the percentage.
       Then close the other 13 `openehr` files; measure and close
       `openehr-sqlite`, `openehr-postgresql`, the four schema-only dialect
       crates, `openehr-loco`, and `openehr-assets`; and finally make the
