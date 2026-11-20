@@ -144,7 +144,7 @@ Stated so that "not examined" and "examined and sound" stay distinguishable
 - **CI covers stable and N−2.** The workflow builds exactly two
   toolchains, stable and N−2. A break that appears only on 1.99 would reach a
   user before it reached CI. Contributors can exercise that intermediate release
-  with `make test-minimum-supported-rust-version`, which checks all targets and
+  with `make ci-minimum-supported-rust-version`, which checks all targets and
   runs tests with the committed locks in each non-fuzz workspace on the MSRV
   and the following minor. It uses installed host toolchains. The intermediate
   release remains a local check.

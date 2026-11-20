@@ -467,7 +467,7 @@ intermediate release reaches a user before it reaches CI.
 ---
 
 **Local verification follow-up, 2026-11-19.** After the runner was renamed,
-`make test-minimum-supported-rust-version` failed with “No such file or
+`make ci-minimum-supported-rust-version` failed with “No such file or
 directory”. The recipe now invokes the installed script, which also resolves
 an installed patch release for the requested minor. The repaired target
 completed checks and tests for every non-fuzz workspace on both local

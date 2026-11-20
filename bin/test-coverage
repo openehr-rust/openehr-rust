@@ -1,0 +1,5 @@
+#!/bin/sh
+# Line coverage for the openehr crate with cargo-tarpaulin.
+set -eu
+cd "$(dirname "$0")/../openehr"
+cargo tarpaulin

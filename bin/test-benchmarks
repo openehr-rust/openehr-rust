@@ -1,0 +1,5 @@
+#!/bin/sh
+# Run the criterion benchmarks in the openehr crate.
+set -eu
+cd "$(dirname "$0")/../openehr"
+cargo bench

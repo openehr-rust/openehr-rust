@@ -243,7 +243,7 @@ it.
 
 **Consequence.** Nothing about this defect could be seen without running the
 DDL against a real server: `conformance::check_dialect` and every golden
-test in `tests/ddl.rs` assert what the emitter produces, and every one of
+test in `tests/main.rs` assert what the emitter produces, and every one of
 them passed while the produced script was one SQL Server would reject
 outright, at the very last statement, after every prior one succeeded.
 
