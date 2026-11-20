@@ -105,6 +105,21 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       unsupported sibling order, and trailing input. Leave microtests that
       call private lexer/pattern helpers inline; do not expose internals or
       count those test helpers as production merely to raise the percentage.
+      **Stopped work-in-progress, 2026-11-20:**
+      `openehr/tests/cadl_contract.rs` now contains the external public-parser
+      suite, but it is deliberately committed unfinished and its three tests
+      currently fail. Two failures are fixture corrections: the `":"` refusal
+      reaches `expected '['` rather than `RM type name`, and the `use_node`
+      example needs attribute cardinality compatible with occurrences
+      `{0..3}`. The third exposed a production defect: `cadl_lexer` consumes
+      the comma separating a `Date` primitive list as part of the ISO-8601
+      token, even though comma must remain available as the decimal sign in a
+      time such as `10:30:00,5`. Before resuming code, specify and register
+      this as the next `lib:A-*` finding, add its archetype requirement and
+      matrix evidence, then make comma tokenization context-sensitive and add
+      positive contracts for both date lists and comma-decimal temporal
+      values. Re-run this test target, the full locked `openehr` suite, strict
+      Clippy, and production-only LCOV before updating the baseline.
       Then close the other 13 `openehr` files; measure and close
       `openehr-sqlite`, `openehr-postgresql`, the four schema-only dialect
       crates, `openehr-loco`, and `openehr-assets`; and finally make the
