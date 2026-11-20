@@ -630,6 +630,7 @@ impl Party {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::base::{HierObjectId, ObjectId, UidBasedId};
@@ -713,7 +714,10 @@ mod tests {
             .unwrap(),
         );
         assert_eq!(dated.was_valid_on(&when), Some(true));
-        assert!(dated.time_validity().is_some(), "a recorded validity was dropped");
+        assert!(
+            dated.time_validity().is_some(),
+            "a recorded validity was dropped"
+        );
     }
 
     #[test]
@@ -776,8 +780,11 @@ mod tests {
             identity().details().clone(),
         );
 
-        let bare = Contact::new(LocatableAttrs::named("home", "at0001").unwrap(), vec![addr.clone()])
-            .unwrap();
+        let bare = Contact::new(
+            LocatableAttrs::named("home", "at0001").unwrap(),
+            vec![addr.clone()],
+        )
+        .unwrap();
         assert_eq!(bare.time_validity(), None);
         assert_eq!(bare.addresses().len(), 1);
 
@@ -786,10 +793,9 @@ mod tests {
             DvDate::new("2020-12-31").unwrap(),
         )
         .unwrap();
-        let dated =
-            Contact::new(LocatableAttrs::named("home", "at0001").unwrap(), vec![addr])
-                .unwrap()
-                .with_time_validity(period.clone());
+        let dated = Contact::new(LocatableAttrs::named("home", "at0001").unwrap(), vec![addr])
+            .unwrap()
+            .with_time_validity(period.clone());
         assert_eq!(dated.time_validity(), Some(&period));
 
         // PARTY_RELATIONSHIP: no builder for `details` or `time_validity`.
@@ -902,7 +908,10 @@ mod tests {
         );
         let with_details: PartyAttrs =
             serde_json::from_value(serde_json::Value::Object(object)).expect("deserialize");
-        assert!(with_details.details().is_some(), "recorded party details were dropped");
+        assert!(
+            with_details.details().is_some(),
+            "recorded party details were dropped"
+        );
 
         let bare_actor = ActorAttrs::default();
         assert!(bare_actor.languages().is_empty());
@@ -947,7 +956,10 @@ mod tests {
         )
         .unwrap();
         let party = PartyAttrs::new(
-            attrs_with_uid("consultant cardiologist", "openEHR-DEMOGRAPHIC-ROLE.role.v1"),
+            attrs_with_uid(
+                "consultant cardiologist",
+                "openEHR-DEMOGRAPHIC-ROLE.role.v1",
+            ),
             vec![identity()],
         )
         .unwrap();
@@ -970,7 +982,11 @@ mod tests {
             .with_capability(capability)
             .with_time_validity(period.clone());
         assert_eq!(held.capabilities().len(), 1, "a capability was dropped");
-        assert_eq!(held.time_validity(), Some(&period), "a recorded validity was dropped");
+        assert_eq!(
+            held.time_validity(),
+            Some(&period),
+            "a recorded validity was dropped"
+        );
         assert_eq!(held.was_held_on(&when), Some(true));
         let outside = DvDate::new("2025-01-01").unwrap();
         assert_eq!(

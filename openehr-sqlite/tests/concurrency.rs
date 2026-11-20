@@ -69,7 +69,13 @@ fn racing_commits_to_one_position_produce_one_winner() {
                 scope.spawn(move || {
                     let mut store = SqliteStore::open(&path).expect("open");
                     let ehr_id = container();
-                    let version = conformance::sample_version(2, Some(1), 10 + minute);
+                    let creating_system_id = format!("writer-{i}.example.org");
+                    let version = conformance::sample_version_for_system(
+                        2,
+                        Some(1),
+                        10 + minute,
+                        &creating_system_id,
+                    );
                     barrier.wait();
                     store.commit_composition(&ehr_id, &version, "c1")
                 })
@@ -101,6 +107,11 @@ fn racing_commits_to_one_position_produce_one_winner() {
     let store = SqliteStore::open(&path).expect("open");
     let all = store.all_versions(&container()).expect("all_versions");
     assert_eq!(all.len(), 2, "the version tree gained a duplicate position");
+    assert_ne!(
+        all[1].creating_system_id,
+        conformance::SYSTEM,
+        "the winning version must prove the race used a distinct version UID"
+    );
     let _ = std::fs::remove_file(&path);
 }
 

@@ -380,6 +380,7 @@ impl<'de, T: serde::Deserialize<'de>> serde::Deserialize<'de> for Sensitive<T> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::rm::common::{Archetyped, LocatableAttrs, PartyIdentified};
@@ -503,6 +504,10 @@ mod tests {
         assert!(!format!("{s}").contains(marker));
         assert!(!format!("{s:?}").contains(marker));
         // Storage and authorised transmission must keep the value.
-        assert!(serde_json::to_string(&s).unwrap().contains(marker));
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(json.contains(marker));
+        let back: Sensitive<String> = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.expose(), marker);
+        assert_eq!(back.into_inner(), marker);
     }
 }

@@ -137,16 +137,17 @@ reader deciding whether to use these crates needs the reason more than the fact.
 
 ## Engine bindings
 
-Non-normative summary; each crate's annex is authoritative for its own row.
+The engine floors come from the dialect annexes. Levels come from the
+[conformance matrix](conformance-matrix.md).
 
 | Crate | Engine | Declared floor | Level |
 | --- | --- | --- | --- |
-| `openehr-sqlite` | SQLite | 3.35+ (bundled) | **Store** |
-| `openehr-postgresql` | PostgreSQL | 18 | **Schema** |
+| `openehr-sqlite` | SQLite | 3.35+ (bundled) | **Verified** |
+| `openehr-postgresql` | PostgreSQL | 18 | **Verified** |
 | `openehr-mysql` | MySQL | 8.4 | **Schema** |
 | `openehr-mariadb` | MariaDB | 11.4 | **Schema** |
-| `openehr-mssql` | SQL Server | 2019+ | **Dialect** |
-| `openehr-oracle` | Oracle Database | 12.2+ | **Dialect** |
+| `openehr-mssql` | SQL Server | 2019+ | **Schema** |
+| `openehr-oracle` | Oracle Database | 12.2+ | **Schema** |
 
 Oracle's floor is now stated, in that crate's annex, with the fact that sets
 it: identifiers were 30 bytes before 12.2 and 128 after, and several generated

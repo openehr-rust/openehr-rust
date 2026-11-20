@@ -27,6 +27,81 @@ use openehr::rm::common::{CommitError, Contribution, Version};
 use openehr::rm::data_types::DvDateTime;
 use openehr::rm::ehr::{Composition, Ehr, EhrStatus};
 
+/// Selects the metadata needed to resolve a historical read (`db:H5.13`).
+///
+/// Bind the container UID and whole UTC second twice, in that order. Only the
+/// query second and the latest occupied earlier second can contain the answer.
+/// The latter matters when every commit in the query second is still in the future.
+#[must_use]
+pub fn version_at_time_candidates_sql(placeholder: crate::Placeholder) -> String {
+    format!(
+        "SELECT uid, audit_time_committed_text, trunk_version FROM openehr_version \
+         WHERE versioned_object_uid = {} AND audit_time_committed_utc IN ({}, \
+           (SELECT MAX(audit_time_committed_utc) FROM openehr_version \
+            WHERE versioned_object_uid = {} AND audit_time_committed_utc < {}))",
+        placeholder.render(1),
+        placeholder.render(2),
+        placeholder.render(3),
+        placeholder.render(4)
+    )
+}
+
+/// Resolves an inclusive cutoff over candidate (UID, commit time, trunk version)
+/// rows from [`version_at_time_candidates_sql`]. Only the winning immutable
+/// version needs to be fetched with its content.
+///
+/// # Errors
+///
+/// Returns a driver error or a parsing error for malformed stored metadata.
+pub fn version_uid_at_time(
+    at: &DvDateTime,
+    candidates: impl IntoIterator<Item = Result<(String, String, i64)>>,
+) -> Result<Option<ObjectVersionId>> {
+    let mut candidates = candidates.into_iter();
+    version_uid_at_time_iter(at, &mut candidates)
+}
+
+/// Non-generic implementation, so closure coverage reflects one source body
+/// rather than one independently instrumented copy per driver iterator.
+fn version_uid_at_time_iter(
+    at: &DvDateTime,
+    candidates: &mut dyn Iterator<Item = Result<(String, String, i64)>>,
+) -> Result<Option<ObjectVersionId>> {
+    use openehr::base::iso8601::DateTime;
+    use std::cmp::Ordering;
+
+    let mut latest: Option<(DateTime, i64, String)> = None;
+    for candidate in candidates {
+        let (uid, text, trunk) = candidate?;
+        let time: DateTime = text.parse().map_err(|_| {
+            openehr::ParseError::invariant("DV_DATE_TIME", "invalid stored commit time")
+        })?;
+        if !time.semantic_cmp(at.value()).is_some_and(Ordering::is_le) {
+            continue;
+        }
+        let replaces = latest.as_ref().is_none_or(|(best_time, best_trunk, _)| {
+            // Eligible instants at the same position can have different precision.
+            time.semantic_cmp(best_time)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| trunk.cmp(best_trunk))
+                .is_gt()
+        });
+        if replaces {
+            latest = Some((time, trunk, uid));
+        }
+    }
+    latest
+        .map(|(_, _, uid)| {
+            uid.parse().map_err(|_| {
+                StoreError::Parse(openehr::ParseError::invariant(
+                    "OBJECT_VERSION_ID",
+                    "invalid stored version uid",
+                ))
+            })
+        })
+        .transpose()
+}
+
 /// What a successful commit produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommitOutcome {
@@ -249,8 +324,9 @@ pub trait Store {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
-    use super::check_commit_rules;
+    use super::{check_commit_rules, version_at_time_candidates_sql, version_uid_at_time};
     use crate::StoreError;
     use openehr::base::ObjectVersionId;
     use openehr::rm::common::CommitError;
@@ -259,6 +335,70 @@ mod tests {
         format!("87284370-2D4B-4E3D-A3F3-F303D2F4F34B::ehr1.example.org::{v}")
             .parse()
             .expect("literal")
+    }
+
+    #[test]
+    fn historical_candidates_bind_the_container_and_cutoff_for_both_index_lookups() {
+        let pg = version_at_time_candidates_sql(crate::Placeholder::Dollar);
+        assert!(pg.contains("versioned_object_uid = $1 AND audit_time_committed_utc IN ($2,"));
+        assert!(pg.contains("versioned_object_uid = $3 AND audit_time_committed_utc < $4"));
+        let sqlite = version_at_time_candidates_sql(crate::Placeholder::Question);
+        assert_eq!(sqlite.matches('?').count(), 4);
+    }
+
+    #[test]
+    fn historical_selection_is_independent_of_row_order() {
+        let cutoff = openehr::rm::data_types::DvDateTime::new("2026-08-01T00:00:00.5Z").unwrap();
+        let candidates = [
+            (1, "00:00:00.5000Z"),
+            (2, "00:00:00.50000001Z"),
+            (3, "00:00:00.5Z"),
+            (4, "00:00:00.4Z"),
+        ];
+        for indices in [[0, 1, 2, 3], [3, 2, 1, 0]] {
+            let rows = indices.map(|i| {
+                let (n, time) = candidates[i];
+                Ok((
+                    uid(n).to_string(),
+                    format!("2026-08-01T{time}"),
+                    i64::from(n),
+                ))
+            });
+            assert_eq!(version_uid_at_time(&cutoff, rows).unwrap(), Some(uid(3)));
+        }
+    }
+
+    #[test]
+    fn malformed_historical_metadata_is_refused_without_echoing_it() {
+        let cutoff = openehr::rm::data_types::DvDateTime::new("2026-08-01T00:00:00Z").unwrap();
+        for (id, time) in [
+            (uid(1).to_string(), "private-marker"),
+            ("private-marker".into(), "2026-08-01T00:00:00Z"),
+        ] {
+            let error = version_uid_at_time(&cutoff, [Ok((id, time.into(), 1))]).unwrap_err();
+            assert!(matches!(error, StoreError::Parse(_)));
+            assert!(!error.to_string().contains("private-marker"));
+        }
+    }
+
+    #[test]
+    fn historical_candidate_engine_errors_are_propagated() {
+        let cutoff = openehr::rm::data_types::DvDateTime::new("2026-08-01T00:00:00Z").unwrap();
+        let error = version_uid_at_time(
+            &cutoff,
+            [Err(StoreError::Engine {
+                engine: "fixture",
+                message: "candidate read failed".to_owned(),
+            })],
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            StoreError::Engine {
+                engine: "fixture",
+                ..
+            }
+        ));
     }
 
     /// `check_commit_rules` is a pure function with no test of its own in

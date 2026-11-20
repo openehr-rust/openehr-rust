@@ -92,11 +92,12 @@ fn every_table_and_index_is_emitted() {
 fn the_dialect_names_itself_and_the_trigger_refuses_both_mutations() {
     assert_eq!(MariadbDialect.name(), "MariaDB");
 
-    let sql = MariadbDialect.append_only_sql(&openehr_store::schema::VERSION).join("\n");
+    let sql = MariadbDialect
+        .append_only_sql(&openehr_store::schema::VERSION)
+        .join("\n");
     assert!(sql.contains("BEFORE UPDATE"), "{sql}");
     assert!(sql.contains("BEFORE DELETE"), "{sql}");
     assert!(sql.contains("SIGNAL SQLSTATE '45000'"), "{sql}");
     assert!(sql.contains(openehr_store::schema::VERSION.name), "{sql}");
     assert!(sql.contains("openEHR V8.10"), "{sql}");
 }
-

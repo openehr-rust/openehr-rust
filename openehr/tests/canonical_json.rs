@@ -234,10 +234,9 @@ fn kitchen_sink() -> Composition {
     // A family-history EVALUATION: the subject is somebody else, and the model
     // has to say so.
     let family_history = Evaluation::new(
-        at("Family history", "openEHR-EHR-EVALUATION.family_history.v1")
-            .with_archetype_details(
-                Archetyped::new("openEHR-EHR-EVALUATION.family_history.v1", "1.1.0").unwrap(),
-            ),
+        at("Family history", "openEHR-EHR-EVALUATION.family_history.v1").with_archetype_details(
+            Archetyped::new("openEHR-EHR-EVALUATION.family_history.v1", "1.1.0").unwrap(),
+        ),
         EntryAttrs::about(
             en(),
             utf8(),

@@ -41,7 +41,8 @@ nothing here is behind a flag.
 | `openehr` | Reference Model types, validation, openEHR paths, AQL parsing, change-control security |
 | `openehr-store` | the storage model, projection onto rows, commit rules, the `Store` and `Dialect` traits, and the conformance suite |
 | `openehr-sqlite` | a complete embedded store, and the SQLite dialect |
-| `openehr-postgresql`, `openehr-mysql`, `openehr-mariadb`, `openehr-mssql`, `openehr-oracle` | that engine's DDL. **A dialect is not a store** — it emits schema; you write the driver code |
+| `openehr-postgresql` | a PostgreSQL store and dialect. Its connector requires verified TLS, using platform roots or an explicit private CA. |
+| `openehr-mysql`, `openehr-mariadb`, `openehr-mssql`, `openehr-oracle` | that engine's DDL. **A dialect is not a store** — it emits schema; you write the driver code |
 
 Which of those has been verified how far is one table in one place:
 [`spec/databases/conformance-matrix.md`](spec/databases/conformance-matrix.md).

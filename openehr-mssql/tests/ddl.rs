@@ -92,10 +92,11 @@ fn the_trigger_is_the_first_statement_in_its_own_batch() {
 fn the_dialect_names_itself_and_the_trigger_refuses_both_mutations() {
     assert_eq!(MssqlDialect.name(), "SQL Server");
 
-    let sql = MssqlDialect.append_only_sql(&openehr_store::schema::VERSION).join("\n");
+    let sql = MssqlDialect
+        .append_only_sql(&openehr_store::schema::VERSION)
+        .join("\n");
     assert!(sql.contains("INSTEAD OF UPDATE, DELETE"), "{sql}");
     assert!(sql.contains("THROW 50000"), "{sql}");
     assert!(sql.contains(openehr_store::schema::VERSION.name), "{sql}");
     assert!(sql.contains("openEHR V8.10"), "{sql}");
 }
-

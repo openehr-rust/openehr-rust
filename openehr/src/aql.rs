@@ -1075,7 +1075,10 @@ impl Parser {
         }
         match self.next_token() {
             Some(Token::Integer(v)) => u64::try_from(v).map_err(|_| {
-                AqlError::new(offset, "LIMIT and OFFSET are counts and must not be negative")
+                AqlError::new(
+                    offset,
+                    "LIMIT and OFFSET are counts and must not be negative",
+                )
             }),
             _ => Err(AqlError::new(offset, "expected a non-negative integer")),
         }
@@ -1354,6 +1357,7 @@ fn split_path(text: &str) -> IdentifiedPath {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -1527,9 +1531,10 @@ mod tests {
     #[test]
     fn a_string_literal_carries_its_escapes() {
         let value = |text: &str| -> String {
-            let q: AqlQuery = format!("SELECT c/uid FROM COMPOSITION c WHERE c/name/value = {text}")
-                .parse()
-                .unwrap_or_else(|e| panic!("{text}: {e}"));
+            let q: AqlQuery =
+                format!("SELECT c/uid FROM COMPOSITION c WHERE c/name/value = {text}")
+                    .parse()
+                    .unwrap_or_else(|e| panic!("{text}: {e}"));
             match q.where_clause {
                 Some(Expr::Compare {
                     rhs: Operand::Literal(Literal::String(v)),
@@ -1573,9 +1578,11 @@ mod tests {
         assert_eq!(q.parameters(), vec!["uid"]);
         // `$` with nothing after it names nothing, and must be refused rather
         // than yielding an empty parameter name.
-        assert!("SELECT c/uid FROM COMPOSITION c WHERE c/uid/value = $"
-            .parse::<AqlQuery>()
-            .is_err());
+        assert!(
+            "SELECT c/uid FROM COMPOSITION c WHERE c/uid/value = $"
+                .parse::<AqlQuery>()
+                .is_err()
+        );
     }
 
     /// `LIMIT` and `OFFSET` refuse a negative count — from the lexer.
@@ -1628,7 +1635,10 @@ mod tests {
         let q: AqlQuery = "SELECT c/uid FROM COMPOSITION c WHERE c/v > -2.5"
             .parse()
             .expect("a negative literal is a value");
-        assert_eq!(q.to_string(), "SELECT c/uid FROM COMPOSITION c WHERE c/v > -2.5");
+        assert_eq!(
+            q.to_string(),
+            "SELECT c/uid FROM COMPOSITION c WHERE c/v > -2.5"
+        );
 
         // Integers too, and inside a value set, which parses its members as
         // operands like everything else.
@@ -1651,7 +1661,8 @@ mod tests {
         }
 
         // A sign with no number is an error, not a guess.
-        let text = "SELECT c/uid FROM COMPOSITION c WHERE c/v > -openEHR-EHR-COMPOSITION.encounter.v1";
+        let text =
+            "SELECT c/uid FROM COMPOSITION c WHERE c/v > -openEHR-EHR-COMPOSITION.encounter.v1";
         let err = text.parse::<AqlQuery>().expect_err(text);
         assert!(err.reason.contains("number"), "{}", err.reason);
     }
@@ -1720,8 +1731,14 @@ mod tests {
         .unwrap();
         let rendered = q.to_string();
         for wanted in [
-            "c/a != 1", "c/b < 2", "c/c <= 3", "c/d > 4", "c/e >= 5",
-            "c/f LIKE 'x%'", "NOT ", "'433', '431', '451'",
+            "c/a != 1",
+            "c/b < 2",
+            "c/c <= 3",
+            "c/d > 4",
+            "c/e >= 5",
+            "c/f LIKE 'x%'",
+            "NOT ",
+            "'433', '431', '451'",
         ] {
             assert!(rendered.contains(wanted), "{wanted} lost from {rendered}");
         }
@@ -1793,7 +1810,10 @@ mod tests {
         let q: AqlQuery = "SELECT c/uid FROM COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]"
             .parse()
             .unwrap();
-        assert_eq!(q.archetype_ids(), vec!["openEHR-EHR-COMPOSITION.encounter.v1"]);
+        assert_eq!(
+            q.archetype_ids(),
+            vec!["openEHR-EHR-COMPOSITION.encounter.v1"]
+        );
 
         // A path with a dot but no dash, followed by `=`: a condition, not an
         // archetype. It must not be swallowed as an id.

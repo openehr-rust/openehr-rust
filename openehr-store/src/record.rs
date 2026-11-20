@@ -279,12 +279,13 @@ impl CompositionIndexRow {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
-    use super::VersionRow;
+    use super::{CompositionIndexRow, VersionRow};
     use openehr::rm::common::{AuditDetails, OriginalVersion, PartyIdentified, Version};
     use openehr::rm::data_types::{DvDateTime, Text};
-    use openehr::rm::ehr::Composition;
-    use openehr::terminology::{audit_change_type, version_lifecycle_state};
+    use openehr::rm::ehr::{Composition, EventContext};
+    use openehr::terminology::{audit_change_type, setting, version_lifecycle_state};
 
     fn version(
         build: impl FnOnce(OriginalVersion<Composition>) -> OriginalVersion<Composition>,
@@ -310,6 +311,34 @@ mod tests {
         )
         .expect("literal");
         build(original).into()
+    }
+
+    #[test]
+    fn projection_carries_both_context_instants() {
+        let composition = crate::conformance::sample_composition("Encounter")
+            .with_context(
+                EventContext::new(
+                    DvDateTime::new("2026-08-01T09:00:00Z").expect("literal"),
+                    setting::PRIMARY_MEDICAL_CARE,
+                )
+                .expect("literal")
+                .with_end_time(DvDateTime::new("2026-08-01T09:45:00Z").expect("literal"))
+                .expect("literal"),
+            )
+            .expect("literal");
+        let row = CompositionIndexRow::project("version", "ehr", &composition).expect("project");
+        assert_eq!(
+            row.context_start
+                .as_ref()
+                .map(|instant| instant.text.as_str()),
+            Some("2026-08-01T09:00:00Z")
+        );
+        assert_eq!(
+            row.context_end
+                .as_ref()
+                .map(|instant| instant.text.as_str()),
+            Some("2026-08-01T09:45:00Z")
+        );
     }
 
     /// `D-07`: the four attributes that used to be dropped are now stored.

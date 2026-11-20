@@ -155,15 +155,14 @@ what it meant (`C0.6`).
 | Crate | Engine | Level |
 | --- | --- | --- |
 | [`openehr-sqlite`](../../openehr-sqlite) | SQLite 3 | **Verified** |
-| [`openehr-postgresql`](../../openehr-postgresql) | PostgreSQL 18 | **Schema** |
+| [`openehr-postgresql`](../../openehr-postgresql) | PostgreSQL 18 | **Verified** |
 | [`openehr-mysql`](../../openehr-mysql) | MySQL 8.4 | **Schema** |
 | [`openehr-mariadb`](../../openehr-mariadb) | MariaDB 11.4 | **Schema** |
-| [`openehr-mssql`](../../openehr-mssql) | SQL Server | **Dialect** |
-| [`openehr-oracle`](../../openehr-oracle) | Oracle Database | **Dialect** |
+| [`openehr-mssql`](../../openehr-mssql) | SQL Server | **Schema** |
+| [`openehr-oracle`](../../openehr-oracle) | Oracle Database | **Schema** |
 
 `openehr-loco` is an HTTP service over `openehr-sqlite` (`S1.7` as amended).
 It is not an engine crate, carries no conformance level, and is not published.
 
-Levels are defined in [§0](00-conformance.md). `openehr-sqlite` is at
-**Verified** as of green run 30713623082, 2026-08-01; the three Schema claims are now checked on
-every push rather than attested once ([`spec/audit.md`](../audit.md) **W-02**).
+The [conformance ladder](00-conformance.md) defines each level. The
+[conformance matrix](conformance-matrix.md) records the CI evidence for each engine.

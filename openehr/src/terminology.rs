@@ -465,6 +465,7 @@ group! {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -498,6 +499,10 @@ mod tests {
             null_flavour::GROUP
                 .coded_text(null_flavour::UNKNOWN)
                 .is_some()
+        );
+        assert_eq!(
+            rubric(null_flavour::GROUP, null_flavour::UNKNOWN),
+            Some("unknown")
         );
     }
 

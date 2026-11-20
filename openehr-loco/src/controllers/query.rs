@@ -66,9 +66,7 @@ fn json_to_literal(name: &str, value: &serde_json::Value) -> Result<Literal, (St
             }),
         other => Err((
             StatusCode::BAD_REQUEST,
-            format!(
-                "query_parameters.{name} must be a string, number, or boolean, not {other}"
-            ),
+            format!("query_parameters.{name} must be a string, number, or boolean, not {other}"),
         )),
     }
 }

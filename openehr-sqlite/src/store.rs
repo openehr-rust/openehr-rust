@@ -7,7 +7,10 @@ use openehr::rm::data_types::DvDateTime;
 use openehr::rm::ehr::{Composition, Ehr, EhrStatus};
 use openehr::validation::Validate as _;
 use openehr_store::record::{CompositionIndexRow, StoredInstant, VersionRow};
-use openehr_store::{CommitOutcome, Result, Store, StoreError, check_commit_rules, ddl_script};
+use openehr_store::store::{version_at_time_candidates_sql, version_uid_at_time};
+use openehr_store::{
+    CommitOutcome, Placeholder, Result, Store, StoreError, check_commit_rules, ddl_script,
+};
 use rusqlite::{Connection, OptionalExtension as _, params};
 
 /// The engine name used in errors.
@@ -87,8 +90,12 @@ impl SqliteStore {
             versioned_object_uid: row.get("versioned_object_uid")?,
             creating_system_id: row.get("creating_system_id")?,
             trunk_version: row.get("trunk_version")?,
-            branch_number: row.get("branch_number")?,
-            branch_version: row.get("branch_version")?,
+            branch_number: (row.get::<_, i64>("branch_number")? != 0)
+                .then(|| row.get("branch_number"))
+                .transpose()?,
+            branch_version: (row.get::<_, i64>("branch_version")? != 0)
+                .then(|| row.get("branch_version"))
+                .transpose()?,
             preceding_version_uid: row.get("preceding_version_uid")?,
             lifecycle_state_code: row.get("lifecycle_state_code")?,
             is_deleted: row.get::<_, i64>("is_deleted")? != 0,
@@ -272,7 +279,10 @@ fn commit_conflict(error: &rusqlite::Error) -> Option<StoreError> {
     }
     if message.contains("openehr_version.uid") {
         Some(StoreError::Commit(CommitError::DuplicateVersion))
-    } else if message.contains("ix_version_container_trunk") {
+    } else if message.contains(
+        "openehr_version.versioned_object_uid, openehr_version.trunk_version, \
+         openehr_version.branch_number, openehr_version.branch_version",
+    ) {
         Some(StoreError::Commit(CommitError::NotLatest))
     } else {
         None
@@ -552,8 +562,8 @@ impl Store for SqliteStore {
                     row.versioned_object_uid,
                     row.creating_system_id,
                     row.trunk_version,
-                    row.branch_number,
-                    row.branch_version,
+                    row.branch_number.unwrap_or(0),
+                    row.branch_version.unwrap_or(0),
                     row.preceding_version_uid,
                     row.lifecycle_state_code,
                     i64::from(row.is_deleted),
@@ -714,8 +724,8 @@ impl Store for SqliteStore {
                     row.versioned_object_uid,
                     row.creating_system_id,
                     row.trunk_version,
-                    row.branch_number,
-                    row.branch_version,
+                    row.branch_number.unwrap_or(0),
+                    row.branch_version.unwrap_or(0),
                     row.preceding_version_uid,
                     row.lifecycle_state_code,
                     i64::from(row.is_deleted),
@@ -801,29 +811,18 @@ impl Store for SqliteStore {
                 id,
             });
         };
-        // `audit_time_committed_utc IS NOT NULL` is not redundant: a version
-        // whose commit time carries no offset has a NULL here, and SQLite's
-        // comparison would exclude it anyway — but stating it makes the
-        // skipping deliberate rather than incidental.
-        self.connection
-            .query_row(
-                &format!(
-                    "SELECT {} FROM openehr_version \
-                     WHERE versioned_object_uid = ?1 \
-                       AND audit_time_committed_utc IS NOT NULL \
-                       AND audit_time_committed_utc <= ?2 \
-                     ORDER BY audit_time_committed_utc DESC, trunk_version DESC LIMIT 1",
-                    Self::VERSION_COLUMNS
-                ),
-                params![id, at_seconds],
-                Self::read_version,
-            )
-            .optional()
-            .map_err(|e| engine(&e))?
-            .ok_or(StoreError::NotFound {
-                kind: "version",
-                id,
+        let sql = version_at_time_candidates_sql(Placeholder::Question);
+        let mut statement = self.connection.prepare(&sql).map_err(|e| engine(&e))?;
+        let candidates = statement
+            .query_map(params![id, at_seconds, id, at_seconds], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
             })
+            .map_err(|e| engine(&e))?;
+        let uid = version_uid_at_time(at, candidates.map(|row| row.map_err(|e| engine(&e))))?;
+        self.get_version(&uid.ok_or(StoreError::NotFound {
+            kind: "version",
+            id,
+        })?)
     }
 
     fn all_versions(&self, versioned_object_uid: &HierObjectId) -> Result<Vec<VersionRow>> {

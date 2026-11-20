@@ -131,6 +131,11 @@ touch `S1.5`, `P6.10`, or `P6.19`, all of which stay exactly as written.
     silent choice `Pathable::item_at_path` itself already refuses to
     make; extending that refusal to one row and answering with the rest
     would just move the silent choice from "which node" to "which rows".
+  - Integer and real-number scalars belong to one numeric family and MUST be
+    compared by numeric value. Scalars from different families (string,
+    numeric, boolean) MUST compare unequal: `=` is false, `!=` is true, and
+    every ordering comparison is false. A total ordering used internally for
+    sorting MUST NOT leak into `WHERE` equality or range semantics.
 - **P6.23** `SELECT` MUST be limited to a list of `IdentifiedPath` columns
   rooted at the `COMPOSITION` alias, each optionally aliased with `AS`, and
   `ORDER BY` (when present) to `IdentifiedPath` terms rooted the same way —

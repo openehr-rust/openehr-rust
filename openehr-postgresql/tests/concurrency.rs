@@ -30,7 +30,12 @@ fn connect() -> PostgresqlStore {
         "set OPENEHR_POSTGRESQL_URL to a postgres connection string, or run \
          sh openehr-postgresql/scripts/verify-store.sh, which does both",
     );
-    PostgresqlStore::connect(&params).expect("connect")
+    let ca = std::fs::read(
+        std::env::var("OPENEHR_POSTGRESQL_CA")
+            .expect("set OPENEHR_POSTGRESQL_CA or run verify-store.sh"),
+    )
+    .expect("read test CA");
+    PostgresqlStore::connect_with_ca(&params, &ca).expect("verified TLS connect")
 }
 
 fn reset(store: &mut PostgresqlStore) {
@@ -82,7 +87,13 @@ fn racing_commits_to_one_position_produce_one_winner() {
                 scope.spawn(move || {
                     let mut store = connect();
                     let ehr_id = container();
-                    let version = conformance::sample_version(2, Some(1), 10 + minute);
+                    let creating_system_id = format!("writer-{i}.example.org");
+                    let version = conformance::sample_version_for_system(
+                        2,
+                        Some(1),
+                        10 + minute,
+                        &creating_system_id,
+                    );
                     barrier.wait();
                     store.commit_composition(&ehr_id, &version, "c1")
                 })
@@ -114,6 +125,11 @@ fn racing_commits_to_one_position_produce_one_winner() {
     let store = connect();
     let all = store.all_versions(&container()).expect("all_versions");
     assert_eq!(all.len(), 2, "the version tree gained a duplicate position");
+    assert_ne!(
+        all[1].creating_system_id,
+        conformance::SYSTEM,
+        "the winning version must prove the race used a distinct version UID"
+    );
 }
 
 /// `R4.5`: a reader looping against a writer never observes a torn commit.

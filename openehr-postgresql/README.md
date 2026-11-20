@@ -10,6 +10,11 @@ openEHR® persistence for **PostgreSQL 18** — the schema dialect and a real
 
 ## Conformance level: Verified
 
+The store requires verified TLS. `PostgresqlStore::connect` uses the platform
+trust store; `connect_with_ca` replaces it with an explicitly supplied PEM CA
+for a private deployment. Both verify the configured server name and refuse
+plaintext fallback. See [finding D-15](../spec/databases/audit.md#d-15--postgresql-connected-without-tls--high-fixed).
+
 `PostgresqlStore` implements `openehr_store::Store` and passes the shared
 conformance suite — `conformance::run`, `run_ehr_status`,
 `run_is_modifiable_gate` — against a real PostgreSQL 18 server, plus every
@@ -24,8 +29,9 @@ run
 sh scripts/verify-store.sh
 ```
 
-Provisions a disposable `postgres:18-alpine` container with its port
-published to the host, runs the full suite against it, and tears it down —
+Provisions disposable TLS-enabled and plaintext-only `postgres:18-alpine`
+containers with ports published to the host, runs the full suite against
+them, and tears them down —
 reproducible from a fresh checkout, the same discipline
 `../openehr-store/scripts/verify-schema.sh` already holds this crate's DDL
 to.
@@ -78,7 +84,7 @@ owns only spellings cannot do that, and
 | `text`, **not** `jsonb`, for canonical JSON | `jsonb` reorders keys and rewrites numbers — measured on PostgreSQL 18, not assumed. The chain's content digest is SHA-256 over the exact bytes committed (`M3.16`), so those bytes must be reproducible from storage; `jsonb` produces an equivalent document, not the same one (`M3.43`, `D-08`). |
 | `timestamptz` for derived instants | The authoritative instant is stored as `text` alongside it — see below. `PostgresqlStore` converts through `time::OffsetDateTime` on both sides, since `postgres-types` has no `ToSql`/`FromSql` between a raw integer and `timestamptz`. |
 | An append-only trigger | The guarantee lives in the database, not in application code, where it would end the first time somebody opened `psql`. |
-| `postgres`, blocking, `NoTls` | A synchronous driver matches `Store`'s own synchronous trait — no async runtime for a caller to bring. `NoTls`: this crate connects to a server the deployment already trusts on its own network; TLS to a database is a separate decision this crate does not make on a caller's behalf. |
+| `postgres`, blocking, with Rustls | A synchronous driver matches `Store`'s own synchronous trait — no async runtime for a caller to bring. TLS is mandatory, the certificate chain and configured server name are verified, and failed negotiation does not fall back to plaintext. |
 
 ## Every instant is stored twice, and that is the point
 
@@ -99,10 +105,14 @@ cargo test              # golden DDL tests: no server needed
 sh scripts/verify-store.sh   # the Store, against a real, disposable server
 ```
 
+The live script requires Podman (or Docker through `CONTAINER=docker`) and the
+`openssl` command used to generate its short-lived test CA and certificate.
 The golden tests assert the SQL this crate's dialect emits, including that it
 is *not* another engine's SQL. The `Store` tests are `#[ignore]`d — they need
-`OPENEHR_POSTGRESQL_URL` pointing at a real server, which `verify-store.sh`
-provisions, uses, and tears down.
+`OPENEHR_POSTGRESQL_URL` pointing at a real server and
+`OPENEHR_POSTGRESQL_CA` naming its PEM CA, which `verify-store.sh` provisions,
+uses, and tears down. The script also proves that a wrong server name, an
+untrusted issuer, and a plaintext-only server are refused.
 
 ## What is not here
 
@@ -110,7 +120,7 @@ provisions, uses, and tears down.
 | --- | --- |
 | Archetype or template validation | Not implemented anywhere in this project (`lib:S1.4`). |
 | AQL execution | Parsed and statically checked by `openehr`, never executed (`S1.6`). |
-| A keyed-chain or two-system-race test | Gaps in `openehr_store::conformance`'s own shared fixtures, not in this crate — `db:D-14`. |
+| A keyed-chain test | A gap in `openehr_store::conformance`'s own shared fixtures, not in this crate — `db:D-14`. The former two-system-race gap is closed (`db:D-17`). |
 
 ## Fuzzing
 

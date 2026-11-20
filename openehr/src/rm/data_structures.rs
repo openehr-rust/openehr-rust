@@ -1097,6 +1097,7 @@ impl History {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::rm::data_types::{DvCount, DvQuantity};
@@ -1284,16 +1285,40 @@ mod tests {
         // the `+ minute` and `+ second` terms are added to zero and a `-` is
         // indistinguishable. Every case below with a `:00:00` time leaves that
         // term free, which is how the seconds term survived a first pass.
-        assert_eq!(start("2026-08-03T12:34:56Z", "PT1H"), "2026-08-03T11:34:56Z");
-        assert_eq!(start("2026-08-03T12:34:56Z", "PT30S"), "2026-08-03T12:34:26Z");
-        assert_eq!(start("2026-08-03T00:00:30Z", "PT1M"), "2026-08-02T23:59:30Z");
-        assert_eq!(start("2026-08-03T12:00:00Z", "PT1H"), "2026-08-03T11:00:00Z");
-        assert_eq!(start("2026-08-03T12:00:00Z", "PT30M"), "2026-08-03T11:30:00Z");
-        assert_eq!(start("2026-08-03T12:00:00Z", "PT45S"), "2026-08-03T11:59:15Z");
-        assert_eq!(start("2026-08-03T12:00:00Z", "PT0S"), "2026-08-03T12:00:00Z");
+        assert_eq!(
+            start("2026-08-03T12:34:56Z", "PT1H"),
+            "2026-08-03T11:34:56Z"
+        );
+        assert_eq!(
+            start("2026-08-03T12:34:56Z", "PT30S"),
+            "2026-08-03T12:34:26Z"
+        );
+        assert_eq!(
+            start("2026-08-03T00:00:30Z", "PT1M"),
+            "2026-08-02T23:59:30Z"
+        );
+        assert_eq!(
+            start("2026-08-03T12:00:00Z", "PT1H"),
+            "2026-08-03T11:00:00Z"
+        );
+        assert_eq!(
+            start("2026-08-03T12:00:00Z", "PT30M"),
+            "2026-08-03T11:30:00Z"
+        );
+        assert_eq!(
+            start("2026-08-03T12:00:00Z", "PT45S"),
+            "2026-08-03T11:59:15Z"
+        );
+        assert_eq!(
+            start("2026-08-03T12:00:00Z", "PT0S"),
+            "2026-08-03T12:00:00Z"
+        );
 
         // Across a day boundary, which is the borrow loop.
-        assert_eq!(start("2026-08-03T00:30:00Z", "PT1H"), "2026-08-02T23:30:00Z");
+        assert_eq!(
+            start("2026-08-03T00:30:00Z", "PT1H"),
+            "2026-08-02T23:30:00Z"
+        );
         assert_eq!(start("2026-08-03T12:00:00Z", "P1D"), "2026-08-02T12:00:00Z");
         // Several days, so the loop runs more than once.
         assert_eq!(start("2026-08-03T12:00:00Z", "P5D"), "2026-07-29T12:00:00Z");
@@ -1312,7 +1337,10 @@ mod tests {
         assert_eq!(start("2000-03-01T12:00:00Z", "P1D"), "2000-02-29T12:00:00Z");
 
         // Across a year boundary.
-        assert_eq!(start("2026-01-01T00:30:00Z", "PT1H"), "2025-12-31T23:30:00Z");
+        assert_eq!(
+            start("2026-01-01T00:30:00Z", "PT1H"),
+            "2025-12-31T23:30:00Z"
+        );
 
         // The offset is carried through unchanged — the arithmetic is in the
         // value's own zone, so the wall-clock reading moves and the zone does
@@ -1325,8 +1353,16 @@ mod tests {
         // A calendar width is refused rather than approximated (`R4.9`): one
         // month before 31 March is 28 February, and no fixed number of seconds
         // produces that.
-        assert!(event("2026-03-31T12:00:00Z", "P1M").interval_start_time().is_err());
-        assert!(event("2026-03-31T12:00:00Z", "P1Y").interval_start_time().is_err());
+        assert!(
+            event("2026-03-31T12:00:00Z", "P1M")
+                .interval_start_time()
+                .is_err()
+        );
+        assert!(
+            event("2026-03-31T12:00:00Z", "P1Y")
+                .interval_start_time()
+                .is_err()
+        );
         // As is a date with no time of day.
         let dateless = IntervalEvent::new(
             attrs("summary", "at0100"),
@@ -1418,8 +1454,11 @@ mod tests {
         // their own node id.
         let element_item = Item::Element(count_element("systolic", 120));
         let cluster_item = Item::Cluster(
-            Cluster::new(attrs("row", "at0500"), vec![Item::Element(count_element("cell", 1))])
-                .unwrap(),
+            Cluster::new(
+                attrs("row", "at0500"),
+                vec![Item::Element(count_element("cell", 1))],
+            )
+            .unwrap(),
         );
         assert_eq!(element_item.type_name(), "ELEMENT");
         assert_eq!(cluster_item.type_name(), "CLUSTER");
@@ -1438,14 +1477,22 @@ mod tests {
         );
         assert_eq!(list.item_count(), 3, "the list reported the wrong size");
         assert_eq!(list.items().len(), list.item_count());
-        assert_eq!(ItemList::new(attrs("empty", "at0601"), Vec::new()).item_count(), 0);
+        assert_eq!(
+            ItemList::new(attrs("empty", "at0601"), Vec::new()).item_count(),
+            0
+        );
 
         // Every item shares `at0001`, so a lookup that matched the node id
         // would return the first regardless — the name is what tells them
         // apart, and a `!=` returns the wrong one rather than none.
-        let found = list.named_item("diastolic").expect("diastolic is in the list");
+        let found = list
+            .named_item("diastolic")
+            .expect("diastolic is in the list");
         assert_eq!(found.name().value(), "diastolic");
-        assert_eq!(list.named_item("pulse").map(|e| e.name().value()), Some("pulse"));
+        assert_eq!(
+            list.named_item("pulse").map(|e| e.name().value()),
+            Some("pulse")
+        );
         assert!(list.named_item("nonesuch").is_none());
     }
 

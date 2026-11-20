@@ -149,3 +149,31 @@ impl ValuedId {
         d.deserialize_any(V(expected))
     }
 }
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use crate::base::{TemplateId, Uid};
+
+    #[test]
+    fn malformed_string_and_valued_identifiers_keep_their_class_in_the_error() {
+        let string_error = serde_json::from_str::<Uid>(r#""not a uid!""#).unwrap_err();
+        assert!(string_error.to_string().contains("UID"), "{string_error}");
+
+        let valued_error = serde_json::from_str::<TemplateId>(r#"{"value":""}"#).unwrap_err();
+        assert!(
+            valued_error.to_string().contains("TEMPLATE_ID"),
+            "{valued_error}"
+        );
+    }
+
+    #[test]
+    fn valued_identifiers_ignore_extensions_and_reject_the_wrong_json_shape() {
+        let id: TemplateId =
+            serde_json::from_str(r#"{"extension":{"future":true},"value":"ward-round"}"#).unwrap();
+        assert_eq!(id.as_str(), "ward-round");
+
+        let error = serde_json::from_str::<TemplateId>("42").unwrap_err();
+        assert!(error.to_string().contains("a string or a"), "{error}");
+    }
+}

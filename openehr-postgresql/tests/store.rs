@@ -24,7 +24,12 @@ fn connect() -> PostgresqlStore {
         "set OPENEHR_POSTGRESQL_URL to a postgres connection string, or run \
          sh openehr-postgresql/scripts/verify-store.sh, which does both",
     );
-    PostgresqlStore::connect(&params).expect("connect")
+    let ca = std::fs::read(
+        std::env::var("OPENEHR_POSTGRESQL_CA")
+            .expect("set OPENEHR_POSTGRESQL_CA or run verify-store.sh"),
+    )
+    .expect("read test CA");
+    PostgresqlStore::connect_with_ca(&params, &ca).expect("verified TLS connect")
 }
 
 /// Drops every table this crate's own DDL creates, so each test starts from
@@ -41,6 +46,22 @@ fn reset(store: &mut PostgresqlStore) {
              openehr_schema_version CASCADE",
         )
         .expect("reset");
+}
+
+#[test]
+#[ignore = "needs a real PostgreSQL server, see this file's own module doc"]
+fn historical_reads_preserve_fractional_commit_times() {
+    let mut store = connect();
+    reset(&mut store);
+    conformance::run_fractional_history(&mut store).expect("historical reads");
+}
+
+#[test]
+#[ignore = "needs a real PostgreSQL server, see this file's own module doc"]
+fn validation_uses_the_compositions_declared_language_before_commit() {
+    let mut store = connect();
+    reset(&mut store);
+    conformance::run_language_validation(&mut store).expect("language-aware validation");
 }
 
 #[test]

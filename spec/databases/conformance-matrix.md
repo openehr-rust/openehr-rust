@@ -61,7 +61,9 @@ with every statement before it, which SQL Server refuses outright. See
 
 **`openehr-postgresql` reached Store, then Verified, 2026-09-12** — the first
 engine besides `SQLite` to implement `Store` at all, and the second to reach
-Verified. `PostgresqlStore` uses the `postgres` crate (blocking, `NoTls`),
+Verified. `PostgresqlStore` uses the blocking `postgres` crate with Rustls;
+TLS is mandatory, with platform roots by default or a caller-supplied PEM CA,
+and both certificate-chain and configured-server-name verification,
 with the client behind a `RefCell` because every one of its methods takes
 `&mut self` where `rusqlite::Connection` allows a shared borrow — the shared
 trait's read methods take `&self` regardless of engine, so the interior
@@ -72,10 +74,9 @@ conformance suites, plus every `SqliteStore`-only test this crate had
 than assumed to hold unchanged. Mutation-tested (`cargo mutants --in-place`, a
 live server, `--ignored --test-threads=1`): 54 diff mutants, 35 caught, 15
 unviable (the same `Result`-return-type shape already accepted for every
-other handler in this tree), 4 missed — all four traced to `db:D-14`, a gap
-in `openehr_store::conformance`'s own fixtures (no keyed chain, no
-two-system race) rather than in this engine's code, and left open there
-rather than patched narrowly here. Reached Verified the same day: the CI step
+other handler in this tree), 4 missed — three remain the keyed-chain fixture
+gap in `db:D-14`; the fourth, the absent two-system race, later exposed and
+closed the real schema defect `db:D-17`. Reached Verified the same day: the CI step
 (`schema` job, `matrix.engine == 'postgresql'`) ran green on the very next
 push, run
 [34710118312](https://github.com/openehr-rust/openehr-rust/actions/runs/34710118312)
@@ -120,8 +121,8 @@ Columns: **pg** PostgreSQL, **lt** SQLite, **my** MySQL, **ma** MariaDB,
 
 ## Store-level requirements
 
-Only `openehr-sqlite` implements `Store`, so the other five are **—**
-throughout. A dash here means "this crate has no store", not "this crate fails".
+The column below records the SQLite assessment. PostgreSQL store runs are
+recorded in the levels table above. The per-requirement marks here cover SQLite.
 
 | Requirement | sqlite | Note |
 | --- | :-: | --- |
@@ -141,16 +142,16 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `R4.5` snapshot reads | • | a reader looping against a writer never sees a version without its index row |
 | `H5.1` commit appends, never modifies | • | |
 | `H5.8` commit rules refuse mis-parented / duplicate / stale | • | |
-| `H5.10` unique index makes a duplicate fail in the database | • | |
+| `H5.10` unique index makes a duplicate fail in the database | • | branch columns are non-null; eight distinct version UIDs race for one tree position and exactly one wins on live SQLite and PostgreSQL (`D-17`) |
 | `H5.2` deletion is a new version | • | |
 | `H5.12` `all_versions` oldest first | • | |
-| `H5.13` `version_at_time` skips unestablished instants | • | |
+| `H5.13` historical read at an established instant | • | Shared exact-boundary suite passes on live SQLite and PostgreSQL, including offsets and fractions beyond milliseconds (`D-16`, fixed). |
 | `H5.11` `is_deleted` is a derived, **indexed** column | ✗ | derived: yes. Indexed: no — `openehr_version`'s own three indexes none include it. The column's own comment claimed it was indexed; corrected in place while assessing this row, 2026-09-10 — no query filters on it yet, so nothing has felt the absence |
 | `H5.14` a `CONTRIBUTION` is its own row, append-only | • | `openehr_contribution` (`M3.21`), append-only by the same `M3.17` mechanism |
-| `H5.4` concurrent commits produce one winner | • | 8 racing writers, one winner, losers refused by the commit rules (`D-06`) |
+| `H5.4` concurrent commits produce one winner | • | 8 systems with distinct version UIDs race for one position; one winner and typed refusals on live SQLite and PostgreSQL (`D-06`, `D-17`) |
 | `H5.3` a store offers version-by-id, latest, at-time, every-version | • | the same `P6.11` evidence |
 | `H5.5` every version is a row in `openehr_version`, no separate history table | • | one version table in the six-table schema (`M3.21`) — there is no second to split into |
-| `H5.6` version identity stored whole and decomposed | • | `openehr_version.uid` (whole) plus `versioned_object_uid`/`creating_system_id`/`trunk_version`/`branch_number`/`branch_version` (decomposed) |
+| `H5.6` version identity stored whole and decomposed | • | `openehr_version.uid` (whole) plus `versioned_object_uid`/`creating_system_id`/`trunk_version`/`branch_number`/`branch_version` (decomposed); zero encodes absent trunk branch components and decodes back to absence |
 | `H5.7` `creating_system_id` stored, never dropped | • | its own required column, same table |
 | `H5.9` commit refusals enforced and distinguishable | • | `openehr::rm::common::CommitError`'s four named variants (`WrongObject`, `DuplicateVersion`, `PrecedingVersionMismatch`, `NotLatest`), wrapped not restated by `StoreError::Commit`; "every engine" is the one engine that has a `Store` today |
 | `H5.17` a deactivated `EHR` refuses new content, checked fresh every commit | • | `SqliteStore::ehr_is_modifiable` re-reads `latest_version` of the `EHR_STATUS` container on every `commit_composition`; `StoreError::NotModifiable`; `conformance::run_is_modifiable_gate` covers both orderings — deactivated-then-refused, and reactivated-then-admitted within the same `CONTRIBUTION` |
@@ -175,19 +176,19 @@ throughout. A dash here means "this crate has no store", not "this crate fails".
 | `R4.3` content is not rejected for archetyped structure the crate does not interpret | • | the same `V9.9` evidence — no archetype-validation code path exists to reject on |
 | `R4.6` identifiers satisfy openEHR's lexical grammars before reaching a column, never normalised | • | `Store` trait methods take typed `HierObjectId`/`ObjectVersionId`, never a bare string — malformed input is refused at parse, before it can reach a column |
 | `R4.9` the projection is a pure function, no SQL, shared by every engine | • | the same `M3.35` evidence |
-| `R4.10` a projected column is never the only home of a fact | ? | plausible by construction — `project()`'s only input is the same `Composition` object that gets canonicalized to JSON, so nothing it derives can come from elsewhere — but no test re-projects from stored JSON and compares |
+| `R4.10` a projected column is never the only home of a fact | • | the shared store suite parses canonical JSON read back from each engine, re-projects it, and compares the complete row with the stored index result; passes on live SQLite and PostgreSQL |
 | `M3.15` audit attributes on every version/contribution row | • | committing system, change type, committer, and the commit-time pair — the same columns `R4.2`'s own note names |
 | `M3.19` canonical JSON is the record, stored whole | • | `M3.43`/`R4.8`/`R4.11` together are this claim, tested |
 | `M3.20` the relational part is an index, never shredded content | ? | true today — `openehr_composition_index` carries only RM-fixed attributes (`M3.32`) — but nothing would fail a schema change that added an archetype-specific column |
-| `M3.28` ordering and range scans use the derived column | • | the real SQL: `... AND audit_time_committed_utc IS NOT NULL ORDER BY audit_time_committed_utc DESC ...` (`src/store.rs`); the skip is `H5.13`'s own tested claim |
+| `M3.28` ordering and range scans use the derived column | • | `version_at_time_candidates_sql` bounds candidates through `audit_time_committed_utc`; `version_uid_at_time` resolves the exact cutoff from authoritative text (`D-16`) |
 | `M3.32` composition index carries only RM-fixed attributes | • | `openehr_composition_index`'s column list matches exactly: archetype id, template id, category, composer, language, territory, setting, context start/end |
 | `M3.35` projection is one function, shared | • | one `project` function in `openehr-store::record`; the guarantee is structural — today only `openehr-sqlite` calls it, since it is the only `Store` |
 | `P6.11` a store offers version-by-id, latest, at-time, every-version, and archetype search | • | all five exercised in `openehr-store/src/conformance.rs`, including `find_compositions_by_archetype` |
-| `P6.14` time-ranged queries use the derived UTC column | • | the same `M3.28` evidence |
+| `P6.14` time-ranged queries use the derived UTC column | • | the same indexed candidate bound as `M3.28`; exact fractional resolution uses authoritative text (`D-16`) |
 | `P6.15` no silent truncation of a result set | ? | vacuously true at this layer — the store applies no bound to `find_compositions_by_archetype` at all, so nothing here truncates; the caller-facing page/cap (`_count`/`_offset`, capped at 100) is `openehr-loco`'s own, above the store |
 | `P6.20` the executor calls only `Store` trait methods, never SQL | • | `openehr-store::aql` depends on `openehr::aql`/`openehr::path` and `Store::find_compositions_by_archetype`/`latest_version` alone — no dialect, no driver |
 | `P6.21` `FROM` limited to one `EHR`-scoped, archetype-predicated `COMPOSITION` | • | `single_containment`/`ehr_id_from_predicate` in `openehr-store::aql`, refusing every other `FROM` shape by name |
-| `P6.22` `WHERE` limited to `Compare`/`And`/`Or`/`Not` over scalar leaves; no match is `false`, an ambiguous or non-scalar match aborts the query | • | `check_expr_shape` (shape, before any store call) and `resolve_scalar` (the three per-row outcomes); every `CompareOp` `db:P6.22` permits exercised individually (`=`, `!=`, `>`, `>=`, `<`, `<=`) plus `AND`/`OR`/`NOT`, not only `=` alone; the abort case found and fixed a real bug in the same pass — the archetype index's own indexed version can be stale (superseded or deleted) once a container is amended, and `run_aql`'s own fourth container, committed then deleted, is the regression test |
+| `P6.22` `WHERE` limited to `Compare`/`And`/`Or`/`Not` over scalar leaves; no match is `false`, an ambiguous or non-scalar match aborts the query | • | `check_expr_shape` and `resolve_scalar`; all six operators plus `AND`/`OR`/`NOT`; owner-crate tests prove integer/real numeric comparison and that different scalar families cannot compare equal or satisfy an ordering predicate (`D-18`); the live suite also covers a stale/deleted archetype-index candidate |
 | `P6.23` `SELECT`/`ORDER BY` limited the same way; `LIMIT` required | • | the same shape checks, plus a dedicated "no `LIMIT`" refusal test |
 | `P6.24` every other construct refused by name before any store is queried | • | `DISTINCT`, `TOP`, a second `CONTAINS` level, a function call, `EXISTS`, `MATCHES`, an unrooted path — each its own `StoreError::AqlUnsupported` |
 | `S1.13` `openehr-sqlite` pins its engine rather than discovering it | • | the `bundled` `rusqlite` feature (`Cargo.toml`) |
@@ -307,12 +308,12 @@ states evidence and takes no level. Nothing here is published.
 | `O10.4` `install()` is idempotent | • | the same `G2.13` evidence (declared per statement kind); `verify-schema.sh` runs every dialect's DDL twice and requires the second run clean |
 | `O10.4a` a recompute path for the one derived value, `…_utc` | — | the requirement's own text: *(amended — not applicable)* — no migration machinery exists to need one, and the projection already recomputes `…_utc` from `…_text` |
 | `O10.6` no bespoke backup format | ? | true by absence — no backup/restore code exists anywhere in this tree — not guarded against one being added |
-| `O10.7` the database connection is encrypted unless in-process | ? | `openehr-sqlite` is exempt by construction (in-process, no connection); no other engine crate opens a live connection yet for the requirement to bind |
+| `O10.7` the database connection is encrypted unless in-process | • | PostgreSQL's public connector forces verified TLS; a live plaintext-only PostgreSQL 18 server is refused (`D-15`). SQLite runs in process. |
 | `O10.10` a release ships supply-chain evidence | • | the `supply-chain` CI job (`cargo deny check`, `cargo audit`, all eighteen crates) plus `Cargo.lock` committed in every one |
 | `O10.11` a published version matches the source that claims it | • | `agents/publishing.md`'s documented process tags the release as part of publishing, from the exact commit, not after it |
 | `O10.12` a contributor's local check and CI run the same script | • | the same `T11.19` row — this requirement's own text cites it |
 | `O10.13` no bound parameter logged at a level a production deployment would enable | • | the same zero-logging evidence as `O10.2` |
-| `O10.18` an engine crate opening a connection documents its TLS configuration | ? | vacuously true — no crate here opens a network connection yet; the requirement states which crate it would bind once one does |
+| `O10.18` a network driver documents TLS and verifies the connection by default | • | `PostgresqlStore::connect` uses platform roots and `connect_with_ca` replaces them with an explicit PEM CA. Live tests accept the trusted configured name and reject a wrong name, unrelated issuer, and plaintext fallback (`D-15`). |
 | `PR12.8` the trust boundary is stated plainly: this layer does not authenticate | • | `openehr-loco/src/auth.rs`'s own module doc cites this requirement by number: "the practical consequence is that `db:PR12.8` still holds" |
 | `PR12.11` append-only is not tamper evidence, and documentation must not conflate them | • | `PHI.md`'s own text draws exactly this distinction, citing `db:PR12.11` by number |
 | `X15.1` the portable core exists in exactly one crate, not copied | • | the same `S1.1` evidence — `openehr-store` is the one crate; the `layering` job keeps it that way |

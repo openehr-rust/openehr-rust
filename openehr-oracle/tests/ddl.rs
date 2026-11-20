@@ -103,7 +103,9 @@ fn no_identifier_is_too_long_for_oracle() {
 fn the_dialect_names_itself_and_the_trigger_refuses_both_mutations() {
     assert_eq!(OracleDialect.name(), "Oracle");
 
-    let sql = OracleDialect.append_only_sql(&openehr_store::schema::VERSION).join("\n");
+    let sql = OracleDialect
+        .append_only_sql(&openehr_store::schema::VERSION)
+        .join("\n");
     assert!(sql.contains("BEFORE UPDATE OR DELETE"), "{sql}");
     assert!(sql.contains("raise_application_error"), "{sql}");
     assert!(sql.contains(openehr_store::schema::VERSION.name), "{sql}");
@@ -121,4 +123,3 @@ fn statements_terminate_with_the_sqlplus_block_marker() {
     let sql = ddl_script(&OracleDialect);
     assert!(sql.contains("\n/"), "{sql}");
 }
-

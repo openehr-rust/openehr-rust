@@ -112,11 +112,11 @@ mod validate;
 pub use adl2::{Adl2Error, Adl2Header, parse_header as parse_adl2_header};
 pub use adl14::{Adl14Error, Adl14Header, parse_header as parse_adl14_header};
 pub use archetype::{Archetype, ROOT_OCCURRENCES};
-pub use cadl::{CadlError, parse_definition};
 pub use archetype_hrid::{ArchetypeHrid, VersionStatus};
+pub use cadl::{CadlError, parse_definition};
 pub use constraint::{
     ArchetypeSlot, CArchetypeRoot, CAttribute, CAttributeTuple, CComplexObject,
-    CComplexObjectProxy, CObject, ConstraintStatus, CPrimitive, CPrimitiveObject, CPrimitiveTuple,
+    CComplexObjectProxy, CObject, CPrimitive, CPrimitiveObject, CPrimitiveTuple, ConstraintStatus,
     NodeIdSyntax, PrimitiveValue,
 };
 pub use multiplicity::{Cardinality, MultiplicityInterval};

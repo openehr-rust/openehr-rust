@@ -1009,6 +1009,7 @@ ordered!(
 ordered_builders!(DvProportion, "DvProportion");
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::rm::data_types::CodePhrase;
@@ -1070,6 +1071,56 @@ mod tests {
         let ranged =
             quantity(9.9, "mmol/l").with_normal_range(Interval::closed(low, high).unwrap());
         assert_eq!(ranged.is_abnormal(), Some(true));
+    }
+
+    #[test]
+    fn every_ordered_kind_checks_its_own_normal_range() {
+        let symbol = |value: &str| {
+            DvCodedText::new(value, CodePhrase::new("local", value).unwrap()).unwrap()
+        };
+        let ordinal = DvOrdinal::new(2, symbol("at0002")).with_normal_range(
+            Interval::closed(
+                DataValue::Ordinal(DvOrdinal::new(1, symbol("at0001"))),
+                DataValue::Ordinal(DvOrdinal::new(3, symbol("at0003"))),
+            )
+            .unwrap(),
+        );
+        assert_eq!(ordinal.is_abnormal(), Some(false));
+
+        let scale = DvScale::new(2.0, symbol("at0002"))
+            .unwrap()
+            .with_normal_range(
+                Interval::closed(
+                    DataValue::Scale(DvScale::new(1.0, symbol("at0001")).unwrap()),
+                    DataValue::Scale(DvScale::new(3.0, symbol("at0003")).unwrap()),
+                )
+                .unwrap(),
+            );
+        assert_eq!(scale.is_abnormal(), Some(false));
+
+        let count = DvCount::new(2).with_normal_range(
+            Interval::closed(
+                DataValue::Count(DvCount::new(1)),
+                DataValue::Count(DvCount::new(3)),
+            )
+            .unwrap(),
+        );
+        assert_eq!(count.is_abnormal(), Some(false));
+
+        let proportion = DvProportion::new(2.0, 1.0, ProportionKind::Ratio)
+            .unwrap()
+            .with_normal_range(
+                Interval::closed(
+                    DataValue::Proportion(
+                        DvProportion::new(1.0, 1.0, ProportionKind::Ratio).unwrap(),
+                    ),
+                    DataValue::Proportion(
+                        DvProportion::new(3.0, 1.0, ProportionKind::Ratio).unwrap(),
+                    ),
+                )
+                .unwrap(),
+            );
+        assert_eq!(proportion.is_abnormal(), Some(false));
     }
 
     #[test]
@@ -1460,12 +1511,37 @@ mod tests {
         // Zero accuracy is allowed absolutely and refused as a percentage
         // (`Accuracy_is_percent_validity`), and a percentage outside 0–100 is
         // refused (`Accuracy_validity`).
-        assert!(DvQuantity::new(1.0, "mg").unwrap().with_accuracy(0.0, false).is_ok());
-        assert!(DvQuantity::new(1.0, "mg").unwrap().with_accuracy(0.0, true).is_err());
-        assert!(DvQuantity::new(1.0, "mg").unwrap().with_accuracy(101.0, true).is_err());
-        assert!(DvQuantity::new(1.0, "mg").unwrap().with_accuracy(-1.0, true).is_err());
+        assert!(
+            DvQuantity::new(1.0, "mg")
+                .unwrap()
+                .with_accuracy(0.0, false)
+                .is_ok()
+        );
+        assert!(
+            DvQuantity::new(1.0, "mg")
+                .unwrap()
+                .with_accuracy(0.0, true)
+                .is_err()
+        );
+        assert!(
+            DvQuantity::new(1.0, "mg")
+                .unwrap()
+                .with_accuracy(101.0, true)
+                .is_err()
+        );
+        assert!(
+            DvQuantity::new(1.0, "mg")
+                .unwrap()
+                .with_accuracy(-1.0, true)
+                .is_err()
+        );
         // Absolute accuracy may legitimately exceed 100 — it is not a percent.
-        assert!(DvQuantity::new(1.0, "mg").unwrap().with_accuracy(101.0, false).is_ok());
+        assert!(
+            DvQuantity::new(1.0, "mg")
+                .unwrap()
+                .with_accuracy(101.0, false)
+                .is_ok()
+        );
     }
 
     /// A `DV_COUNT` orders by magnitude and carries its own status marker.
@@ -1477,8 +1553,14 @@ mod tests {
     /// such a search compares).
     #[test]
     fn counts_order_by_magnitude_and_keep_their_status_marker() {
-        assert_eq!(DvCount::new(1).semantic_cmp(&DvCount::new(2)), Some(Ordering::Less));
-        assert_eq!(DvCount::new(-1).semantic_cmp(&DvCount::new(0)), Some(Ordering::Less));
+        assert_eq!(
+            DvCount::new(1).semantic_cmp(&DvCount::new(2)),
+            Some(Ordering::Less)
+        );
+        assert_eq!(
+            DvCount::new(-1).semantic_cmp(&DvCount::new(0)),
+            Some(Ordering::Less)
+        );
         assert_eq!(
             DvCount::new(5).semantic_cmp(&DvCount::new(5)),
             Some(Ordering::Equal)
@@ -1487,7 +1569,10 @@ mod tests {
         assert_eq!(DvCount::new(50).magnitude(), 50);
         assert_eq!(DvCount::new(50).magnitude_status(), None);
         let at_least = DvCount::new(50).with_magnitude_status(MagnitudeStatus::GreaterThan);
-        assert_eq!(at_least.magnitude_status(), Some(MagnitudeStatus::GreaterThan));
+        assert_eq!(
+            at_least.magnitude_status(),
+            Some(MagnitudeStatus::GreaterThan)
+        );
         assert_eq!(at_least.magnitude(), 50);
         assert_ne!(at_least, DvCount::new(50), "`>50` is not `50`");
     }

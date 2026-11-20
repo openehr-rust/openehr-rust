@@ -28,6 +28,12 @@
 //! 2026-09-12 — see `spec/databases/conformance-matrix.md`, the one file that
 //! owns this claim.
 //!
+//! Every connection is verified TLS: [`PostgresqlStore::connect`] uses the
+//! platform trust store, while [`PostgresqlStore::connect_with_ca`] replaces
+//! it with an explicit PEM CA for a private deployment. Both verify the
+//! configured server name and refuse plaintext fallback (`db:O10.7`,
+//! `db:O10.18`).
+//!
 //! That level is checked, not asserted, because the sibling FHIR monorepo in
 //! this repository carries an audit finding (**F-01**) for six READMEs that
 //! claimed a working store, a CLI, and 7,399 round-tripped resources in ports

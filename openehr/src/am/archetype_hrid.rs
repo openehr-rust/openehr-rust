@@ -445,6 +445,7 @@ impl FromStr for ArchetypeHrid {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::{ArchetypeHrid, VersionStatus};
 
@@ -550,6 +551,20 @@ mod tests {
                 .parse::<ArchetypeHrid>()
                 .is_err()
         );
+
+        // `ArchetypeHrid` is a public serde type, so a stored AOM2 model can
+        // still carry the class model's Build status even though the ADL
+        // lexical grammar has no `+` branch.
+        let parsed: ArchetypeHrid = "openEHR-EHR-OBSERVATION.blood_pressure.v1.0.0"
+            .parse()
+            .unwrap();
+        let mut json = serde_json::to_value(parsed).unwrap();
+        json["version_status"] = serde_json::json!("Build");
+        let without_count: ArchetypeHrid = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(without_count.version_id(), "1.0.0");
+        json["build_count"] = serde_json::json!("4");
+        let with_count: ArchetypeHrid = serde_json::from_value(json).unwrap();
+        assert_eq!(with_count.version_id(), "1.0.0+4");
     }
 
     #[test]
@@ -558,6 +573,21 @@ mod tests {
             .parse::<ArchetypeHrid>()
             .unwrap_err();
         assert!(err.reason.contains("rc"), "{err}");
+
+        let err = "openEHR-EHR-OBSERVATION.blood_pressure.1.0.0"
+            .parse::<ArchetypeHrid>()
+            .unwrap_err();
+        assert!(err.reason.contains("start with 'v'"), "{err}");
+
+        let err = "openEHR-EHR-OBSERVATION.blood_pressure.v1.0.0-rc.x"
+            .parse::<ArchetypeHrid>()
+            .unwrap_err();
+        assert!(err.reason.contains("digits"), "{err}");
+
+        let err = "openEHR-EHR-OBSERVATION.9pressure.v1"
+            .parse::<ArchetypeHrid>()
+            .unwrap_err();
+        assert!(err.reason.contains("concept_id"), "{err}");
     }
 
     #[test]

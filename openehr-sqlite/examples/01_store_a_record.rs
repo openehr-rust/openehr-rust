@@ -103,7 +103,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Reference-Model attributes -- not the document body.
     let found =
         store.find_compositions_by_archetype(&ehr_id, "openEHR-EHR-COMPOSITION.encounter.v1")?;
-    println!("indexed    {} composition(s) of that archetype", found.len());
+    println!(
+        "indexed    {} composition(s) of that archetype",
+        found.len()
+    );
 
     // ---- 6. The commit rules refuse what they should ---------------------
     //

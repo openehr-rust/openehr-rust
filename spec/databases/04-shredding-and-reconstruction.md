@@ -28,6 +28,12 @@ Requirement prefix: `R4`.
   sole record of something can only be migrated by rewriting rows; this one can
   be reprojected from the documents it already holds.
 
+  The shared store conformance suite MUST parse the canonical JSON read back
+  from the engine, re-run the shared projection, and compare the complete row
+  with the engine's stored index result. Comparing the original in-memory
+  object is insufficient evidence that the stored document remains a complete
+  source for rebuilding the index.
+
 ## Round-trip fidelity
 
 - **R4.2** *(amended)* Round-trip MUST be **lossless**: an openEHR object written

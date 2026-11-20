@@ -114,6 +114,7 @@ fn write_json_string(s: &str, out: &mut Vec<u8>) {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -158,7 +159,10 @@ mod tests {
         let q: crate::rm::data_types::DvQuantity =
             serde_json::from_str(r#"{"magnitude":1.50,"units":"mg"}"#).unwrap();
         assert_eq!(q.magnitude_real().as_str(), "1.50");
-        #[allow(clippy::float_cmp, reason = "1.50 and 1.5 are the same f64 — that is the point")]
+        #[allow(
+            clippy::float_cmp,
+            reason = "1.50 and 1.5 are the same f64 — that is the point"
+        )]
         {
             assert_eq!(q.magnitude(), 1.5, "what it denotes is unchanged");
         }

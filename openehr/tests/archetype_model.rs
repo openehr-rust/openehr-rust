@@ -40,7 +40,10 @@ fn blood_pressure() -> Archetype {
                         Some(MultiplicityInterval::MANDATORY),
                         CPrimitive::Real {
                             list: Vec::new(),
-                            range: Some(Interval::closed("0".parse().unwrap(), "1000.0".parse().unwrap()).unwrap()),
+                            range: Some(
+                                Interval::closed("0".parse().unwrap(), "1000.0".parse().unwrap())
+                                    .unwrap(),
+                            ),
                         },
                     ))],
                 )
@@ -60,9 +63,13 @@ fn blood_pressure() -> Archetype {
     ));
 
     let slot = CObject::Slot(
-        ArchetypeSlot::new("CLUSTER", "at0007", Some(MultiplicityInterval::new(0, None).unwrap()))
-            .unwrap()
-            .including("archetype_id/value matches {/openEHR-EHR-CLUSTER\\..*/}"),
+        ArchetypeSlot::new(
+            "CLUSTER",
+            "at0007",
+            Some(MultiplicityInterval::new(0, None).unwrap()),
+        )
+        .unwrap()
+        .including("archetype_id/value matches {/openEHR-EHR-CLUSTER\\..*/}"),
     );
 
     let items = CAttribute::container(
@@ -77,16 +84,22 @@ fn blood_pressure() -> Archetype {
         "OBSERVATION",
         Some("id1".to_owned()),
         Some(MultiplicityInterval::MANDATORY),
-        vec![CAttribute::single("data", MultiplicityInterval::MANDATORY, vec![CObject::Complex(
-            CComplexObject::new(
-                "ITEM_TREE",
-                Some("at0003".to_owned()),
-                Some(MultiplicityInterval::MANDATORY),
-                vec![items],
+        vec![
+            CAttribute::single(
+                "data",
+                MultiplicityInterval::MANDATORY,
+                vec![CObject::Complex(
+                    CComplexObject::new(
+                        "ITEM_TREE",
+                        Some("at0003".to_owned()),
+                        Some(MultiplicityInterval::MANDATORY),
+                        vec![items],
+                    )
+                    .unwrap(),
+                )],
             )
             .unwrap(),
-        )])
-        .unwrap()],
+        ],
     )
     .unwrap();
 
@@ -162,7 +175,10 @@ fn a_constraint_this_crate_cannot_model_survives_rather_than_disappearing() {
     ));
 
     let json = serde_json::to_string(&node).unwrap();
-    assert!(json.contains("C_UNSUPPORTED"), "the kind is named, not erased");
+    assert!(
+        json.contains("C_UNSUPPORTED"),
+        "the kind is named, not erased"
+    );
 
     let CObject::Primitive(back) = serde_json::from_str::<CObject>(&json).unwrap() else {
         panic!("a primitive node deserialized as something else");
@@ -180,11 +196,15 @@ fn a_constraint_this_crate_cannot_model_survives_rather_than_disappearing() {
 fn the_targeted_archetype_model_release_is_named() {
     assert_eq!(AM_RELEASE, "2.3.0");
 
-    let declared = blood_pressure().with_versions(Some("2.4.0".to_owned()), Some("1.0.4".to_owned()));
+    let declared =
+        blood_pressure().with_versions(Some("2.4.0".to_owned()), Some("1.0.4".to_owned()));
     // Carried, not enforced: an artefact declaring another release is readable.
     let json = serde_json::to_string(&declared).unwrap();
     assert!(json.contains("2.4.0") && json.contains("1.0.4"));
-    serde_json::from_str::<Archetype>(&json).unwrap().check().unwrap();
+    serde_json::from_str::<Archetype>(&json)
+        .unwrap()
+        .check()
+        .unwrap();
 }
 
 /// `K15.1`: the checks run at construction, and again on anything deserialized.
@@ -243,12 +263,20 @@ fn every_accessor_returns_what_was_constructed() {
         TermDefinition::new("Systolic", Some("Peak pressure".to_owned())).unwrap();
     assert_eq!(with_description.text(), "Systolic");
     assert_eq!(with_description.description(), Some("Peak pressure"));
-    assert_eq!(TermDefinition::new("Diastolic", None).unwrap().description(), None);
+    assert_eq!(
+        TermDefinition::new("Diastolic", None)
+            .unwrap()
+            .description(),
+        None
+    );
 
     // --- ArchetypeTerminology ---------------------------------------------
     let terminology = ArchetypeTerminology::new("en", terms(&["id1", "at0004"])).unwrap();
     assert_eq!(terminology.original_language(), "en");
-    assert_eq!(terminology.definition("at0004").unwrap().text(), "term at0004");
+    assert_eq!(
+        terminology.definition("at0004").unwrap().text(),
+        "term at0004"
+    );
     assert_eq!(terminology.definition("at9999"), None);
     let mut codes: Vec<&str> = terminology.codes().collect();
     codes.sort_unstable();
@@ -260,8 +288,8 @@ fn every_accessor_returns_what_was_constructed() {
         Some(MultiplicityInterval::MANDATORY),
         CPrimitive::String { list: Vec::new() },
     ));
-    let single = CAttribute::single("value", MultiplicityInterval::MANDATORY, vec![leaf.clone()])
-        .unwrap();
+    let single =
+        CAttribute::single("value", MultiplicityInterval::MANDATORY, vec![leaf.clone()]).unwrap();
     assert_eq!(single.rm_attribute_name(), "value");
     assert_eq!(single.cardinality(), None);
     assert_eq!(single.existence(), &MultiplicityInterval::MANDATORY);

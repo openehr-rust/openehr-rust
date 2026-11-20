@@ -106,8 +106,47 @@ pub fn sample_composition(name: &str) -> Composition {
 /// Never: every input is a literal known to parse.
 #[must_use]
 pub fn sample_version(n: u32, preceding: Option<u32>, minute: u32) -> Version<Composition> {
-    let id = |v: u32| -> ObjectVersionId {
-        format!("{RECORD}::{SYSTEM}::{v}").parse().expect("literal")
+    sample_version_for_system(n, preceding, minute, SYSTEM)
+}
+
+/// Builds a version attributed to a particular creating system.
+///
+/// This variant exists for the two-system concurrency case. Two writers can
+/// independently choose the same tree position while producing distinct
+/// version UIDs, which exercises the tree-position constraint rather than the
+/// primary key.
+///
+/// # Panics
+///
+/// Never: the fixed fixture identifiers and timestamp are known to parse. The
+/// caller must supply a valid `creating_system_id` for an object version UID.
+#[must_use]
+pub fn sample_version_for_system(
+    n: u32,
+    preceding: Option<u32>,
+    minute: u32,
+    creating_system_id: &str,
+) -> Version<Composition> {
+    sample_version_at(
+        n,
+        preceding,
+        &format!("2026-08-01T09:{minute:02}:00Z"),
+        creating_system_id,
+        SYSTEM,
+    )
+}
+
+fn sample_version_at(
+    n: u32,
+    preceding: Option<u32>,
+    committed: &str,
+    creating_system_id: &str,
+    preceding_system_id: &str,
+) -> Version<Composition> {
+    let version_id = |v: u32, system: &str| -> ObjectVersionId {
+        format!("{RECORD}::{system}::{v}")
+            .parse()
+            .expect("fixture creating system")
     };
     let owner = ObjectRef::new(
         "local",
@@ -116,8 +155,8 @@ pub fn sample_version(n: u32, preceding: Option<u32>, minute: u32) -> Version<Co
     )
     .expect("literal");
     let audit = AuditDetails::new(
-        SYSTEM,
-        DvDateTime::new(&format!("2026-08-01T09:{minute:02}:00Z")).expect("literal"),
+        creating_system_id,
+        DvDateTime::new(committed).expect("fixture time"),
         if preceding.is_none() {
             audit_change_type::CREATION
         } else {
@@ -129,8 +168,8 @@ pub fn sample_version(n: u32, preceding: Option<u32>, minute: u32) -> Version<Co
     )
     .expect("literal");
     OriginalVersion::new(
-        id(n),
-        preceding.map(id),
+        version_id(n, creating_system_id),
+        preceding.map(|v| version_id(v, preceding_system_id)),
         version_lifecycle_state::COMPLETE,
         Some(sample_composition(&format!("Encounter {n}"))),
         audit,
@@ -389,6 +428,14 @@ pub fn run<S: Store>(store: &mut S) -> Result<()> {
     let by_id: ObjectVersionId = format!("{RECORD}::{SYSTEM}::1").parse()?;
     let one = store.get_version(&by_id)?;
     assert_eq!(one.uid, by_id.to_string());
+    assert_eq!(
+        one.branch_number, None,
+        "{engine}: the SQL trunk sentinel leaked into branch_number"
+    );
+    assert_eq!(
+        one.branch_version, None,
+        "{engine}: the SQL trunk sentinel leaked into branch_version"
+    );
     assert!(one.data_json.is_some(), "{engine}: content was not stored");
     assert!(!one.is_deleted);
     assert_eq!(one.audit_change_type_code, audit_change_type::CREATION);
@@ -438,6 +485,30 @@ pub fn run<S: Store>(store: &mut S) -> Result<()> {
         none.is_empty(),
         "{engine}: archetype index matched the wrong archetype"
     );
+
+    // R4.10: rebuild every returned index row from the canonical JSON read
+    // back from the engine. The document in storage, not the original Rust
+    // value, must remain the complete source for every projected fact.
+    for stored_index in &found {
+        let version_uid: ObjectVersionId = stored_index.version_uid.parse()?;
+        let stored_version = store.get_version(&version_uid)?;
+        let data_json = stored_version.data_json.as_deref().unwrap_or_else(|| {
+            panic!(
+                "{engine}: indexed version {} has no stored composition",
+                stored_index.version_uid
+            )
+        });
+        let composition: Composition = serde_json::from_str(data_json)?;
+        let rebuilt = crate::record::CompositionIndexRow::project(
+            &stored_index.version_uid,
+            &stored_index.ehr_id,
+            &composition,
+        )?;
+        assert_eq!(
+            &rebuilt, stored_index,
+            "{engine}: an index row cannot be reproduced from its stored canonical JSON"
+        );
+    }
 
     // --- the tamper-evidence chain (M3.16) -----------------------------------
     //
@@ -562,6 +633,162 @@ pub fn run<S: Store>(store: &mut S) -> Result<()> {
     Ok(())
 }
 
+/// Checks inclusive historical reads within one UTC second (`db:H5.13`).
+/// Run against a fresh store.
+///
+/// # Errors
+///
+/// Returns a fixture or database error.
+///
+/// # Panics
+///
+/// Panics if a lookup returns the wrong version or invents an earlier one.
+pub fn run_fractional_history<S: Store>(store: &mut S) -> Result<()> {
+    store.install()?;
+    let ehr = sample_ehr();
+    store.create_ehr(&ehr)?;
+    let contribution = "22222222-3333-4444-5555-666666666666";
+    store.create_contribution(
+        ehr.ehr_id(),
+        &sample_contribution(contribution, &[1, 2, 3, 4, 5, 6, 7]),
+    )?;
+    let container = HierObjectId::from_uid_str(RECORD)?;
+    for (n, committed) in [
+        (1, "2026-08-02T00:05:00,100+05:45"),
+        (2, "2026-08-01T18:20:00.900Z"),
+        (3, "2026-08-01T18:20:00.9000001Z"),
+        // Same instant as version 3. Version 5 has a later trunk but an earlier time.
+        (4, "2026-08-02T00:05:00.900000100+05:45"),
+        (5, "2026-08-01T18:20:00.850Z"),
+        (6, "2026-08-01T18:20:01.200Z"),
+        (7, "2026-08-01T18:20:02.300"),
+    ] {
+        let previous = (n > 1).then(|| n - 1);
+        store.commit_composition(
+            ehr.ehr_id(),
+            &sample_version_at(n, previous, committed, SYSTEM, SYSTEM),
+            contribution,
+        )?;
+    }
+    for (query, expected) in [
+        ("2026-08-01T18:20:00.099Z", None),
+        ("2026-08-01T18:20:00.100Z", Some(1)),
+        ("2026-08-01T18:20:00.500Z", Some(1)),
+        ("2026-08-01T18:20:00.850Z", Some(5)),
+        ("2026-08-02T00:05:00.900+05:45", Some(2)),
+        ("2026-08-01T18:20:00.90000009Z", Some(2)),
+        ("2026-08-01T18:20:00.9000001Z", Some(4)),
+        ("2026-08-01T18:20:01.100Z", Some(4)),
+        ("2026-08-01T18:20:03.000Z", Some(6)),
+        ("2026-08-01T18:20:03.000", None),
+    ] {
+        let actual = match store.version_at_time(&container, &DvDateTime::new(query)?) {
+            Ok(row) => Some(row.trunk_version),
+            Err(crate::StoreError::NotFound { .. }) => None,
+            Err(error) => return Err(error),
+        };
+        assert_eq!(actual, expected, "{query}");
+    }
+    Ok(())
+}
+
+/// Proves that a valid non-English openEHR rubric reaches storage unchecked,
+/// while the same text explicitly declared English is still refused
+/// (`lib:D3.7a`, `lib:A-81`). Run against a fresh store.
+///
+/// # Errors
+///
+/// Returns a fixture or database error.
+///
+/// # Panics
+///
+/// Panics if the store rejects the Spanish record or accepts the English
+/// negative control.
+pub fn run_language_validation<S: Store>(store: &mut S) -> Result<()> {
+    const CONTAINER: &str = "10000000-0000-0000-0000-000000000081";
+    const CONTRIBUTION: &str = "81000000-0000-0000-0000-000000000001";
+
+    store.install()?;
+    let ehr = sample_ehr();
+    store.create_ehr(&ehr)?;
+
+    let version_id = |n| -> ObjectVersionId {
+        format!("{CONTAINER}::{SYSTEM}::{n}")
+            .parse()
+            .expect("fixture")
+    };
+    store.create_contribution(
+        ehr.ehr_id(),
+        &Contribution::new(
+            HierObjectId::from_uid_str(CONTRIBUTION).expect("fixture"),
+            vec![version_id(1), version_id(2)],
+            AuditDetails::new(
+                SYSTEM,
+                DvDateTime::new("2026-08-01T10:00:00Z").expect("fixture"),
+                audit_change_type::CREATION,
+                PartyIdentified::named("Dra Ejemplo")
+                    .expect("fixture")
+                    .into(),
+            )
+            .expect("fixture"),
+        )
+        .expect("fixture"),
+    )?;
+
+    let composition = |language: &str| -> Composition {
+        serde_json::from_str(&format!(
+            r#"{{
+              "_type":"COMPOSITION",
+              "name":{{"value":"Encuentro"}},
+              "archetype_node_id":"openEHR-EHR-COMPOSITION.encounter.v1",
+              "archetype_details":{{"archetype_id":{{"value":"openEHR-EHR-COMPOSITION.encounter.v1"}},"rm_version":"1.1.0"}},
+              "language":{{"terminology_id":{{"value":"ISO_639-1"}},"code_string":"{language}"}},
+              "territory":{{"terminology_id":{{"value":"ISO_3166-1"}},"code_string":"ES"}},
+              "category":{{"value":"evento","defining_code":{{"terminology_id":{{"value":"openehr"}},"code_string":"433"}}}},
+              "composer":{{"_type":"PARTY_IDENTIFIED","name":"Dra Ejemplo"}}
+            }}"#
+        ))
+        .expect("fixture")
+    };
+    let owner = ObjectRef::new("local", "EHR", ObjectId::HierObjectId(ehr.ehr_id().clone()))
+        .expect("fixture");
+    let version = |n, language: &str| -> Version<Composition> {
+        OriginalVersion::new(
+            version_id(n),
+            (n > 1).then(|| version_id(n - 1)),
+            version_lifecycle_state::COMPLETE,
+            Some(composition(language)),
+            AuditDetails::new(
+                SYSTEM,
+                DvDateTime::new(&format!("2026-08-01T10:0{n}:00Z")).expect("fixture"),
+                if n == 1 {
+                    audit_change_type::CREATION
+                } else {
+                    audit_change_type::AMENDMENT
+                },
+                PartyIdentified::named("Dra Ejemplo")
+                    .expect("fixture")
+                    .into(),
+            )
+            .expect("fixture"),
+            owner.clone(),
+        )
+        .expect("fixture")
+        .into()
+    };
+
+    store.commit_composition(ehr.ehr_id(), &version(1, "es"), CONTRIBUTION)?;
+    assert!(
+        matches!(
+            store.commit_composition(ehr.ehr_id(), &version(2, "en"), CONTRIBUTION),
+            Err(crate::StoreError::Invalid(_))
+        ),
+        "{}: accepted Spanish rubric text explicitly declared English",
+        store.engine()
+    );
+    Ok(())
+}
+
 /// Runs the `EHR_STATUS` versioning story against one engine.
 ///
 /// Separate from [`run`] rather than folded into it: this is a different
@@ -656,7 +883,8 @@ pub fn run_ehr_status<S: Store>(store: &mut S) -> Result<()> {
         "{engine}: EHR_STATUS all_versions must be oldest first"
     );
 
-    let at_0915 = store.version_at_time(&container_uid, &DvDateTime::new("2026-08-01T09:15:00Z")?)?;
+    let at_0915 =
+        store.version_at_time(&container_uid, &DvDateTime::new("2026-08-01T09:15:00Z")?)?;
     assert_eq!(
         at_0915.trunk_version, 1,
         "{engine}: EHR_STATUS version_at_time went forwards"
@@ -771,18 +999,20 @@ pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
 
     for (i, container) in CONTAINERS.iter().enumerate() {
         let n = u32::try_from(i).expect("three fits");
-        let id: ObjectVersionId = format!("{container}::{SYSTEM}::1").parse()?;
-        let owner = ObjectRef::new(
-            "local",
-            "EHR",
-            ObjectId::HierObjectId(ehr_id.clone()),
-        )?;
+        let id: ObjectVersionId = format!("{container}::{SYSTEM}::1")
+            .parse()
+            .expect("fixture");
+        let owner = ObjectRef::new("local", "EHR", ObjectId::HierObjectId(ehr_id.clone()))
+            .expect("fixture");
         let audit = AuditDetails::new(
             SYSTEM,
-            DvDateTime::new(&format!("2026-08-01T09:{:02}:00Z", 10 + n))?,
+            DvDateTime::new(&format!("2026-08-01T09:{:02}:00Z", 10 + n)).expect("fixture"),
             audit_change_type::CREATION,
-            PartyIdentified::named("Dr A Nurse")?.into(),
-        )?;
+            PartyIdentified::named("Dr A Nurse")
+                .expect("fixture")
+                .into(),
+        )
+        .expect("fixture");
         let version: Version<Composition> = OriginalVersion::new(
             id,
             None,
@@ -790,7 +1020,8 @@ pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
             Some(sample_composition(&format!("Encounter {n}"))),
             audit,
             owner,
-        )?
+        )
+        .expect("fixture")
         .into();
         store.commit_composition(&ehr_id, &version, contribution_uid)?;
     }
@@ -807,9 +1038,14 @@ pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
     // deleted — the shared suite gets its own direct case for it here
     // rather than relying on that coincidence to keep catching it.
     let deleted_container = "10000000-0000-0000-0000-000000000004";
-    let v1: ObjectVersionId = format!("{deleted_container}::{SYSTEM}::1").parse()?;
-    let v2: ObjectVersionId = format!("{deleted_container}::{SYSTEM}::2").parse()?;
-    let owner = ObjectRef::new("local", "EHR", ObjectId::HierObjectId(ehr_id.clone()))?;
+    let v1: ObjectVersionId = format!("{deleted_container}::{SYSTEM}::1")
+        .parse()
+        .expect("fixture");
+    let v2: ObjectVersionId = format!("{deleted_container}::{SYSTEM}::2")
+        .parse()
+        .expect("fixture");
+    let owner =
+        ObjectRef::new("local", "EHR", ObjectId::HierObjectId(ehr_id.clone())).expect("fixture");
     let create: Version<Composition> = OriginalVersion::new(
         v1.clone(),
         None,
@@ -817,12 +1053,16 @@ pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
         Some(sample_composition("Encounter 3")),
         AuditDetails::new(
             SYSTEM,
-            DvDateTime::new("2026-08-01T09:13:00Z")?,
+            DvDateTime::new("2026-08-01T09:13:00Z").expect("fixture"),
             audit_change_type::CREATION,
-            PartyIdentified::named("Dr A Nurse")?.into(),
-        )?,
+            PartyIdentified::named("Dr A Nurse")
+                .expect("fixture")
+                .into(),
+        )
+        .expect("fixture"),
         owner.clone(),
-    )?
+    )
+    .expect("fixture")
     .into();
     store.commit_composition(&ehr_id, &create, contribution_uid)?;
     let delete: Version<Composition> = OriginalVersion::new(
@@ -832,12 +1072,16 @@ pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
         None,
         AuditDetails::new(
             SYSTEM,
-            DvDateTime::new("2026-08-01T09:14:00Z")?,
+            DvDateTime::new("2026-08-01T09:14:00Z").expect("fixture"),
             audit_change_type::DELETED,
-            PartyIdentified::named("Dr A Nurse")?.into(),
-        )?,
+            PartyIdentified::named("Dr A Nurse")
+                .expect("fixture")
+                .into(),
+        )
+        .expect("fixture"),
         owner,
-    )?
+    )
+    .expect("fixture")
     .into();
     store.commit_composition(&ehr_id, &delete, contribution_uid)?;
 
@@ -983,7 +1227,7 @@ pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
 /// # Panics
 ///
 /// Panics on a conformance failure, naming what broke.
-pub fn check_dialect<D: Dialect + ?Sized>(dialect: &D) {
+pub fn check_dialect(dialect: &dyn Dialect) {
     let name = dialect.name();
     let statements = dialect.ddl();
     let index_statements = if dialect.index_idempotence() == crate::Idempotence::Inline {
@@ -1230,14 +1474,15 @@ pub fn check_col_sql<D: Dialect + ?Sized>(dialect: &D, ty: crate::ColTy) {
     // The two halves of an instant pair must stay distinguishable whatever the
     // bound (`M3.31`); a fuzzer varying `Id(n)`/`Text(n)` must not be able to
     // collapse them.
-    if matches!(ty, crate::ColTy::Instant) {
-        assert_ne!(
-            sql,
-            dialect.col_sql(crate::ColTy::InstantUtc),
-            "{}: the authoritative and derived instant columns share a type",
-            dialect.name()
-        );
+    if !matches!(ty, crate::ColTy::Instant) {
+        return;
     }
+    assert_ne!(
+        sql,
+        dialect.col_sql(crate::ColTy::InstantUtc),
+        "{}: the authoritative and derived instant columns share a type",
+        dialect.name()
+    );
 }
 
 /// Drives the projection with a composition that passed no constructor.
@@ -1281,10 +1526,20 @@ pub fn check_projection(version_uid: &str, ehr_id: &str, composition: &Compositi
     let first = crate::record::CompositionIndexRow::project(version_uid, ehr_id, composition);
     let second = crate::record::CompositionIndexRow::project(version_uid, ehr_id, composition);
 
+    projection_outcome(first, second)
+}
+
+fn projection_outcome(
+    first: Result<crate::record::CompositionIndexRow>,
+    second: Result<crate::record::CompositionIndexRow>,
+) -> bool {
     match (first, second) {
         (Ok(a), Ok(b)) => {
             assert_eq!(a, b, "projection is not deterministic");
-            for (which, instant) in [("context_start", &a.context_start), ("context_end", &a.context_end)] {
+            for (which, instant) in [
+                ("context_start", &a.context_start),
+                ("context_end", &a.context_end),
+            ] {
                 let Some(stored) = instant else { continue };
                 check_stored_instant(which, stored);
             }
@@ -1348,7 +1603,7 @@ pub fn check_stored_instant(column: &str, stored: &crate::record::StoredInstant)
 /// early", which the fuzz target could not otherwise tell apart (`db:D-10`).
 #[must_use]
 pub fn check_verify_versions(rows: &[crate::record::VersionRow]) -> usize {
-    use crate::integrity::{Breach, Integrity, verify_versions};
+    use crate::integrity::{Integrity, verify_versions};
 
     let verdict = verify_versions(rows, &[]);
     if rows.is_empty() {
@@ -1392,27 +1647,360 @@ pub fn check_verify_versions(rows: &[crate::record::VersionRow]) -> usize {
                 Some(json) => format!("{json} "),
                 None => "null ".to_owned(),
             });
-            match verify_versions(&tampered, &[]) {
-                Integrity::Broken { at, reason, .. } => {
-                    assert_eq!(at, i, "the wrong version was named as altered");
-                    assert_eq!(
-                        reason,
-                        Breach::ContentAltered,
-                        "an edited version was reported as something other than altered"
-                    );
-                }
-                other => panic!(
-                    "editing version {i}'s content left the history reporting {other:?} — \
-                     the chain does not detect the thing it exists to detect"
-                ),
-            }
+            assert_tamper_detected(verify_versions(&tampered, &[]), i);
             provoked += 1;
         }
     }
     provoked
 }
 
+fn assert_tamper_detected(verdict: crate::integrity::Integrity, expected_at: usize) {
+    use crate::integrity::{Breach, Integrity};
+
+    match verdict {
+        Integrity::Broken { at, reason, .. } => {
+            assert_eq!(at, expected_at, "the wrong version was named as altered");
+            assert_eq!(
+                reason,
+                Breach::ContentAltered,
+                "an edited version was reported as something other than altered"
+            );
+        }
+        other => panic!(
+            "editing version {expected_at}'s content left the history reporting {other:?} — \
+             the chain does not detect the thing it exists to detect"
+        ),
+    }
+}
+
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod store_tests {
+    //! The shared suite must execute in its owner crate as well as in engine
+    //! crates. This deliberately small in-memory adapter is test support, not
+    //! another advertised store: it gives owner-crate coverage and mutation
+    //! testing a faithful driver without creating a dependency cycle through
+    //! `openehr-sqlite`.
+
+    use super::{
+        EHR_STATUS_RECORD, run, run_aql, run_ehr_status, run_fractional_history,
+        run_is_modifiable_gate, run_language_validation,
+    };
+    use crate::record::{CompositionIndexRow, VersionRow};
+    use crate::{CommitOutcome, Result, Store, StoreError, check_commit_rules};
+    use openehr::base::iso8601::DateTime;
+    use openehr::base::{HierObjectId, ObjectVersionId};
+    use openehr::rm::common::{Contribution, Version};
+    use openehr::rm::data_types::DvDateTime;
+    use openehr::rm::ehr::{Composition, Ehr, EhrStatus};
+    use openehr::validation::Validate as _;
+    use serde::Serialize;
+    use std::cell::Cell;
+    use std::cmp::Ordering;
+    use std::collections::HashMap;
+
+    #[derive(Default)]
+    struct MemoryStore {
+        ehrs: HashMap<String, Ehr>,
+        versions: Vec<VersionRow>,
+        indexes: Vec<CompositionIndexRow>,
+        omit_indexed_content: bool,
+        version_reads: Cell<usize>,
+        fail_history_read: bool,
+        refuse_reactivated_content: bool,
+    }
+
+    impl MemoryStore {
+        fn missing(kind: &'static str, id: &str) -> StoreError {
+            StoreError::NotFound {
+                kind,
+                id: id.to_owned(),
+            }
+        }
+
+        fn rows(&self, container: &str) -> Vec<VersionRow> {
+            let mut rows: Vec<_> = self
+                .versions
+                .iter()
+                .filter(|row| row.versioned_object_uid == container)
+                .cloned()
+                .collect();
+            rows.sort_by_key(|row| (row.trunk_version, row.branch_number, row.branch_version));
+            rows
+        }
+
+        fn prepare<T: Serialize>(
+            &self,
+            version: &Version<T>,
+            contribution_uid: &str,
+        ) -> Result<(VersionRow, bool)> {
+            let container = version.uid().object_id().to_string();
+            let head = self.rows(&container).last().cloned();
+            let head_rule = head
+                .as_ref()
+                .map(|row| (row.uid.clone(), row.trunk_version));
+            check_commit_rules(
+                head_rule.as_ref(),
+                self.versions
+                    .iter()
+                    .any(|row| row.uid == version.uid().to_string()),
+                version.preceding_version_uid(),
+            )?;
+            let previous = head.as_ref().map(|row| row.chain.digest);
+            Ok((
+                VersionRow::project(version, contribution_uid, previous, None)?,
+                head.is_none(),
+            ))
+        }
+
+        fn ehr_is_modifiable(&self, ehr: &Ehr) -> Result<bool> {
+            let container = ehr.ehr_status().id().to_string();
+            let Some(row) = self.rows(&container).last().cloned() else {
+                return Ok(true);
+            };
+            let json = row
+                .data_json
+                .as_deref()
+                .ok_or_else(|| Self::missing("EHR_STATUS", &container))?;
+            let status: EhrStatus = serde_json::from_str(json)?;
+            Ok(status.is_modifiable())
+        }
+    }
+
+    impl Store for MemoryStore {
+        fn engine(&self) -> &'static str {
+            "owner-memory"
+        }
+
+        fn install(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        fn create_ehr(&mut self, ehr: &Ehr) -> Result<()> {
+            ehr.validate_ok()?;
+            let id = ehr.ehr_id().to_string();
+            if self.ehrs.contains_key(&id) {
+                return Err(StoreError::Conflict { kind: "ehr", id });
+            }
+            self.ehrs.insert(id, ehr.clone());
+            Ok(())
+        }
+
+        fn get_ehr(&self, ehr_id: &HierObjectId) -> Result<Ehr> {
+            let id = ehr_id.to_string();
+            self.ehrs
+                .get(&id)
+                .cloned()
+                .ok_or_else(|| Self::missing("ehr", &id))
+        }
+
+        fn create_contribution(
+            &mut self,
+            ehr_id: &HierObjectId,
+            _contribution: &Contribution,
+        ) -> Result<()> {
+            self.get_ehr(ehr_id).map(|_| ())
+        }
+
+        fn commit_composition(
+            &mut self,
+            ehr_id: &HierObjectId,
+            version: &Version<Composition>,
+            contribution_uid: &str,
+        ) -> Result<CommitOutcome> {
+            version.validate_ok()?;
+            let ehr = self.get_ehr(ehr_id)?;
+            if !self.ehr_is_modifiable(&ehr)? {
+                return Err(StoreError::NotModifiable {
+                    ehr_id: ehr_id.to_string(),
+                });
+            }
+            if self.refuse_reactivated_content && self.rows(EHR_STATUS_RECORD).len() >= 2 {
+                return Err(StoreError::Engine {
+                    engine: "owner-memory",
+                    message: "injected refusal after reactivation".to_owned(),
+                });
+            }
+            let (row, created_container) = self.prepare(version, contribution_uid)?;
+            if let Some(composition) = version.data() {
+                self.indexes.push(CompositionIndexRow::project(
+                    &row.uid,
+                    &ehr_id.to_string(),
+                    composition,
+                )?);
+            }
+            self.versions.push(row);
+            Ok(CommitOutcome {
+                version_uid: version.uid().clone(),
+                created_container,
+            })
+        }
+
+        fn commit_ehr_status(
+            &mut self,
+            ehr_id: &HierObjectId,
+            version: &Version<EhrStatus>,
+            contribution_uid: &str,
+        ) -> Result<CommitOutcome> {
+            version.validate_ok()?;
+            self.get_ehr(ehr_id)?;
+            let (row, created_container) = self.prepare(version, contribution_uid)?;
+            self.versions.push(row);
+            Ok(CommitOutcome {
+                version_uid: version.uid().clone(),
+                created_container,
+            })
+        }
+
+        fn get_version(&self, uid: &ObjectVersionId) -> Result<VersionRow> {
+            let id = uid.to_string();
+            let mut row = self
+                .versions
+                .iter()
+                .find(|row| row.uid == id)
+                .cloned()
+                .ok_or_else(|| Self::missing("version", &id))?;
+            let read = self.version_reads.get();
+            self.version_reads.set(read + 1);
+            if self.omit_indexed_content && read > 0 {
+                row.data_json = None;
+            }
+            Ok(row)
+        }
+
+        fn latest_version(&self, versioned_object_uid: &HierObjectId) -> Result<VersionRow> {
+            let id = versioned_object_uid.to_string();
+            self.rows(&id)
+                .pop()
+                .ok_or_else(|| Self::missing("versioned_object", &id))
+        }
+
+        fn version_at_time(
+            &self,
+            versioned_object_uid: &HierObjectId,
+            at: &DvDateTime,
+        ) -> Result<VersionRow> {
+            let id = versioned_object_uid.to_string();
+            if self.fail_history_read {
+                return Err(StoreError::Engine {
+                    engine: "owner-memory",
+                    message: "injected historical read failure".to_owned(),
+                });
+            }
+            if crate::record::StoredInstant::from_date_time(at.value())
+                .utc_seconds
+                .is_none()
+            {
+                return Err(Self::missing("versioned_object", &id));
+            }
+            self.rows(&id)
+                .into_iter()
+                .filter_map(|row| {
+                    row.audit_time_committed.utc_seconds?;
+                    let time: DateTime = row.audit_time_committed.text.parse().ok()?;
+                    time.semantic_cmp(at.value())
+                        .is_some_and(|ordering| ordering != Ordering::Greater)
+                        .then_some((time, row))
+                })
+                .max_by(|(left_time, left), (right_time, right)| {
+                    left_time
+                        .semantic_cmp(right_time)
+                        .unwrap_or(Ordering::Equal)
+                        .then_with(|| left.trunk_version.cmp(&right.trunk_version))
+                })
+                .map(|(_, row)| row)
+                .ok_or_else(|| Self::missing("versioned_object", &id))
+        }
+
+        fn all_versions(&self, versioned_object_uid: &HierObjectId) -> Result<Vec<VersionRow>> {
+            Ok(self.rows(&versioned_object_uid.to_string()))
+        }
+
+        fn chain_checkpoint(&self, versioned_object_uid: &HierObjectId) -> Result<String> {
+            let rows = self.rows(&versioned_object_uid.to_string());
+            let head = rows.last().ok_or_else(|| {
+                Self::missing("versioned_object", &versioned_object_uid.to_string())
+            })?;
+            Ok(format!(
+                "entries={} head={:?} version={}",
+                rows.len(),
+                head.chain.digest,
+                head.uid
+            ))
+        }
+
+        fn find_compositions_by_archetype(
+            &self,
+            ehr_id: &HierObjectId,
+            archetype_id: &str,
+        ) -> Result<Vec<CompositionIndexRow>> {
+            Ok(self
+                .indexes
+                .iter()
+                .filter(|row| row.ehr_id == ehr_id.to_string() && row.archetype_id == archetype_id)
+                .cloned()
+                .collect())
+        }
+    }
+
+    #[test]
+    fn owner_crate_executes_every_store_conformance_story() {
+        for story in [
+            run::<MemoryStore>,
+            run_fractional_history,
+            run_language_validation,
+            run_ehr_status,
+            run_is_modifiable_gate,
+            run_aql,
+        ] {
+            story(&mut MemoryStore::default()).expect("owner conformance story");
+        }
+
+        // Keep the status container constant tied to the fixture this adapter
+        // reads when applying the `is_modifiable` gate.
+        assert_eq!(
+            super::sample_ehr().ehr_status().id().to_string(),
+            EHR_STATUS_RECORD
+        );
+    }
+
+    #[test]
+    fn owner_suite_failure_paths_are_observable() {
+        let mut missing_content = MemoryStore {
+            omit_indexed_content: true,
+            ..MemoryStore::default()
+        };
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                run(&mut missing_content)
+            }))
+            .is_err()
+        );
+
+        let mut history_failure = MemoryStore {
+            fail_history_read: true,
+            ..MemoryStore::default()
+        };
+        assert!(matches!(
+            run_fractional_history(&mut history_failure),
+            Err(StoreError::Engine { .. })
+        ));
+
+        let mut reactivation_failure = MemoryStore {
+            refuse_reactivated_content: true,
+            ..MemoryStore::default()
+        };
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                run_is_modifiable_gate(&mut reactivation_failure)
+            }))
+            .is_err()
+        );
+    }
+}
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod property_tests {
     //! Proof that the fuzz properties are not vacuous.
     //!
@@ -1421,16 +2009,23 @@ mod property_tests {
     //! test below defines a dialect with exactly the defect the property exists
     //! to catch, and asserts the property rejects it.
 
+    use super::assert_tamper_detected;
     use super::{
         CodePhrase, Composition, LocatableAttrs, PartyIdentified, RECORD, SYSTEM, check_col_sql,
-        check_projection, check_quote, check_stored_instant, check_verify_versions,
-        composition_category, sample_composition, sample_version,
+        check_dialect, check_projection, check_quote, check_stored_instant, check_verify_versions,
+        composition_category, dialects_are_distinct, projection_outcome, sample_composition,
+        sample_ehr, sample_version,
     };
+    use crate::{ColTy, Dialect, Idempotence, ObjectKind, Placeholder, Table};
     use openehr::base::iso8601;
-    use crate::{ColTy, Dialect, Placeholder};
+    use openehr::rm::common::{OriginalVersion, Version};
+    use openehr::rm::data_types::DvDateTime;
+    use openehr::rm::ehr::EventContext;
+    use openehr::terminology::{setting, version_lifecycle_state};
 
     /// Escapes nothing — the defect `check_quote` exists to catch.
     struct Unescaping;
+    #[cfg_attr(coverage_nightly, coverage(off))]
     impl Dialect for Unescaping {
         fn name(&self) -> &'static str {
             "unescaping"
@@ -1459,8 +2054,32 @@ mod property_tests {
         check_quote(&Unescaping, "a\"; DROP TABLE openehr_version; --");
     }
 
+    struct NoDelimiters;
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    impl Dialect for NoDelimiters {
+        fn name(&self) -> &'static str {
+            "no-delimiters"
+        }
+        fn col_sql(&self, _ty: ColTy) -> String {
+            "TEXT".to_owned()
+        }
+        fn quote(&self, identifier: &str) -> String {
+            identifier.to_owned()
+        }
+        fn placeholder(&self) -> Placeholder {
+            Placeholder::Question
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "produced no delimiters")]
+    fn quoting_with_no_delimiters_is_caught() {
+        check_quote(&NoDelimiters, "anything");
+    }
+
     /// Maps both halves of an instant pair to one type (`M3.31`).
     struct CollapsedInstants;
+    #[cfg_attr(coverage_nightly, coverage(off))]
     impl Dialect for CollapsedInstants {
         fn name(&self) -> &'static str {
             "collapsed"
@@ -1484,6 +2103,7 @@ mod property_tests {
 
     /// Maps a logical type to nothing at all.
     struct EmptyType;
+    #[cfg_attr(coverage_nightly, coverage(off))]
     impl Dialect for EmptyType {
         fn name(&self) -> &'static str {
             "empty"
@@ -1526,6 +2146,83 @@ mod property_tests {
         }
     }
 
+    struct Guarded;
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    impl Dialect for Guarded {
+        fn name(&self) -> &'static str {
+            "guarded-test"
+        }
+        fn col_sql(&self, ty: ColTy) -> String {
+            match ty {
+                ColTy::Id(n) | ColTy::Text(n) => format!("VARCHAR({n})"),
+                ColTy::LongText | ColTy::Json | ColTy::Instant => "TEXT".to_owned(),
+                ColTy::InstantUtc | ColTy::Int => "BIGINT".to_owned(),
+                ColTy::Bool => "BOOLEAN".to_owned(),
+                ColTy::Digest => "BINARY(32)".to_owned(),
+            }
+        }
+        fn quote(&self, identifier: &str) -> String {
+            format!("\"{}\"", identifier.replace('"', "\"\""))
+        }
+        fn placeholder(&self) -> Placeholder {
+            Placeholder::AtP
+        }
+        fn table_idempotence(&self) -> Idempotence {
+            Idempotence::Guard
+        }
+        fn index_idempotence(&self) -> Idempotence {
+            Idempotence::Guard
+        }
+        fn guard(&self, kind: ObjectKind, name: &str, statement: &str) -> String {
+            format!("GUARD {kind:?} {name} BEGIN {statement} END")
+        }
+        fn append_only_sql(&self, table: &Table) -> Vec<String> {
+            vec![format!("TRIGGER {}_append_only", table.name)]
+        }
+    }
+
+    struct Inline;
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    impl Dialect for Inline {
+        fn name(&self) -> &'static str {
+            "inline-test"
+        }
+        fn col_sql(&self, ty: ColTy) -> String {
+            Guarded.col_sql(ty).replace("BIGINT", "INTEGER")
+        }
+        fn quote(&self, identifier: &str) -> String {
+            format!("`{}`", identifier.replace('`', "``"))
+        }
+        fn placeholder(&self) -> Placeholder {
+            Placeholder::Colon
+        }
+        fn index_idempotence(&self) -> Idempotence {
+            Idempotence::Inline
+        }
+        fn append_only_sql(&self, table: &Table) -> Vec<String> {
+            vec![format!("TRIGGER {}_append_only", table.name)]
+        }
+    }
+
+    #[test]
+    fn owner_crate_drives_the_complete_dialect_contract() {
+        check_dialect(&Guarded);
+        check_dialect(&Inline);
+        dialects_are_distinct(&[&Guarded, &Inline]);
+        check_col_sql(&Guarded, ColTy::Json);
+        check_col_sql(&Guarded, ColTy::Instant);
+
+        assert_eq!(Placeholder::Question.render(9), "?");
+        assert_eq!(Placeholder::Dollar.render(9), "$9");
+        assert_eq!(Placeholder::AtP.render(9), "@p9");
+        assert_eq!(Placeholder::Colon.render(9), ":9");
+
+        let required = crate::Column::required("r", ColTy::Int, "required");
+        let optional = crate::Column::optional("o", ColTy::Bool, "optional");
+        assert!(!required.nullable);
+        assert!(optional.nullable);
+    }
+
     /// The three properties the `openehr-store-fuzz` targets drive can fail.
     ///
     /// **Failure mode, and it was live.** Mutation testing replaced
@@ -1541,6 +2238,7 @@ mod property_tests {
     /// they are what kills the mutants: a property that can only pass is
     /// indistinguishable from one that was removed.
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn each_fuzz_property_accepts_what_is_right_and_rejects_what_is_not() {
         // ---- check_stored_instant ------------------------------------------
         let good = crate::record::StoredInstant::from_date_time(
@@ -1571,6 +2269,30 @@ mod property_tests {
             ),
             "the sample composition must project"
         );
+        let contextual = sample_composition("Encounter")
+            .with_context(
+                EventContext::new(
+                    DvDateTime::new("2026-08-01T09:00:00Z").expect("literal"),
+                    setting::PRIMARY_MEDICAL_CARE,
+                )
+                .expect("literal")
+                .with_end_time(DvDateTime::new("2026-08-01T09:45:00Z").expect("literal"))
+                .expect("literal"),
+            )
+            .expect("literal");
+        assert!(check_projection(
+            &format!("{RECORD}::{SYSTEM}::1"),
+            RECORD,
+            &contextual,
+        ));
+
+        let malformed = crate::record::StoredInstant {
+            text: "not-an-instant".to_owned(),
+            utc_seconds: None,
+        };
+        assert!(
+            std::panic::catch_unwind(|| check_stored_instant("malformed", &malformed)).is_err()
+        );
 
         // And the other answer. A composition with no `archetype_details` has
         // nothing to put in `archetype_id` — the column `AQL` filters on — so
@@ -1581,7 +2303,9 @@ mod property_tests {
             LocatableAttrs::named("Encounter", "openEHR-EHR-COMPOSITION.encounter.v1")
                 .expect("literal"),
             composition_category::EVENT,
-            PartyIdentified::named("Dr A Nurse").expect("literal").into(),
+            PartyIdentified::named("Dr A Nurse")
+                .expect("literal")
+                .into(),
             CodePhrase::new("ISO_639-1", "en").expect("literal"),
             CodePhrase::new("ISO_3166-1", "GB").expect("literal"),
         )
@@ -1589,6 +2313,24 @@ mod property_tests {
         assert!(
             !check_projection(&format!("{RECORD}::{SYSTEM}::1"), RECORD, &unrooted),
             "a composition with no archetype_details must not project"
+        );
+        let projected = crate::record::CompositionIndexRow::project(
+            &format!("{RECORD}::{SYSTEM}::1"),
+            RECORD,
+            &sample_composition("Encounter"),
+        )
+        .expect("fixture projects");
+        assert!(
+            std::panic::catch_unwind(|| {
+                projection_outcome(
+                    Ok(projected),
+                    Err(crate::StoreError::Engine {
+                        engine: "fixture",
+                        message: "injected mismatch".to_owned(),
+                    }),
+                )
+            })
+            .is_err()
         );
 
         // ---- check_verify_versions -----------------------------------------
@@ -1600,7 +2342,9 @@ mod property_tests {
 
         let mut rows = Vec::new();
         for n in 1..=3u32 {
-            let previous = rows.last().map(|r: &crate::record::VersionRow| r.chain.digest);
+            let previous = rows
+                .last()
+                .map(|r: &crate::record::VersionRow| r.chain.digest);
             let version = sample_version(n, (n > 1).then(|| n - 1), n);
             rows.push(
                 crate::record::VersionRow::project(&version, "ctrb-1", previous, None)
@@ -1613,6 +2357,26 @@ mod property_tests {
             check_verify_versions(&rows),
             rows.len(),
             "the tamper provocation did not run for every version"
+        );
+
+        let deleted: Version<Composition> = OriginalVersion::new(
+            format!("{RECORD}::{SYSTEM}::1").parse().expect("literal"),
+            None,
+            version_lifecycle_state::DELETED,
+            None,
+            sample_version(1, None, 1).commit_audit().clone(),
+            sample_ehr().ehr_status().clone(),
+        )
+        .expect("deletion fixture")
+        .into();
+        let deleted_row = crate::record::VersionRow::project(&deleted, "ctrb-2", None, None)
+            .expect("deletion projects");
+        assert_eq!(check_verify_versions(&[deleted_row]), 1);
+        assert!(
+            std::panic::catch_unwind(|| {
+                assert_tamper_detected(crate::integrity::Integrity::Unkeyed, 0);
+            })
+            .is_err()
         );
 
         // And the provocation inside `check_verify_versions` is real rather than

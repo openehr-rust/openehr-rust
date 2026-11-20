@@ -395,6 +395,7 @@ impl fmt::Display for LocatableRef {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::base::HierObjectId;
@@ -459,6 +460,7 @@ mod tests {
         assert!(local.is_local());
         assert_eq!(local.namespace(), "local");
         assert_eq!(local.type_name(), "VERSIONED_COMPOSITION");
+        assert_eq!(local.id(), &ObjectId::HierObjectId(uid.clone()));
         assert_eq!(local.to_string(), format!("local:{uid}"));
 
         // A different namespace is not local, and a different type name must
@@ -497,11 +499,17 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{class}: {e}"));
             assert_eq!(r.type_name(), class, "a permitted class was misreported");
         }
-        let r = PartyRef::new("demographic", "PERSON", ObjectId::HierObjectId(uid.clone())).unwrap();
+        let r =
+            PartyRef::new("demographic", "PERSON", ObjectId::HierObjectId(uid.clone())).unwrap();
         assert_eq!(r.namespace(), "demographic");
         assert_eq!(r.to_string(), format!("demographic:{uid}"));
 
-        let other = PartyRef::new("registry", "ORGANISATION", ObjectId::HierObjectId(uid.clone())).unwrap();
+        let other = PartyRef::new(
+            "registry",
+            "ORGANISATION",
+            ObjectId::HierObjectId(uid.clone()),
+        )
+        .unwrap();
         assert_ne!(other.namespace(), r.namespace());
         assert_ne!(other.type_name(), r.type_name());
         assert_ne!(other.to_string(), r.to_string());
@@ -534,6 +542,7 @@ mod tests {
         .unwrap();
         assert_eq!(r.namespace(), "local");
         assert_eq!(r.type_name(), "VERSIONED_COMPOSITION");
+        assert_eq!(r.id(), &id);
         assert_eq!(r.path(), Some("/content[at0001]"));
         assert_eq!(r.to_string(), r.uri());
         assert!(r.to_string().contains("/content[at0001]"));
@@ -541,6 +550,10 @@ mod tests {
         let other = LocatableRef::new("local", "EHR", id, None).unwrap();
         assert_ne!(other.type_name(), r.type_name());
         assert_ne!(other.to_string(), r.to_string());
+        assert!(
+            LocatableRef::new("local", "", other.id().clone(), None).is_err(),
+            "an empty RM type must not be accepted"
+        );
     }
 
     /// An `ACCESS_GROUP_REF` always names `ACCESS_GROUP`, whatever the mutant
@@ -555,6 +568,7 @@ mod tests {
         let group = AccessGroupRef::new("local", ObjectId::HierObjectId(uid.clone())).unwrap();
         assert_eq!(group.namespace(), "local");
         assert_eq!(group.type_name(), "ACCESS_GROUP");
+        assert_eq!(group.id(), &ObjectId::HierObjectId(uid.clone()));
 
         let other = AccessGroupRef::new("registry", ObjectId::HierObjectId(uid)).unwrap();
         assert_ne!(other.namespace(), group.namespace());

@@ -9,6 +9,18 @@ use openehr_sqlite::{SqliteDialect, SqliteStore};
 use openehr_store::{Store, conformance, ddl_script};
 
 #[test]
+fn historical_reads_preserve_fractional_commit_times() {
+    let mut store = SqliteStore::in_memory().expect("open");
+    conformance::run_fractional_history(&mut store).expect("historical reads");
+}
+
+#[test]
+fn validation_uses_the_compositions_declared_language_before_commit() {
+    let mut store = SqliteStore::in_memory().expect("open");
+    conformance::run_language_validation(&mut store).expect("language-aware validation");
+}
+
+#[test]
 fn the_shared_suite_passes_against_a_real_database() {
     let mut store = SqliteStore::in_memory().expect("open");
     conformance::run(&mut store).expect("conformance suite");

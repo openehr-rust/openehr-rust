@@ -304,3 +304,17 @@ impl core::error::Error for ValidationReport {}
 
 /// The crate's result alias.
 pub type Result<T, E = Error> = core::result::Result<T, E>;
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::ValidationReport;
+
+    #[test]
+    fn a_new_validation_report_is_empty_and_composes_as_success() {
+        let report = ValidationReport::new();
+        assert!(report.is_empty());
+        assert_eq!(report.len(), 0);
+        assert_eq!(report.into_result(), Ok(()));
+    }
+}

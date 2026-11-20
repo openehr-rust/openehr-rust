@@ -38,10 +38,7 @@ impl TermDefinition {
     ///
     /// Returns [`ParseError`] if the rubric is empty. A code whose text is
     /// blank is a node a clinician cannot be shown and a form cannot label.
-    pub fn new(
-        text: impl Into<String>,
-        description: Option<String>,
-    ) -> Result<Self, ParseError> {
+    pub fn new(text: impl Into<String>, description: Option<String>) -> Result<Self, ParseError> {
         let text = text.into();
         if text.trim().is_empty() {
             return Err(ParseError::invariant("ARCHETYPE_TERM", "empty text"));
@@ -214,6 +211,7 @@ impl ArchetypeTerminology {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -241,9 +239,21 @@ mod tests {
 
         assert!(
             terminology
+                .clone()
                 .with_value_set("ac0001", BTreeSet::from(["at0001".to_owned()]))
                 .is_ok()
         );
+        assert!(
+            terminology
+                .with_value_set("ac0002", BTreeSet::new())
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn a_terminology_needs_a_language_and_definitions() {
+        assert!(ArchetypeTerminology::new(" ", definitions(&[("at0001", "one")])).is_err());
+        assert!(ArchetypeTerminology::new("en", BTreeMap::new()).is_err());
     }
 
     #[test]

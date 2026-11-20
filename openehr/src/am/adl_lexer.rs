@@ -155,3 +155,20 @@ impl<'a> Lexer<'a> {
         }
     }
 }
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod coverage_tests {
+    use super::*;
+
+    #[test]
+    fn symbol_peeking_and_nested_metadata_preserve_the_lexer_position() {
+        let mut symbol = Lexer::new("[at0000]");
+        assert_eq!(symbol.peek_word(), None);
+        assert_eq!(symbol.next(), Some(Token::Symbol('[')));
+
+        let mut metadata = Lexer::new("(outer=(inner)) after");
+        metadata.skip_parenthesised().unwrap();
+        assert_eq!(metadata.peek_word(), Some("after"));
+    }
+}

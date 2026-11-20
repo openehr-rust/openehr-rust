@@ -264,8 +264,16 @@ pub const VERSION: Table = Table {
              version 2 distinct",
         ),
         Column::required("trunk_version", ColTy::Int, "version tree trunk number"),
-        Column::optional("branch_number", ColTy::Int, "NULL on the trunk"),
-        Column::optional("branch_version", ColTy::Int, "NULL on the trunk"),
+        Column::required(
+            "branch_number",
+            ColTy::Int,
+            "branch number, or zero on the trunk (db:H5.6)",
+        ),
+        Column::required(
+            "branch_version",
+            ColTy::Int,
+            "branch version, or zero on the trunk (db:H5.6)",
+        ),
         Column::optional(
             "preceding_version_uid",
             ColTy::Id(255),
@@ -514,11 +522,10 @@ pub const COMPOSITION_INDEX: Table = Table {
 /// success followed by an unexplained failure, which is the shape this project
 /// refuses everywhere else.
 ///
-/// `4` since 2026-08-02: `ColTy::Json` moved off normalizing JSON column types
-/// (`M3.43`, `D-08`). No column was added or removed, but on `PostgreSQL` and
-/// `MySQL` the *type* changed, and a database built under `3` returns bytes the
-/// content digest cannot be recomputed from.
-pub const SCHEMA_VERSION: i64 = 4;
+/// `5` since 2026-11-19: the branch-position columns became required and use
+/// zero for a trunk position. A database built under `4` permits `NULL`, which
+/// defeats the unique tree-position index (`H5.10`, `D-17`).
+pub const SCHEMA_VERSION: i64 = 5;
 
 /// The `schema_version` table: what shape this database is in.
 ///
@@ -557,6 +564,7 @@ pub const TABLES: &[Table] = &[
 ];
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use std::collections::HashSet;
@@ -683,6 +691,29 @@ mod tests {
                     index.name
                 );
             }
+        }
+    }
+
+    /// `db:H5.10`: nullable branch columns make a conventional unique index
+    /// admit multiple trunk rows at the same position (`db:D-17`).
+    #[test]
+    fn the_tree_position_index_has_no_nullable_hole() {
+        let index = VERSION
+            .indexes
+            .iter()
+            .find(|index| index.name == "ix_version_container_trunk")
+            .expect("the required tree-position index");
+        assert!(index.unique, "the tree-position index must be unique");
+        for name in index.columns {
+            let column = VERSION
+                .columns
+                .iter()
+                .find(|column| column.name == *name)
+                .expect("index columns are checked separately");
+            assert!(
+                !column.nullable,
+                "{name} is nullable, so NULL can bypass tree-position uniqueness"
+            );
         }
     }
 

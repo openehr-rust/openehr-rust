@@ -191,6 +191,7 @@ impl FromStr for DvEhrUri {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -231,6 +232,14 @@ mod tests {
         assert_eq!(with_port.rest(), "//example.org:8443/x");
     }
 
+    #[test]
+    fn both_uri_classes_parse_through_from_str() {
+        let uri: DvUri = "https://example.org/records/1".parse().unwrap();
+        assert_eq!(uri.scheme(), "https");
+        let ehr: DvEhrUri = "ehr://record.example.org/ehr/1".parse().unwrap();
+        assert_eq!(ehr.scheme(), "ehr");
+    }
+
     /// Both URI types display as the URI, not as nothing.
     ///
     /// Mutation testing replaced each `Display::fmt` with `Ok(())` — writing an
@@ -249,6 +258,9 @@ mod tests {
 
         // And `DvEhrUri` displays its whole self rather than delegating to a
         // field and losing the scheme.
-        assert!(ehr.to_string().starts_with("ehr:"), "the scheme was dropped");
+        assert!(
+            ehr.to_string().starts_with("ehr:"),
+            "the scheme was dropped"
+        );
     }
 }

@@ -29,6 +29,9 @@ thiserror = "2"
 [lints.rust]
 missing_docs = "deny"
 unsafe_code = "forbid"
+# `cargo +nightly llvm-cov` defines this cfg so test support can be excluded
+# from the production-code denominator; stable and the MSRV must still check it.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

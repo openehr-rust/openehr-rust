@@ -52,7 +52,9 @@ fn definition_section(source: &str) -> Option<String> {
 }
 
 fn walk(dir: &Path, ext: &str, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = fs::read_dir(dir) else { return };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
@@ -85,7 +87,11 @@ fn category(reason: &str) -> String {
     out.chars().take(110).collect()
 }
 
-fn run(corpus: &Path, ext: &str, report: Option<&mut fs::File>) -> (usize, usize, BTreeMap<String, usize>) {
+fn run(
+    corpus: &Path,
+    ext: &str,
+    report: Option<&mut fs::File>,
+) -> (usize, usize, BTreeMap<String, usize>) {
     let mut files = Vec::new();
     walk(corpus, ext, &mut files);
     files.sort();
@@ -95,7 +101,11 @@ fn run(corpus: &Path, ext: &str, report: Option<&mut fs::File>) -> (usize, usize
     let mut refusals: BTreeMap<String, usize> = BTreeMap::new();
     let mut report = report;
     for path in &files {
-        let rel = path.strip_prefix(corpus).unwrap_or(path).display().to_string();
+        let rel = path
+            .strip_prefix(corpus)
+            .unwrap_or(path)
+            .display()
+            .to_string();
         // A few corpus files are Latin-1 (a `©` in the description). ADL 2
         // is UTF-8 by specification, so that is a corpus fact worth its own
         // count, but it is not a fact about the `definition` section: decode
@@ -151,14 +161,19 @@ fn run(corpus: &Path, ext: &str, report: Option<&mut fs::File>) -> (usize, usize
 #[ignore = "needs OPENEHR_ADL_CORPUS=<directory of .adls/.adl files>; see the module documentation"]
 fn every_corpus_file_gets_a_verdict() {
     let corpus = PathBuf::from(
-        std::env::var("OPENEHR_ADL_CORPUS").expect("OPENEHR_ADL_CORPUS must name the corpus directory"),
+        std::env::var("OPENEHR_ADL_CORPUS")
+            .expect("OPENEHR_ADL_CORPUS must name the corpus directory"),
     );
     let mut report = std::env::var("OPENEHR_ADL_CORPUS_REPORT")
         .ok()
         .map(|p| fs::File::create(p).expect("report file"));
     let (n2, _, _) = run(&corpus, "adls", report.as_mut());
     let (n14, _, _) = run(&corpus, "adl", report.as_mut());
-    assert!(n2 + n14 > 0, "no .adls or .adl files under {}", corpus.display());
+    assert!(
+        n2 + n14 > 0,
+        "no .adls or .adl files under {}",
+        corpus.display()
+    );
 }
 
 #[test]

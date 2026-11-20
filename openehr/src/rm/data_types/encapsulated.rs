@@ -453,6 +453,7 @@ impl DvParsable {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -476,6 +477,30 @@ mod tests {
         assert_eq!(
             base64::decode("YW55IGNhcm5hbCBwbGVhc3VyZS4=").unwrap(),
             b"any carnal pleasure."
+        );
+        assert_eq!(
+            base64::decode("Y W55\nIGNhcm5hbA==").unwrap(),
+            b"any carnal"
+        );
+    }
+
+    #[test]
+    fn external_multimedia_round_trips_without_inline_bytes_or_an_invented_digest() {
+        let external =
+            DvMultimedia::external(media(), DvUri::new("https://example.org/x.png").unwrap())
+                .with_sha256_integrity();
+        assert_eq!(external.verify_integrity(), IntegrityCheck::NotRecorded);
+        let json = serde_json::to_string(&external).unwrap();
+        assert!(!json.contains("\"data\""));
+        let back: DvMultimedia = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, external);
+
+        // `skip_serializing_if` normally bypasses this helper for `None`, but
+        // serde's `with` contract still requires the helper to be total.
+        let none: Option<Vec<u8>> = None;
+        assert_eq!(
+            bytes_serde::serialize(&none, serde_json::value::Serializer).unwrap(),
+            serde_json::Value::Null
         );
     }
 
@@ -561,7 +586,8 @@ mod tests {
         );
 
         // NoInlineData: a digest with nothing to check it against.
-        let external = DvMultimedia::external(png(), DvUri::new("https://example.org/x.png").unwrap());
+        let external =
+            DvMultimedia::external(png(), DvUri::new("https://example.org/x.png").unwrap());
         assert_eq!(external.verify_integrity(), IntegrityCheck::NotRecorded);
 
         // The remaining outcomes need a digest this crate would not write, so
@@ -607,7 +633,11 @@ mod tests {
             rebuilt("SHA-512", &wrong, true).verify_integrity(),
             IntegrityCheck::Failed
         );
-        assert!(!rebuilt("SHA-512", &wrong, true).verify_integrity().is_verified());
+        assert!(
+            !rebuilt("SHA-512", &wrong, true)
+                .verify_integrity()
+                .is_verified()
+        );
 
         // NoInlineData: a digest, no data.
         assert_eq!(
@@ -671,7 +701,10 @@ mod tests {
         // as given otherwise. A thumbnail is itself a DV_MULTIMEDIA — smaller,
         // but still the same duty to not lie about its own content.
         let png2 = CodePhrase::new("IANA_media-types", "image/png").unwrap();
-        assert_eq!(DvMultimedia::inline(png2.clone(), data.clone()).alternate_text(), None);
+        assert_eq!(
+            DvMultimedia::inline(png2.clone(), data.clone()).alternate_text(),
+            None
+        );
         let captioned = DvMultimedia::inline(png2.clone(), data.clone())
             .with_alternate_text("chest X-ray, PA view");
         assert_eq!(captioned.alternate_text(), Some("chest X-ray, PA view"));
@@ -689,7 +722,10 @@ mod tests {
         );
         let with_thumb: DvMultimedia =
             serde_json::from_value(serde_json::Value::Object(object)).expect("deserialize");
-        assert!(with_thumb.thumbnail().is_some(), "a recorded thumbnail was dropped");
+        assert!(
+            with_thumb.thumbnail().is_some(),
+            "a recorded thumbnail was dropped"
+        );
         assert_eq!(
             with_thumb.thumbnail().and_then(DvMultimedia::data),
             Some(&b"thumb-bytes"[..])
@@ -719,15 +755,16 @@ mod tests {
             .clone();
         object.insert(
             "charset".to_owned(),
-            serde_json::to_value(
-                CodePhrase::new("IANA_character-sets", "UTF-8").unwrap(),
-            )
-            .expect("serialize"),
+            serde_json::to_value(CodePhrase::new("IANA_character-sets", "UTF-8").unwrap())
+                .expect("serialize"),
         );
         let charset_set: DvMultimedia =
             serde_json::from_value(serde_json::Value::Object(object)).expect("deserialize");
         assert_eq!(
-            charset_set.encapsulated().charset().map(CodePhrase::code_string),
+            charset_set
+                .encapsulated()
+                .charset()
+                .map(CodePhrase::code_string),
             Some("UTF-8"),
             "a recorded charset was dropped by DvMultimedia::encapsulated"
         );
@@ -739,11 +776,17 @@ mod tests {
         )
         .expect("deserialize");
         assert_eq!(
-            annotated.encapsulated().charset().map(CodePhrase::code_string),
+            annotated
+                .encapsulated()
+                .charset()
+                .map(CodePhrase::code_string),
             Some("UTF-8")
         );
         assert_eq!(
-            annotated.encapsulated().language().map(CodePhrase::code_string),
+            annotated
+                .encapsulated()
+                .language()
+                .map(CodePhrase::code_string),
             Some("en")
         );
     }

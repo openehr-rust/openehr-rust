@@ -135,17 +135,16 @@ harnesses.
 | [`openehr`](../openehr) | the Reference Model, validation, paths, AQL, security | library — n/a |
 | [`openehr-store`](../openehr-store) | engine-agnostic persistence: schema, projection, commit rules, conformance suite | library — n/a |
 | [`openehr-sqlite`](../openehr-sqlite) | SQLite dialect **and a complete store** | **Verified** |
-| [`openehr-postgresql`](../openehr-postgresql) | PostgreSQL 18 dialect | **Schema** |
+| [`openehr-postgresql`](../openehr-postgresql) | PostgreSQL 18 dialect and store | **Verified** |
 | [`openehr-mysql`](../openehr-mysql) | MySQL 8.4 dialect | **Schema** |
 | [`openehr-mariadb`](../openehr-mariadb) | MariaDB 11.4 dialect | **Schema** |
-| [`openehr-mssql`](../openehr-mssql) | SQL Server dialect | **Dialect** |
-| [`openehr-oracle`](../openehr-oracle) | Oracle Database dialect | **Dialect** |
+| [`openehr-mssql`](../openehr-mssql) | SQL Server dialect | **Schema** |
+| [`openehr-oracle`](../openehr-oracle) | Oracle Database dialect | **Schema** |
 
 The [conformance matrix](databases/conformance-matrix.md) is the detailed
 version of that last column and is the one to trust.
 
-All eight are on crates.io at **0.10.0**, published 2026-10-16, and local matches
-published. [`agents/publishing.md`](../agents/publishing.md) holds the
+All eight are on crates.io at **0.10.0**, published 2026-10-16, with 0.11.0 staged locally. [`agents/publishing.md`](../agents/publishing.md) holds the
 per-crate table and is the file to read before the next release.
 
 This sentence said **0.2.0** for sixteen days after 0.3.0 went out, because the
@@ -369,7 +368,42 @@ is genuinely worse. The rules below keep the copies and make them mechanical.
   These are not marked copies, because they are legitimately different shapes: a
   crate's README says `## Conformance level: Verified` and this file's table
   carries a Role column. What is checked is the **level**, wherever it is
-  asserted, which is the part `W0.9` is about.
+  asserted. The check MUST cover the level column even when role, engine, or
+  version columns precede it.
+
+- **W0.41** *(added 2026-11-19; measurement amended 2026-11-20)* Every
+  buildable crate MUST reach **100% executable-line and function coverage of
+  its production Rust source**, measured from that crate's own workspace with
+  `cargo +nightly llvm-cov --lib --tests --lcov`. Inline test modules MUST use
+  nightly's `coverage(off)` so test support is not counted as production, and
+  registry source MUST be filtered from the report. The gate MUST coalesce
+  `DA` records by physical `(source file, line)` before deciding whether a line
+  ran: LLVM emits one record per generic instantiation, so mutually exclusive
+  branches otherwise make one executed source line look uncovered once for
+  every instantiation that correctly took the other branch. Function coverage
+  MUST still be complete according to LCOV's `FNF`/`FNH` totals.
+
+  A compiler-required wildcard arm over an **external `#[non_exhaustive]`
+  enum** MAY be excluded only when safe code in the workspace cannot construct
+  any value reaching it, the arm fails closed rather than reporting success,
+  and [`coverage-exclusions.tsv`](../coverage-exclusions.tsv) pins every
+  excluded physical line by SHA-256. The coverage checker MUST fail for a hash
+  mismatch, a stale exclusion that became covered, an uncovered line absent
+  from the register, or an exclusion outside production Rust source. This is
+  not permission to exclude a difficult, platform-specific, error, or merely
+  untested path; all of those are executable and remain in the denominator.
+
+  A downstream crate's test
+  is not coverage evidence for the crate that owns the code: mutation testing
+  runs the owner's tests, and has already shown cross-crate-only paths survive.
+  Generated dependency source, test code, examples, and benchmarks are outside
+  the denominator; an uncovered production line or function is not. CI MUST
+  enforce the same command contributors run locally, and the list of workspaces
+  MUST be derived from the tree and checked for completeness.
+
+  Coverage is a floor, not a correctness claim. `db:T11.10` still requires a
+  regression test to be shown capable of failing, and mutation testing still
+  asks whether an executed assertion distinguishes right from wrong.
 
 ## Benchmarks
 

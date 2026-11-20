@@ -66,13 +66,21 @@ fn served() -> (Router, String, String) {
     let ehr_id = ehr.ehr_id().clone();
     let contribution = "22222222-3333-4444-5555-666666666666";
     store
-        .create_contribution(&ehr_id, &conformance::sample_contribution(contribution, &[1]))
+        .create_contribution(
+            &ehr_id,
+            &conformance::sample_contribution(contribution, &[1]),
+        )
         .expect("contribution");
     store
-        .commit_composition(&ehr_id, &conformance::sample_version(1, None, 5), contribution)
+        .commit_composition(
+            &ehr_id,
+            &conformance::sample_version(1, None, 5),
+            contribution,
+        )
         .expect("commit");
 
-    let ctx = AppContext::builder(Environment::Test, loco_rs::tests_cfg::config::test_config()).build();
+    let ctx =
+        AppContext::builder(Environment::Test, loco_rs::tests_cfg::config::test_config()).build();
     let mut paserk = String::new();
     pair.public.fmt(&mut paserk).expect("PASERK");
     ctx.shared_store.insert::<SharedVerifier>(Arc::new(

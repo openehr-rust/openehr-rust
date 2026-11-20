@@ -80,6 +80,7 @@ use crate::terminology;
 pub struct Context {
     path: Vec<String>,
     report: ValidationReport,
+    rubric_language: Option<crate::rm::data_types::CodePhrase>,
 }
 
 impl Context {
@@ -268,7 +269,12 @@ fn check_text(text: &crate::rm::data_types::DvText, ctx: &mut Context) {
 
 fn check_coded_text(coded: &DvCodedText, ctx: &mut Context) {
     check_text(coded.as_text(), ctx);
-    if coded.check_openehr_rubric() == Some(false) {
+    let language = coded.as_text().language().or(ctx.rubric_language.as_ref());
+    let rubric = language.map_or_else(
+        || coded.check_openehr_rubric(),
+        |language| coded.check_openehr_rubric_in(language),
+    );
+    if rubric == Some(false) {
         ctx.violation(
             "DV_CODED_TEXT",
             "Value_is_rubric",
@@ -307,9 +313,8 @@ fn check_ordered(attrs: &OrderedAttrs, is_abnormal: Option<bool>, ctx: &mut Cont
                 Some(DataValue::Scale(v)) => Some(v.ordered_attrs()),
                 _ => None,
             };
-            attrs.is_none_or(|o| {
-                o.normal_range().is_none() && o.other_reference_ranges().is_empty()
-            })
+            attrs
+                .is_none_or(|o| o.normal_range().is_none() && o.other_reference_ranges().is_empty())
         };
         if !simple(range.range().lower()) || !simple(range.range().upper()) {
             ctx.violation(
@@ -1004,6 +1009,7 @@ impl Validate for EhrStatus {
 
 impl Validate for Composition {
     fn visit(&self, ctx: &mut Context) {
+        let previous_language = ctx.rubric_language.replace(self.language().clone());
         check_locatable(self, ctx);
         check_coded_text(self.category(), ctx);
         if !crate::terminology::composition_category::GROUP.contains(self.category_code()) {
@@ -1041,6 +1047,7 @@ impl Validate for Composition {
         for (i, item) in self.content().iter().enumerate() {
             ctx.nested(format!("/content[{i}]"), |c| item.visit(c));
         }
+        ctx.rubric_language = previous_language;
     }
 }
 
@@ -1362,6 +1369,7 @@ impl Validate for crate::rm::demographic::Party {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::base::Interval;
@@ -1477,6 +1485,59 @@ mod tests {
         assert_eq!(report.violations()[0].invariant, "Value_is_rubric");
         // The path locates the offending node without repeating its content.
         assert_eq!(report.violations()[0].path, "/value");
+    }
+
+    #[test]
+    fn a_composition_checks_rubrics_only_in_the_language_the_table_carries() {
+        let composition = |language: &str, coded_language: Option<&str>| {
+            let coded_language = coded_language.map_or_else(String::new, |code| {
+                format!(
+                    r#", "language":{{"terminology_id":{{"value":"ISO_639-1"}},"code_string":"{code}"}}"#
+                )
+            });
+            serde_json::from_str::<Composition>(&format!(
+                r#"{{
+                  "_type":"COMPOSITION",
+                  "name":{{"value":"Encounter"}},
+                  "archetype_node_id":"openEHR-EHR-COMPOSITION.encounter.v1",
+                  "archetype_details":{{"archetype_id":{{"value":"openEHR-EHR-COMPOSITION.encounter.v1"}},"rm_version":"1.1.0"}},
+                  "language":{{"terminology_id":{{"value":"ISO_639-1"}},"code_string":"{language}"}},
+                  "territory":{{"terminology_id":{{"value":"ISO_3166-1"}},"code_string":"ES"}},
+                  "category":{{"value":"evento","defining_code":{{"terminology_id":{{"value":"openehr"}},"code_string":"433"}}{coded_language}}},
+                  "composer":{{"_type":"PARTY_IDENTIFIED","name":"Dra Ejemplo"}}
+                }}"#
+            ))
+            .expect("fixture")
+        };
+        let rubric_violations = |language, coded_language| {
+            composition(language, coded_language)
+                .validate()
+                .violations()
+                .iter()
+                .filter(|violation| violation.invariant == "Value_is_rubric")
+                .count()
+        };
+
+        assert_eq!(
+            rubric_violations("es", None),
+            0,
+            "Spanish must be unchecked"
+        );
+        assert_eq!(
+            rubric_violations("zz", None),
+            0,
+            "unknown must be unchecked"
+        );
+        assert_eq!(
+            rubric_violations("en", None),
+            1,
+            "English must still be checked"
+        );
+        assert_eq!(
+            rubric_violations("en", Some("es")),
+            0,
+            "the coded text's own Spanish declaration must override its composition"
+        );
     }
 
     #[test]
@@ -1898,11 +1959,7 @@ mod tests {
 
         let subject = plain(5.0).with_other_reference_range(ReferenceRange::new(
             DvText::new("normal").unwrap(),
-            Interval::closed(
-                DataValue::Quantity(nested),
-                DataValue::Quantity(plain(6.0)),
-            )
-            .unwrap(),
+            Interval::closed(DataValue::Quantity(nested), DataValue::Quantity(plain(6.0))).unwrap(),
         ));
         let report = DataValue::Quantity(subject).validate();
         assert!(
@@ -2048,9 +2105,8 @@ mod tests {
         use crate::security::access::EhrAccess;
 
         let rooted = |archetype: &str| {
-            attrs("subject", archetype).with_archetype_details(
-                Archetyped::new(archetype, "1.1.0").expect("literal"),
-            )
+            attrs("subject", archetype)
+                .with_archetype_details(Archetyped::new(archetype, "1.1.0").expect("literal"))
         };
 
         let bare = EhrAccess::new(attrs("access", "at0000"));
@@ -2217,8 +2273,11 @@ mod tests {
         // Not in the openEHR normal-statuses code set.
         let bogus = || CodePhrase::new("openehr", "ZZ").expect("literal");
         let symbol = || {
-            DvCodedText::new("symbol", CodePhrase::new("local", "at0001").expect("literal"))
-                .expect("literal")
+            DvCodedText::new(
+                "symbol",
+                CodePhrase::new("local", "at0001").expect("literal"),
+            )
+            .expect("literal")
         };
 
         let values = [

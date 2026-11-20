@@ -1230,6 +1230,7 @@ mod object_id_serde {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -1249,7 +1250,11 @@ mod tests {
     /// Only emptiness is refused.
     #[test]
     fn a_template_id_may_contain_whitespace() {
-        for text in ["Virologischer Befund", "Blood pressure.v1", "blood_pressure.v1"] {
+        for text in [
+            "Virologischer Befund",
+            "Blood pressure.v1",
+            "blood_pressure.v1",
+        ] {
             assert_eq!(text.parse::<TemplateId>().unwrap().as_str(), text);
         }
         assert!("".parse::<TemplateId>().is_err());
@@ -1367,11 +1372,9 @@ mod tests {
             "",       //
             "01",     // leading zero
             "1.02.3", //
-            "1.2.03",
-            "0",     // zero
-            "1.2",   // two components
-            "1.2.3.4",
-            "-1",
+            "1.2.03", "0",   // zero
+            "1.2", // two components
+            "1.2.3.4", "-1",
         ] {
             assert!(
                 bad.parse::<VersionTreeId>().is_err(),
@@ -1416,9 +1419,9 @@ mod tests {
             "openEHR-EHR-OBSERVATION.x!.v1", // illegal character in it
             "openEHR-EHR-OBSERVATION.x-.v1", // empty specialisation segment
             "openEHR-EHR-OBSERVATION.-x.v1",
-            "openEHR-EHR-OBSERVATION.x.1",   // version lacks `v`
-            "openEHR-EHR-OBSERVATION.x.vx",  // version is not a number
-            "openEHR-EHR-OBSERVATION.x.v",   // empty version
+            "openEHR-EHR-OBSERVATION.x.1",  // version lacks `v`
+            "openEHR-EHR-OBSERVATION.x.vx", // version is not a number
+            "openEHR-EHR-OBSERVATION.x.v",  // empty version
             "openEHR-EHR-OBSERVATION.x.v1.2.3.4",
         ] {
             assert!(
@@ -1499,9 +1502,7 @@ mod tests {
             "a GENERIC_ID with no scheme was accepted"
         );
         // And an unknown `_type` is refused rather than inferred.
-        assert!(
-            serde_json::from_str::<ObjectId>(r#"{"_type":"XYZZY","value":"12345"}"#).is_err()
-        );
+        assert!(serde_json::from_str::<ObjectId>(r#"{"_type":"XYZZY","value":"12345"}"#).is_err());
     }
 
     /// Only a `HIER_OBJECT_ID` carries an extension.
@@ -1557,19 +1558,22 @@ mod tests {
     /// identifier is refused.
     #[test]
     fn each_malformed_version_tree_id_is_refused_for_its_own_reason() {
-        let reason = |text: &str| {
-            text.parse::<VersionTreeId>()
-                .expect_err(text)
-                .reason
-        };
+        let reason = |text: &str| text.parse::<VersionTreeId>().expect_err(text).reason;
         assert_eq!(reason("1.x.3"), "not a number");
-        assert_eq!(reason("1..3"), "not a number", "an empty part is not a number");
+        assert_eq!(
+            reason("1..3"),
+            "not a number",
+            "an empty part is not a number"
+        );
         assert_eq!(reason("01"), "leading zero would not round-trip");
         assert_eq!(reason("1.02.3"), "leading zero would not round-trip");
         // A single `0` is not a leading-zero problem — it is one digit — and
         // must be refused as a version number instead.
         assert_eq!(reason("0"), "trunk_version is 0");
-        assert_eq!(reason("1.2"), "expected `trunk` or `trunk.branch_number.branch_version`");
+        assert_eq!(
+            reason("1.2"),
+            "expected `trunk` or `trunk.branch_number.branch_version`"
+        );
         // Larger than a u32.
         assert_eq!(reason("4294967296"), "number does not fit in u32");
     }

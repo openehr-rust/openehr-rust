@@ -77,9 +77,18 @@ Requirement prefix: `O10`.
   because it is in-process: there is no connection.
 
 - **O10.18** An engine crate that opens a connection MUST document how TLS is
-  configured for its driver, and MUST NOT default to an unverified connection. No
-  crate here opens a network connection yet, so this requirement binds the first
-  one that does.
+  configured for its driver, and MUST NOT default to an unverified connection.
+  This applies to `PostgresqlStore::connect`. Verification of a remote connection
+  MUST cover the configured server name and certificate trust chain, and a
+  failed negotiation MUST NOT fall back to plaintext.
+
+  `PostgresqlStore::connect` MUST require TLS and verify against the platform
+  trust store. A private deployment MAY supply its own PEM-encoded CA through a
+  separate constructor, which replaces rather than weakens the trust roots.
+  Both constructors MUST force `sslmode=require` even if the caller's parameter
+  string says `prefer` or `disable`. The explicit-CA path MUST refuse an empty or
+  malformed bundle before opening a socket. Neither path offers an
+  accept-invalid-certificate or accept-invalid-hostname switch.
 
 ## Backup
 

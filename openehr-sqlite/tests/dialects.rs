@@ -185,12 +185,22 @@ fn every_dialect_names_itself_and_no_two_share_a_name() {
     let names: Vec<&str> = all().iter().map(|d| d.name()).collect();
     assert_eq!(
         names,
-        vec!["PostgreSQL", "SQLite", "MySQL", "MariaDB", "SQL Server", "Oracle"]
+        vec![
+            "PostgreSQL",
+            "SQLite",
+            "MySQL",
+            "MariaDB",
+            "SQL Server",
+            "Oracle"
+        ]
     );
 
     let mut sorted = names.clone();
     sorted.sort_unstable();
     sorted.dedup();
-    assert_eq!(sorted.len(), names.len(), "two dialects share a name: {names:?}");
+    assert_eq!(
+        sorted.len(),
+        names.len(),
+        "two dialects share a name: {names:?}"
+    );
 }
-

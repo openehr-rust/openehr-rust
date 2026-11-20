@@ -249,7 +249,10 @@ fn expect_dotdot(lexer: &mut Lexer<'_>) -> Result<(), CadlError> {
     let offset = lexer.offset();
     match lexer.next() {
         Some(Token::DotDot) => Ok(()),
-        Some(other) => Err(CadlError::at(offset, format!("expected `..`, found {other}"))),
+        Some(other) => Err(CadlError::at(
+            offset,
+            format!("expected `..`, found {other}"),
+        )),
         None => Err(CadlError::at(offset, "expected `..`, found end of input")),
     }
 }
@@ -277,7 +280,10 @@ fn expect_word(lexer: &mut Lexer<'_>, what: &'static str) -> Result<String, Cadl
     let offset = lexer.offset();
     match lexer.next() {
         Some(Token::Word(w)) => Ok(w),
-        Some(other) => Err(CadlError::at(offset, format!("expected {what}, found {other}"))),
+        Some(other) => Err(CadlError::at(
+            offset,
+            format!("expected {what}, found {other}"),
+        )),
         None => Err(CadlError::at(
             offset,
             format!("expected {what}, found end of input"),
@@ -378,8 +384,14 @@ fn expect_signed_integer(lexer: &mut Lexer<'_>) -> Result<i64, CadlError> {
             .parse::<i64>()
             .map(|v| if negative { -v } else { v })
             .map_err(|_| CadlError::at(offset, format!("`{n}` does not fit an INTEGER"))),
-        Some(other) => Err(CadlError::at(offset, format!("expected an integer, found {other}"))),
-        None => Err(CadlError::at(offset, "expected an integer, found end of input")),
+        Some(other) => Err(CadlError::at(
+            offset,
+            format!("expected an integer, found {other}"),
+        )),
+        None => Err(CadlError::at(
+            offset,
+            "expected an integer, found end of input",
+        )),
     }
 }
 
@@ -396,11 +408,22 @@ fn expect_signed_real(lexer: &mut Lexer<'_>) -> Result<Real, CadlError> {
     }
     let text = match lexer.next() {
         Some(Token::Real(n) | Token::Integer(n)) => n,
-        Some(other) => return Err(CadlError::at(offset, format!("expected a real number, found {other}"))),
-        None => return Err(CadlError::at(offset, "expected a real number, found end of input")),
+        Some(other) => {
+            return Err(CadlError::at(
+                offset,
+                format!("expected a real number, found {other}"),
+            ));
+        }
+        None => {
+            return Err(CadlError::at(
+                offset,
+                "expected a real number, found end of input",
+            ));
+        }
     };
     let text = if negative { format!("-{text}") } else { text };
-    Real::from_str(&text).map_err(|_| CadlError::at(offset, format!("`{text}` is not a valid REAL")))
+    Real::from_str(&text)
+        .map_err(|_| CadlError::at(offset, format!("`{text}` is not a valid REAL")))
 }
 
 // ---------------------------------------------------------------------
@@ -466,7 +489,10 @@ fn c_complex_object(lexer: &mut Lexer<'_>, is_root: bool) -> Result<CComplexObje
 /// `Void`, for [`crate::am::CObject::effective_occurrences`] to infer from
 /// the owning attribute when asked (`A-71`, `K15.32`). Nothing is guessed
 /// here: the stated/unstated distinction survives the parse.
-fn parse_occurrences(lexer: &mut Lexer<'_>, is_root: bool) -> Result<Option<MultiplicityInterval>, CadlError> {
+fn parse_occurrences(
+    lexer: &mut Lexer<'_>,
+    is_root: bool,
+) -> Result<Option<MultiplicityInterval>, CadlError> {
     let stated = parse_optional_occurrences(lexer)?;
     Ok(match (stated, is_root) {
         (None, true) => Some(ROOT_OCCURRENCES),
@@ -480,9 +506,9 @@ fn parse_multiplicity(lexer: &mut Lexer<'_>) -> Result<MultiplicityInterval, Cad
     let (lower, upper) = match lexer.next() {
         Some(Token::Symbol('*')) => (0, None),
         Some(Token::Integer(n)) => {
-            let lower: u32 = n
-                .parse()
-                .map_err(|_| CadlError::at(offset, format!("`{n}` does not fit a multiplicity bound")))?;
+            let lower: u32 = n.parse().map_err(|_| {
+                CadlError::at(offset, format!("`{n}` does not fit a multiplicity bound"))
+            })?;
             if matches!(lexer.peek(), Some(Token::DotDot)) {
                 lexer.next();
                 let upper_offset = lexer.offset();
@@ -490,7 +516,10 @@ fn parse_multiplicity(lexer: &mut Lexer<'_>) -> Result<MultiplicityInterval, Cad
                     Some(Token::Symbol('*')) => (lower, None),
                     Some(Token::Integer(u)) => {
                         let upper: u32 = u.parse().map_err(|_| {
-                            CadlError::at(upper_offset, format!("`{u}` does not fit a multiplicity bound"))
+                            CadlError::at(
+                                upper_offset,
+                                format!("`{u}` does not fit a multiplicity bound"),
+                            )
                         })?;
                         (lower, Some(upper))
                     }
@@ -517,7 +546,12 @@ fn parse_multiplicity(lexer: &mut Lexer<'_>) -> Result<MultiplicityInterval, Cad
                 format!("expected a multiplicity (an integer, `*`, or a range), found {other}"),
             ));
         }
-        None => return Err(CadlError::at(offset, "expected a multiplicity, found end of input")),
+        None => {
+            return Err(CadlError::at(
+                offset,
+                "expected a multiplicity, found end of input",
+            ));
+        }
     };
     MultiplicityInterval::new(lower, upper).map_err(|e| CadlError::at(offset, e.to_string()))
 }
@@ -551,9 +585,13 @@ fn parse_cardinality(lexer: &mut Lexer<'_>) -> Result<Cardinality, CadlError> {
         }
         let offset = lexer.offset();
         match lexer.next() {
-            Some(Token::Word(w)) if w.eq_ignore_ascii_case("ordered") => cardinality = cardinality.ordered(),
+            Some(Token::Word(w)) if w.eq_ignore_ascii_case("ordered") => {
+                cardinality = cardinality.ordered()
+            }
             Some(Token::Word(w)) if w.eq_ignore_ascii_case("unordered") => {}
-            Some(Token::Word(w)) if w.eq_ignore_ascii_case("unique") => cardinality = cardinality.unique(),
+            Some(Token::Word(w)) if w.eq_ignore_ascii_case("unique") => {
+                cardinality = cardinality.unique()
+            }
             Some(other) => {
                 return Err(CadlError::at(
                     offset,
@@ -610,7 +648,10 @@ fn c_attribute_def(lexer: &mut Lexer<'_>) -> Result<AttributeDef, CadlError> {
     // hung for its full timeout instead of failing — the same shape the
     // `ARCHETYPE_SLOT` assertion loop guards against.
     if lexer.offset() == before {
-        return Err(CadlError::at(before, "a C_ATTRIBUTE definition consumed no input"));
+        return Err(CadlError::at(
+            before,
+            "a C_ATTRIBUTE definition consumed no input",
+        ));
     }
     Ok(def)
 }
@@ -625,23 +666,30 @@ fn c_attribute_def_inner(lexer: &mut Lexer<'_>) -> Result<AttributeDef, CadlErro
     // mutation could turn into `true` and quietly give every plain
     // attribute a differential path of `/` (found by cargo-mutants on the
     // first shape of this code).
-    let (differential_path, attr_name) = match lexer.peek_raw_path().and_then(|raw| raw.rsplit_once('/')) {
-        Some((parent, name)) => {
-            let (parent, name) = (parent.to_owned(), name.to_owned());
-            // Consume what was peeked: the whole whitespace-bounded run.
-            let _ = lexer.read_raw_path();
-            // `/events` is an attribute of the root object itself, whose
-            // path is `/`; `items[id2]/value` is relative to the enclosing
-            // object and keeps its predicates in the parent part.
-            let parent = if parent.is_empty() { "/".to_owned() } else { parent };
-            (Some(parent), name)
-        }
-        None => (None, expect_word(lexer, "an attribute name")?),
-    };
+    let (differential_path, attr_name) =
+        match lexer.peek_raw_path().and_then(|raw| raw.rsplit_once('/')) {
+            Some((parent, name)) => {
+                let (parent, name) = (parent.to_owned(), name.to_owned());
+                // Consume what was peeked: the whole whitespace-bounded run.
+                let _ = lexer.read_raw_path();
+                // `/events` is an attribute of the root object itself, whose
+                // path is `/`; `items[id2]/value` is relative to the enclosing
+                // object and keeps its predicates in the parent part.
+                let parent = if parent.is_empty() {
+                    "/".to_owned()
+                } else {
+                    parent
+                };
+                (Some(parent), name)
+            }
+            None => (None, expect_word(lexer, "an attribute name")?),
+        };
     if !is_identifier(&attr_name) {
         return Err(CadlError::at(
             offset,
-            format!("`{attr_name}` is not an attribute name (an identifier: a letter, then letters, digits, `_`)"),
+            format!(
+                "`{attr_name}` is not an attribute name (an identifier: a letter, then letters, digits, `_`)"
+            ),
         ));
     }
 
@@ -681,7 +729,9 @@ fn c_attribute_def_inner(lexer: &mut Lexer<'_>) -> Result<AttributeDef, CadlErro
             // own single-list shape), the same unwrapped-primitive shape
             // `c_objects`'s own shorthand already produces.
             Ok(Some(pattern)) => {
-                let constraint = CPrimitive::String { list: vec![pattern.to_owned()] };
+                let constraint = CPrimitive::String {
+                    list: vec![pattern.to_owned()],
+                };
                 let assumed = finish_contained_regexp(lexer)?.map(PrimitiveValue::Text);
                 children = vec![unwrapped_primitive_object(constraint, assumed)];
             }
@@ -701,7 +751,9 @@ fn c_attribute_def_inner(lexer: &mut Lexer<'_>) -> Result<AttributeDef, CadlErro
     }
 
     let result = match cardinality {
-        Some(cardinality) => CAttribute::container(attr_name.clone(), existence, cardinality, children),
+        Some(cardinality) => {
+            CAttribute::container(attr_name.clone(), existence, cardinality, children)
+        }
         None => CAttribute::single(attr_name.clone(), existence, children),
     };
     result
@@ -767,7 +819,8 @@ fn c_primitive_tuple(lexer: &mut Lexer<'_>) -> Result<CPrimitiveTuple, CadlError
         }
     }
     expect_symbol(lexer, ']')?;
-    CPrimitiveTuple::new(items).map_err(|e| CadlError::at(offset, format!("invalid C_PRIMITIVE_TUPLE: {e}")))
+    CPrimitiveTuple::new(items)
+        .map_err(|e| CadlError::at(offset, format!("invalid C_PRIMITIVE_TUPLE: {e}")))
 }
 
 /// `c_primitive_tuple_item: '{' c_inline_primitive_object '}' |
@@ -782,7 +835,9 @@ fn c_primitive_tuple_item(lexer: &mut Lexer<'_>) -> Result<CPrimitiveObject, Cad
     let regexp_offset = lexer.offset();
     match lexer.try_read_contained_regexp() {
         Ok(Some(pattern)) => {
-            let constraint = CPrimitive::String { list: vec![pattern.to_owned()] };
+            let constraint = CPrimitive::String {
+                list: vec![pattern.to_owned()],
+            };
             let assumed = finish_contained_regexp(lexer)?.map(PrimitiveValue::Text);
             Ok(unwrapped_primitive(constraint, assumed))
         }
@@ -806,10 +861,17 @@ fn c_primitive_tuple_item(lexer: &mut Lexer<'_>) -> Result<CPrimitiveObject, Cad
 /// `c_attribute`'s `CONTAINED_REGEXP` shorthand, and each
 /// `c_primitive_tuple_item` in a `C_ATTRIBUTE_TUPLE` row (`lib:A-33`: one
 /// place, not three, for a repeated construction).
-fn unwrapped_primitive(constraint: CPrimitive, assumed: Option<PrimitiveValue>) -> CPrimitiveObject {
-    let mut object = CPrimitiveObject::new("primitive", Some(MultiplicityInterval::MANDATORY), constraint)
-        .with_node_id(CPrimitiveObject::PRIMITIVE_NODE_ID)
-        .expect("PRIMITIVE_NODE_ID is always accepted by with_node_id");
+fn unwrapped_primitive(
+    constraint: CPrimitive,
+    assumed: Option<PrimitiveValue>,
+) -> CPrimitiveObject {
+    let mut object = CPrimitiveObject::new(
+        "primitive",
+        Some(MultiplicityInterval::MANDATORY),
+        constraint,
+    )
+    .with_node_id(CPrimitiveObject::PRIMITIVE_NODE_ID)
+    .expect("PRIMITIVE_NODE_ID is always accepted by with_node_id");
     if let Some(value) = assumed {
         object = object.with_assumed_value(value);
     }
@@ -954,7 +1016,9 @@ fn is_pattern_field(s: &str, letter: u8) -> bool {
 /// `DATE_CONSTRAINT_PATTERN: YEAR_PATTERN '-' MONTH_PATTERN '-' DAY_PATTERN`.
 fn is_date_pattern(s: &str) -> bool {
     let mut parts = s.split('-');
-    let (Some(y), Some(m), Some(d), None) = (parts.next(), parts.next(), parts.next(), parts.next()) else {
+    let (Some(y), Some(m), Some(d), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
         return false;
     };
     is_year_pattern(y) && is_pattern_field(m, b'm') && is_pattern_field(d, b'd')
@@ -980,7 +1044,8 @@ fn is_time_pattern(s: &str) -> bool {
 /// `DATE_TIME_CONSTRAINT_PATTERN: DATE_CONSTRAINT_PATTERN 'T'
 /// TIME_CONSTRAINT_PATTERN`.
 fn is_date_time_pattern(s: &str) -> bool {
-    s.split_once('T').is_some_and(|(date, time)| is_date_pattern(date) && is_time_pattern(time))
+    s.split_once('T')
+        .is_some_and(|(date, time)| is_date_pattern(date) && is_time_pattern(time))
 }
 
 /// `DURATION_CONSTRAINT_PATTERN: 'P' [yY]?[mM]?[Ww]?[dD]? ( 'T'
@@ -1029,8 +1094,11 @@ fn is_duration_pattern(s: &str) -> bool {
 /// test).
 fn matches_optional_letters(s: &str, letters: &[char]) -> bool {
     let mut remaining = letters.iter();
-    s.chars()
-        .all(|c| remaining.by_ref().any(|&letter| letter == c.to_ascii_lowercase()))
+    s.chars().all(|c| {
+        remaining
+            .by_ref()
+            .any(|&letter| letter == c.to_ascii_lowercase())
+    })
 }
 
 /// `c_regular_object_ordered: sibling_order? c_regular_object ;`
@@ -1170,7 +1238,9 @@ fn expect_archetype_ref(lexer: &mut Lexer<'_>) -> Result<String, CadlError> {
 /// crate an absence is meaningful for: `None` is AOM2's own `Void`, meaning
 /// `use_target_occurrences()` (`crate::am::CComplexObjectProxy::new`'s own
 /// documentation), not something to guess a value for or refuse.
-fn parse_optional_occurrences(lexer: &mut Lexer<'_>) -> Result<Option<MultiplicityInterval>, CadlError> {
+fn parse_optional_occurrences(
+    lexer: &mut Lexer<'_>,
+) -> Result<Option<MultiplicityInterval>, CadlError> {
     if peek_keyword(lexer, "occurrences") {
         lexer.next();
         expect_keyword(lexer, "matches")?;
@@ -1214,7 +1284,10 @@ fn c_complex_object_proxy(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
     let occurrences = parse_optional_occurrences(lexer)?;
     let path_offset = lexer.offset();
     let target_path = lexer.read_raw_path().ok_or_else(|| {
-        CadlError::at(path_offset, "expected a target ADL_PATH, found end of input")
+        CadlError::at(
+            path_offset,
+            "expected a target ADL_PATH, found end of input",
+        )
     })?;
 
     let proxy = CComplexObjectProxy::new(rm_type_name, Some(node_id), occurrences, target_path)
@@ -1233,8 +1306,18 @@ fn finish_contained_regexp(lexer: &mut Lexer<'_>) -> Result<Option<String>, Cadl
         let offset = lexer.offset();
         match lexer.next() {
             Some(Token::Str(s)) => assumed = Some(s),
-            Some(other) => return Err(CadlError::at(offset, format!("expected a string literal, found {other}"))),
-            None => return Err(CadlError::at(offset, "expected a string literal, found end of input")),
+            Some(other) => {
+                return Err(CadlError::at(
+                    offset,
+                    format!("expected a string literal, found {other}"),
+                ));
+            }
+            None => {
+                return Err(CadlError::at(
+                    offset,
+                    "expected a string literal, found end of input",
+                ));
+            }
         }
     }
     expect_symbol(lexer, '}')?;
@@ -1245,7 +1328,10 @@ fn finish_contained_regexp(lexer: &mut Lexer<'_>) -> Result<Option<String>, Cadl
 /// [`CadlError`] naming which one fired — shared between `c_attribute_def`
 /// and `parse_slot_assertion`, the two call sites that need a
 /// `CONTAINED_REGEXP` and disagree about nothing past this point.
-fn expect_contained_regexp<'a>(lexer: &mut Lexer<'a>, context: &'static str) -> Result<&'a str, CadlError> {
+fn expect_contained_regexp<'a>(
+    lexer: &mut Lexer<'a>,
+    context: &'static str,
+) -> Result<&'a str, CadlError> {
     let offset = lexer.offset();
     match lexer.try_read_contained_regexp() {
         Ok(Some(pattern)) => Ok(pattern),
@@ -1281,9 +1367,12 @@ fn expect_contained_regexp<'a>(lexer: &mut Lexer<'a>, context: &'static str) -> 
 fn parse_slot_assertion(lexer: &mut Lexer<'_>) -> Result<String, CadlError> {
     let start = lexer.offset();
     let path_offset = lexer.offset();
-    lexer
-        .read_raw_path()
-        .ok_or_else(|| CadlError::at(path_offset, "expected an assertion path, found end of input"))?;
+    lexer.read_raw_path().ok_or_else(|| {
+        CadlError::at(
+            path_offset,
+            "expected an assertion path, found end of input",
+        )
+    })?;
     expect_keyword(lexer, "matches")?;
     expect_contained_regexp(lexer, "after `matches` in an ARCHETYPE_SLOT assertion")?;
     finish_contained_regexp(lexer)?;
@@ -1346,8 +1435,12 @@ fn archetype_slot(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
                 return Err(CadlError::at(
                     lexer.offset(),
                     match lexer.peek() {
-                        Some(other) => format!("expected `include`, `exclude`, or `}}`, found {other}"),
-                        None => "expected `include`, `exclude`, or `}`, found end of input".to_owned(),
+                        Some(other) => {
+                            format!("expected `include`, `exclude`, or `}}`, found {other}")
+                        }
+                        None => {
+                            "expected `include`, `exclude`, or `}`, found end of input".to_owned()
+                        }
                     },
                 ));
             };
@@ -1364,9 +1457,16 @@ fn archetype_slot(lexer: &mut Lexer<'_>) -> Result<CObject, CadlError> {
                 // replacing that function's body with a constant, and the
                 // job timed out rather than failed (CI run 33775455452).
                 if lexer.offset() == before {
-                    return Err(CadlError::at(before, "an ARCHETYPE_SLOT assertion consumed no input"));
+                    return Err(CadlError::at(
+                        before,
+                        "an ARCHETYPE_SLOT assertion consumed no input",
+                    ));
                 }
-                slot = if including { slot.including(assertion) } else { slot.excluding(assertion) };
+                slot = if including {
+                    slot.including(assertion)
+                } else {
+                    slot.excluding(assertion)
+                };
                 if peek_keyword(lexer, "include")
                     || peek_keyword(lexer, "exclude")
                     || matches!(lexer.peek(), Some(Token::Symbol('}')))
@@ -1413,10 +1513,7 @@ fn primitive_kind(rm_type_name: &str) -> Option<&'static str> {
         "Duration",
         "Terminology_code",
     ];
-    KINDS
-        .iter()
-        .find(|k| **k == rm_type_name)
-        .copied()
+    KINDS.iter().find(|k| **k == rm_type_name).copied()
 }
 
 /// `c_inline_primitive_object: c_integer | c_real | c_date | c_time |
@@ -1500,7 +1597,10 @@ fn parse_inline_primitive(
                 lexer.offset(),
                 format!("expected an integer or real bound after `|`, found {other}"),
             )),
-            None => Err(CadlError::at(lexer.offset(), "expected an interval bound after `|`, found end of input")),
+            None => Err(CadlError::at(
+                lexer.offset(),
+                "expected an interval bound after `|`, found end of input",
+            )),
         },
         // `A-77`: a negative number's own `-` tokenizes on its own
         // (`Symbol('-')`), so the ordinary one-token dispatch above never
@@ -1511,12 +1611,26 @@ fn parse_inline_primitive(
         Some(Token::Symbol('-')) => match lexer.peek_after_sign() {
             Some(Token::Integer(_)) => parse_integer_primitive(lexer),
             Some(Token::Real(_)) => parse_real_primitive(lexer),
-            Some(other) => Err(CadlError::at(lexer.offset(), format!("expected a number after `-`, found {other}"))),
-            None => Err(CadlError::at(lexer.offset(), "expected a number after `-`, found end of input")),
+            Some(other) => Err(CadlError::at(
+                lexer.offset(),
+                format!("expected a number after `-`, found {other}"),
+            )),
+            None => Err(CadlError::at(
+                lexer.offset(),
+                "expected a number after `-`, found end of input",
+            )),
         },
-        _ if peek_keyword(lexer, "true") || peek_keyword(lexer, "false") => parse_boolean_primitive(lexer),
-        Some(other) => Err(CadlError::at(lexer.offset(), format!("expected a primitive value, found {other}"))),
-        None => Err(CadlError::at(lexer.offset(), "expected a primitive value, found end of input")),
+        _ if peek_keyword(lexer, "true") || peek_keyword(lexer, "false") => {
+            parse_boolean_primitive(lexer)
+        }
+        Some(other) => Err(CadlError::at(
+            lexer.offset(),
+            format!("expected a primitive value, found {other}"),
+        )),
+        None => Err(CadlError::at(
+            lexer.offset(),
+            "expected a primitive value, found end of input",
+        )),
     }
 }
 
@@ -1530,29 +1644,57 @@ fn parse_assumed_boolean(lexer: &mut Lexer<'_>) -> Result<Option<PrimitiveValue>
     }
     let offset = lexer.offset();
     match lexer.next() {
-        Some(Token::Word(w)) if w.eq_ignore_ascii_case("true") => Ok(Some(PrimitiveValue::Boolean(true))),
-        Some(Token::Word(w)) if w.eq_ignore_ascii_case("false") => Ok(Some(PrimitiveValue::Boolean(false))),
-        Some(other) => Err(CadlError::at(offset, format!("expected `true` or `false`, found {other}"))),
-        None => Err(CadlError::at(offset, "expected `true` or `false`, found end of input")),
+        Some(Token::Word(w)) if w.eq_ignore_ascii_case("true") => {
+            Ok(Some(PrimitiveValue::Boolean(true)))
+        }
+        Some(Token::Word(w)) if w.eq_ignore_ascii_case("false") => {
+            Ok(Some(PrimitiveValue::Boolean(false)))
+        }
+        Some(other) => Err(CadlError::at(
+            offset,
+            format!("expected `true` or `false`, found {other}"),
+        )),
+        None => Err(CadlError::at(
+            offset,
+            "expected `true` or `false`, found end of input",
+        )),
     }
 }
 
-fn parse_boolean_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
+fn parse_boolean_primitive(
+    lexer: &mut Lexer<'_>,
+) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
     let (mut allow_true, mut allow_false) = (false, false);
     loop {
         let offset = lexer.offset();
         match lexer.next() {
             Some(Token::Word(w)) if w.eq_ignore_ascii_case("true") => allow_true = true,
             Some(Token::Word(w)) if w.eq_ignore_ascii_case("false") => allow_false = true,
-            Some(other) => return Err(CadlError::at(offset, format!("expected `true` or `false`, found {other}"))),
-            None => return Err(CadlError::at(offset, "expected `true` or `false`, found end of input")),
+            Some(other) => {
+                return Err(CadlError::at(
+                    offset,
+                    format!("expected `true` or `false`, found {other}"),
+                ));
+            }
+            None => {
+                return Err(CadlError::at(
+                    offset,
+                    "expected `true` or `false`, found end of input",
+                ));
+            }
         }
         if !consume_symbol_if(lexer, ',') {
             break;
         }
     }
     let assumed = parse_assumed_boolean(lexer)?;
-    Ok((CPrimitive::Boolean { allow_true, allow_false }, assumed))
+    Ok((
+        CPrimitive::Boolean {
+            allow_true,
+            allow_false,
+        },
+        assumed,
+    ))
 }
 
 fn parse_assumed_string(lexer: &mut Lexer<'_>) -> Result<Option<PrimitiveValue>, CadlError> {
@@ -1562,19 +1704,37 @@ fn parse_assumed_string(lexer: &mut Lexer<'_>) -> Result<Option<PrimitiveValue>,
     let offset = lexer.offset();
     match lexer.next() {
         Some(Token::Str(s)) => Ok(Some(PrimitiveValue::Text(s))),
-        Some(other) => Err(CadlError::at(offset, format!("expected a string literal, found {other}"))),
-        None => Err(CadlError::at(offset, "expected a string literal, found end of input")),
+        Some(other) => Err(CadlError::at(
+            offset,
+            format!("expected a string literal, found {other}"),
+        )),
+        None => Err(CadlError::at(
+            offset,
+            "expected a string literal, found end of input",
+        )),
     }
 }
 
-fn parse_string_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
+fn parse_string_primitive(
+    lexer: &mut Lexer<'_>,
+) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
     let mut list = Vec::new();
     loop {
         let offset = lexer.offset();
         match lexer.next() {
             Some(Token::Str(s)) => list.push(s),
-            Some(other) => return Err(CadlError::at(offset, format!("expected a string literal, found {other}"))),
-            None => return Err(CadlError::at(offset, "expected a string literal, found end of input")),
+            Some(other) => {
+                return Err(CadlError::at(
+                    offset,
+                    format!("expected a string literal, found {other}"),
+                ));
+            }
+            None => {
+                return Err(CadlError::at(
+                    offset,
+                    "expected a string literal, found end of input",
+                ));
+            }
         }
         if !consume_symbol_if(lexer, ',') {
             break;
@@ -1591,7 +1751,9 @@ fn parse_assumed_integer(lexer: &mut Lexer<'_>) -> Result<Option<PrimitiveValue>
     Ok(Some(PrimitiveValue::Integer(expect_signed_integer(lexer)?)))
 }
 
-fn parse_integer_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
+fn parse_integer_primitive(
+    lexer: &mut Lexer<'_>,
+) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
     let constraint = if matches!(lexer.peek(), Some(Token::Symbol('|'))) {
         let range = parse_integer_interval(lexer)?;
         if matches!(lexer.peek(), Some(Token::Symbol(','))) {
@@ -1601,7 +1763,10 @@ fn parse_integer_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<
                  CPrimitive::Integer (one Option<Interval<i64>>)",
             ));
         }
-        CPrimitive::Integer { list: Vec::new(), range: Some(range) }
+        CPrimitive::Integer {
+            list: Vec::new(),
+            range: Some(range),
+        }
     } else {
         let mut list = Vec::new();
         loop {
@@ -1673,7 +1838,12 @@ fn parse_numeric_interval<T: SemanticOrd + Clone>(
     let upper_excluded = consume_symbol_if(lexer, '<');
     let upper = read_bound(lexer)?;
     expect_symbol(lexer, '|')?;
-    build(Interval::new(Some(first), Some(upper), Some(!gt), Some(!upper_excluded)))
+    build(Interval::new(
+        Some(first),
+        Some(upper),
+        Some(!gt),
+        Some(!upper_excluded),
+    ))
 }
 
 fn parse_assumed_real(lexer: &mut Lexer<'_>) -> Result<Option<PrimitiveValue>, CadlError> {
@@ -1683,7 +1853,9 @@ fn parse_assumed_real(lexer: &mut Lexer<'_>) -> Result<Option<PrimitiveValue>, C
     Ok(Some(PrimitiveValue::Real(expect_signed_real(lexer)?)))
 }
 
-fn parse_real_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
+fn parse_real_primitive(
+    lexer: &mut Lexer<'_>,
+) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
     let constraint = if matches!(lexer.peek(), Some(Token::Symbol('|'))) {
         let range = parse_real_interval(lexer)?;
         if matches!(lexer.peek(), Some(Token::Symbol(','))) {
@@ -1693,7 +1865,10 @@ fn parse_real_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<Pri
                  CPrimitive::Real (one Option<Interval<Real>>)",
             ));
         }
-        CPrimitive::Real { list: Vec::new(), range: Some(range) }
+        CPrimitive::Real {
+            list: Vec::new(),
+            range: Some(range),
+        }
     } else {
         let mut list = Vec::new();
         loop {
@@ -1720,12 +1895,17 @@ fn parse_real_interval(lexer: &mut Lexer<'_>) -> Result<Interval<Real>, CadlErro
 /// explicit that it "can only occur after an ac-code not after the single
 /// at-code" — enforced below rather than accepted and left for
 /// `Inv_valid_assumed_value` (`A-56`) to catch later.
-fn parse_terminology_code_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
+fn parse_terminology_code_primitive(
+    lexer: &mut Lexer<'_>,
+) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
     expect_symbol(lexer, '[')?;
     let offset = lexer.offset();
     let code = expect_word(lexer, "an at- or ac-code")?;
     if NodeIdSyntax::of(&code).is_none() {
-        return Err(CadlError::at(offset, format!("`{code}` is not a valid at- or ac-code")));
+        return Err(CadlError::at(
+            offset,
+            format!("`{code}` is not a valid at- or ac-code"),
+        ));
     }
     let mut assumed = None;
     if consume_symbol_if(lexer, ';') {
@@ -1739,7 +1919,10 @@ fn parse_terminology_code_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive
         let at_offset = lexer.offset();
         let at_code = expect_word(lexer, "an assumed at-code")?;
         if !at_code.starts_with("at") || NodeIdSyntax::of(&at_code).is_none() {
-            return Err(CadlError::at(at_offset, format!("`{at_code}` is not a valid at-code")));
+            return Err(CadlError::at(
+                at_offset,
+                format!("`{at_code}` is not a valid at-code"),
+            ));
         }
         assumed = Some(PrimitiveValue::Text(at_code));
     }
@@ -1792,7 +1975,8 @@ fn parse_assumed_temporal<T: FromStr>(
             None => CadlError::at(offset, format!("expected {what}, found end of input")),
         });
     };
-    T::from_str(text).map_err(|_| CadlError::at(offset, format!("`{text}` is not a valid {what}")))?;
+    T::from_str(text)
+        .map_err(|_| CadlError::at(offset, format!("`{text}` is not a valid {what}")))?;
     Ok(Some(PrimitiveValue::Text(text.to_owned())))
 }
 
@@ -1807,11 +1991,18 @@ macro_rules! temporal_primitive {
             let upper_excluded = consume_symbol_if(lexer, '<');
             let upper: $ty = expect_temporal(lexer, $what)?;
             expect_symbol(lexer, '|')?;
-            Interval::new(Some(lower), Some(upper), Some(!lower_excluded), Some(!upper_excluded))
-                .map_err(|e| CadlError::at(offset, e.to_string()))
+            Interval::new(
+                Some(lower),
+                Some(upper),
+                Some(!lower_excluded),
+                Some(!upper_excluded),
+            )
+            .map_err(|e| CadlError::at(offset, e.to_string()))
         }
 
-        fn $fn_primitive(lexer: &mut Lexer<'_>) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
+        fn $fn_primitive(
+            lexer: &mut Lexer<'_>,
+        ) -> Result<(CPrimitive, Option<PrimitiveValue>), CadlError> {
             // `A-75`: `c_date`'s own grammar (and its three siblings')
             // puts `*_CONSTRAINT_PATTERN` first among its alternatives,
             // ahead of a value, a list, or an interval — checked here on
@@ -1829,7 +2020,13 @@ macro_rules! temporal_primitive {
                 // back shorter or empty.
                 let _ = lexer.read_iso8601();
                 let assumed = parse_assumed_temporal::<$ty>(lexer, $what)?;
-                return Ok((CPrimitive::$variant { range: Vec::new(), pattern: Some(raw) }, assumed));
+                return Ok((
+                    CPrimitive::$variant {
+                        range: Vec::new(),
+                        pattern: Some(raw),
+                    },
+                    assumed,
+                ));
             }
             let constraint = if matches!(lexer.peek(), Some(Token::Symbol('|'))) {
                 let range = $fn_interval(lexer)?;
@@ -1844,11 +2041,16 @@ macro_rules! temporal_primitive {
                         ),
                     ));
                 }
-                CPrimitive::$variant { range: vec![range], pattern: None }
+                CPrimitive::$variant {
+                    range: vec![range],
+                    pattern: None,
+                }
             } else {
                 let value: $ty = expect_temporal(lexer, $what)?;
-                let mut range = vec![Interval::new(Some(value.clone()), Some(value), Some(true), Some(true))
-                    .map_err(|e| CadlError::at(lexer.offset(), e.to_string()))?];
+                let mut range = vec![
+                    Interval::new(Some(value.clone()), Some(value), Some(true), Some(true))
+                        .map_err(|e| CadlError::at(lexer.offset(), e.to_string()))?,
+                ];
                 while consume_symbol_if(lexer, ',') {
                     let value: $ty = expect_temporal(lexer, $what)?;
                     range.push(
@@ -1856,7 +2058,10 @@ macro_rules! temporal_primitive {
                             .map_err(|e| CadlError::at(lexer.offset(), e.to_string()))?,
                     );
                 }
-                CPrimitive::$variant { range, pattern: None }
+                CPrimitive::$variant {
+                    range,
+                    pattern: None,
+                }
             };
             let assumed = parse_assumed_temporal::<$ty>(lexer, $what)?;
             Ok((constraint, assumed))
@@ -1902,6 +2107,7 @@ temporal_primitive!(
 );
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::am::CObject;
@@ -1985,7 +2191,9 @@ mod tests {
             real.constraint(),
             &CPrimitive::Real {
                 list: Vec::new(),
-                range: Some(Interval::closed("0.0".parse().unwrap(), "1000.0".parse().unwrap()).unwrap()),
+                range: Some(
+                    Interval::closed("0.0".parse().unwrap(), "1000.0".parse().unwrap()).unwrap()
+                ),
             }
         );
         // `units` uses the unwrapped shorthand: no `String[atN]` wrapper.
@@ -1993,7 +2201,10 @@ mod tests {
         let CObject::Primitive(unwrapped) = &units.children()[0] else {
             panic!("expected an unwrapped primitive String");
         };
-        assert_eq!(unwrapped.node_id(), Some(CPrimitiveObject::PRIMITIVE_NODE_ID));
+        assert_eq!(
+            unwrapped.node_id(),
+            Some(CPrimitiveObject::PRIMITIVE_NODE_ID)
+        );
     }
 
     /// The trailing `'; ' <value>` every primitive kind but
@@ -2009,9 +2220,17 @@ mod tests {
     fn a_wrapped_primitives_assumed_value_is_attached() {
         let cases: &[(&str, &str, PrimitiveValue)] = &[
             ("Boolean", "true; false", PrimitiveValue::Boolean(false)),
-            ("String", "\"a\", \"b\"; \"a\"", PrimitiveValue::Text("a".to_owned())),
+            (
+                "String",
+                "\"a\", \"b\"; \"a\"",
+                PrimitiveValue::Text("a".to_owned()),
+            ),
             ("Integer", "|0..10|; 5", PrimitiveValue::Integer(5)),
-            ("Real", "|0.0..10.0|; 5.0", PrimitiveValue::Real("5.0".parse().unwrap())),
+            (
+                "Real",
+                "|0.0..10.0|; 5.0",
+                PrimitiveValue::Real("5.0".parse().unwrap()),
+            ),
             (
                 "Date",
                 "2024-01-01; 2024-06-15",
@@ -2027,7 +2246,11 @@ mod tests {
             let CObject::Primitive(leaf) = &root.attributes()[0].children()[0] else {
                 panic!("expected a primitive {kind}, source: {source}");
             };
-            assert_eq!(leaf.assumed_value(), Some(want), "kind {kind}, source: {source}");
+            assert_eq!(
+                leaf.assumed_value(),
+                Some(want),
+                "kind {kind}, source: {source}"
+            );
         }
     }
 
@@ -2091,7 +2314,10 @@ mod tests {
         };
         assert_eq!(
             leaf.constraint(),
-            &CPrimitive::Boolean { allow_true: true, allow_false: false }
+            &CPrimitive::Boolean {
+                allow_true: true,
+                allow_false: false
+            }
         );
         let source = "CLUSTER[id1] matches { flag matches {false} }";
         let root = parse_definition(source).unwrap();
@@ -2100,7 +2326,10 @@ mod tests {
         };
         assert_eq!(
             leaf.constraint(),
-            &CPrimitive::Boolean { allow_true: false, allow_false: true }
+            &CPrimitive::Boolean {
+                allow_true: false,
+                allow_false: true
+            }
         );
     }
 
@@ -2153,7 +2382,9 @@ mod tests {
         assert_eq!(leaf.node_id(), Some(CPrimitiveObject::PRIMITIVE_NODE_ID));
         assert_eq!(
             leaf.constraint(),
-            &CPrimitive::String { list: vec![r"/mm\[Hg\]|kPa/".to_owned()] }
+            &CPrimitive::String {
+                list: vec![r"/mm\[Hg\]|kPa/".to_owned()]
+            }
         );
         assert_eq!(leaf.assumed_value(), None);
     }
@@ -2185,7 +2416,9 @@ mod tests {
         };
         assert_eq!(
             leaf.constraint(),
-            &CPrimitive::String { list: vec![r"^mm\^Hg\^^".to_owned()] }
+            &CPrimitive::String {
+                list: vec![r"^mm\^Hg\^^".to_owned()]
+            }
         );
     }
 
@@ -2238,7 +2471,9 @@ mod tests {
     /// `0..upper` under a container.
     #[test]
     fn occurrences_omitted_on_a_non_root_node_is_carried_unstated_and_inferred_from_its_owner() {
-        let root = parse_definition("CLUSTER[id1] matches { items matches { ELEMENT[id2] matches { } } }").unwrap();
+        let root =
+            parse_definition("CLUSTER[id1] matches { items matches { ELEMENT[id2] matches { } } }")
+                .unwrap();
         let items = &root.attributes()[0];
         assert_eq!(items.children()[0].occurrences(), None);
         assert_eq!(
@@ -2379,7 +2614,10 @@ mod tests {
             message.contains("ADL 1.4's `matches {*}` wildcard"),
             "unexpected message: {message}"
         );
-        assert!(!message.contains("expected an attribute name"), "still the generic message: {message}");
+        assert!(
+            !message.contains("expected an attribute name"),
+            "still the generic message: {message}"
+        );
     }
 
     /// The same wildcard, one level deeper, through `c_regular_object`'s own
@@ -2418,7 +2656,8 @@ mod tests {
     /// exactly this shape: a path, a cardinality, no children.
     #[test]
     fn a_differential_path_attribute_is_parsed_with_its_parent_path_split_off() {
-        let source = "OBSERVATION[id1.1] matches { /data/events cardinality matches {2..8; ordered} }";
+        let source =
+            "OBSERVATION[id1.1] matches { /data/events cardinality matches {2..8; ordered} }";
         let root = parse_definition(source).unwrap();
         let attr = &root.attributes()[0];
         assert_eq!(attr.rm_attribute_name(), "events");
@@ -2433,8 +2672,10 @@ mod tests {
     /// asserted the absence.
     #[test]
     fn a_plain_attribute_has_no_differential_path() {
-        let root = parse_definition("CLUSTER[id1] matches { items cardinality matches {0..*} matches { \
-                                     ELEMENT[id2] occurrences matches {0..1} } }")
+        let root = parse_definition(
+            "CLUSTER[id1] matches { items cardinality matches {0..*} matches { \
+                                     ELEMENT[id2] occurrences matches {0..1} } }",
+        )
         .unwrap();
         assert_eq!(root.attributes()[0].rm_attribute_name(), "items");
         assert_eq!(root.attributes()[0].differential_path(), None);
@@ -2453,7 +2694,8 @@ mod tests {
 
     #[test]
     fn a_root_level_differential_path_names_the_root_as_its_parent() {
-        let root = parse_definition("CLUSTER[id1.1] matches { /items cardinality matches {1..*} }").unwrap();
+        let root = parse_definition("CLUSTER[id1.1] matches { /items cardinality matches {1..*} }")
+            .unwrap();
         assert_eq!(root.attributes()[0].differential_path(), Some("/"));
         assert_eq!(root.attributes()[0].rm_attribute_name(), "items");
     }
@@ -2493,11 +2735,15 @@ mod tests {
     #[test]
     fn an_assumed_boolean_is_read_either_way_and_anything_else_is_refused() {
         assert_eq!(
-            wrapped("Boolean", "true, false; true").unwrap().assumed_value(),
+            wrapped("Boolean", "true, false; true")
+                .unwrap()
+                .assumed_value(),
             Some(&PrimitiveValue::Boolean(true))
         );
         assert_eq!(
-            wrapped("Boolean", "true, false; false").unwrap().assumed_value(),
+            wrapped("Boolean", "true, false; false")
+                .unwrap()
+                .assumed_value(),
             Some(&PrimitiveValue::Boolean(false))
         );
         let err = wrapped("Boolean", "true; maybe").unwrap_err();
@@ -2510,11 +2756,17 @@ mod tests {
     fn an_integer_list_is_read_whole() {
         assert_eq!(
             wrapped("Integer", "1, 2, 3").unwrap().constraint(),
-            &CPrimitive::Integer { list: vec![1, 2, 3], range: None }
+            &CPrimitive::Integer {
+                list: vec![1, 2, 3],
+                range: None
+            }
         );
         assert_eq!(
             wrapped("Integer", "7").unwrap().constraint(),
-            &CPrimitive::Integer { list: vec![7], range: None }
+            &CPrimitive::Integer {
+                list: vec![7],
+                range: None
+            }
         );
     }
 
@@ -2540,7 +2792,8 @@ mod tests {
     /// case alone never exercised.
     #[test]
     fn an_assumed_code_that_is_an_ac_code_is_refused_as_not_an_at_code() {
-        let err = parse_definition("ELEMENT[id1] matches { value matches { [ac1; ac2] } }").unwrap_err();
+        let err =
+            parse_definition("ELEMENT[id1] matches { value matches { [ac1; ac2] } }").unwrap_err();
         assert!(err.reason.contains("is not a valid at-code"), "{err}");
     }
 
@@ -2567,7 +2820,10 @@ mod tests {
         let row = &tuple.tuples()[0];
         assert_eq!(
             row.members()[1].constraint(),
-            &CPrimitive::Integer { list: Vec::new(), range: Some(Interval::closed(0, 300).unwrap()) }
+            &CPrimitive::Integer {
+                list: Vec::new(),
+                range: Some(Interval::closed(0, 300).unwrap())
+            }
         );
     }
 
@@ -2582,7 +2838,9 @@ mod tests {
     #[test]
     fn an_unwrapped_intervals_kind_is_decided_by_its_first_bounds_token() {
         let parse = |body: &str| {
-            let root = parse_definition(&format!("WHOLE[id1] matches {{ attr matches {{{body}}} }}")).unwrap();
+            let root =
+                parse_definition(&format!("WHOLE[id1] matches {{ attr matches {{{body}}} }}"))
+                    .unwrap();
             let CObject::Primitive(p) = &root.attributes()[0].children()[0] else {
                 panic!("expected a C_PRIMITIVE_OBJECT");
             };
@@ -2591,34 +2849,66 @@ mod tests {
         let integer = parse("|0..100|; 10");
         assert_eq!(
             integer.constraint(),
-            &CPrimitive::Integer { list: Vec::new(), range: Some(Interval::closed(0, 100).unwrap()) }
+            &CPrimitive::Integer {
+                list: Vec::new(),
+                range: Some(Interval::closed(0, 100).unwrap())
+            }
         );
         assert_eq!(integer.assumed_value(), Some(&PrimitiveValue::Integer(10)));
         let real = parse("|0.0..100.0|");
-        assert!(matches!(real.constraint(), CPrimitive::Real { range: Some(_), .. }), "{real:?}");
+        assert!(
+            matches!(real.constraint(), CPrimitive::Real { range: Some(_), .. }),
+            "{real:?}"
+        );
         let negative = parse("|-5..5|");
-        assert!(matches!(negative.constraint(), CPrimitive::Integer { range: Some(_), .. }));
+        assert!(matches!(
+            negative.constraint(),
+            CPrimitive::Integer { range: Some(_), .. }
+        ));
         // Bounds that share a prefix with an ISO 8601 shape — four digits,
         // or two — are numbers all the same: `looks_iso8601` needs the
         // `-` or `:` too. cargo-mutants turned each `&&` and `==` in it
         // and nothing noticed until these two.
-        assert!(matches!(parse("|1000..2000|").constraint(), CPrimitive::Integer { range: Some(_), .. }));
-        assert!(matches!(parse("|10..20|").constraint(), CPrimitive::Integer { range: Some(_), .. }));
+        assert!(matches!(
+            parse("|1000..2000|").constraint(),
+            CPrimitive::Integer { range: Some(_), .. }
+        ));
+        assert!(matches!(
+            parse("|10..20|").constraint(),
+            CPrimitive::Integer { range: Some(_), .. }
+        ));
         // And the bare unwrapped value, which the same dispatcher reads
         // by the same token — never tested unwrapped before this.
-        assert_eq!(parse("5").constraint(), &CPrimitive::Integer { list: vec![5], range: None });
-        assert!(matches!(parse("5.5").constraint(), CPrimitive::Real { range: None, .. }));
+        assert_eq!(
+            parse("5").constraint(),
+            &CPrimitive::Integer {
+                list: vec![5],
+                range: None
+            }
+        );
+        assert!(matches!(
+            parse("5.5").constraint(),
+            CPrimitive::Real { range: None, .. }
+        ));
 
         let err = parse_definition("WHOLE[id1] matches { attr matches {|0..100.0|} }").unwrap_err();
         assert!(err.reason.contains("expected an integer"), "{err}");
-        let err = parse_definition("WHOLE[id1] matches { attr matches {|2024-01-01..2024-12-31|} }").unwrap_err();
+        let err =
+            parse_definition("WHOLE[id1] matches { attr matches {|2024-01-01..2024-12-31|} }")
+                .unwrap_err();
         assert!(err.reason.contains("unwrapped temporal interval"), "{err}");
-        let err = parse_definition("WHOLE[id1] matches { attr matches {|PT0S..PT1H|} }").unwrap_err();
+        let err =
+            parse_definition("WHOLE[id1] matches { attr matches {|PT0S..PT1H|} }").unwrap_err();
         assert!(err.reason.contains("unwrapped temporal interval"), "{err}");
-        let err = parse_definition("WHOLE[id1] matches { attr matches {|09:00:00..17:00:00|} }").unwrap_err();
+        let err = parse_definition("WHOLE[id1] matches { attr matches {|09:00:00..17:00:00|} }")
+            .unwrap_err();
         assert!(err.reason.contains("unwrapped temporal interval"), "{err}");
-        let err = parse_definition(r#"WHOLE[id1] matches { attr matches {|"a".."b"|} }"#).unwrap_err();
-        assert!(err.reason.contains("expected an integer or real bound"), "{err}");
+        let err =
+            parse_definition(r#"WHOLE[id1] matches { attr matches {|"a".."b"|} }"#).unwrap_err();
+        assert!(
+            err.reason.contains("expected an integer or real bound"),
+            "{err}"
+        );
     }
 
     /// `A-74`: `odin_values.g4`'s second interval spelling, one bound with
@@ -2629,26 +2919,46 @@ mod tests {
     #[test]
     fn a_relop_interval_is_read_as_one_open_ended_bound() {
         let range = |body: &str| {
-            let root = parse_definition(&format!("WHOLE[id1] matches {{ attr matches {{{body}}} }}")).unwrap();
+            let root =
+                parse_definition(&format!("WHOLE[id1] matches {{ attr matches {{{body}}} }}"))
+                    .unwrap();
             let CObject::Primitive(p) = &root.attributes()[0].children()[0] else {
                 panic!("expected a C_PRIMITIVE_OBJECT");
             };
             p.constraint().clone()
         };
-        let CPrimitive::Real { range: Some(r), .. } = range("|>=0.0|") else { panic!() };
+        let CPrimitive::Real { range: Some(r), .. } = range("|>=0.0|") else {
+            panic!()
+        };
         assert_eq!(r.lower().map(ToString::to_string), Some("0.0".to_owned()));
         assert_eq!(r.lower_included(), Some(true));
         assert!(r.upper_unbounded());
-        let CPrimitive::Integer { range: Some(r), .. } = range("|>0|") else { panic!() };
-        assert_eq!((r.lower(), r.lower_included(), r.upper()), (Some(&0), Some(false), None));
-        let CPrimitive::Integer { range: Some(r), .. } = range("|<=10|") else { panic!() };
-        assert_eq!((r.lower(), r.upper(), r.upper_included()), (None, Some(&10), Some(true)));
-        let CPrimitive::Integer { range: Some(r), .. } = range("|<10|") else { panic!() };
+        let CPrimitive::Integer { range: Some(r), .. } = range("|>0|") else {
+            panic!()
+        };
+        assert_eq!(
+            (r.lower(), r.lower_included(), r.upper()),
+            (Some(&0), Some(false), None)
+        );
+        let CPrimitive::Integer { range: Some(r), .. } = range("|<=10|") else {
+            panic!()
+        };
+        assert_eq!(
+            (r.lower(), r.upper(), r.upper_included()),
+            (None, Some(&10), Some(true))
+        );
+        let CPrimitive::Integer { range: Some(r), .. } = range("|<10|") else {
+            panic!()
+        };
         assert_eq!((r.upper(), r.upper_included()), (Some(&10), Some(false)));
-        let CPrimitive::Integer { range: Some(r), .. } = range("|5|") else { panic!() };
+        let CPrimitive::Integer { range: Some(r), .. } = range("|5|") else {
+            panic!()
+        };
         assert_eq!((r.lower(), r.upper()), (Some(&5), Some(&5)));
         // The range's own optional open lower bound is unchanged.
-        let CPrimitive::Integer { range: Some(r), .. } = range("|>0..10|") else { panic!() };
+        let CPrimitive::Integer { range: Some(r), .. } = range("|>0..10|") else {
+            panic!()
+        };
         assert_eq!((r.lower_included(), r.upper()), (Some(false), Some(&10)));
 
         let err = parse_definition("WHOLE[id1] matches { attr matches {|>=0..10|} }").unwrap_err();
@@ -2674,7 +2984,14 @@ mod tests {
         for good in ["hh:mm:ss", "HH:MM:SS", "??:??:??", "hh:mm:ssZ"] {
             assert!(is_time_pattern(good), "{good}");
         }
-        for bad in ["10:30:00", "hh:mm", "hh:mm:ss:ss", "", "hh:30:ss", "10:mm:ss"] {
+        for bad in [
+            "10:30:00",
+            "hh:mm",
+            "hh:mm:ss:ss",
+            "",
+            "hh:30:ss",
+            "10:mm:ss",
+        ] {
             assert!(!is_time_pattern(bad), "{bad}");
         }
         assert!(is_date_time_pattern("yyyy-??-??T??:??:??"));
@@ -2722,9 +3039,10 @@ mod tests {
     #[test]
     fn a_wrapped_constraint_pattern_is_carried_for_all_four_temporal_kinds() {
         let parse = |kind: &str, body: &str| {
-            let root =
-                parse_definition(&format!("WHOLE[id1] matches {{ attr matches {{ {kind}[id2] matches {{{body}}} }} }}"))
-                    .unwrap();
+            let root = parse_definition(&format!(
+                "WHOLE[id1] matches {{ attr matches {{ {kind}[id2] matches {{{body}}} }} }}"
+            ))
+            .unwrap();
             let CObject::Primitive(p) = &root.attributes()[0].children()[0] else {
                 panic!("expected a C_PRIMITIVE_OBJECT");
             };
@@ -2733,34 +3051,53 @@ mod tests {
         let date = parse("Date", "yyyy-mm-??");
         assert_eq!(
             date.constraint(),
-            &CPrimitive::Date { range: Vec::new(), pattern: Some("yyyy-mm-??".to_owned()) }
+            &CPrimitive::Date {
+                range: Vec::new(),
+                pattern: Some("yyyy-mm-??".to_owned())
+            }
         );
         assert_eq!(date.assumed_value(), None);
 
         let time = parse("Time", "??:??:??; 10:30:00");
         assert_eq!(
             time.constraint(),
-            &CPrimitive::Time { range: Vec::new(), pattern: Some("??:??:??".to_owned()) }
+            &CPrimitive::Time {
+                range: Vec::new(),
+                pattern: Some("??:??:??".to_owned())
+            }
         );
-        assert_eq!(time.assumed_value(), Some(&PrimitiveValue::Text("10:30:00".to_owned())));
+        assert_eq!(
+            time.assumed_value(),
+            Some(&PrimitiveValue::Text("10:30:00".to_owned()))
+        );
 
         let date_time = parse("Date_time", "yyyy-??-??T??:??:??");
         assert_eq!(
             date_time.constraint(),
-            &CPrimitive::DateTime { range: Vec::new(), pattern: Some("yyyy-??-??T??:??:??".to_owned()) }
+            &CPrimitive::DateTime {
+                range: Vec::new(),
+                pattern: Some("yyyy-??-??T??:??:??".to_owned())
+            }
         );
 
         let duration = parse("Duration", "PYMWDTHMS");
         assert_eq!(
             duration.constraint(),
-            &CPrimitive::Duration { range: Vec::new(), pattern: Some("PYMWDTHMS".to_owned()) }
+            &CPrimitive::Duration {
+                range: Vec::new(),
+                pattern: Some("PYMWDTHMS".to_owned())
+            }
         );
 
         // A genuine value still parses as one, not swallowed by the
         // pattern check — `is_date_pattern` requires letters, and "2024"
         // is digits.
         let value = parse("Date", "2024-01-01");
-        let CPrimitive::Date { range, pattern: None } = value.constraint() else {
+        let CPrimitive::Date {
+            range,
+            pattern: None,
+        } = value.constraint()
+        else {
             panic!("expected a value, not a pattern: {:?}", value.constraint());
         };
         assert_eq!(range.len(), 1);
@@ -2802,7 +3139,10 @@ mod tests {
         };
         assert_eq!(
             p.constraint(),
-            &CPrimitive::Date { range: Vec::new(), pattern: Some("yyyy-mm-dd".to_owned()) }
+            &CPrimitive::Date {
+                range: Vec::new(),
+                pattern: Some("yyyy-mm-dd".to_owned())
+            }
         );
     }
 
@@ -2816,13 +3156,19 @@ mod tests {
     #[test]
     fn an_unwrapped_temporal_literal_or_pattern_is_dispatched_by_classify_temporal() {
         let attr = |body: &str| {
-            let root = parse_definition(&format!("WHOLE[id1] matches {{ attr matches {{{body}}} }}")).unwrap();
+            let root =
+                parse_definition(&format!("WHOLE[id1] matches {{ attr matches {{{body}}} }}"))
+                    .unwrap();
             let CObject::Primitive(p) = &root.attributes()[0].children()[0] else {
                 panic!("expected a C_PRIMITIVE_OBJECT");
             };
             p.clone()
         };
-        let CPrimitive::Duration { range, pattern: None } = attr("PT0S").constraint().clone() else {
+        let CPrimitive::Duration {
+            range,
+            pattern: None,
+        } = attr("PT0S").constraint().clone()
+        else {
             panic!("expected a duration value: {:?}", attr("PT0S").constraint());
         };
         assert_eq!(range.len(), 1);
@@ -2835,11 +3181,20 @@ mod tests {
             "{:?}",
             attr("2024-06-15").constraint()
         );
-        assert!(matches!(attr("10:30:00").constraint(), CPrimitive::Time { .. }));
-        assert!(matches!(attr("2024-06-15T10:30:00Z").constraint(), CPrimitive::DateTime { .. }));
+        assert!(matches!(
+            attr("10:30:00").constraint(),
+            CPrimitive::Time { .. }
+        ));
+        assert!(matches!(
+            attr("2024-06-15T10:30:00Z").constraint(),
+            CPrimitive::DateTime { .. }
+        ));
         assert_eq!(
             attr("yyyy-mm-??").constraint(),
-            &CPrimitive::Date { range: Vec::new(), pattern: Some("yyyy-mm-??".to_owned()) }
+            &CPrimitive::Date {
+                range: Vec::new(),
+                pattern: Some("yyyy-mm-??".to_owned())
+            }
         );
 
         // An ordinary RM type name is unaffected: `PARTICIPATION`'s own
@@ -2883,14 +3238,22 @@ mod tests {
         let rows = root.attribute_tuples()[0].tuples();
         assert_eq!(
             rows[0].members()[0].constraint(),
-            &CPrimitive::Boolean { allow_true: true, allow_false: false }
+            &CPrimitive::Boolean {
+                allow_true: true,
+                allow_false: false
+            }
         );
         assert_eq!(
             rows[1].members()[0].constraint(),
-            &CPrimitive::Boolean { allow_true: false, allow_false: true }
+            &CPrimitive::Boolean {
+                allow_true: false,
+                allow_false: true
+            }
         );
-        let err = parse_definition("SOME_TYPE[id1] matches { [flag, magnitude] matches { [{xyz}, {5}] } }")
-            .unwrap_err();
+        let err = parse_definition(
+            "SOME_TYPE[id1] matches { [flag, magnitude] matches { [{xyz}, {5}] } }",
+        )
+        .unwrap_err();
         assert!(err.reason.contains("expected a primitive value"), "{err}");
     }
 
@@ -2914,14 +3277,26 @@ mod tests {
         assert_eq!(root.attribute_tuples().len(), 1);
         let tuple = &root.attribute_tuples()[0];
         assert_eq!(
-            tuple.members().iter().map(CAttribute::rm_attribute_name).collect::<Vec<_>>(),
+            tuple
+                .members()
+                .iter()
+                .map(CAttribute::rm_attribute_name)
+                .collect::<Vec<_>>(),
             ["units", "magnitude"]
         );
         assert_eq!(tuple.tuples().len(), 2);
-        assert_eq!(tuple.tuples()[0].members()[0].constraint(), &CPrimitive::String { list: vec!["deg F".to_owned()] });
+        assert_eq!(
+            tuple.tuples()[0].members()[0].constraint(),
+            &CPrimitive::String {
+                list: vec!["deg F".to_owned()]
+            }
+        );
         assert_eq!(
             tuple.tuples()[0].members()[1].constraint(),
-            &CPrimitive::Real { list: vec!["212.0".parse().unwrap()], range: None }
+            &CPrimitive::Real {
+                list: vec!["212.0".parse().unwrap()],
+                range: None
+            }
         );
     }
 
@@ -2946,15 +3321,24 @@ mod tests {
         let tuple = &root.attribute_tuples()[0];
         assert_eq!(
             tuple.tuples()[0].members()[0].constraint(),
-            &CPrimitive::Integer { list: vec![-3], range: None }
+            &CPrimitive::Integer {
+                list: vec![-3],
+                range: None
+            }
         );
         assert_eq!(
             tuple.tuples()[1].members()[0].constraint(),
-            &CPrimitive::Integer { list: vec![-2], range: None }
+            &CPrimitive::Integer {
+                list: vec![-2],
+                range: None
+            }
         );
         assert_eq!(
             tuple.tuples()[2].members()[0].constraint(),
-            &CPrimitive::Integer { list: vec![0], range: None }
+            &CPrimitive::Integer {
+                list: vec![0],
+                range: None
+            }
         );
     }
 
@@ -2965,14 +3349,28 @@ mod tests {
     #[test]
     fn a_negative_unwrapped_number_via_c_objects_is_read_as_integer_or_real() {
         let attr = |body: &str| {
-            let root = parse_definition(&format!("WHOLE[id1] matches {{ attr matches {{{body}}} }}")).unwrap();
+            let root =
+                parse_definition(&format!("WHOLE[id1] matches {{ attr matches {{{body}}} }}"))
+                    .unwrap();
             let CObject::Primitive(p) = &root.attributes()[0].children()[0] else {
                 panic!("expected a C_PRIMITIVE_OBJECT");
             };
             p.constraint().clone()
         };
-        assert_eq!(attr("-3"), CPrimitive::Integer { list: vec![-3], range: None });
-        assert_eq!(attr("-3.5"), CPrimitive::Real { list: vec!["-3.5".parse().unwrap()], range: None });
+        assert_eq!(
+            attr("-3"),
+            CPrimitive::Integer {
+                list: vec![-3],
+                range: None
+            }
+        );
+        assert_eq!(
+            attr("-3.5"),
+            CPrimitive::Real {
+                list: vec!["-3.5".parse().unwrap()],
+                range: None
+            }
+        );
 
         // `-"x"` (a `-` followed by something that is not a number) does
         // not *start* an inline primitive at all — `starts_inline_primitive`
@@ -3007,7 +3405,9 @@ mod tests {
         let tuple = &root.attribute_tuples()[0];
         assert_eq!(
             tuple.tuples()[0].members()[0].constraint(),
-            &CPrimitive::String { list: vec![r"/mm\[Hg\]|kPa/".to_owned()] }
+            &CPrimitive::String {
+                list: vec![r"/mm\[Hg\]|kPa/".to_owned()]
+            }
         );
     }
 
@@ -3071,7 +3471,10 @@ mod tests {
         assert_eq!(items.children().len(), 3);
         assert_eq!(items.children()[0].node_id(), Some("id2"));
         assert_eq!(items.children()[0].occurrences(), None);
-        assert_eq!(items.children()[1].occurrences(), Some(&MultiplicityInterval::OPTIONAL));
+        assert_eq!(
+            items.children()[1].occurrences(),
+            Some(&MultiplicityInterval::OPTIONAL)
+        );
         let CObject::Slot(slot) = &items.children()[2] else {
             panic!("expected an ARCHETYPE_SLOT");
         };

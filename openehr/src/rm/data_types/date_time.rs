@@ -175,8 +175,10 @@ temporal! {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
+    use crate::base::Interval;
 
     #[test]
     fn temporals_serialize_as_a_value_object_not_a_bare_string() {
@@ -204,5 +206,21 @@ mod tests {
         assert!(DvDate::new("2026-02-30").is_err());
         assert!(DvDateTime::new("2026-07-31T25:00:00").is_err());
         assert!(DvDuration::new("8 hours").is_err());
+    }
+
+    #[test]
+    fn a_temporal_reports_its_status_display_and_normal_range_result() {
+        let date = DvDate::new("2026-07-31")
+            .unwrap()
+            .with_magnitude_status(MagnitudeStatus::Approximate);
+        assert_eq!(date.magnitude_status(), Some(MagnitudeStatus::Approximate));
+        assert_eq!(date.to_string(), "2026-07-31");
+
+        let low = DataValue::Date(DvDate::new("2026-01-01").unwrap());
+        let high = DataValue::Date(DvDate::new("2026-12-31").unwrap());
+        let mut json = serde_json::to_value(date).unwrap();
+        json["normal_range"] = serde_json::to_value(Interval::closed(low, high).unwrap()).unwrap();
+        let ranged: DvDate = serde_json::from_value(json).unwrap();
+        assert_eq!(ranged.is_abnormal(), Some(false));
     }
 }

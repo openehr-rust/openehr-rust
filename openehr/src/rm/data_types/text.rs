@@ -12,7 +12,8 @@
 //! This crate cannot enforce the invariant in general, because checking a
 //! SNOMED rubric needs SNOMED. It enforces it for the openEHR support
 //! terminology, where it has the rubrics, and says so rather than implying
-//! wider coverage — see [`DvCodedText::check_openehr_rubric`].
+//! wider coverage — see [`DvCodedText::check_openehr_rubric`] and
+//! [`DvCodedText::check_openehr_rubric_in`].
 
 use crate::base::TerminologyId;
 use crate::error::ParseError;
@@ -506,6 +507,37 @@ impl DvCodedText {
         }
         if seen { Some(false) } else { None }
     }
+
+    /// Checks the openEHR rubric when this crate has it in `language`.
+    ///
+    /// The bundled support-terminology table is English-only. Consequently
+    /// this returns [`None`] for every language except `ISO_639-1::en`: that is
+    /// *not checked*, not a pass and not a violation (`lib:D3.7a`).
+    ///
+    /// ```
+    /// use openehr::rm::data_types::{CodePhrase, DvCodedText};
+    ///
+    /// let event = DvCodedText::new(
+    ///     "evento",
+    ///     CodePhrase::openehr("433").unwrap(),
+    /// ).unwrap();
+    /// let es = CodePhrase::new("ISO_639-1", "es").unwrap();
+    /// let en = CodePhrase::new("ISO_639-1", "en").unwrap();
+    /// assert_eq!(event.check_openehr_rubric_in(&es), None);
+    /// assert_eq!(event.check_openehr_rubric_in(&en), Some(false));
+    /// ```
+    #[must_use]
+    pub fn check_openehr_rubric_in(&self, language: &CodePhrase) -> Option<bool> {
+        if !language
+            .terminology_id()
+            .name()
+            .eq_ignore_ascii_case("ISO_639-1")
+            || !language.code_string().eq_ignore_ascii_case("en")
+        {
+            return None;
+        }
+        self.check_openehr_rubric()
+    }
 }
 
 impl fmt::Display for DvCodedText {
@@ -732,8 +764,21 @@ impl DvParagraph {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rubric_checks_are_explicitly_limited_to_english() {
+        let coded = DvCodedText::new("evento", CodePhrase::openehr("433").unwrap()).unwrap();
+        let language = |code| CodePhrase::new("ISO_639-1", code).unwrap();
+
+        assert_eq!(coded.check_openehr_rubric_in(&language("es")), None);
+        assert_eq!(coded.check_openehr_rubric_in(&language("zz")), None);
+        assert_eq!(coded.check_openehr_rubric_in(&language("en")), Some(false));
+        let wrong_namespace = CodePhrase::new("example", "en").unwrap();
+        assert_eq!(coded.check_openehr_rubric_in(&wrong_namespace), None);
+    }
 
     #[test]
     fn coded_text_round_trips_through_canonical_json() {
@@ -844,9 +889,8 @@ mod tests {
     /// changes what an ICD-10 crosswalk claims about a SNOMED CT code.
     #[test]
     fn every_mapping_match_is_reported_by_exactly_one_predicate() {
-        let mapping = |kind: MappingMatch| {
-            TermMapping::new(CodePhrase::new("ICD10", "I10").unwrap(), kind)
-        };
+        let mapping =
+            |kind: MappingMatch| TermMapping::new(CodePhrase::new("ICD10", "I10").unwrap(), kind);
 
         let cases = [
             (MappingMatch::Broader, [true, false, false]),
@@ -862,13 +906,32 @@ mod tests {
             assert_eq!(m.match_kind(), kind);
             assert_eq!(m.target().code_string(), "I10");
         }
+        assert_eq!(MappingMatch::Narrower.as_char(), '<');
+        assert_eq!(MappingMatch::Unknown.as_char(), '?');
 
         // The purpose is optional and reported as recorded.
         assert_eq!(mapping(MappingMatch::Equivalent).purpose(), None);
         let with_purpose = mapping(MappingMatch::Equivalent).with_purpose(
             DvCodedText::new("clinical", CodePhrase::new("local", "at0001").unwrap()).unwrap(),
         );
-        assert_eq!(with_purpose.purpose().map(DvCodedText::value), Some("clinical"));
+        assert_eq!(
+            with_purpose.purpose().map(DvCodedText::value),
+            Some("clinical")
+        );
+    }
+
+    #[test]
+    fn text_refuses_empty_formatting_and_coded_text_requires_its_code() {
+        assert!(DvText::new("text").unwrap().with_formatting("").is_err());
+
+        let coded =
+            Text::Coded(DvCodedText::new("masked", CodePhrase::openehr("272").unwrap()).unwrap());
+        assert_eq!(coded.as_text().value(), "masked");
+        assert_eq!(coded.type_name(), "DV_CODED_TEXT");
+
+        let error = serde_json::from_str::<Text>(r#"{"_type":"DV_CODED_TEXT","value":"masked"}"#)
+            .unwrap_err();
+        assert!(error.to_string().contains("defining_code"), "{error}");
     }
 
     /// A `DV_TEXT`'s optional attributes, and its rendering.
@@ -909,15 +972,23 @@ mod tests {
         let mut object = json.as_object().expect("an object").clone();
         object.insert(
             "hyperlink".to_owned(),
-            serde_json::to_value(crate::rm::data_types::DvUri::new("https://example.org/x").unwrap())
-                .expect("serialize"),
+            serde_json::to_value(
+                crate::rm::data_types::DvUri::new("https://example.org/x").unwrap(),
+            )
+            .expect("serialize"),
         );
         let revived: DvText =
             serde_json::from_value(serde_json::Value::Object(object)).expect("deserialize");
-        assert!(revived.hyperlink().is_some(), "a recorded hyperlink was dropped");
+        assert!(
+            revived.hyperlink().is_some(),
+            "a recorded hyperlink was dropped"
+        );
 
         // Two different values must render differently.
-        assert_ne!(bare.to_string(), DvText::new("diastolic blood pressure").unwrap().to_string());
+        assert_ne!(
+            bare.to_string(),
+            DvText::new("diastolic blood pressure").unwrap().to_string()
+        );
     }
 
     /// A `DV_CODED_TEXT` renders as its plain value and carries the mappings

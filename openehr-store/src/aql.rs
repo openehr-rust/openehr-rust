@@ -31,7 +31,7 @@ use openehr::aql::{
     AqlQuery, ClassExpr, CompareOp, Direction, Expr, From as AqlFrom, IdentifiedPath, Literal,
     Operand, Predicate,
 };
-use openehr::base::ObjectVersionId;
+use openehr::base::{HierObjectId, ObjectVersionId};
 use openehr::path::{Pathable as _, Scalar};
 use openehr::rm::ehr::Composition;
 use std::cmp::Ordering;
@@ -86,8 +86,8 @@ pub struct QueryResult {
 }
 
 /// A refusal naming the construct, built for [`StoreError::AqlUnsupported`].
-fn unsupported(detail: impl Into<String>) -> StoreError {
-    StoreError::AqlUnsupported(detail.into())
+fn unsupported(detail: String) -> StoreError {
+    StoreError::AqlUnsupported(detail)
 }
 
 /// Executes `query` against `store`, binding `$name` parameters from `params`.
@@ -101,6 +101,12 @@ fn unsupported(detail: impl Into<String>) -> StoreError {
 /// and the container once a candidate composition is actually read. Returns
 /// the store's own error if a lookup fails, or [`StoreError::Json`] if a
 /// candidate's canonical JSON does not parse as a `COMPOSITION`.
+///
+/// # Panics
+///
+/// Never: once an `OBJECT_VERSION_ID` parses, its object component is already
+/// a `UID`; wrapping that UID as a bare `HIER_OBJECT_ID` adds no extension that
+/// could fail validation.
 // Long on purpose, the same reason `SqliteStore::commit_composition` gives:
 // this is the whole planning pass — one gate per clause, in the order a
 // query is written — and splitting it into a dozen helpers would hide the
@@ -111,8 +117,8 @@ fn unsupported(detail: impl Into<String>) -> StoreError {
 // default hasher's generic parameter here for one function's sake is
 // friction `openehr-loco`'s own eventual caller would have to carry too.
 #[allow(clippy::implicit_hasher)]
-pub fn execute<S: Store + ?Sized>(
-    store: &S,
+pub fn execute(
+    store: &dyn Store,
     query: &AqlQuery,
     params: &HashMap<String, Literal>,
 ) -> Result<QueryResult> {
@@ -122,14 +128,14 @@ pub fn execute<S: Store + ?Sized>(
     query.check().map_err(|e| unsupported(e.to_string()))?;
 
     if query.distinct {
-        return Err(unsupported("DISTINCT"));
+        return Err(unsupported("DISTINCT".to_owned()));
     }
     if query.top.is_some() {
-        return Err(unsupported("TOP"));
+        return Err(unsupported("TOP".to_owned()));
     }
     let Some(limit) = query.limit else {
         return Err(unsupported(
-            "a query with no LIMIT (db:P6.15, db:P6.7: no unbounded result set)",
+            "a query with no LIMIT (db:P6.15, db:P6.7: no unbounded result set)".to_owned(),
         ));
     };
 
@@ -140,18 +146,21 @@ pub fn execute<S: Store + ?Sized>(
             ehr_class.rm_type
         )));
     }
-    if !composition_class.rm_type.eq_ignore_ascii_case("COMPOSITION") {
+    if !composition_class
+        .rm_type
+        .eq_ignore_ascii_case("COMPOSITION")
+    {
         return Err(unsupported(format!(
             "the contained class must be COMPOSITION, not {}",
             composition_class.rm_type
         )));
     }
     let Some(composition_alias) = composition_class.alias.as_deref() else {
-        return Err(unsupported("COMPOSITION must be aliased"));
+        return Err(unsupported("COMPOSITION must be aliased".to_owned()));
     };
     let Some(Predicate::Archetype(archetype_id)) = &composition_class.predicate else {
         return Err(unsupported(
-            "COMPOSITION must be predicated by a bare archetype id, such as [openEHR-EHR-COMPOSITION.encounter.v1]",
+            "COMPOSITION must be predicated by a bare archetype id, such as [openEHR-EHR-COMPOSITION.encounter.v1]".to_owned(),
         ));
     };
 
@@ -202,24 +211,21 @@ pub fn execute<S: Store + ?Sized>(
         // withdrawn content; `latest_version` on its *container* is what
         // AQL means by "the composition in this record" — its current
         // state, never a snapshot from whenever it happened to be indexed.
-        let indexed: ObjectVersionId = candidate.version_uid.parse().map_err(|_| {
-            StoreError::Engine {
-                engine: "aql",
-                message: format!(
-                    "the archetype index named a malformed version uid: {}",
-                    candidate.version_uid
-                ),
-            }
-        })?;
-        let container = indexed.object_id().to_string().parse().map_err(|_| {
-            StoreError::Engine {
-                engine: "aql",
-                message: format!(
-                    "the archetype index named a version uid with a malformed container: {}",
-                    candidate.version_uid
-                ),
-            }
-        })?;
+        let indexed: ObjectVersionId =
+            candidate
+                .version_uid
+                .parse()
+                .map_err(|_| StoreError::Engine {
+                    engine: "aql",
+                    message: format!(
+                        "the archetype index named a malformed version uid: {}",
+                        candidate.version_uid
+                    ),
+                })?;
+        // Parsing the OBJECT_VERSION_ID above already proved its object part is
+        // a UID. A bare HIER_OBJECT_ID adds no fallible extension of its own.
+        let container = HierObjectId::new(indexed.object_id().clone(), None)
+            .expect("a bare UID is always a valid HIER_OBJECT_ID");
         let version = store.latest_version(&container)?;
         // A logical deletion carries no content (`db:H5.2`) — not a row any
         // query can match, the same as if it had never been committed.
@@ -316,7 +322,8 @@ fn ehr_id_from_predicate(
     let Some(Predicate::Standard(expr)) = &ehr_class.predicate else {
         return Err(unsupported(
             "EHR must be scoped by a predicate naming a literal or parameter \
-             compared against ehr_id/value — this executor has no cross-EHR index",
+             compared against ehr_id/value — this executor has no cross-EHR index"
+                .to_owned(),
         ));
     };
     let Expr::Compare {
@@ -383,8 +390,8 @@ fn check_expr_shape(expr: &Expr, alias: &str) -> Result<()> {
             check_expr_shape(b, alias)
         }
         Expr::Not(a) => check_expr_shape(a, alias),
-        Expr::MatchesSet { .. } => Err(unsupported("WHERE ... MATCHES { ... }")),
-        Expr::Exists(_) => Err(unsupported("WHERE EXISTS ...")),
+        Expr::MatchesSet { .. } => Err(unsupported("WHERE ... MATCHES { ... }".to_owned())),
+        Expr::Exists(_) => Err(unsupported("WHERE EXISTS ...".to_owned())),
     }
 }
 
@@ -461,7 +468,11 @@ fn literal_to_cell(literal: &Literal) -> Cell {
 /// no match is [`Cell::Null`], one scalar match is that scalar, and
 /// anything else — more than one match, or a match that is not a
 /// [`Scalar`] — refuses the whole query, naming `path` and `version_uid`.
-fn resolve_scalar(composition: &Composition, path: &IdentifiedPath, version_uid: &str) -> Result<Cell> {
+fn resolve_scalar(
+    composition: &Composition,
+    path: &IdentifiedPath,
+    version_uid: &str,
+) -> Result<Cell> {
     let text = path.path.as_deref().unwrap_or("");
     let matches = composition
         .items_at_path(text)
@@ -501,6 +512,18 @@ fn resolve_scalar(composition: &Composition, path: &IdentifiedPath, version_uid:
 fn compare(lhs: &Cell, op: CompareOp, rhs: &Cell) -> Result<bool> {
     if matches!(lhs, Cell::Null) || matches!(rhs, Cell::Null) {
         return Ok(false);
+    }
+    let comparable = matches!(
+        (lhs, rhs),
+        (Cell::Str(_), Cell::Str(_))
+            | (Cell::Boolean(_), Cell::Boolean(_))
+            | (
+                Cell::Integer(_) | Cell::Number(_),
+                Cell::Integer(_) | Cell::Number(_),
+            )
+    );
+    if !comparable {
+        return Ok(op == CompareOp::NotEqual);
     }
     match op {
         CompareOp::Equal => Ok(cells_eq(lhs, rhs)),
@@ -551,5 +574,586 @@ fn compare_cells(a: &Cell, b: &Cell) -> Ordering {
         (Cell::Null, _) => Ordering::Less,
         (_, Cell::Null) => Ordering::Greater,
         _ => Ordering::Equal,
+    }
+}
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::{
+        Cell, compare, compare_cells, eval_expr, eval_operand, execute, literal_to_cell,
+        resolve_scalar, scalar_to_cell, single_containment,
+    };
+    use crate::conformance::{self, RECORD};
+    use crate::record::{CompositionIndexRow, VersionRow};
+    use crate::{CommitOutcome, Result, Store};
+    use openehr::aql::{
+        AqlQuery, CompareOp, Expr, From as AqlFrom, IdentifiedPath, Literal, Operand,
+    };
+    use openehr::base::{HierObjectId, ObjectVersionId};
+    use openehr::path::Scalar;
+    use openehr::rm::common::{Contribution, Version};
+    use openehr::rm::data_types::DvDateTime;
+    use openehr::rm::ehr::{Composition, Ehr, EhrStatus};
+    use std::collections::HashMap;
+
+    /// Read-only owner-crate fixture for the executor. Engine conformance tests
+    /// remain the evidence that real stores supply these rows; this fixture
+    /// makes mutations in the engine-agnostic executor visible to this crate's
+    /// own tests rather than only to a downstream workspace (`W0.41`).
+    struct ReadStore {
+        index: Vec<CompositionIndexRow>,
+        version: VersionRow,
+    }
+
+    impl ReadStore {
+        fn one() -> Self {
+            let version = conformance::sample_version(1, None, 5);
+            let row = VersionRow::project(&version, "contribution", None, None).expect("project");
+            let index =
+                CompositionIndexRow::project(&row.uid, RECORD, version.data().expect("content"))
+                    .expect("index");
+            Self {
+                index: vec![index],
+                version: row,
+            }
+        }
+    }
+
+    impl Store for ReadStore {
+        fn engine(&self) -> &'static str {
+            "read fixture"
+        }
+
+        fn install(&mut self) -> Result<()> {
+            unreachable!("the AQL executor does not install a store")
+        }
+
+        fn create_ehr(&mut self, _: &Ehr) -> Result<()> {
+            unreachable!("the AQL executor does not create an EHR")
+        }
+
+        fn get_ehr(&self, _: &HierObjectId) -> Result<Ehr> {
+            unreachable!("the AQL executor does not read the EHR row")
+        }
+
+        fn create_contribution(&mut self, _: &HierObjectId, _: &Contribution) -> Result<()> {
+            unreachable!("the AQL executor does not create a contribution")
+        }
+
+        fn commit_composition(
+            &mut self,
+            _: &HierObjectId,
+            _: &Version<Composition>,
+            _: &str,
+        ) -> Result<CommitOutcome> {
+            unreachable!("the AQL executor does not commit")
+        }
+
+        fn commit_ehr_status(
+            &mut self,
+            _: &HierObjectId,
+            _: &Version<EhrStatus>,
+            _: &str,
+        ) -> Result<CommitOutcome> {
+            unreachable!("the AQL executor does not commit")
+        }
+
+        fn get_version(&self, _: &ObjectVersionId) -> Result<VersionRow> {
+            unreachable!("the executor resolves candidates through latest_version")
+        }
+
+        fn latest_version(&self, _: &HierObjectId) -> Result<VersionRow> {
+            Ok(self.version.clone())
+        }
+
+        fn version_at_time(&self, _: &HierObjectId, _: &DvDateTime) -> Result<VersionRow> {
+            unreachable!("the AQL executor does not perform historical reads")
+        }
+
+        fn all_versions(&self, _: &HierObjectId) -> Result<Vec<VersionRow>> {
+            unreachable!("the AQL executor does not enumerate history")
+        }
+
+        fn chain_checkpoint(&self, _: &HierObjectId) -> Result<String> {
+            unreachable!("the AQL executor does not inspect integrity metadata")
+        }
+
+        fn find_compositions_by_archetype(
+            &self,
+            _: &HierObjectId,
+            _: &str,
+        ) -> Result<Vec<CompositionIndexRow>> {
+            Ok(self.index.clone())
+        }
+    }
+
+    fn params() -> HashMap<String, Literal> {
+        HashMap::from([("ehrUid".to_owned(), Literal::String(RECORD.to_owned()))])
+    }
+
+    #[test]
+    fn the_owner_crate_executes_projection_filter_sort_and_pagination() {
+        let query: AqlQuery = "
+            SELECT c/name/value AS name, c/context/location AS location
+            FROM EHR e[ehr_id/value=$ehrUid]
+                CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+            WHERE c/name/value = 'Encounter 1'
+            ORDER BY c/name/value DESC
+            LIMIT 1 OFFSET 0
+        "
+        .parse()
+        .expect("query");
+        let result = execute(&ReadStore::one(), &query, &params()).expect("execute");
+
+        assert_eq!(result.columns, ["name", "location"]);
+        assert_eq!(
+            result.rows,
+            [vec![Cell::Str("Encounter 1".to_owned()), Cell::Null]]
+        );
+    }
+
+    #[test]
+    fn an_unbounded_query_is_refused_before_the_store_is_called() {
+        let query: AqlQuery = "
+            SELECT c/name/value
+            FROM EHR e[ehr_id/value=$ehrUid]
+                CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+        "
+        .parse()
+        .expect("query");
+        let error = execute(&ReadStore::one(), &query, &params()).expect_err("must refuse");
+        assert!(error.to_string().contains("no LIMIT"), "{error}");
+    }
+
+    #[test]
+    fn every_unsupported_query_shape_is_refused_by_name_in_the_owner_crate() {
+        let cases = [
+            (
+                "SELECT missing/name/value FROM EHR e[ehr_id/value=$ehrUid] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 10",
+                "FROM does not bind",
+            ),
+            (
+                "SELECT DISTINCT c/name/value FROM EHR e[ehr_id/value=$ehrUid] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 10",
+                "DISTINCT",
+            ),
+            (
+                "SELECT TOP 1 c/name/value FROM EHR e[ehr_id/value=$ehrUid] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 10",
+                "TOP",
+            ),
+            (
+                "SELECT c/name/value FROM EHR_STATUS e[ehr_id/value=$ehrUid] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 10",
+                "FROM must start from EHR",
+            ),
+            (
+                "SELECT c/name/value FROM EHR e[ehr_id/value=$ehrUid] CONTAINS OBSERVATION c[openEHR-EHR-OBSERVATION.test.v1] LIMIT 10",
+                "contained class must be COMPOSITION",
+            ),
+            (
+                "SELECT 1 FROM EHR e[ehr_id/value=$ehrUid] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 10",
+                "not a bare path",
+            ),
+            (
+                "SELECT e/ehr_id/value FROM EHR e[ehr_id/value=$ehrUid] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 10",
+                "not the COMPOSITION alias",
+            ),
+            (
+                "SELECT c/name/value FROM EHR e[ehr_id/value=$ehrUid] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] WHERE c/name/value LIKE 'Encounter%' LIMIT 10",
+                "WHERE ... LIKE ...",
+            ),
+            (
+                "SELECT c/name/value FROM EHR e[ehr_id/value=$ehrUid] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] WHERE EXISTS c/context LIMIT 10",
+                "WHERE EXISTS",
+            ),
+            (
+                "SELECT c/name/value FROM EHR e[ehr_id/value=$ehrUid] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] WHERE c/name/value MATCHES {'a', 'b'} LIMIT 10",
+                "MATCHES",
+            ),
+            (
+                "SELECT c/name/value FROM EHR e[ehr_id/value=$ehrUid] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] WHERE LENGTH(c/name/value) = 1 LIMIT 10",
+                "function call in WHERE",
+            ),
+            (
+                "SELECT c/name/value FROM EHR e[ehr_id/value=$ehrUid] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] ORDER BY e/ehr_id/value LIMIT 10",
+                "not the COMPOSITION alias",
+            ),
+            (
+                "SELECT o/name/value FROM EHR e[ehr_id/value=$ehrUid] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] CONTAINS OBSERVATION o[openEHR-EHR-OBSERVATION.test.v1] LIMIT 10",
+                "bare COMPOSITION class",
+            ),
+        ];
+
+        for (text, expected) in cases {
+            let query: AqlQuery = text
+                .parse()
+                .unwrap_or_else(|error| panic!("{text}: {error}"));
+            let error = execute(&ReadStore::one(), &query, &params()).unwrap_err();
+            assert!(
+                error.to_string().contains(expected),
+                "expected {expected:?} from {text}, got {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn required_scope_alias_archetype_and_parameter_are_each_checked() {
+        let cases = [
+            (
+                "SELECT 1 FROM EHR e[ehr_id/value=$ehrUid] CONTAINS COMPOSITION[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 10",
+                "COMPOSITION must be aliased",
+            ),
+            (
+                "SELECT c/name/value FROM EHR e[ehr_id/value=$ehrUid] CONTAINS COMPOSITION c LIMIT 10",
+                "must be predicated by a bare archetype id",
+            ),
+            (
+                "SELECT c/name/value FROM EHR e CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 10",
+                "EHR must be scoped",
+            ),
+            (
+                "SELECT c/name/value FROM EHR e[name/value=$ehrUid] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 10",
+                "must name ehr_id/value",
+            ),
+            (
+                "SELECT c/name/value FROM EHR e[ehr_id/value!=$ehrUid] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 10",
+                "ehr_id/value =",
+            ),
+            (
+                "SELECT c/name/value FROM EHR e[ehr_id/value=17] CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 10",
+                "string literal or a parameter",
+            ),
+        ];
+        for (text, expected) in cases {
+            let query: AqlQuery = text
+                .parse()
+                .unwrap_or_else(|error| panic!("{text}: {error}"));
+            let error = execute(&ReadStore::one(), &query, &params()).unwrap_err();
+            assert!(
+                error.to_string().contains(expected),
+                "expected {expected:?} from {text}, got {error}"
+            );
+        }
+
+        let query: AqlQuery = "
+            SELECT c/name/value
+            FROM EHR e[ehr_id/value=$ehrUid]
+                CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+            LIMIT 10
+        "
+        .parse()
+        .unwrap();
+        let missing = execute(&ReadStore::one(), &query, &HashMap::new()).unwrap_err();
+        assert!(missing.to_string().contains("missing parameter: $ehrUid"));
+
+        let wrong_type = HashMap::from([("ehrUid".to_owned(), Literal::Integer(1))]);
+        let error = execute(&ReadStore::one(), &query, &wrong_type).unwrap_err();
+        assert!(error.to_string().contains("must be a string ehr_id"));
+
+        let malformed = HashMap::from([("ehrUid".to_owned(), Literal::String(String::new()))]);
+        let error = execute(&ReadStore::one(), &query, &malformed).unwrap_err();
+        assert!(error.to_string().contains("malformed ehr_id"));
+    }
+
+    #[test]
+    fn malformed_deleted_and_invalid_index_candidates_have_distinct_outcomes() {
+        let query: AqlQuery = "
+            SELECT c/name/value
+            FROM EHR e[ehr_id/value=$ehrUid]
+                CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+            LIMIT 10
+        "
+        .parse()
+        .unwrap();
+
+        let mut malformed = ReadStore::one();
+        malformed.index[0].version_uid = "not-a-version-uid".to_owned();
+        let error = execute(&malformed, &query, &params()).unwrap_err();
+        assert!(error.to_string().contains("malformed version uid"));
+
+        let mut deleted = ReadStore::one();
+        deleted.version.data_json = None;
+        assert!(
+            execute(&deleted, &query, &params())
+                .unwrap()
+                .rows
+                .is_empty()
+        );
+
+        let mut invalid = ReadStore::one();
+        invalid.version.data_json = Some("{".to_owned());
+        assert!(execute(&invalid, &query, &params()).is_err());
+    }
+
+    #[test]
+    fn every_scalar_and_literal_kind_becomes_the_matching_cell() {
+        let path = IdentifiedPath {
+            root: "c".to_owned(),
+            path: Some("value".to_owned()),
+        };
+        assert_eq!(
+            scalar_to_cell(Scalar::Str("text"), &path, "uid").unwrap(),
+            Cell::Str("text".to_owned())
+        );
+        assert_eq!(
+            scalar_to_cell(Scalar::Number(1.5), &path, "uid").unwrap(),
+            Cell::Number(1.5)
+        );
+        assert_eq!(
+            scalar_to_cell(Scalar::Integer(2), &path, "uid").unwrap(),
+            Cell::Integer(2)
+        );
+        assert_eq!(
+            scalar_to_cell(Scalar::Boolean(true), &path, "uid").unwrap(),
+            Cell::Boolean(true)
+        );
+
+        for (literal, expected) in [
+            (
+                Literal::String("text".to_owned()),
+                Cell::Str("text".to_owned()),
+            ),
+            (Literal::Integer(2), Cell::Integer(2)),
+            (Literal::Number(1.5), Cell::Number(1.5)),
+            (Literal::Boolean(true), Cell::Boolean(true)),
+        ] {
+            assert_eq!(literal_to_cell(&literal), expected);
+        }
+    }
+
+    #[test]
+    fn comparisons_cover_every_operator_without_cross_type_false_positives() {
+        for (op, expected) in [
+            (CompareOp::Equal, false),
+            (CompareOp::NotEqual, true),
+            (CompareOp::Greater, false),
+            (CompareOp::GreaterOrEqual, false),
+            (CompareOp::Less, true),
+            (CompareOp::LessOrEqual, true),
+        ] {
+            assert_eq!(
+                compare(&Cell::Integer(1), op, &Cell::Number(2.0)).unwrap(),
+                expected
+            );
+        }
+        for (op, expected) in [
+            (CompareOp::Equal, false),
+            (CompareOp::NotEqual, true),
+            (CompareOp::Greater, false),
+            (CompareOp::GreaterOrEqual, false),
+            (CompareOp::Less, false),
+            (CompareOp::LessOrEqual, false),
+        ] {
+            assert_eq!(
+                compare(&Cell::Str("1".to_owned()), op, &Cell::Integer(1)).unwrap(),
+                expected,
+                "{op}"
+            );
+        }
+        assert!(!compare(&Cell::Null, CompareOp::NotEqual, &Cell::Integer(1)).unwrap());
+        assert!(compare(&Cell::Boolean(false), CompareOp::Less, &Cell::Boolean(true)).unwrap());
+        assert!(
+            compare(
+                &Cell::Str("a".to_owned()),
+                CompareOp::Less,
+                &Cell::Str("b".to_owned())
+            )
+            .unwrap()
+        );
+        assert!(compare(&Cell::Integer(2), CompareOp::Equal, &Cell::Number(2.0)).unwrap());
+        assert!(compare(&Cell::Number(2.0), CompareOp::Equal, &Cell::Integer(2)).unwrap());
+        assert!(compare(&Cell::Integer(2), CompareOp::Equal, &Cell::Integer(2)).unwrap());
+        assert!(compare(&Cell::Number(2.0), CompareOp::Equal, &Cell::Number(2.0)).unwrap());
+        assert!(compare(&Cell::Integer(1), CompareOp::Like, &Cell::Integer(1)).is_err());
+
+        assert_eq!(
+            compare_cells(&Cell::Null, &Cell::Null),
+            std::cmp::Ordering::Equal
+        );
+        assert_eq!(
+            compare_cells(&Cell::Null, &Cell::Integer(1)),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            compare_cells(&Cell::Integer(1), &Cell::Null),
+            std::cmp::Ordering::Greater
+        );
+        assert_eq!(
+            compare_cells(&Cell::Number(f64::NAN), &Cell::Number(1.0)),
+            std::cmp::Ordering::Equal
+        );
+        assert_eq!(
+            compare_cells(&Cell::Str("1".to_owned()), &Cell::Boolean(true)),
+            std::cmp::Ordering::Equal
+        );
+    }
+
+    #[test]
+    fn literal_scope_runtime_parameters_paths_and_descending_sort_are_driven() {
+        let literal_scope: AqlQuery = format!(
+            "SELECT c/name/value \
+             FROM EHR e[ehr_id/value='{RECORD}'] \
+                 CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] \
+             LIMIT 10"
+        )
+        .parse()
+        .expect("query");
+        assert_eq!(
+            execute(&ReadStore::one(), &literal_scope, &HashMap::new())
+                .expect("literal scope")
+                .rows
+                .len(),
+            1
+        );
+
+        let runtime_parameter: AqlQuery = "
+            SELECT c/name/value
+            FROM EHR e[ehr_id/value=$ehrUid]
+                CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+            WHERE c/name/value = $wanted
+            LIMIT 10
+        "
+        .parse()
+        .expect("query");
+        let error = execute(&ReadStore::one(), &runtime_parameter, &params()).unwrap_err();
+        assert!(error.to_string().contains("missing parameter: $wanted"));
+
+        let composition = conformance::sample_composition("Encounter");
+        let structure = IdentifiedPath {
+            root: "c".to_owned(),
+            path: Some("name".to_owned()),
+        };
+        assert!(
+            resolve_scalar(&composition, &structure, "uid")
+                .unwrap_err()
+                .to_string()
+                .contains("whole structure")
+        );
+        let malformed = IdentifiedPath {
+            root: "c".to_owned(),
+            path: Some("[".to_owned()),
+        };
+        assert!(resolve_scalar(&composition, &malformed, "uid").is_err());
+
+        let repeated = composition
+            .clone()
+            .with_content(
+                openehr::rm::ehr::Section::new(
+                    openehr::rm::common::LocatableAttrs::named("One", "at0001").expect("fixture"),
+                    Vec::new(),
+                )
+                .into(),
+            )
+            .with_content(
+                openehr::rm::ehr::Section::new(
+                    openehr::rm::common::LocatableAttrs::named("Two", "at0002").expect("fixture"),
+                    Vec::new(),
+                )
+                .into(),
+            );
+        let many = IdentifiedPath {
+            root: "c".to_owned(),
+            path: Some("/content/name/value".to_owned()),
+        };
+        assert!(
+            resolve_scalar(&repeated, &many, "uid")
+                .unwrap_err()
+                .to_string()
+                .contains("matched 2 nodes")
+        );
+
+        let mut two = ReadStore::one();
+        two.index.push(two.index[0].clone());
+        let descending: AqlQuery = "
+            SELECT c/name/value
+            FROM EHR e[ehr_id/value=$ehrUid]
+                CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+            ORDER BY c/name/value DESC
+            LIMIT 10
+        "
+        .parse()
+        .expect("query");
+        assert_eq!(execute(&two, &descending, &params()).unwrap().rows.len(), 2);
+
+        let parse_error = "SELECT".parse::<AqlQuery>().unwrap_err();
+        assert!(matches!(
+            crate::StoreError::from(parse_error),
+            crate::StoreError::AqlUnsupported(_)
+        ));
+    }
+
+    #[test]
+    fn internal_planning_guards_refuse_or_panic_when_called_out_of_order() {
+        let bare: AqlQuery = "SELECT e/ehr_id/value FROM EHR e LIMIT 1"
+            .parse()
+            .expect("query");
+        assert!(single_containment(&bare.from).is_err());
+
+        let nested: AqlQuery = "
+            SELECT o/name/value
+            FROM EHR e[ehr_id/value=$ehrUid]
+                CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+                CONTAINS OBSERVATION o[openEHR-EHR-OBSERVATION.test.v1]
+            LIMIT 1
+        "
+        .parse()
+        .expect("query");
+        assert!(single_containment(&nested.from).is_err());
+        let AqlFrom::Contains { left, right, .. } = &nested.from else {
+            panic!("fixture did not parse containment");
+        };
+        let rightmost = match right.as_ref() {
+            AqlFrom::Contains { right, .. } => right.clone(),
+            AqlFrom::Class(_) => right.clone(),
+            other => panic!("unexpected fixture tree: {other:?}"),
+        };
+        let left_nested = AqlFrom::Contains {
+            left: Box::new(AqlFrom::Contains {
+                left: left.clone(),
+                negated: false,
+                right: rightmost.clone(),
+            }),
+            negated: false,
+            right: rightmost,
+        };
+        assert!(single_containment(&left_nested).is_err());
+
+        let composition = conformance::sample_composition("Encounter");
+        let exists_query: AqlQuery = "
+            SELECT c/name/value
+            FROM EHR e[ehr_id/value=$ehrUid]
+                CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+            WHERE EXISTS c/context
+            LIMIT 1
+        "
+        .parse()
+        .expect("query");
+        let exists = exists_query.where_clause.as_ref().expect("where");
+        assert!(matches!(exists, Expr::Exists(_)));
+        assert!(
+            std::panic::catch_unwind(|| eval_expr(exists, &composition, &params(), "uid")).is_err()
+        );
+
+        let function_query: AqlQuery = "
+            SELECT c/name/value
+            FROM EHR e[ehr_id/value=$ehrUid]
+                CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+            WHERE LENGTH(c/name/value) = 1
+            LIMIT 1
+        "
+        .parse()
+        .expect("query");
+        let Some(Expr::Compare {
+            lhs: Operand::Function { .. },
+            ..
+        }) = function_query.where_clause.as_ref()
+        else {
+            panic!("fixture did not parse a function operand");
+        };
+        let Expr::Compare { lhs, .. } = function_query.where_clause.as_ref().unwrap() else {
+            unreachable!()
+        };
+        assert!(
+            std::panic::catch_unwind(|| eval_operand(lhs, &composition, &params(), "uid")).is_err()
+        );
     }
 }

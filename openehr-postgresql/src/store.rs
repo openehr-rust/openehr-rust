@@ -7,12 +7,21 @@ use openehr::rm::data_types::DvDateTime;
 use openehr::rm::ehr::{Composition, Ehr, EhrStatus};
 use openehr::validation::Validate as _;
 use openehr_store::record::{CompositionIndexRow, StoredInstant, VersionRow};
-use openehr_store::{CommitOutcome, Result, Store, StoreError, check_commit_rules, ddl_script};
+use openehr_store::store::{version_at_time_candidates_sql, version_uid_at_time};
+use openehr_store::{
+    CommitOutcome, Placeholder, Result, Store, StoreError, check_commit_rules, ddl_script,
+};
 use postgres::error::SqlState;
+use postgres::fallible_iterator::FallibleIterator as _;
 use postgres::types::ToSql;
-use postgres::{Client, NoTls, Row};
+use postgres::{Client, Row};
+use rustls::pki_types::CertificateDer;
+use rustls::pki_types::pem::PemObject as _;
+use rustls::{ClientConfig, RootCertStore};
 use std::cell::RefCell;
+use std::sync::Arc;
 use time::OffsetDateTime;
+use tokio_postgres_rustls::MakeRustlsConnect;
 
 /// The engine name used in errors.
 const ENGINE: &str = "PostgreSQL";
@@ -49,20 +58,55 @@ impl PostgresqlStore {
     ///
     /// Returns [`StoreError::Engine`] if the connection cannot be established.
     ///
-    /// # No TLS negotiation
-    ///
-    /// [`NoTls`]: this crate connects to a server this deployment already
-    /// trusts on the network it runs on — a loopback container in every test
-    /// this crate has, and a private network in the shape every other engine
-    /// crate here assumes (`db:S1.7`'s own boundary: the *service*,
-    /// `openehr-loco`, terminates the connection an outside caller makes;
-    /// nothing here is that boundary). Negotiating TLS to a database is a
-    /// real, separate decision — certificate verification, and what a
-    /// misconfigured or absent certificate should do — not a default to
-    /// invent inside a connection constructor.
+    /// TLS is required even when `params` says `sslmode=prefer` or
+    /// `sslmode=disable`. The certificate chain is verified against the
+    /// platform trust store and the certificate must cover the configured
+    /// server name. Negotiation failure never falls back to plaintext
+    /// (`db:O10.7`, `db:O10.18`).
     pub fn connect(params: &str) -> Result<Self> {
+        let (tls, errors) =
+            MakeRustlsConnect::with_native_certs().map_err(|_| tls_roots_error())?;
+        if !errors.is_empty() {
+            return Err(tls_roots_error());
+        }
+        Self::connect_with(params, tls)
+    }
+
+    /// Connects with one or more PEM-encoded private CA certificates.
+    ///
+    /// The supplied bundle replaces the platform roots. TLS, chain validation,
+    /// and server-name validation remain mandatory, so this is suitable for a
+    /// private CA without creating an accept-invalid-certificate mode.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Engine`] if the bundle is empty or malformed, or
+    /// if a verified TLS connection cannot be established.
+    pub fn connect_with_ca(params: &str, ca_pem: &[u8]) -> Result<Self> {
+        let certificates = CertificateDer::pem_slice_iter(ca_pem)
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|_| tls_roots_error())?;
+        if certificates.is_empty() {
+            return Err(tls_roots_error());
+        }
+        let mut roots = RootCertStore::empty();
+        for certificate in certificates {
+            roots.add(certificate).map_err(|_| tls_roots_error())?;
+        }
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let config = ClientConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .map_err(|_| tls_configuration_error())?
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+        Self::connect_with(params, MakeRustlsConnect::new(config))
+    }
+
+    fn connect_with(params: &str, tls: MakeRustlsConnect) -> Result<Self> {
+        let mut config: postgres::Config = params.parse().map_err(|e| engine(&e))?;
+        config.ssl_mode(postgres::config::SslMode::Require);
         Ok(Self {
-            client: RefCell::new(Client::connect(params, NoTls).map_err(|e| engine(&e))?),
+            client: RefCell::new(config.connect(tls).map_err(|e| engine(&e))?),
         })
     }
 
@@ -144,8 +188,14 @@ impl PostgresqlStore {
             versioned_object_uid: column(row, "versioned_object_uid")?,
             creating_system_id: column(row, "creating_system_id")?,
             trunk_version: column(row, "trunk_version")?,
-            branch_number: column(row, "branch_number")?,
-            branch_version: column(row, "branch_version")?,
+            branch_number: match column::<i64>(row, "branch_number")? {
+                0 => None,
+                value => Some(value),
+            },
+            branch_version: match column::<i64>(row, "branch_version")? {
+                0 => None,
+                value => Some(value),
+            },
             preceding_version_uid: column(row, "preceding_version_uid")?,
             lifecycle_state_code: column(row, "lifecycle_state_code")?,
             is_deleted: column(row, "is_deleted")?,
@@ -281,6 +331,20 @@ impl PostgresqlStore {
             Err(StoreError::NotFound { .. }) => Ok(true),
             Err(e) => Err(e),
         }
+    }
+}
+
+fn tls_roots_error() -> StoreError {
+    StoreError::Engine {
+        engine: ENGINE,
+        message: "could not load a complete TLS trust store".to_owned(),
+    }
+}
+
+fn tls_configuration_error() -> StoreError {
+    StoreError::Engine {
+        engine: ENGINE,
+        message: "could not configure the required TLS protocols".to_owned(),
     }
 }
 
@@ -692,26 +756,27 @@ impl Store for PostgresqlStore {
             });
         };
         let at_ts = Self::utc_seconds_to_timestamptz(Some(at_seconds))?;
-        let row = self
-            .client
-            .borrow_mut()
-            .query_opt(
-                &format!(
-                    "SELECT {} FROM openehr_version \
-                     WHERE versioned_object_uid = $1 \
-                       AND audit_time_committed_utc IS NOT NULL \
-                       AND audit_time_committed_utc <= $2 \
-                     ORDER BY audit_time_committed_utc DESC, trunk_version DESC LIMIT 1",
-                    Self::VERSION_COLUMNS
-                ),
-                &[&id, &at_ts],
-            )
-            .map_err(|e| engine(&e))?;
-        row.ok_or(StoreError::NotFound {
+        let sql = version_at_time_candidates_sql(Placeholder::Dollar);
+        let uid = {
+            let mut client = self.client.borrow_mut();
+            let params: [&(dyn ToSql + Sync); 4] = [&id, &at_ts, &id, &at_ts];
+            let candidates = client.query_raw(&sql, params).map_err(|e| engine(&e))?;
+            version_uid_at_time(
+                at,
+                candidates.iterator().map(|row| {
+                    let row = row.map_err(|e| engine(&e))?;
+                    Ok((
+                        column(&row, "uid")?,
+                        column(&row, "audit_time_committed_text")?,
+                        column(&row, "trunk_version")?,
+                    ))
+                }),
+            )?
+        };
+        self.get_version(&uid.ok_or(StoreError::NotFound {
             kind: "version",
             id,
-        })
-        .and_then(|r| Self::read_version(&r))
+        })?)
     }
 
     fn all_versions(&self, versioned_object_uid: &HierObjectId) -> Result<Vec<VersionRow>> {
@@ -798,6 +863,8 @@ fn insert_version(transaction: &mut postgres::Transaction<'_>, row: &VersionRow)
     let committed_utc =
         PostgresqlStore::utc_seconds_to_timestamptz(row.audit_time_committed.utc_seconds)?;
     let tag_mac = row.chain.tag_mac.map(|m| m.to_vec());
+    let branch_number = row.branch_number.unwrap_or(0);
+    let branch_version = row.branch_version.unwrap_or(0);
     // Bound to a slice with its element type stated up front: each `&row.…`
     // has a different concrete type (`&String`, `&i64`, `&bool`, `&[u8]`, …),
     // and Rust only coerces each to `&dyn ToSql + Sync` while constructing an
@@ -810,8 +877,8 @@ fn insert_version(transaction: &mut postgres::Transaction<'_>, row: &VersionRow)
         &row.versioned_object_uid,
         &row.creating_system_id,
         &row.trunk_version,
-        &row.branch_number,
-        &row.branch_version,
+        &branch_number,
+        &branch_version,
         &row.preceding_version_uid,
         &row.lifecycle_state_code,
         &row.is_deleted,

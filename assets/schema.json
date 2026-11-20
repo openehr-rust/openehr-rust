@@ -186,14 +186,14 @@
       {
         "name": "branch_number",
         "ty": "Int",
-        "nullable": true,
-        "note": "NULL on the trunk"
+        "nullable": false,
+        "note": "branch number, or zero on the trunk (db:H5.6)"
       },
       {
         "name": "branch_version",
         "ty": "Int",
-        "nullable": true,
-        "note": "NULL on the trunk"
+        "nullable": false,
+        "note": "branch version, or zero on the trunk (db:H5.6)"
       },
       {
         "name": "preceding_version_uid",

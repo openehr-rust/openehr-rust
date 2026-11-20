@@ -1100,13 +1100,14 @@ fn walk_primitive(
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::am::{
         ArchetypeRepository, ArchetypeSlot, ArchetypeTerminology, CArchetypeRoot, CAttribute,
-        CAttributeTuple, CComplexObject, CComplexObjectProxy, CObject, ConstraintStatus,
-        CPrimitiveObject, Cardinality, MultiplicityInterval, Provenance, RepositoryError,
-        Resolved, TermDefinition,
+        CAttributeTuple, CComplexObject, CComplexObjectProxy, CObject, CPrimitiveObject,
+        Cardinality, ConstraintStatus, MultiplicityInterval, Provenance, RepositoryError, Resolved,
+        TermDefinition,
     };
     use crate::base::Interval;
     use crate::path::Pathable as _;
@@ -1192,8 +1193,13 @@ mod tests {
     /// value.
     fn element_alt(node_id: &str, occurrences: MultiplicityInterval) -> CObject {
         CObject::Complex(
-            CComplexObject::new("ELEMENT", Some(node_id.to_owned()), Some(occurrences), Vec::new())
-                .unwrap(),
+            CComplexObject::new(
+                "ELEMENT",
+                Some(node_id.to_owned()),
+                Some(occurrences),
+                Vec::new(),
+            )
+            .unwrap(),
         )
     }
 
@@ -1337,7 +1343,12 @@ mod tests {
     #[test]
     fn an_open_slot_left_unfilled_is_fully_conformant() {
         let slot = CObject::Slot(
-            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, Some(MultiplicityInterval::OPTIONAL)).unwrap(),
+            ArchetypeSlot::new(
+                "ELEMENT",
+                SLOT_NODE_ID,
+                Some(MultiplicityInterval::OPTIONAL),
+            )
+            .unwrap(),
         );
         let archetype = evaluation_archetype(slot);
         let entry = build_evaluation(vec![Element::new(
@@ -1357,16 +1368,23 @@ mod tests {
     #[test]
     fn a_closed_slot_that_was_filled_anyway_is_a_violation() {
         let slot = CObject::Slot(
-            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, Some(MultiplicityInterval::OPTIONAL))
-                .unwrap()
-                .closed(),
+            ArchetypeSlot::new(
+                "ELEMENT",
+                SLOT_NODE_ID,
+                Some(MultiplicityInterval::OPTIONAL),
+            )
+            .unwrap()
+            .closed(),
         );
         let archetype = evaluation_archetype(slot);
         let entry = build_evaluation(vec![filled("Systolic", SLOT_NODE_ID)]);
         let report = validate_against_archetype(&archetype, entry.as_node());
         assert!(report.unchecked().is_empty());
         assert_eq!(report.violations().len(), 1);
-        assert_eq!(report.violations()[0].constraint(), "ARCHETYPE_SLOT.is_closed");
+        assert_eq!(
+            report.violations()[0].constraint(),
+            "ARCHETYPE_SLOT.is_closed"
+        );
         assert_eq!(
             report.violations()[0].archetype_path(),
             "/data[id2]/items[at0004]"
@@ -1379,7 +1397,12 @@ mod tests {
     #[test]
     fn an_unrestricted_open_slots_filler_is_fully_conformant() {
         let slot = CObject::Slot(
-            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, Some(MultiplicityInterval::OPTIONAL)).unwrap(),
+            ArchetypeSlot::new(
+                "ELEMENT",
+                SLOT_NODE_ID,
+                Some(MultiplicityInterval::OPTIONAL),
+            )
+            .unwrap(),
         );
         let archetype = evaluation_archetype(slot);
         let entry = build_evaluation(vec![filled("Systolic", SLOT_NODE_ID)]);
@@ -1396,9 +1419,13 @@ mod tests {
     #[test]
     fn a_restricted_open_slots_filler_is_unchecked_not_silently_passed() {
         let slot = CObject::Slot(
-            ArchetypeSlot::new("ELEMENT", SLOT_NODE_ID, Some(MultiplicityInterval::OPTIONAL))
-                .unwrap()
-                .including("archetype_id/value matches {/.*device.*/}"),
+            ArchetypeSlot::new(
+                "ELEMENT",
+                SLOT_NODE_ID,
+                Some(MultiplicityInterval::OPTIONAL),
+            )
+            .unwrap()
+            .including("archetype_id/value matches {/.*device.*/}"),
         );
         let archetype = evaluation_archetype(slot);
         let entry = build_evaluation(vec![filled("Systolic", SLOT_NODE_ID)]);
@@ -1442,7 +1469,8 @@ mod tests {
         let archetype = Archetype::new(
             "openEHR-EHR-EVALUATION.test.v1".parse().unwrap(),
             definition,
-            ArchetypeTerminology::new("en", terms(&[("id1", "Test"), ("at0004", "Systolic")])).unwrap(),
+            ArchetypeTerminology::new("en", terms(&[("id1", "Test"), ("at0004", "Systolic")]))
+                .unwrap(),
         )
         .unwrap();
         let entry = build_evaluation(vec![]);
@@ -1477,19 +1505,35 @@ mod tests {
             vec![element],
         )
         .unwrap();
-        let data = CComplexObject::new("ITEM_LIST", Some("id2".to_owned()), Some(MultiplicityInterval::MANDATORY), vec![items])
-            .unwrap();
+        let data = CComplexObject::new(
+            "ITEM_LIST",
+            Some("id2".to_owned()),
+            Some(MultiplicityInterval::MANDATORY),
+            vec![items],
+        )
+        .unwrap();
         let definition = CComplexObject::new(
             "EVALUATION",
             Some("id1".to_owned()),
             Some(MultiplicityInterval::MANDATORY),
-            vec![CAttribute::single("data", MultiplicityInterval::MANDATORY, vec![CObject::Complex(data)]).unwrap()],
+            vec![
+                CAttribute::single(
+                    "data",
+                    MultiplicityInterval::MANDATORY,
+                    vec![CObject::Complex(data)],
+                )
+                .unwrap(),
+            ],
         )
         .unwrap();
         let archetype = Archetype::new(
             "openEHR-EHR-EVALUATION.test.v1".parse().unwrap(),
             definition,
-            ArchetypeTerminology::new("en", terms(&[("id1", "Test"), ("id2", "Data"), ("at0004", "Systolic")])).unwrap(),
+            ArchetypeTerminology::new(
+                "en",
+                terms(&[("id1", "Test"), ("id2", "Data"), ("at0004", "Systolic")]),
+            )
+            .unwrap(),
         )
         .unwrap();
         let systolic = || Element::new(attrs("Systolic", "at0004"), placeholder_value());
@@ -1497,13 +1541,20 @@ mod tests {
         for count in [0, 2] {
             let entry = build_evaluation((0..count).map(|_| systolic()).collect());
             let report = validate_against_archetype(&archetype, entry.as_node());
-            assert!(report.is_conformant(), "{count} elements: {:?}", report.violations());
+            assert!(
+                report.is_conformant(),
+                "{count} elements: {:?}",
+                report.violations()
+            );
         }
         let entry = build_evaluation(vec![systolic(), systolic(), systolic()]);
         let report = validate_against_archetype(&archetype, entry.as_node());
         assert!(report.unchecked().is_empty());
         assert!(
-            report.violations().iter().any(|v| v.constraint() == "Occurrences"),
+            report
+                .violations()
+                .iter()
+                .any(|v| v.constraint() == "Occurrences"),
             "{:?}",
             report.violations()
         );
@@ -1825,12 +1876,8 @@ mod tests {
         let tuple = CAttributeTuple::new(
             vec![
                 CAttribute::single("units", MultiplicityInterval::MANDATORY, Vec::new()).unwrap(),
-                CAttribute::single(
-                    "accuracy",
-                    MultiplicityInterval::MANDATORY,
-                    Vec::new(),
-                )
-                .unwrap(),
+                CAttribute::single("accuracy", MultiplicityInterval::MANDATORY, Vec::new())
+                    .unwrap(),
             ],
             vec![units_magnitude_row("mm[Hg]", 0.0, 300.0)],
         )
@@ -2094,8 +2141,10 @@ mod tests {
             )
         };
 
-        let exact =
-            build_evaluation(vec![Element::new(attrs("Systolic", "at0004"), coded("at0010"))]);
+        let exact = build_evaluation(vec![Element::new(
+            attrs("Systolic", "at0004"),
+            coded("at0010"),
+        )]);
         assert!(validate_against_archetype(&archetype, exact.as_node()).is_conformant());
 
         let other = build_evaluation(vec![Element::new(
@@ -2112,22 +2161,20 @@ mod tests {
     #[test]
     fn a_c_terminology_code_with_no_constraint_is_unchecked_either_spelling() {
         for constraint in [None, Some(String::new())] {
-            let element =
-                element_with_value_constraint(
-                    "at0004",
-                    "defining_code",
-                    CPrimitive::TerminologyCode {
-                        constraint,
-                        constraint_status: None,
-                    },
-                    "DV_CODED_TEXT",
-                );
+            let element = element_with_value_constraint(
+                "at0004",
+                "defining_code",
+                CPrimitive::TerminologyCode {
+                    constraint,
+                    constraint_status: None,
+                },
+                "DV_CODED_TEXT",
+            );
             let archetype = evaluation_archetype(element);
             let entry = build_evaluation(vec![Element::new(
                 attrs("Systolic", "at0004"),
                 DataValue::CodedText(
-                    DvCodedText::new("value", CodePhrase::new("local", "at0010").unwrap())
-                        .unwrap(),
+                    DvCodedText::new("value", CodePhrase::new("local", "at0010").unwrap()).unwrap(),
                 ),
             )]);
             let report = validate_against_archetype(&archetype, entry.as_node());

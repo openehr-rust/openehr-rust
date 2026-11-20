@@ -393,9 +393,8 @@ fn aql_catches_a_path_rooted_at_an_unbound_alias() {
 fn no_document_this_crate_can_build_carries_a_non_finite_float() {
     use openehr::rm::data_types::{DvCodedText, DvProportion, DvScale, ProportionKind};
 
-    let symbol = || {
-        DvCodedText::new("symbol", CodePhrase::new("local", "at0001").unwrap()).unwrap()
-    };
+    let symbol =
+        || DvCodedText::new("symbol", CodePhrase::new("local", "at0001").unwrap()).unwrap();
     for (name, value) in [
         ("NaN", f64::NAN),
         ("+inf", f64::INFINITY),
@@ -512,7 +511,9 @@ fn every_redaction_rule_kind_withholds_what_it_names() {
     assert_eq!(masked(RedactionRule::node_id("at9999")), (true, 0));
     assert_eq!(masked(RedactionRule::name("Blood pressure")), (true, 0));
     assert_eq!(
-        masked(RedactionRule::archetype_root("openEHR-EHR-OBSERVATION.other.v1")),
+        masked(RedactionRule::archetype_root(
+            "openEHR-EHR-OBSERVATION.other.v1"
+        )),
         (true, 0)
     );
 }
@@ -535,7 +536,10 @@ fn a_redaction_count_reports_numbers_and_the_rules_are_kept() {
     // withheld is the point of counting, and an empty one reads as "none".
     let shown = count.to_string();
     assert!(shown.contains('1'), "no number in {shown:?}");
-    assert!(!shown.contains("HIV"), "a count must not name what it withheld");
+    assert!(
+        !shown.contains("HIV"),
+        "a count must not name what it withheld"
+    );
 }
 
 /// Redaction tells an ELEMENT from a CLUSTER by **shape**, not by `_type`.
@@ -568,7 +572,10 @@ fn redaction_distinguishes_a_leaf_from_a_branch_by_shape() {
             Item::Cluster(
                 Cluster::new(
                     at("Group", "at0021"),
-                    vec![leaf("Inner A", "at0022", "a"), leaf("Inner B", "at0023", "b")],
+                    vec![
+                        leaf("Inner A", "at0022", "a"),
+                        leaf("Inner B", "at0023", "b"),
+                    ],
                 )
                 .unwrap(),
             ),
@@ -613,9 +620,15 @@ fn redaction_distinguishes_a_leaf_from_a_branch_by_shape() {
         .with_rule(RedactionRule::node_id("at0021"))
         .redact_counting(&composition)
         .unwrap();
-    assert_eq!(count.masked, 0, "a cluster was masked as though it were a value");
+    assert_eq!(
+        count.masked, 0,
+        "a cluster was masked as though it were a value"
+    );
     let json = serde_json::to_string(&redacted).unwrap();
-    assert!(json.contains('a') && json.contains('b'), "the branch survived");
+    assert!(
+        json.contains('a') && json.contains('b'),
+        "the branch survived"
+    );
 
     // A rule naming a leaf inside the cluster masks exactly that one.
     let (_, count) = Redactor::new()
@@ -691,7 +704,6 @@ fn an_untagged_element_is_still_recognised_and_withheld() {
     assert!(!serde_json::to_string(&redacted).unwrap().contains(MARKER));
 }
 
-
 /// A `DV_URI` that arrived as JSON is checked, and reading it does not panic.
 ///
 /// **Failure mode.** `Deserialize` is derived on `DvUri` and writes `value`
@@ -755,7 +767,11 @@ fn an_ehr_uri_deserialized_with_a_foreign_scheme_is_reported() {
     let uri: openehr::rm::data_types::DvEhrUri =
         serde_json::from_str(r#"{"value":"https://example.org/x"}"#)
             .expect("serde writes the field in");
-    assert_eq!(uri.scheme(), "https", "the parse gate is the one it skipped");
+    assert_eq!(
+        uri.scheme(),
+        "https",
+        "the parse gate is the one it skipped"
+    );
 
     let report = DataValue::EhrUri(uri).validate();
     let named: Vec<_> = report
@@ -843,12 +859,20 @@ fn equality_and_order_disagree_by_design_and_neither_is_partial_ord() {
     );
     distinct_but_ordered_equal(
         "DV_QUANTITY differing only in precision",
-        &DvQuantity::new(5.0, "mg").unwrap().with_precision(1).unwrap(),
-        &DvQuantity::new(5.0, "mg").unwrap().with_precision(2).unwrap(),
+        &DvQuantity::new(5.0, "mg")
+            .unwrap()
+            .with_precision(1)
+            .unwrap(),
+        &DvQuantity::new(5.0, "mg")
+            .unwrap()
+            .with_precision(2)
+            .unwrap(),
     );
     distinct_but_ordered_equal(
         "DV_QUANTITY differing only in units_display_name",
-        &DvQuantity::new(5.0, "mg").unwrap().with_units_display_name("mg"),
+        &DvQuantity::new(5.0, "mg")
+            .unwrap()
+            .with_units_display_name("mg"),
         &DvQuantity::new(5.0, "mg").unwrap(),
     );
     distinct_but_ordered_equal(
@@ -885,8 +909,14 @@ fn a_reference_range_is_unmoved_by_how_an_instant_is_spelled() {
 
     // A bound that is not comparable is excluded, not silently admitted.
     let month = DvDateTime::new("2026-08").unwrap();
-    assert_eq!(month.semantic_cmp(&DvDateTime::new("2026-08-01T11:00:00Z").unwrap()), None);
-    assert!(!range.contains(&month), "an incomparable value was admitted");
+    assert_eq!(
+        month.semantic_cmp(&DvDateTime::new("2026-08-01T11:00:00Z").unwrap()),
+        None
+    );
+    assert!(
+        !range.contains(&month),
+        "an incomparable value was admitted"
+    );
 
     // An excluded bound is still excluded.
     let open = openehr::base::Interval::open(
@@ -952,9 +982,9 @@ fn aql_rendering_round_trips_through_the_parser() {
     ] {
         let once: AqlQuery = text.parse().unwrap_or_else(|e| panic!("{text:?}: {e}"));
         let rendered = once.to_string();
-        let twice: AqlQuery = rendered
-            .parse()
-            .unwrap_or_else(|e| panic!("{text:?} rendered to {rendered:?}, which will not reparse: {e}"));
+        let twice: AqlQuery = rendered.parse().unwrap_or_else(|e| {
+            panic!("{text:?} rendered to {rendered:?}, which will not reparse: {e}")
+        });
         assert_eq!(
             twice.to_string(),
             rendered,

@@ -62,19 +62,16 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
 - **D3.8** Where a code appears in more than one openEHR terminology group with
   different rubrics, agreement with **any** group MUST be accepted: a bare
   `DV_CODED_TEXT` does not know which attribute it sits on.
-- **D3.7a** *(added 2026-09-05)* `D3.7`'s own "report *not checked*, never a
-  false violation" principle is not yet met for a non-English record: this
-  crate's rubric table carries the **English** rubric only, and the check does
-  not know the enclosing record's own declared `language` — so a valid
-  Spanish rubric (`"evento"` for openEHR's own code `433`, whose English
-  rubric is `"event"`) is reported as a *violation*, not as *unchecked*,
-  which is exactly the false claim `D3.7` says not to make, just in the
-  refusing direction rather than the accepting one. Found running the JSON
-  corpus (`EHRbase`'s own `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`,
-  declared `language: es`), recorded as `A-81`, open: closing it needs
-  either threading the record's language through the validation walk and
-  reporting unchecked for anything but English, or sourcing and citing real
-  multi-language rubric data — a decision, not a same-day fix.
+- **D3.7a** *(added 2026-09-05, amended 2026-11-19)* The support-terminology
+  rubric table is English-only. Validation MUST check a rubric only when the
+  coded text's own declared language, or otherwise its enclosing
+  `COMPOSITION.language`, is `ISO_639-1::en`. It MUST report any other declared
+  language as *not checked*, never as a violation against the English table.
+  A standalone coded text with no language context retains the explicitly
+  English [`check_openehr_rubric`](../src/rm/data_types/text.rs) operation.
+  This closes the false refusal found as `A-81`: Spanish `"evento"` for code
+  `433` is unchecked, while the same value explicitly declared English still
+  violates the English rubric `"event"`.
 
 ## Dates, times, and durations
 
@@ -149,7 +146,12 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
 - **D3.17** `DV_PROPORTION` values MUST be comparable only when their kinds
   match.
 - **D3.18** Times carrying UTC offsets MUST be normalised to UTC before
-  comparison.
+  comparison. The ordering MUST retain all authored fractional digits:
+  `.5009` is later than `.500`, and `.5000` equals `.5` in chronological
+  order. For a date-time normalisation includes any change of calendar day.
+  For example, `2024-03-01T00:15:00+05:45` and `2024-02-29T18:30:00Z`
+  denote the same instant. Different written dates cannot resolve a
+  comparison between a local date-time and an offset-bearing one (`D3.14`).
 - **D3.18a** *Resolved by design, not by compromise.* `Eq` on `Time`, `Date`,
   `DateTime` and `Duration` is **lexical** — two values are equal when they
   were written the same way — while chronological (or, for `Duration`, length)

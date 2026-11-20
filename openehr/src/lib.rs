@@ -157,6 +157,10 @@
 //! and in these docs — `S1.4`, `Q12.9`, `X11.7` — so prose can be traced back
 //! to a decision.
 
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+// The feature gate is consumed only by nightly coverage builds; stable sees
+// the attribute but no unstable feature use.
+#![cfg_attr(coverage_nightly, allow(unused_features))]
 #![forbid(unsafe_code)]
 
 pub mod am;

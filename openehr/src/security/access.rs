@@ -427,6 +427,7 @@ impl From<GroupSettings> for AccessControlSettings {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::rm::common::LocatableAttrs;
@@ -456,6 +457,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(opaque.scheme(), "nl.nictiz.opt-out.v2");
+        let AccessControlSettings::Opaque(details) = &opaque else {
+            panic!("a foreign scheme was not kept opaque");
+        };
+        assert_eq!(details.settings()["register"], "national");
         let request = AccessRequest {
             operation: Operation::Read,
             groups: &[],
@@ -483,6 +488,8 @@ mod tests {
     fn operations_are_separately_permitted() {
         let settings = GroupSettings::new()
             .permit(Operation::Read, "care-team")
+            .permit(Operation::Write, "writers")
+            .permit(Operation::Delete, "records-administration")
             .permit(Operation::Audit, "information-governance");
         let ig = ["information-governance".to_string()];
         let care = ["care-team".to_string()];
@@ -498,10 +505,39 @@ mod tests {
         };
         assert!(permitted(&care, Operation::Read));
         assert!(!permitted(&care, Operation::Write));
+        assert_eq!(settings.groups_for(Operation::Write), ["writers"]);
         assert!(permitted(&ig, Operation::Audit));
         // The separation that matters: an auditor gets the trail, not the
         // clinical content.
         assert!(!permitted(&ig, Operation::Read));
+        assert_eq!(
+            settings.groups_for(Operation::Delete),
+            ["records-administration"]
+        );
+
+        let tagged: AccessControlSettings = settings.clone().into();
+        let json = serde_json::to_string(&tagged).unwrap();
+        assert!(json.contains(GroupSettings::SCHEME), "{json}");
+        let read: AccessControlSettings = serde_json::from_str(&json).unwrap();
+        assert!(
+            read.decide(&AccessRequest {
+                operation: Operation::Read,
+                groups: &care,
+                is_subject: false,
+            })
+            .is_permit()
+        );
+
+        let access = EhrAccess::new(attrs()).with_settings(read);
+        assert!(
+            access
+                .decide(&AccessRequest {
+                    operation: Operation::Read,
+                    groups: &care,
+                    is_subject: false,
+                })
+                .is_permit()
+        );
     }
 
     #[test]
@@ -563,13 +599,21 @@ mod tests {
         // Serialising is how a dropped group becomes visible without an
         // accessor for the list.
         let shown = serde_json::to_string(&groups).expect("json");
-        assert!(shown.contains("6BA7B810"), "a group reference was dropped: {shown}");
-        assert!(shown.contains("3F2504E0"), "a group reference was dropped: {shown}");
+        assert!(
+            shown.contains("6BA7B810"),
+            "a group reference was dropped: {shown}"
+        );
+        assert!(
+            shown.contains("3F2504E0"),
+            "a group reference was dropped: {shown}"
+        );
 
         let configured =
             EhrAccess::new(attrs("access", "at0000")).with_settings(groups.clone().into());
         assert!(configured.settings().is_some());
-        let scheme = configured.scheme().expect("a configured access has a scheme");
+        let scheme = configured
+            .scheme()
+            .expect("a configured access has a scheme");
         assert!(!scheme.is_empty(), "openEHR's Scheme_valid wants a name");
         assert_eq!(scheme, AccessControlSettings::from(groups).scheme());
     }

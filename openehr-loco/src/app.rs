@@ -15,7 +15,9 @@ use loco_rs::{
 use openehr_sqlite::SqliteStore;
 use openehr_store::Store as _;
 use std::sync::{Arc, Mutex};
-use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder, key_extractor::GlobalKeyExtractor};
+use tower_governor::{
+    GovernorLayer, governor::GovernorConfigBuilder, key_extractor::GlobalKeyExtractor,
+};
 
 use crate::access::{AccessLog, SharedAccessLog};
 use crate::auth::{PasetoVerifier, SharedVerifier};

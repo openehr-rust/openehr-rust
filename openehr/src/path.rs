@@ -875,6 +875,7 @@ impl Pathable for History {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::rm::common::{LocatableAttrs, PartyIdentified};
@@ -945,12 +946,19 @@ mod tests {
     fn the_three_hand_written_archetype_details_dispatchers_answer_present_and_absent() {
         use crate::rm::data_structures::{Event, History, ItemStructure};
         use crate::rm::ehr::Entry;
-        let details = || Archetyped::new("openEHR-EHR-OBSERVATION.blood_pressure.v2", "1.1.0").unwrap();
+        let details =
+            || Archetyped::new("openEHR-EHR-OBSERVATION.blood_pressure.v2", "1.1.0").unwrap();
         let structure = |a: LocatableAttrs| ItemStructure::from(ItemTree::new(a, vec![]));
-        assert!(structure(attrs("d", "at0003").with_archetype_details(details()))
-            .archetype_details()
-            .is_some());
-        assert!(structure(attrs("d", "at0003")).archetype_details().is_none());
+        assert!(
+            structure(attrs("d", "at0003").with_archetype_details(details()))
+                .archetype_details()
+                .is_some()
+        );
+        assert!(
+            structure(attrs("d", "at0003"))
+                .archetype_details()
+                .is_none()
+        );
 
         let event = |a: LocatableAttrs| {
             Event::from(PointEvent::new(
@@ -959,9 +967,11 @@ mod tests {
                 structure(attrs("d", "at0003")),
             ))
         };
-        assert!(event(attrs("e", "at0006").with_archetype_details(details()))
-            .archetype_details()
-            .is_some());
+        assert!(
+            event(attrs("e", "at0006").with_archetype_details(details()))
+                .archetype_details()
+                .is_some()
+        );
         assert!(event(attrs("e", "at0006")).archetype_details().is_none());
 
         let entry = |a: LocatableAttrs| {
@@ -981,12 +991,19 @@ mod tests {
                 history,
             ))
         };
-        assert!(entry(attrs("o", "openEHR-EHR-OBSERVATION.blood_pressure.v2").with_archetype_details(details()))
+        assert!(
+            entry(
+                attrs("o", "openEHR-EHR-OBSERVATION.blood_pressure.v2")
+                    .with_archetype_details(details())
+            )
             .archetype_details()
-            .is_some());
-        assert!(entry(attrs("o", "openEHR-EHR-OBSERVATION.blood_pressure.v2"))
-            .archetype_details()
-            .is_none());
+            .is_some()
+        );
+        assert!(
+            entry(attrs("o", "openEHR-EHR-OBSERVATION.blood_pressure.v2"))
+                .archetype_details()
+                .is_none()
+        );
     }
 
     #[test]
@@ -1305,11 +1322,23 @@ mod tests {
             ),
             // The text and scalar values.
             (r#"{"_type":"DV_BOOLEAN","value":true}"#, "value", "true"),
-            (r#"{"_type":"DV_TEXT","value":"free text"}"#, "value", "free text"),
+            (
+                r#"{"_type":"DV_TEXT","value":"free text"}"#,
+                "value",
+                "free text",
+            ),
             (CODED, "value", "female"),
             (CODED, "defining_code", "at0022"),
-            (r#"{"_type":"DV_DATE","value":"2026-08-03"}"#, "value", "2026-08-03"),
-            (r#"{"_type":"DV_TIME","value":"09:30:00"}"#, "value", "09:30:00"),
+            (
+                r#"{"_type":"DV_DATE","value":"2026-08-03"}"#,
+                "value",
+                "2026-08-03",
+            ),
+            (
+                r#"{"_type":"DV_TIME","value":"09:30:00"}"#,
+                "value",
+                "09:30:00",
+            ),
             (
                 r#"{"_type":"DV_DATE_TIME","value":"2026-08-03T09:30:00Z"}"#,
                 "value",
@@ -1378,8 +1407,8 @@ mod tests {
     #[test]
     #[allow(clippy::too_many_lines)]
     fn every_navigable_attribute_of_a_structural_node_reaches_its_value() {
-        use crate::rm::data_structures::{Cluster, ItemList, ItemSingle, ItemTable};
         use crate::rm::data_structures::Event;
+        use crate::rm::data_structures::{Cluster, ItemList, ItemSingle, ItemTable};
         use crate::rm::ehr::{
             Action, AdminEntry, CareEntryAttrs, Evaluation, Instruction, IsmTransition, Section,
         };
@@ -1396,16 +1425,13 @@ mod tests {
                 DataValue::Quantity(DvQuantity::new(v, "mm[Hg]").unwrap()),
             )
         };
-        let single = |name: &str| ItemSingle::new(attrs(name, "at0100"), element("s", "at0101", 1.0));
+        let single =
+            |name: &str| ItemSingle::new(attrs(name, "at0100"), element("s", "at0101", 1.0));
 
         // --- COMPOSITION, SECTION -------------------------------------------
         let composition = blood_pressure();
         let coded_name = Text::Coded(
-            DvCodedText::new(
-                "Systolic",
-                CodePhrase::new("local", "at0004").unwrap(),
-            )
-            .unwrap(),
+            DvCodedText::new("Systolic", CodePhrase::new("local", "at0004").unwrap()).unwrap(),
         );
         let section = Section::new(
             attrs("Findings", "at0200"),
@@ -1421,27 +1447,34 @@ mod tests {
         let state = History::new(
             attrs("State Series", "at0300"),
             DvDateTime::new("2026-07-31T09:00:00Z").unwrap(),
-            vec![PointEvent::new(
-                attrs("state event", "at0301"),
-                DvDateTime::new("2026-07-31T09:05:00Z").unwrap(),
-                ItemTree::new(attrs("position", "at0302"), vec![]).into(),
-            )
-            .into()],
+            vec![
+                PointEvent::new(
+                    attrs("state event", "at0301"),
+                    DvDateTime::new("2026-07-31T09:05:00Z").unwrap(),
+                    ItemTree::new(attrs("position", "at0302"), vec![]).into(),
+                )
+                .into(),
+            ],
             None,
         )
         .unwrap();
         let observation = Observation::new(
-            attrs("Blood pressure", "openEHR-EHR-OBSERVATION.blood_pressure.v2"),
+            attrs(
+                "Blood pressure",
+                "openEHR-EHR-OBSERVATION.blood_pressure.v2",
+            ),
             entry_attrs(),
             History::new(
                 attrs("Event Series", "at0001"),
                 DvDateTime::new("2026-07-31T09:00:00Z").unwrap(),
-                vec![PointEvent::new(
-                    attrs("any event", "at0006"),
-                    DvDateTime::new("2026-07-31T09:15:00Z").unwrap(),
-                    ItemTree::new(attrs("bp", "at0003"), vec![]).into(),
-                )
-                .into()],
+                vec![
+                    PointEvent::new(
+                        attrs("any event", "at0006"),
+                        DvDateTime::new("2026-07-31T09:15:00Z").unwrap(),
+                        ItemTree::new(attrs("bp", "at0003"), vec![]).into(),
+                    )
+                    .into(),
+                ],
                 None,
             )
             .unwrap(),
@@ -1462,12 +1495,14 @@ mod tests {
             attrs("Order", "openEHR-EHR-INSTRUCTION.medication_order.v3"),
             entry_attrs(),
             Text::Plain(DvText::new("Give 5mg at once").unwrap()),
-            vec![crate::rm::ehr::Activity::new(
-                attrs("activity", "at0400"),
-                single("activity description").into(),
-                "openEHR-EHR-ACTION.medication.v1",
-            )
-            .unwrap()],
+            vec![
+                crate::rm::ehr::Activity::new(
+                    attrs("activity", "at0400"),
+                    single("activity description").into(),
+                    "openEHR-EHR-ACTION.medication.v1",
+                )
+                .unwrap(),
+            ],
         )
         .unwrap();
         let action = Action::new(
@@ -1483,11 +1518,13 @@ mod tests {
         let item_list = ItemList::new(attrs("list", "at0500"), vec![element("l", "at0501", 2.0)]);
         let item_table = ItemTable::new(
             attrs("table", "at0600"),
-            vec![Cluster::new(
-                attrs("row", "at0601"),
-                vec![Item::Element(element("cell", "at0602", 6.0))],
-            )
-            .unwrap()],
+            vec![
+                Cluster::new(
+                    attrs("row", "at0601"),
+                    vec![Item::Element(element("cell", "at0602", 6.0))],
+                )
+                .unwrap(),
+            ],
         );
         let item_tree = ItemTree::new(
             attrs("tree", "at0700"),
@@ -1508,12 +1545,14 @@ mod tests {
         let history = History::new(
             attrs("Series", "at1000"),
             DvDateTime::new("2026-07-31T08:00:00Z").unwrap(),
-            vec![PointEvent::new(
-                attrs("point", "at1001"),
-                DvDateTime::new("2026-07-31T08:30:00Z").unwrap(),
-                item_single.clone().into(),
-            )
-            .into()],
+            vec![
+                PointEvent::new(
+                    attrs("point", "at1001"),
+                    DvDateTime::new("2026-07-31T08:30:00Z").unwrap(),
+                    item_single.clone().into(),
+                )
+                .into(),
+            ],
             Some(single("summary").into()),
         )
         .unwrap();
@@ -1558,7 +1597,11 @@ mod tests {
             (Node::Text(&coded_name), "value", "Systolic"),
             (Node::Text(&coded_name), "defining_code", "at0004"),
             (Node::CodedText(composition.category()), "value", "event"),
-            (Node::CodedText(composition.category()), "defining_code", "433"),
+            (
+                Node::CodedText(composition.category()),
+                "defining_code",
+                "433",
+            ),
             (Node::Section(&section), "items", "SECTION"),
             (Node::Section(&section), "name", "DV_TEXT"),
             // The five ENTRY kinds. `name` is shared and comes last in the
@@ -1642,10 +1685,16 @@ mod tests {
         // the predicate.
         let p: Path = "/items['a]b']/value".parse().unwrap();
         assert_eq!(p.segments().len(), 2);
-        assert_eq!(p.segments()[0].conditions, vec![Condition::Name("a]b".into())]);
+        assert_eq!(
+            p.segments()[0].conditions,
+            vec![Condition::Name("a]b".into())]
+        );
         // And with double quotes, which is the other branch of the same arm.
         let p: Path = r#"/items["a]b"]/value"#.parse().unwrap();
-        assert_eq!(p.segments()[0].conditions, vec![Condition::Name("a]b".into())]);
+        assert_eq!(
+            p.segments()[0].conditions,
+            vec![Condition::Name("a]b".into())]
+        );
 
         // Offsets. `base` is the length of the leading `/` the parser strips,
         // so the same malformed path with and without one must report offsets
@@ -1654,7 +1703,11 @@ mod tests {
             Err(PathError::Malformed { offset, .. }) => offset,
             other => panic!("{text} did not fail as malformed: {other:?}"),
         };
-        assert_eq!(offset_of("/items[at0001"), 6, "unclosed `[` points at the `[`");
+        assert_eq!(
+            offset_of("/items[at0001"),
+            6,
+            "unclosed `[` points at the `[`"
+        );
         assert_eq!(offset_of("items[at0001"), 5, "without the leading slash");
         assert_eq!(offset_of("/items/"), 7, "trailing `/` points past the end");
         assert_eq!(offset_of("/items//value"), 7, "an empty attribute name");
@@ -1682,7 +1735,11 @@ mod tests {
     /// containing the word "and", or a comma, is ordinary text.
     #[test]
     fn conditions_are_split_on_and_and_comma_but_not_inside_a_name() {
-        let conditions = |text: &str| text.parse::<Path>().unwrap().segments()[0].conditions.clone();
+        let conditions = |text: &str| {
+            text.parse::<Path>().unwrap().segments()[0]
+                .conditions
+                .clone()
+        };
 
         // Both separators, and both together.
         assert_eq!(

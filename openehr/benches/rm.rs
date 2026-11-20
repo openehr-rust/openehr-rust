@@ -186,7 +186,11 @@ fn query(c: &mut Criterion) {
         b.iter(|| black_box(&composition).item_at_path(black_box(path)));
     });
     group.bench_function("parse_aql", |b| {
-        b.iter(|| black_box(aql).parse::<AqlQuery>().expect("the literal parses"));
+        b.iter(|| {
+            black_box(aql)
+                .parse::<AqlQuery>()
+                .expect("the literal parses")
+        });
     });
     group.finish();
 }
@@ -207,7 +211,11 @@ fn iso8601(c: &mut Criterion) {
         b.iter(|| black_box("2026-07").parse::<Date>().expect("parses"));
     });
     group.bench_function("duration", |b| {
-        b.iter(|| black_box("P1Y2M3DT4H5M6S").parse::<Duration>().expect("parses"));
+        b.iter(|| {
+            black_box("P1Y2M3DT4H5M6S")
+                .parse::<Duration>()
+                .expect("parses")
+        });
     });
     group.finish();
 }

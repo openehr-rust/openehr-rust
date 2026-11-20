@@ -20,7 +20,7 @@ Eighteen crates, **each its own Cargo workspace**. There is no root workspace â€
 run cargo from inside a crate directory. Eight are published at 0.10.0; the other
 ten are `publish = false`.
 
-**Local matches published: 0.10.0, out 2026-10-16.** 0.10.0 is the one to know
+**0.11.0 is staged locally. The last recorded publication was 0.10.0 on 2026-10-16.** 0.10.0 is the one to know
 about: three breaking changes to the Archetype Model surface (`lib:A-63`,
 `lib:A-69`, `lib:A-71` -- the last makes `occurrences` an `Option` on every
 `C_OBJECT` constructor), the bounded AQL executor in `openehr-store`, and an
@@ -40,7 +40,7 @@ without tracking it (`spec/audit.md` **W-10**).
 | `openehr` | RM types, validation, paths, AQL, security | library |
 | `openehr-store` | schema, projection, commit rules, conformance suite | library |
 | `openehr-sqlite` | SQLite dialect **and a store** | **Verified** |
-| `openehr-postgresql` | PostgreSQL 18 dialect | **Schema** |
+| `openehr-postgresql` | PostgreSQL 18 dialect and store | **Verified** |
 | `openehr-mysql` | MySQL 8.4 dialect | **Schema** |
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
 | `openehr-mssql` | SQL Server dialect | **Schema** |

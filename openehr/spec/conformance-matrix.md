@@ -194,7 +194,7 @@ Process requirements; they govern this specification rather than the code.
 | D3.5 | • | `invariants::a_code_phrase_needs_a_terminology_and_a_code` |
 | D3.6 | • | `invariants::a_term_mapping_match_is_one_of_four_characters` |
 | D3.7–D3.8 | • | `text::tests::rubric_checking_reports_unchecked_separately_from_valid` |
-| D3.7a | open | `A-81` — a non-English rubric is reported as a violation rather than unchecked, the crate's own English-only table having no way to tell the two apart |
+| D3.7a | • | `validation::tests::a_composition_checks_rubrics_only_in_the_language_the_table_carries`; `text::tests::rubric_checks_are_explicitly_limited_to_english`; shared live SQLite/PostgreSQL commit fixture (`A-81`) |
 | D3.9–D3.10 | • | `iso8601::tests::partial_dates_keep_their_precision_and_text`; `canonical_json::partial_dates_and_negative_durations_survive_verbatim` |
 | D3.10b | • | `iso8601::tests::a_comma_decimal_sign_is_accepted_like_a_full_stop`, `…a_durations_comma_decimal_sign_is_accepted_like_a_full_stop` (`A-78`) |
 | D3.11 | • | `iso8601::tests::leap_day_validity_follows_the_gregorian_rule` |
@@ -206,7 +206,7 @@ Process requirements; they govern this specification rather than the code.
 | D3.15 | • | `quantity::tests::different_units_are_not_comparable_in_either_direction` |
 | D3.16 | • | `quantity::tests::ordinals_from_different_terminologies_do_not_compare` |
 | D3.17 | • | `invariants::proportions_of_different_kinds_do_not_compare` |
-| D3.18 | • | `iso8601::tests::offsets_normalise_before_comparison` |
+| D3.18 | • | `iso8601::tests::offsets_normalise_before_comparison`, `times_order_by_the_instant_they_denote`, and `date_times_compare_across_utc_day_boundaries` (`A-83`) |
 | D3.18a | • | resolved: `PartialOrd`/`Ord` removed from the base ISO 8601 types, semantic order is the plain method `semantic_cmp` — `iso8601::tests::eq_is_lexical_and_semantic_cmp_is_not_the_same_question` (`A-32`, fixed) |
 | D3.18b | • | the same resolution over all ten `DV_ORDERED` types and `DATA_VALUE` — `guarantees::equality_and_order_disagree_by_design_and_neither_is_partial_ord` (`A-35`, fixed) |
 | D3.18c | • | `INTERVAL<T>` is bounded on `SemanticOrd`; `guarantees::a_reference_range_is_unmoved_by_how_an_instant_is_spelled` covers the `contains` rewrite |

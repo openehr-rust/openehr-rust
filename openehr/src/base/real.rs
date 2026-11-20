@@ -150,8 +150,7 @@ impl From<Real> for serde_json::Number {
         // Reconstructed from the text, so the bytes out are the bytes in.
         // Parsing cannot fail: `text` came from a `Number` or from `{f64}`.
         serde_json::from_str(&r.text).unwrap_or_else(|_| {
-            serde_json::Number::from_f64(r.value)
-                .unwrap_or_else(|| serde_json::Number::from(0))
+            serde_json::Number::from_f64(r.value).unwrap_or_else(|| serde_json::Number::from(0))
         })
     }
 }
@@ -177,6 +176,7 @@ impl crate::base::SemanticOrd for Real {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -191,7 +191,10 @@ mod tests {
         let fine: Real = "1.50".parse().unwrap();
         assert_eq!(fine.as_str(), "1.50");
         // Exact by construction: `1.50` and `1.5` parse to the same bits.
-        #[allow(clippy::float_cmp, reason = "the whole point is that these are the same f64")]
+        #[allow(
+            clippy::float_cmp,
+            reason = "the whole point is that these are the same f64"
+        )]
         {
             assert_eq!(fine.as_f64(), 1.5);
         }
@@ -232,7 +235,10 @@ mod tests {
     #[test]
     fn a_real_that_never_saw_a_constructor_is_still_readable() {
         let r: Real = serde_json::from_str("1e400").expect("JSON permits it");
-        assert!(!r.is_finite(), "out of range reads as infinite, not a panic");
+        assert!(
+            !r.is_finite(),
+            "out of range reads as infinite, not a panic"
+        );
         assert_eq!(r.as_str(), "1e+400", "the digits are still what arrived");
     }
 
@@ -251,7 +257,7 @@ mod tests {
     #[test]
     fn every_digit_survives_and_only_the_exponent_form_is_normalised() {
         for text in [
-            "1.50",   // the trailing zero this type exists for
+            "1.50", // the trailing zero this type exists for
             "0.10",
             "184.0",
             "0.000",
@@ -259,8 +265,8 @@ mod tests {
             "184",
             "1e-5",
             "1e+5",
-            "12345678901234567890",     // more digits than an f64 holds
-            "3.14159265358979323846",   // and more than it can distinguish
+            "12345678901234567890",   // more digits than an f64 holds
+            "3.14159265358979323846", // and more than it can distinguish
         ] {
             let r: Real = text.parse().expect(text);
             assert_eq!(r.as_str(), text, "{text} was normalised");
@@ -271,7 +277,10 @@ mod tests {
         for (written, stored) in [("1e5", "1e+5"), ("1E5", "1e+5")] {
             let r: Real = written.parse().expect(written);
             assert_eq!(r.as_str(), stored);
-            #[allow(clippy::float_cmp, reason = "an exponent form denotes an exact integer")]
+            #[allow(
+                clippy::float_cmp,
+                reason = "an exponent form denotes an exact integer"
+            )]
             {
                 assert_eq!(r.as_f64(), 100_000.0, "the value is untouched");
             }
@@ -297,7 +306,11 @@ mod tests {
     fn a_real_reports_finiteness_both_ways_and_displays_its_digits() {
         let ordinary: Real = "1.50".parse().unwrap();
         assert!(ordinary.is_finite(), "a plain number is finite");
-        assert_eq!(ordinary.to_string(), "1.50", "Display must write the digits");
+        assert_eq!(
+            ordinary.to_string(),
+            "1.50",
+            "Display must write the digits"
+        );
 
         let huge: Real = "1e400".parse().unwrap();
         assert!(!huge.is_finite(), "out of `f64` range is not finite");
@@ -328,10 +341,7 @@ mod tests {
         assert!(!range.contains(&"10.5".parse::<Real>().unwrap()));
 
         // And through the trait by name, so the impl itself has a caller.
-        assert_eq!(
-            SemanticOrd::semantic_cmp(&low, &high),
-            Some(Ordering::Less)
-        );
+        assert_eq!(SemanticOrd::semantic_cmp(&low, &high), Some(Ordering::Less));
     }
 
     #[test]

@@ -39,7 +39,9 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 fn walk(dir: &Path, ext: &str, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = fs::read_dir(dir) else { return };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
@@ -83,7 +85,11 @@ fn run(corpus: &Path, report: Option<&mut fs::File>) -> (usize, usize, usize) {
     let mut violation_kinds: BTreeMap<String, usize> = BTreeMap::new();
     let mut report = report;
     for path in &files {
-        let rel = path.strip_prefix(corpus).unwrap_or(path).display().to_string();
+        let rel = path
+            .strip_prefix(corpus)
+            .unwrap_or(path)
+            .display()
+            .to_string();
         let source = fs::read_to_string(path).unwrap_or_default();
         let verdict = match serde_json::from_str::<Composition>(&source) {
             Err(e) => {
@@ -98,13 +104,18 @@ fn run(corpus: &Path, report: Option<&mut fs::File>) -> (usize, usize, usize) {
                     "valid".to_owned()
                 } else {
                     parsed_with_violations += 1;
-                    let mut names: Vec<&str> = report.violations().iter().map(|v| v.invariant).collect();
+                    let mut names: Vec<&str> =
+                        report.violations().iter().map(|v| v.invariant).collect();
                     names.sort_unstable();
                     names.dedup();
                     for name in &names {
                         *violation_kinds.entry((*name).to_owned()).or_default() += 1;
                     }
-                    format!("invalid\t{} violations\t{}", report.violations().len(), names.join(","))
+                    format!(
+                        "invalid\t{} violations\t{}",
+                        report.violations().len(),
+                        names.join(",")
+                    )
                 }
             }
         };
@@ -142,7 +153,8 @@ fn run(corpus: &Path, report: Option<&mut fs::File>) -> (usize, usize, usize) {
 #[ignore = "needs OPENEHR_JSON_CORPUS=<directory of canonical COMPOSITION .json files>; see the module documentation"]
 fn every_corpus_file_gets_a_verdict() {
     let corpus = PathBuf::from(
-        std::env::var("OPENEHR_JSON_CORPUS").expect("OPENEHR_JSON_CORPUS must name the corpus directory"),
+        std::env::var("OPENEHR_JSON_CORPUS")
+            .expect("OPENEHR_JSON_CORPUS must name the corpus directory"),
     );
     let mut report = std::env::var("OPENEHR_JSON_CORPUS_REPORT")
         .ok()

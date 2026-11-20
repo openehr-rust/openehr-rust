@@ -117,10 +117,9 @@ correctly refusing two fixture files' inconsistency.
 - **`A-02`** (classified, open): `D3.13a`'s own supporting claim was false;
   the refusal and its other ground stand pending an actual design
   decision. 3 files.
-- **`A-81`** (open, by decision): `Value_is_rubric` reports a violation
-  for a correct non-English rubric, rather than *unchecked* — the crate's
-  rubric table is English-only and the check has no language awareness.
-  1 file.
+- **`A-81`** (fixed 2026-11-19): `Value_is_rubric` reported a violation for a
+  correct non-English rubric. Validation now applies the English-only table
+  only to text declared English and reports other languages unchecked. 1 file.
 
 ### What `validate()` found, in files that do parse — examined, all five
 
@@ -133,7 +132,7 @@ a count.
 | `Archetype_id_rm_entity_matches` | 2 | `informe_amb_1_arquetip_OBS.json`: an `OBSERVATION` carries a `COMPOSITION`-class archetype id. `minimal_action2_1.json`: an `ACTION` carries a `COMPOSITION`-class archetype id | **Not a defect — the check working as designed**, on real external data: this is the exact class of error `check_locatable`'s own comment names as "the single most common structural error in hand-built or transform-produced instances," caught here in two ad-hoc-named fixtures a human plausibly copy-pasted. |
 | `Time_after_origin` | 1 | `compo_feeder_audit_details.json`: a `HISTORY.origin` of `…16:48:41,290627-03:00` and its one event's `time` of `…16:48:41,289975-03:00` — the event 652 **microseconds** before its own origin | **Not a defect.** A generated-test-data timing artifact (two clock reads microseconds apart), and evidence the check is precise enough to catch it — this crate does not round sub-millisecond precision away. |
 | `Periodic_validity` | 2 | Not yet reproduced from the two files it fired on; not pursued further once the other four gave a clear account of the run. | **Not yet examined.** |
-| `Value_is_rubric` | 1 | `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, declared `language: es`, writes `category.value = "evento"` for openEHR code `433` (English rubric `"event"`) | **A real defect — `A-81`, open.** This crate's rubric table is English-only and the check does not know the record's declared language, so a correct Spanish rubric is reported as a violation rather than *unchecked* — exactly the false claim `D3.7` exists to forbid, in the refusing direction. New `D3.7a`. |
+| `Value_is_rubric` | 1 | `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, declared `language: es`, writes `category.value = "evento"` for openEHR code `433` (English rubric `"event"`) | **Fixed — `A-81`.** The validation walk now carries the composition language and reports this Spanish rubric unchecked; English still uses the bundled English table (`D3.7a`). |
 
 ### Candidates — status after this examination
 
@@ -141,8 +140,8 @@ a count.
 2. **`Archetype_id_rm_entity_matches`**: closed, not a defect — confirms
    the check's own value on real data.
 3. **`Time_after_origin`**: closed, not a defect.
-4. **`Value_is_rubric`**: closed as a finding, **open as a decision** —
-   `A-81`.
+4. **`Value_is_rubric`**: fixed — `A-81`; non-English is unchecked and the
+   English negative control remains enforced.
 5. **`Periodic_validity`**: still open, not yet examined (2 files).
 6. **`A-02`'s own design question**: is `20240517` genuinely ambiguous
    with a bare year `2024` the way `D3.13a` states, given that a basic

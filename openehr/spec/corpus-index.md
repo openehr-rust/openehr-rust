@@ -70,12 +70,11 @@ A reverse index from a requirement or finding id to where [`corpus.md`](corpus.m
 | `A-79` | `json_corpus.md` | Run 1 — 2026-09-05 | before any fix, after `A-78`, and after `A-79` — recorded as one run |
 | `A-79` | `json_corpus.md` | Run 1 — 2026-09-05 | After `A-79` (`TEMPLATE_ID` whitespace) \| **14** \| **15** \| **28** |
 | `A-79` | `json_corpus.md` | Run 1 — 2026-09-05 | - **`A-79`** (fixed): `TEMPLATE_ID` refused whitespace the specification |
-| `A-81` | `json_corpus.md` | Run 1 — 2026-09-05 | - **`A-81`** (open, by decision): `Value_is_rubric` reports a violation |
+| `A-81` | `json_corpus.md` | Run 1 — 2026-09-05 | - **`A-81`** (fixed 2026-11-19): `Value_is_rubric` reported a violation for a |
 | `A-81` | `json_corpus.md` | Run 1 — 2026-09-05 | `Value_is_rubric` \| 1 \| `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, declared `language: es... |
-| `A-81` | `json_corpus.md` | Run 1 — 2026-09-05 | `A-81`. |
+| `A-81` | `json_corpus.md` | Run 1 — 2026-09-05 | 4. **`Value_is_rubric`**: fixed — `A-81`; non-English is unchecked and the |
 | `A-82` | `corpus.md` | Run 7 — 2026-09-13, candidate 3 closed (`A-82`) | reparsed: `A-82`. |
 | `A-82` | `corpus.md` | Run 7 — 2026-09-13, candidate 3 closed (`A-82`) | 3. Refusal names that are correct but unhelpful: **closed, `A-82`**. |
-| `D3.7` | `json_corpus.md` | Run 1 — 2026-09-05 | `Value_is_rubric` \| 1 \| `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, declared `language: es... |
 | `D3.7a` | `json_corpus.md` | Run 1 — 2026-09-05 | `Value_is_rubric` \| 1 \| `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, declared `language: es... |
 | `D3.13a` | `json_corpus.md` | Run 1 — 2026-09-05 | 3 \| `all_types_no_multimedia.json` and two siblings: `DV_DATE.value` is `"20190114"`, ISO 8601's ... |
 | `D3.13a` | `json_corpus.md` | Run 1 — 2026-09-05 | - **`A-02`** (classified, open): `D3.13a`'s own supporting claim was false; |

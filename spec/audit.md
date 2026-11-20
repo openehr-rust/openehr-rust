@@ -16,10 +16,10 @@ generated DDL of all six dialects compared byte for byte; the three engines that
 can be provisioned locally actually provisioned and the DDL run against them;
 crates.io queried for what is already published.
 
-Twenty-one findings: three High (**W-01**, **W-02**, **W-04**), eleven Medium
+Twenty-three findings: three High (**W-01**, **W-02**, **W-04**), twelve Medium
 (**W-03**, **W-05**, **W-06**, **W-09**, **W-11**, **W-12**, **W-13**,
-**W-14**, **W-16**, **W-18**, **W-20**), seven Low (**W-07**, **W-08**, **W-10**,
-**W-15**, **W-17**, **W-19**, **W-21**). **Twenty are fixed**; **W-03** is fixed going forward only, because the
+**W-14**, **W-16**, **W-18**, **W-20**, **W-23**), eight Low (**W-07**, **W-08**, **W-10**,
+**W-15**, **W-17**, **W-19**, **W-21**, **W-22**). **Twenty-one are fixed**; **W-03** is fixed going forward only, because the
 published `openehr` 0.1.0 is immutable and keeps its wrong `repository` field.
 
 **W-09 through W-18 were added on 2026-08-20 and -21**, outside the original audit date
@@ -465,6 +465,13 @@ nightly; and only N−3 and stable are built, so a break appearing only on an
 intermediate release reaches a user before it reaches CI.
 
 ---
+
+**Local verification follow-up, 2026-11-19.** After the runner was renamed,
+`make test-minimum-supported-rust-version` failed with “No such file or
+directory”. The recipe now invokes the installed script, which also resolves
+an installed patch release for the requested minor. The repaired target
+completed checks and tests for every non-fuzz workspace on both local
+toolchains, 1.98 and 1.99.1. Database-gated tests require a separate live run.
 
 ## W-10 — the published version was stated in five places and updated in one — **Low, fixed**
 
@@ -1060,6 +1067,73 @@ as a separate finding, since fixing one without the other would have left
 this exact cross-check failing.
 
 ---
+
+## W-22 — The level checker missed tables with a role column — **Low, fixed**
+
+**Found 2026-11-19.** `scripts/check-docs.py` reported agreement while the
+root README gave PostgreSQL the level Schema and the owning matrix recorded
+Verified. The checker looked only in the cell after the crate name. The README
+has a role column there, and the scope table has both an engine and a floor.
+Reading the level across the row flagged 13 stale cells across six documents
+on the uncorrected tree. All were reconciled to the matrix (`W0.40`).
+
+## W-23 — Production-source coverage is neither complete nor gated — **Medium, open**
+
+**Initially measured 2026-11-19 with `cargo llvm-cov 0.9.1 --all-targets`.** The three
+code-heavy workspaces established an unfiltered baseline: `openehr` covers 94.29%
+of lines and 93.14% of functions; `openehr-store`, 53.88% and 69.71%;
+`openehr-sqlite`, 82.08% and 51.49%. The store crate's own `aql.rs` is 0% in
+its workspace even though SQLite and PostgreSQL exercise it downstream. That
+is exactly the cross-crate-only shape mutation testing has already shown is not
+evidence for the crate that owns a function. No coverage command exists in CI,
+and nothing prevents either number falling.
+
+Close only when all ten buildable workspaces meet `W0.41`, a tree-derived CI
+gate checks both 100% line and function coverage, and the locally documented
+command is the command CI invokes. Do not close by excluding reachable
+production code or by counting a downstream workspace's test as the owner's.
+
+**Progress 2026-11-19.** Two owner-crate AQL tests raised `aql.rs` from 0% to
+55.06% line coverage and `openehr-store` overall from 53.88% to 59.70% lines
+(functions 69.71% to 72.17%). Extending the comparison assertions found and
+fixed the real mixed-scalar query defect `db:D-18`, evidence that the uncovered
+regions are not merely a score to normalize.
+
+**Progress later 2026-11-19.** The first baseline counted inline test support,
+so it was not yet the `W0.41` denominator. `openehr-store` now uses
+`cargo +nightly llvm-cov`, disables coverage only on `#[cfg(test)]` modules,
+and filters registry source. A test-only in-memory `Store` runs all six shared
+conformance stories in the owner workspace; complete dialect-contract tests
+exercise the schema generator, and additional AQL cases cover literal scope,
+runtime parameters, path failures, descending sort, and parse-error conversion.
+At that checkpoint the production-only result was **95.96% lines / 95.45%
+functions**, up from 49.97% / 64.29% when test support was first removed from
+the denominator.
+
+**Progress 2026-11-20.** `openehr-store` now meets `W0.41`: **1,444/1,444
+executable physical source lines and 112/112 functions**. Moving historical
+selection behind one non-generic iterator body removed false per-driver closure
+copies; an owner test now reaches AQL's alias-check error conversion; and LCOV
+coalescing prevents mutually exclusive generic instantiations from counting one
+physical line both hit and missed. Five remaining physical lines are compiler-
+required fail-closed arms over `openehr::Scalar` and `ChainStatus`, both external
+`#[non_exhaustive]` enums with no safely constructible current variant that can
+reach those arms. `coverage-exclusions.tsv` pins each line by SHA-256, and
+`scripts/check-coverage.py` was exercised against passing, newly-uncovered,
+stale-exclusion, and incomplete-function inputs. `W-23` remains open for the
+other nine buildable workspaces and the tree-derived CI gate.
+
+**Further progress 2026-11-20.** The `openehr` owner workspace now measures
+**9,636/10,388 executable physical source lines (92.76%) and 1,501/1,596
+functions (94.05%)**, up from its honest 90.77% / 91.40% baseline. Test modules
+remain excluded rather than inflating the denominator, and LCOV records are
+coalesced by physical line. Focused owner tests closed the production gaps in
+ADL 1.4/2 header refusals, time specifications, identifiers and serde glue,
+intervals, archetype HRIDs, access control, and audit-chain storage boundaries;
+only fifteen production files retain uncovered executable lines. Coverage
+also exposed `lib:A-84`, so the three non-finite-`Real` fallback lines remain
+uncovered pending a specified refusal rather than being normalized into a test
+contract.
 
 ## What this audit did not cover
 

@@ -22,6 +22,12 @@ openehr-store = { path = "../openehr-store", version = "0.11.0" }
 # `OffsetDateTime` rather than a raw integer, which `postgres-types` has no
 # `ToSql`/`FromSql` for directly.
 postgres = { version = "0.19.14", features = ["with-time-0_3"] }
+# TLS is mandatory for the network store (`db:O10.7`, `db:O10.18`). Rustls
+# gives the crate one cross-platform verifier with no OpenSSL runtime
+# dependency; the adapter implements `postgres`'s existing TLS trait. `ring`
+# fixes the crypto provider rather than relying on process-global selection.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-postgres-rustls = { version = "0.14", default-features = false, features = ["native-certs", "ring"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip", "arbitrary_precision"] }
 # The other half of `with-time-0_3` above: this crate's own conversion code
 # calls `OffsetDateTime::from_unix_timestamp`/`unix_timestamp` directly, not

@@ -190,9 +190,10 @@ impl core::fmt::Display for DvIdentifier {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
-    use super::*;
     use super::super::text::CodePhrase;
+    use super::*;
 
     #[test]
     fn display_never_reveals_the_identifier() {
@@ -225,10 +226,7 @@ mod tests {
         assert!(!DvBoolean::new(false).value());
 
         let code = CodePhrase::openehr("532").unwrap();
-        let ongoing = DvState::new(
-            DvCodedText::new("active", code.clone()).unwrap(),
-            false,
-        );
+        let ongoing = DvState::new(DvCodedText::new("active", code.clone()).unwrap(), false);
         assert!(!ongoing.is_terminal());
         let ended = DvState::new(DvCodedText::new("completed", code).unwrap(), true);
         assert!(ended.is_terminal(), "a terminal state was reported ongoing");
@@ -270,10 +268,17 @@ mod tests {
             .with_type("NHS Number")
             .with_issuer("NHS");
         assert_eq!(full.to_string(), other_id.to_string());
-        assert_eq!(bare.to_string(), DvIdentifier::new("000-000-0000").unwrap().to_string());
+        assert_eq!(
+            bare.to_string(),
+            DvIdentifier::new("000-000-0000").unwrap().to_string()
+        );
 
         // Type alone, no issuer.
         let typed_only = DvIdentifier::new("x").unwrap().with_type("Passport");
         assert_eq!(typed_only.to_string(), "Passport");
+
+        // Issuer alone is distinct from a type and must still reveal no id.
+        let issuer_only = DvIdentifier::new("x").unwrap().with_issuer("NHS");
+        assert_eq!(issuer_only.to_string(), "identifier issued by NHS");
     }
 }

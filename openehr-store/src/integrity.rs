@@ -257,6 +257,7 @@ pub fn verify_versions(rows: &[VersionRow], keys: &[&ChainKey]) -> Integrity {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::{Breach, Integrity, verify_versions};
     use crate::conformance::{RECORD, SYSTEM, sample_version};

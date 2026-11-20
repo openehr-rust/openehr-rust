@@ -4,7 +4,7 @@ Goal: a production-grade, spec-driven Rust monorepo for openEHR — the
 `openehr/` model crate (Reference Model, paths, AQL parsing, RM validation,
 audit-chain security), six `openehr-<engine>/` database ports,
 `openehr-store/`, `openehr-loco/`, and the fuzz crates; eight crates
-published at 0.9.0 (`openehr-loco` and the fuzz crates stay unpublished) —
+published together (release history in [the publishing guide](agents/publishing.md)) —
 professionalized for its real audience: healthcare
 professionals and the engineers who serve them, worldwide, in settings where
 a wrong claim has clinical cost.
@@ -22,6 +22,21 @@ Engineering status is read from `openehr/spec/conformance-matrix.md` and
 `spec/databases/conformance-matrix.md` — never from a checklist. Execution
 items live in [`tasks.md`](tasks.md), where a `[x]` means verified, not
 intended.
+
+## Production readiness review, 2026-11-19
+
+Prioritize three cases that can change what a clinician or operator sees.
+The database matrix records real store runs for SQLite and PostgreSQL.
+Its ladder measures persistence behavior. A network deployment also needs
+evidence about the connection that carries the record.
+
+| Priority | Decision and rationale | Evidence needed |
+| --- | --- | --- |
+| PostgreSQL transport | Closed 2026-11-19. The connector requires Rustls, verifies the configured name and trust chain, and offers platform roots or an explicit private CA without a plaintext fallback. | A live trusted connection succeeds; wrong-name, unrelated-CA, and plaintext-only endpoints fail. See `db:D-15`. |
+| Historical reads | Closed 2026-11-19. SQLite and PostgreSQL use the UTC index to bound candidates and the authoritative text to resolve the exact cutoff. | Shared boundary tests pass on both live stores, including offsets and sub-millisecond fractions. See `db:D-16`. |
+| Concurrent version identity | Closed 2026-11-19. Nullable branch columns made the unique tree-position index ineffective for distinct version UIDs. Schema version 5 uses a non-null zero sentinel. | Eight distinct systems race for one position; exactly one wins on live SQLite and PostgreSQL. See `db:D-17`. |
+| Language-aware validation | Closed 2026-11-19. A coded text's declared language, or otherwise its composition's, controls whether the English-only rubric table applies. | Spanish and unknown languages are unchecked; the English negative control is refused; the Spanish composition commits on live SQLite and PostgreSQL. See `lib:A-81`. |
+| Production-source coverage | Open repository-wide. Initial unfiltered baselines were 94.29% lines for `openehr`, 53.88% for `openehr-store`, and 82.08% for `openehr-sqlite`; no CI gate exists. `openehr-store` now reaches 100% executable-line (1,444/1,444) and function (112/112) coverage in its owner workspace, with five hash-pinned fail-closed lines that safe Rust cannot reach on external `#[non_exhaustive]` enums. Under the honest production-only denominator, `openehr` has advanced from 90.77% lines / 91.40% functions to 92.76% (9,636/10,388) / 94.05% (1,501/1,596), with uncovered executable lines confined to fifteen files. | The other nine buildable crates reach the same standard, and a tree-derived CI gate enforces every workspace (`W0.41`, `W-23`). |
 
 ## Where the repository stands (verified 2026-09-04)
 
@@ -77,8 +92,7 @@ posture. Open items for each are in `tasks.md`.
 
 1. **Governance.** GOVERNANCE.md, MAINTAINERS.md, RFC.md exist and are
    candid (sole maintainer, bus factor one, machines do not decide). The
-   self-declared hole: no `CODE_OF_CONDUCT.md` — named as a known gap in
-   CONTRIBUTING.md:140 and in the outreach readiness checklist itself.
+   conduct and reporting process is in `CODE_OF_CONDUCT.md`.
 
 2. **Compliance — licensing and trademarks.** Closed 2026-08-27, see
    §Risks & watch items below: openEHR granted permission to use their
@@ -101,8 +115,8 @@ posture. Open items for each are in `tasks.md`.
    Still open: no SBOM, no release attestation.
 
 4. **Privacy and patient data.** PHI rules are specified
-   (`openehr/spec/11-security.md`, the compliance mappings, `redact.rs`) but
-   scattered; there is no root `PHI.md` a clinician or CISO can read. The
+   (`openehr/spec/11-security.md`, the compliance mappings, `redact.rs`) and
+   summarized for clinicians and privacy reviewers in `PHI.md`. The
    compliance mapping's honesty — HIPAA §164.312(b) and (c)(1) marked
    Partial at the database layer — must carry into that page, not be
    smoothed over by it.

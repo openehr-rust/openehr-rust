@@ -205,6 +205,7 @@ pub trait ArchetypeRepository {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::am::{ArchetypeTerminology, CComplexObject, MultiplicityInterval, TermDefinition};
@@ -247,10 +248,16 @@ mod tests {
 
     #[test]
     fn a_resolved_archetype_with_provenance_carries_it() {
-        let provenance = Provenance::new("ckm.openehr.org", "1.0.3", "2026-08-30T00:00:00Z", "abc123");
+        let provenance =
+            Provenance::new("ckm.openehr.org", "1.0.3", "2026-08-30T00:00:00Z", "abc123");
         let resolved = Resolved::new(archetype("openEHR-EHR-EVALUATION.test.v1"), provenance);
         assert_eq!(resolved.provenance().unwrap().source(), "ckm.openehr.org");
         assert_eq!(resolved.provenance().unwrap().revision(), "1.0.3");
+        assert_eq!(
+            resolved.provenance().unwrap().retrieved_at(),
+            "2026-08-30T00:00:00Z"
+        );
+        assert_eq!(resolved.provenance().unwrap().content_digest(), "abc123");
     }
 
     #[test]

@@ -30,8 +30,8 @@ use crate::base::{
 };
 use crate::error::ParseError;
 use crate::rm::data_types::{
-    DvOrdered as _,
-    DataValue, DvCodedText, DvDate, DvDateTime, DvEhrUri, DvIdentifier, DvMultimedia, Text,
+    DataValue, DvCodedText, DvDate, DvDateTime, DvEhrUri, DvIdentifier, DvMultimedia,
+    DvOrdered as _, Text,
 };
 use crate::terminology;
 use serde::{Deserialize, Serialize};
@@ -1898,6 +1898,7 @@ pub type DateValidity = Interval<DvDate>;
 pub type NodeRef = LocatableRef;
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::base::{HierObjectId, ObjectId};
@@ -2215,7 +2216,10 @@ mod tests {
 
         assert_eq!(a.system_id(), "ehr1.example.org");
         assert_eq!(a.time_committed().as_str(), "2026-07-31T09:15:00Z");
-        assert_eq!(a.change_type_code(), terminology::audit_change_type::CREATION);
+        assert_eq!(
+            a.change_type_code(),
+            terminology::audit_change_type::CREATION
+        );
         assert_eq!(a.description().map(Text::value), Some("initial commit"));
         assert_eq!(a.committer().name(), Some("Dr A Nurse"));
 
@@ -2226,7 +2230,10 @@ mod tests {
 
         let deleted = audit(terminology::audit_change_type::DELETED);
         assert!(deleted.is_deletion());
-        assert!(!deleted.is_creation(), "a deletion was reported as a creation");
+        assert!(
+            !deleted.is_creation(),
+            "a deletion was reported as a creation"
+        );
 
         // A third code is neither, so neither predicate may be a constant.
         let amended = audit(terminology::audit_change_type::AMENDMENT);
@@ -2235,7 +2242,10 @@ mod tests {
 
         // No description is absent rather than empty — "no reason was given"
         // and "the reason was blank" are different records.
-        assert_eq!(audit(terminology::audit_change_type::CREATION).description(), None);
+        assert_eq!(
+            audit(terminology::audit_change_type::CREATION).description(),
+            None
+        );
 
         // A system id is required, because an audit with no system says
         // nothing about where the change came from (`System_id_valid`).
@@ -2294,7 +2304,10 @@ mod tests {
         )
         .unwrap()
         .with_other_input_version_uid(id(1));
-        assert!(merged.is_merged(), "a version with another input is a merge");
+        assert!(
+            merged.is_merged(),
+            "a version with another input is a merge"
+        );
         assert_eq!(merged.data(), Some(&"merged".to_owned()));
 
         // A deleted version carries no data, and that is what distinguishes
@@ -2324,8 +2337,13 @@ mod tests {
     #[test]
     fn a_versioned_object_reports_its_history_and_what_was_current_when() {
         let (mut vo, owner) = versioned();
-        vo.commit(version(1, None, &owner, terminology::audit_change_type::CREATION))
-            .unwrap();
+        vo.commit(version(
+            1,
+            None,
+            &owner,
+            terminology::audit_change_type::CREATION,
+        ))
+        .unwrap();
         vo.commit(version(
             2,
             Some(1),
@@ -2336,7 +2354,10 @@ mod tests {
 
         assert_eq!(vo.version_count(), 2);
         assert_eq!(vo.all_versions().len(), 2, "the history was reported empty");
-        assert_eq!(vo.latest_version().and_then(Version::data), Some(&"content 2".to_owned()));
+        assert_eq!(
+            vo.latest_version().and_then(Version::data),
+            Some(&"content 2".to_owned())
+        );
 
         // Both commits are at 09:15:00, so a time before them has no version
         // and a time after them has one. A constant answer cannot be right for
@@ -2406,7 +2427,10 @@ mod tests {
         assert_eq!(proxy.name(), Some("Dr A Nurse"));
         assert_eq!(proxy.identifiers().len(), 1);
         assert_eq!(proxy.external_ref(), Some(&person));
-        assert!(!proxy.is_subject(), "an identified party is not the subject");
+        assert!(
+            !proxy.is_subject(),
+            "an identified party is not the subject"
+        );
 
         // `PARTY_SELF` is the subject of the record. Anonymous carries no
         // reference; the other constructor carries one, and the accessor must
@@ -2418,7 +2442,10 @@ mod tests {
         assert_ne!(anonymous, known);
 
         let self_proxy: PartyProxy = anonymous.into();
-        assert!(self_proxy.is_subject(), "PARTY_SELF is the subject of the record");
+        assert!(
+            self_proxy.is_subject(),
+            "PARTY_SELF is the subject of the record"
+        );
         assert_eq!(self_proxy.name(), None);
         assert!(self_proxy.identifiers().is_empty());
     }
@@ -2436,9 +2463,11 @@ mod tests {
         assert_eq!(bare.archetype_node_id(), "at0000");
         assert_eq!(bare.uid(), None);
 
-        let uid = UidBasedId::from("6BA7B810-9DAD-11D1-80B4-00C04FD430C8"
-            .parse::<HierObjectId>()
-            .unwrap());
+        let uid = UidBasedId::from(
+            "6BA7B810-9DAD-11D1-80B4-00C04FD430C8"
+                .parse::<HierObjectId>()
+                .unwrap(),
+        );
         let link = Link::new(
             Text::Plain(DvText::new("follow-up").unwrap()),
             Text::Plain(DvText::new("issue").unwrap()),
@@ -2467,9 +2496,15 @@ mod tests {
         assert_eq!(Locatable::uid(&full), Some(&uid));
         assert_eq!(full.links(), &[link][..]);
         let audit = full.feeder_audit().expect("a feeder audit was recorded");
-        assert_eq!(audit.originating_system_audit().system_id(), "lab.example.org");
         assert_eq!(
-            audit.originating_system_audit().time().map(DvDateTime::as_str),
+            audit.originating_system_audit().system_id(),
+            "lab.example.org"
+        );
+        assert_eq!(
+            audit
+                .originating_system_audit()
+                .time()
+                .map(DvDateTime::as_str),
             Some("2026-07-30T08:00:00Z")
         );
         assert_eq!(audit.originating_system_item_ids().len(), 1);
@@ -2479,10 +2514,9 @@ mod tests {
 
         // `version_id` has no builder — it arrives only by deserialization —
         // so this is the one path that reads it back at all.
-        let details: FeederAuditDetails = serde_json::from_str(
-            r#"{"system_id":"lab.example.org","version_id":"rev-42"}"#,
-        )
-        .expect("deserialize");
+        let details: FeederAuditDetails =
+            serde_json::from_str(r#"{"system_id":"lab.example.org","version_id":"rev-42"}"#)
+                .expect("deserialize");
         assert_eq!(details.version_id(), Some("rev-42"));
         assert_eq!(details.system_id(), "lab.example.org");
         assert_eq!(details.time(), None);
@@ -2527,14 +2561,18 @@ mod tests {
         // Read on the concrete `ORIGINAL_VERSION` as well as through the
         // `VERSION` enum: they are separate accessors, and testing only the
         // enum leaves the concrete one free to answer nothing.
-        assert_eq!(original.attestations().len(), 1, "an attestation was dropped");
         assert_eq!(
-            original.attestations()[0].reason().value(),
-            "countersigned"
+            original.attestations().len(),
+            1,
+            "an attestation was dropped"
         );
+        assert_eq!(original.attestations()[0].reason().value(), "countersigned");
 
         let live: Version<String> = original.into();
-        assert!(!live.is_deleted(), "a complete version was reported deleted");
+        assert!(
+            !live.is_deleted(),
+            "a complete version was reported deleted"
+        );
         assert_eq!(live.attestations().len(), 1, "an attestation was dropped");
         assert_eq!(live.other_input_version_uids(), &[id(1)][..]);
 
@@ -2612,11 +2650,8 @@ mod tests {
             DvDateTime::new("2026-07-31T09:30:00Z").unwrap(),
         )
         .unwrap();
-        let timed = Participation::new(
-            Text::Plain(DvText::new("performer").unwrap()),
-            performer,
-        )
-        .with_time(window.clone());
+        let timed = Participation::new(Text::Plain(DvText::new("performer").unwrap()), performer)
+            .with_time(window.clone());
         assert_eq!(timed.time(), Some(&window));
 
         // FEEDER_AUDIT: the original content an import kept, if any.

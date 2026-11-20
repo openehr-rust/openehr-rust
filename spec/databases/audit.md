@@ -64,6 +64,105 @@ resolving.
 
 ## Open findings
 
+### D-15 — PostgreSQL connected without TLS — **High, fixed**
+
+**Found 2026-11-19.** `PostgresqlStore::connect` calls
+`Client::connect(params, NoTls)`. A remote server that accepts plaintext
+can receive record contents over an unencrypted connection. The earlier
+`O10.7` and `O10.18` matrix entries said that no crate opened a network
+connection. The PostgreSQL constructor now does. This is a source finding.
+The store's CI conformance run establishes database behavior and supplies
+no evidence of transport encryption.
+
+**Fixed and verified 2026-11-19.** Both public constructors now force TLS and
+verify the configured server name and certificate chain through Rustls.
+`PostgresqlStore::connect` uses platform roots; `connect_with_ca` replaces them
+with a caller-supplied PEM CA and rejects an empty or malformed bundle before
+opening a socket. `scripts/verify-store.sh` provisions a TLS-enabled PostgreSQL
+18 server, an unrelated CA, and a plaintext-only server. The public connector
+successfully queries the correctly named trusted server and rejects the wrong
+hostname, unrelated issuer, and plaintext-only endpoint. The same live run
+passes all 17 store tests and both concurrency tests.
+
+### D-16 — A historical read can return a later commit — **High, fixed**
+
+**Reproduced 2026-11-19 on SQLite and PostgreSQL 18.7.** Create a fresh store, create the
+sample EHR and a contribution, then commit two successive versions at
+`2026-08-01T09:05:00.100Z` and `2026-08-01T09:05:00.900Z`. Calling
+`Store::version_at_time` at `09:05:00.500Z` returned version 2 with the
+original `.900Z` timestamp. Only version 1 was current (`H5.13`).
+
+`StoredInstant::from_date_time` projects both times to identical whole
+seconds. SQLite breaks the resulting tie by descending trunk version.
+PostgreSQL uses the same projection and tie-breaker. The same calls through
+the public `Store` trait returned version 2 on both an in-memory SQLite
+database and a disposable PostgreSQL server.
+The original lexical times are available for a precision-preserving fix.
+
+**Fixed 2026-11-19 without a schema change.** The UTC column still bounds the
+query through `ix_version_time`. The stores fetch candidates in the query
+second and the latest occupied earlier second, then the shared selector parses
+the authoritative text and applies the exact inclusive cutoff. Existing rows
+already retain every fractional digit in that text, so they need no migration.
+
+The shared conformance test runs against live SQLite and PostgreSQL stores. It
+covers `.099`/`.100`/`.500`/`.900` boundaries, fractions beyond milliseconds,
+comma and full-stop decimal signs, equivalent offsets across midnight, equal
+instants with different lexical precision, a higher trunk committed earlier,
+and an unestablished local query. A read-only probe over the database used to
+reproduce the defect returned version 1 at `.500` after the fix. Mutation
+testing of the shared SQL builder and selector caught all four viable mutants;
+one replacement was unbuildable, with no survivors or timeouts.
+
+### D-17 — Nullable branch columns defeated tree-position uniqueness — **High, fixed**
+
+**Found 2026-11-19 by closing `D-14`'s two-system race gap.** Eight writers
+with distinct `creating_system_id`s all committed trunk version 2 to the same
+container. Their full version UIDs differed, so the primary key admitted them.
+The unique `ix_version_container_trunk` index also admitted all eight because
+`branch_number` and `branch_version` were `NULL`, and conventional unique
+indexes do not treat two `NULL` values as equal on SQLite or PostgreSQL.
+
+This violated `H5.4`, `H5.8`, and `H5.10`: the schema allowed multiple versions
+at one position in the version tree precisely when independent systems raced.
+The earlier concurrency test used one creating system, so every losing writer
+reused the same full UID and exercised only the primary key. Its passing result
+was not evidence for the tree-position index it claimed to cover.
+
+**Fixed 2026-11-19.** The two SQL branch columns are required and encode an
+absent trunk branch as zero, outside the positive-integer version-tree domain.
+Store reads decode zero back to `None`, preserving the Rust model. Schema
+version 5 refuses older databases rather than silently retaining the ineffective
+constraint. The generated DDL for all six engines carries the non-null columns.
+The schema verifier passed on PostgreSQL 18, MySQL 8.4, MariaDB 11.4, and
+Oracle Free; SQLite's generated DDL and complete store suite passed locally.
+SQL Server's generated DDL is golden-checked but was not live-run on this arm64
+host, where the repository already documents SQL Server 2022's qemu crash.
+
+The exact regression failed before the fix with eight winners. It now produces
+one winner and seven `CommitError::NotLatest` refusals on SQLite and PostgreSQL
+18, with both complete store suites passing against live databases. A focused
+SQLite mutation run over conflict classification and branch decoding caught all
+five viable mutants; two replacements were unbuildable and none survived.
+
+### D-18 — AQL treated different scalar kinds as equal — **Medium, fixed**
+
+**Found 2026-11-19 while adding owner-crate coverage to `openehr-store::aql`.**
+The internal sort comparator deliberately returns `Equal` for different scalar
+kinds to provide a stable total ordering. `cells_eq` reused that comparator
+without first checking type compatibility, so a string such as `"1"` compared
+equal to integer `1` and boolean `true`. The same leak made mixed-kind `>=` and
+`<=` predicates true. A bounded AQL query could therefore return rows that did
+not satisfy its `WHERE` clause.
+
+**Fixed and verified 2026-11-19.** `compare` now recognizes strings, booleans,
+and the numeric family explicitly. Integers and real numbers compare by numeric
+value; different families produce false for equality and ordering, true only
+for inequality. Direct owner-crate tests exercise all six comparison operators,
+both integer/real directions, every same-kind family, null, and the unsupported
+operator refusal. The mixed string/integer assertion fails against the old
+implementation.
+
 ### D-01 — No engine crate has a dialect annex — **Medium, fixed**
 
 **Required.** `X15.6` requires every engine crate to carry
@@ -1065,19 +1164,16 @@ It is not, for this pass. A future review against the primary sources is the way
 to close that — and the library register records that every such review so far
 found the primary source contradicting what had been implemented.
 
-### D-14 — The shared conformance suite never exercises a keyed chain or a two-system race — **Low, open**
+### D-14 — The shared conformance suite never exercises a keyed chain — **Low, open**
 
 **Found 2026-09-12**, mutation-testing `openehr-postgresql::PostgresqlStore`
 once it gained a real implementation
 (`openehr-postgresql/scripts/verify-store.sh`, `cargo mutants --in-place`
-against a live server): four of its 54 diff mutants survived, and all four
-trace to gaps in `openehr_store::conformance` itself rather than to anything
-specific to this one engine — the same mutations would almost certainly
-survive against `SqliteStore` too, checked by reading rather than assumed:
-its own equivalent logic (inline in `read_version`, not a separate function)
-runs against the identical fixtures.
+against a live server): four of its 54 diff mutants survived. Three trace to
+the keyed-chain fixture gap that remains here. The fourth traced to the missing
+two-system race and exposed the real schema defect now recorded as `D-17`.
 
-**The two gaps, both in the fixtures every engine's suite shares:**
+**The remaining gap in the fixtures every engine's suite shares:**
 
 1. **No fixture ever commits a keyed chain.** `VersionRow::project`'s `key:
    Option<&ChainKey>` parameter is `None` in every call
@@ -1086,31 +1182,16 @@ runs against the identical fixtures.
    makes the tag-reading path return the wrong thing — three of the four
    survivors, all on `PostgresqlStore::optional_digest_column` — cannot be
    caught by a suite that never exercises the `Some` case at all.
-2. **No fixture has two racing writers with different `creating_system_id`s.**
-   `commit_conflict`'s two branches distinguish "the same version identity
-   twice" (`openehr_version_pkey`) from "two different identities at the same
-   tree position" (`ix_version_container_trunk`, `db:H5.10`'s own index) —
-   but `conformance::sample_version` always uses the one `SYSTEM` constant,
-   so `openehr-postgresql/tests/concurrency.rs`'s racing writers (ported from
-   `openehr-sqlite/tests/concurrency.rs`) all attempt the *identical* uid.
-   They can only ever collide on the first constraint. The second — the
-   realistic case of two offline systems each independently computing
-   "version 2" — has no test anywhere in this tree.
+The two-system half of this finding was exercised on 2026-11-19 and exposed an
+actual High-severity defect, `D-17`, rather than merely increasing coverage.
+The shared fixture now accepts a creating system, and the SQLite and PostgreSQL
+race tests use eight distinct systems. That path is fixed and verified.
 
-**Why Low, not Medium.** Both gaps are in test coverage, not in behaviour:
-`commit_conflict`'s second branch was written by reading AOM2/`H5.10`
-directly, not inferred from a passing test, and nothing here suggests either
-engine mishandles the case the coverage is missing. The severity this
-register reserves for an actually-wrong behaviour does not apply to a gap in
-how confidently that behaviour is known to be right.
-
-**Not fixed.** Closing either needs a change to `openehr_store::conformance`
-itself — a keyed-chain fixture, and a `sample_version` variant taking a
-`creating_system_id` — which would then need re-verifying against every
-engine with a `Store`, not only the one whose mutation testing found the
-gap. Left open rather than patched narrowly for `PostgresqlStore` alone,
-which would make the shared suite's own blind spot harder to see the next
-time an engine is added.
+**Why the residual is Low.** The keyed read path remains a test-coverage gap.
+The chain implementation itself has keyed unit tests, but no `Store` API accepts
+a key when committing, so no shared engine suite can persist and read one back.
+Closing it needs a specified key-supply API, not an engine-specific test that
+reaches around `Store` and makes the shared blind spot harder to see.
 
 ## What this audit did not cover
 

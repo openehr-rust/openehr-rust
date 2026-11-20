@@ -141,10 +141,7 @@ impl<T: SemanticOrd> Interval<T> {
             // `2024-05-17`. `lo > hi` reads that as "not greater, therefore
             // fine" and builds an interval whose ends have no established
             // order.
-            if !matches!(
-                lo.semantic_cmp(hi),
-                Some(Ordering::Less | Ordering::Equal)
-            ) {
+            if !matches!(lo.semantic_cmp(hi), Some(Ordering::Less | Ordering::Equal)) {
                 // `DV_INTERVAL.Limits_consistent`, reported by openEHR's own
                 // name. It said `INTERVAL` with prose until `lib:A-24`, which
                 // meant the rule was enforced and a reader could not find it in
@@ -420,6 +417,7 @@ impl<T> From<IntervalWire<T>> for Interval<T> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -444,6 +442,24 @@ mod tests {
     #[test]
     fn inverted_bounds_are_refused() {
         assert!(Interval::closed(100_i32, 60).is_err());
+        assert!(Interval::<i32>::new(None, None, None, None).is_err());
+        assert!(Interval::new(None, Some(5_i32), Some(true), Some(true)).is_err());
+        assert!(Interval::new(Some(1_i32), None, Some(true), Some(true)).is_err());
+    }
+
+    #[test]
+    fn remaining_standard_interval_shapes_have_their_exact_boundaries() {
+        let greater = Interval::greater_than(10_i32).unwrap();
+        assert!(!greater.contains(&10));
+        assert!(greater.contains(&11));
+
+        let less = Interval::less_than(10_i32).unwrap();
+        assert!(less.contains(&9));
+        assert!(!less.contains(&10));
+
+        let point = Interval::point(10_i32).unwrap();
+        assert!(point.contains(&10));
+        assert!(!point.contains(&9));
     }
 
     #[test]
@@ -468,9 +484,18 @@ mod tests {
         assert!(open.contains(&61));
         assert!(open.contains(&99));
         assert!(!open.contains(&60), "the excluded lower bound was included");
-        assert!(!open.contains(&100), "the excluded upper bound was included");
-        assert!(!open.contains(&30), "below the range was reported inside it");
-        assert!(!open.contains(&130), "above the range was reported inside it");
+        assert!(
+            !open.contains(&100),
+            "the excluded upper bound was included"
+        );
+        assert!(
+            !open.contains(&30),
+            "below the range was reported inside it"
+        );
+        assert!(
+            !open.contains(&130),
+            "above the range was reported inside it"
+        );
 
         let closed = Interval::closed(60_i32, 100).unwrap();
         assert!(closed.contains(&60));
@@ -545,6 +570,15 @@ mod tests {
             !at_least_5.contains_interval(&at_least_0),
             "[5, ∞) does not contain [0, ∞)"
         );
+
+        let at_most_10 = Interval::at_most(10_i32).unwrap();
+        let at_most_5 = Interval::at_most(5_i32).unwrap();
+        assert!(at_most_10.contains_interval(&at_most_5));
+        assert!(!at_most_5.contains_interval(&at_most_10));
+
+        let bounded = Interval::closed(0_i32, 10).unwrap();
+        assert!(!bounded.contains_interval(&at_least_0));
+        assert!(!bounded.contains_interval(&at_most_10));
     }
 
     /// `intersects`: "at least one limit of `other` falls strictly inside
@@ -574,6 +608,11 @@ mod tests {
 
         let disjoint = Interval::open(20_i32, 30).unwrap();
         assert!(!left.intersects(&disjoint));
+
+        let at_least = Interval::at_least(0_i32).unwrap();
+        assert!(at_least.intersects(&Interval::closed(1_i32, 2).unwrap()));
+        let at_most = Interval::at_most(10_i32).unwrap();
+        assert!(at_most.intersects(&Interval::closed(1_i32, 2).unwrap()));
     }
 
     /// The `*_unbounded` and `*_included` accessors report what the interval
@@ -599,11 +638,17 @@ mod tests {
 
         let at_least = Interval::at_least(10_i32).unwrap();
         assert!(!at_least.lower_unbounded());
-        assert!(at_least.upper_unbounded(), "an open-ended range was reported bounded");
+        assert!(
+            at_least.upper_unbounded(),
+            "an open-ended range was reported bounded"
+        );
         assert_eq!(at_least.upper(), None);
 
         let at_most = Interval::at_most(10_i32).unwrap();
-        assert!(at_most.lower_unbounded(), "an open-started range was reported bounded");
+        assert!(
+            at_most.lower_unbounded(),
+            "an open-started range was reported bounded"
+        );
         assert!(!at_most.upper_unbounded());
         assert_eq!(at_most.lower(), None);
     }

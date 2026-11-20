@@ -314,6 +314,7 @@ impl FromStr for InternetId {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -365,6 +366,11 @@ mod tests {
                 .is_err()
         );
         assert!("".parse::<Uid>().is_err());
+        assert!("2..16".parse::<IsoOid>().is_err());
+        assert!("ehr..example".parse::<InternetId>().is_err());
+        assert!("ehr!.example".parse::<InternetId>().is_err());
+        assert!("-ehr.example".parse::<InternetId>().is_err());
+        assert!("ehr_.example".parse::<InternetId>().is_err());
     }
 
     /// An `IsoOid` renders as its own text and splits into its arcs.
@@ -375,7 +381,10 @@ mod tests {
     fn an_iso_oid_renders_itself_and_splits_into_arcs() {
         let oid: IsoOid = "1.3.6.1.4.1".parse().unwrap();
         assert_eq!(oid.to_string(), "1.3.6.1.4.1");
-        assert_eq!(oid.arcs().collect::<Vec<_>>(), ["1", "3", "6", "1", "4", "1"]);
+        assert_eq!(
+            oid.arcs().collect::<Vec<_>>(),
+            ["1", "3", "6", "1", "4", "1"]
+        );
         let other: IsoOid = "2.16.840".parse().unwrap();
         assert_ne!(oid.to_string(), other.to_string());
     }
@@ -396,7 +405,11 @@ mod tests {
         let upper: Uuid = "6BA7B810-9DAD-11D1-80B4-00C04FD430C8".parse().unwrap();
         assert_eq!(lower, upper);
         assert_eq!(lower.to_string(), "6ba7b810-9dad-11d1-80b4-00c04fd430c8");
-        assert_ne!(lower.to_string(), upper.to_string(), "text is preserved lexically");
+        assert_ne!(
+            lower.to_string(),
+            upper.to_string(),
+            "text is preserved lexically"
+        );
 
         let digest = |u: &Uuid| {
             let mut h = DefaultHasher::new();
@@ -424,7 +437,11 @@ mod tests {
         set.insert(lower);
         set.insert(upper);
         set.insert(other);
-        assert_eq!(set.len(), 2, "the same UUID in two cases was stored as two entries");
+        assert_eq!(
+            set.len(),
+            2,
+            "the same UUID in two cases was stored as two entries"
+        );
     }
 
     /// An `InternetId` reports its dot-separated labels and renders itself.

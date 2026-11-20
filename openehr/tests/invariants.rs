@@ -30,9 +30,8 @@ use openehr::rm::data_structures::{
 };
 use openehr::rm::data_types::DvDate;
 use openehr::rm::data_types::{
-    DvOrdered as _,
-    CodePhrase, DataValue, DvCount, DvDateTime, DvDuration, DvParagraph, DvParsable, DvProportion,
-    DvText, MappingMatch, ProportionKind, Text,
+    CodePhrase, DataValue, DvCount, DvDateTime, DvDuration, DvOrdered as _, DvParagraph,
+    DvParsable, DvProportion, DvText, MappingMatch, ProportionKind, Text,
 };
 use openehr::rm::demographic::{Address, Contact, DateValidity};
 use openehr::rm::ehr::{

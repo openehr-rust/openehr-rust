@@ -146,7 +146,7 @@ upgrading from a published 0.2.0 — catalogued in full in
 
 | Change | Why it breaks |
 | --- | --- |
-| `SCHEMA_VERSION` exists, and is `4` | Did not exist at 0.2.0. A database written by published 0.2.0 records **no** version, and `install()` refuses a populated database with none rather than guessing (`db:O10.16`). |
+| `SCHEMA_VERSION` exists, and is `5` | Did not exist at 0.2.0. Version 5 makes branch-position columns non-null so the unique tree-position index is effective (`db:D-17`). A database written by published 0.2.0 records **no** version, and `install()` refuses a populated database with none rather than guessing (`db:O10.16`). |
 | `ColTy::Json` moved off `jsonb` and MySQL `JSON` | `db:M3.43`, from `db:D-08`. A PostgreSQL or MySQL database created by 0.2.0 has a column of the wrong type, and its stored bytes are already normalised — reordered keys, and on MySQL `1.10` rewritten as `1.1`. |
 | Nine chain columns on `openehr_version` | `db:D-07`. Absent at 0.2.0. |
 | `ColTy::Digest` added | `ColTy` is deliberately not `#[non_exhaustive]`, so this breaks any external `Dialect` implementation at compile time — by design. |

@@ -619,11 +619,11 @@ impl CAttributeTuple {
     /// documentation for the AOM2 text this positional correspondence comes
     /// from — a row naming three values for a two-attribute tuple has a value
     /// with nothing to correspond to.
-    pub fn new(
-        members: Vec<CAttribute>,
-        tuples: Vec<CPrimitiveTuple>,
-    ) -> Result<Self, ParseError> {
-        if tuples.iter().any(|row| row.members().len() != members.len()) {
+    pub fn new(members: Vec<CAttribute>, tuples: Vec<CPrimitiveTuple>) -> Result<Self, ParseError> {
+        if tuples
+            .iter()
+            .any(|row| row.members().len() != members.len())
+        {
             return Err(ParseError::invariant(
                 "C_ATTRIBUTE_TUPLE",
                 "a tuple row's arity does not match the number of co-varying attributes",
@@ -822,7 +822,6 @@ impl CPrimitiveObject {
     pub const fn occurrences(&self) -> Option<&MultiplicityInterval> {
         self.occurrences.as_ref()
     }
-
 }
 
 /// Whether a terminology constraint is strictly binding, or a preference or
@@ -1396,6 +1395,7 @@ impl CComplexObjectProxy {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -1456,7 +1456,8 @@ mod tests {
 
     #[test]
     fn a_differential_path_is_absent_by_default_round_trips_and_must_name_a_parent() {
-        let plain = CAttribute::single("events", MultiplicityInterval::MANDATORY, Vec::new()).unwrap();
+        let plain =
+            CAttribute::single("events", MultiplicityInterval::MANDATORY, Vec::new()).unwrap();
         assert_eq!(plain.differential_path(), None);
         let json = serde_json::to_value(&plain).unwrap();
         assert!(!json.as_object().unwrap().contains_key("differential_path"));
@@ -1498,16 +1499,30 @@ mod tests {
     /// because its value lives at a target this crate does not resolve.
     #[test]
     fn effective_occurrences_follows_aom2s_rule_and_defers_only_for_a_proxy() {
-        let unstated = || CObject::Complex(CComplexObject::new("ELEMENT", Some("id2".to_owned()), None, Vec::new()).unwrap());
+        let unstated = || {
+            CObject::Complex(
+                CComplexObject::new("ELEMENT", Some("id2".to_owned()), None, Vec::new()).unwrap(),
+            )
+        };
         let stated = CObject::Complex(
-            CComplexObject::new("ELEMENT", Some("id2".to_owned()), Some(MultiplicityInterval::MANDATORY), Vec::new()).unwrap(),
+            CComplexObject::new(
+                "ELEMENT",
+                Some("id2".to_owned()),
+                Some(MultiplicityInterval::MANDATORY),
+                Vec::new(),
+            )
+            .unwrap(),
         );
-        let single = CAttribute::single("value", MultiplicityInterval::MANDATORY, vec![unstated()]).unwrap();
+        let single =
+            CAttribute::single("value", MultiplicityInterval::MANDATORY, vec![unstated()]).unwrap();
         assert_eq!(
             unstated().effective_occurrences(&single),
             Some(MultiplicityInterval::from_zero_to(Some(1)))
         );
-        assert_eq!(stated.effective_occurrences(&single), Some(MultiplicityInterval::MANDATORY));
+        assert_eq!(
+            stated.effective_occurrences(&single),
+            Some(MultiplicityInterval::MANDATORY)
+        );
 
         let bounded = CAttribute::container(
             "items",
@@ -1527,14 +1542,29 @@ mod tests {
             vec![unstated()],
         )
         .unwrap();
-        assert_eq!(unstated().effective_occurrences(&open), Some(MultiplicityInterval::from_zero_to(None)));
+        assert_eq!(
+            unstated().effective_occurrences(&open),
+            Some(MultiplicityInterval::from_zero_to(None))
+        );
 
-        let proxy = CObject::Proxy(CComplexObjectProxy::new("ELEMENT", Some("id3".to_owned()), None, "/items[id2]").unwrap());
+        let proxy = CObject::Proxy(
+            CComplexObjectProxy::new("ELEMENT", Some("id3".to_owned()), None, "/items[id2]")
+                .unwrap(),
+        );
         assert_eq!(proxy.effective_occurrences(&open), None);
         let proxy = CObject::Proxy(
-            CComplexObjectProxy::new("ELEMENT", Some("id3".to_owned()), Some(MultiplicityInterval::OPTIONAL), "/items[id2]").unwrap(),
+            CComplexObjectProxy::new(
+                "ELEMENT",
+                Some("id3".to_owned()),
+                Some(MultiplicityInterval::OPTIONAL),
+                "/items[id2]",
+            )
+            .unwrap(),
         );
-        assert_eq!(proxy.effective_occurrences(&open), Some(MultiplicityInterval::OPTIONAL));
+        assert_eq!(
+            proxy.effective_occurrences(&open),
+            Some(MultiplicityInterval::OPTIONAL)
+        );
     }
 
     /// `K15.3` with `A-71`: an unstated `occurrences` is absent on the wire,
@@ -1542,23 +1572,55 @@ mod tests {
     /// field was optional, with it always present, still reads.
     #[test]
     fn an_unstated_occurrences_is_absent_on_the_wire_and_a_stated_one_round_trips() {
-        let unstated = CComplexObject::new("ELEMENT", Some("id2".to_owned()), None, Vec::new()).unwrap();
+        let unstated =
+            CComplexObject::new("ELEMENT", Some("id2".to_owned()), None, Vec::new()).unwrap();
         let json = serde_json::to_value(&unstated).unwrap();
         assert!(!json.as_object().unwrap().contains_key("occurrences"));
-        assert_eq!(serde_json::from_value::<CComplexObject>(json).unwrap(), unstated);
+        assert_eq!(
+            serde_json::from_value::<CComplexObject>(json).unwrap(),
+            unstated
+        );
 
-        let stated =
-            CComplexObject::new("ELEMENT", Some("id2".to_owned()), Some(MultiplicityInterval::OPTIONAL), Vec::new()).unwrap();
+        let stated = CComplexObject::new(
+            "ELEMENT",
+            Some("id2".to_owned()),
+            Some(MultiplicityInterval::OPTIONAL),
+            Vec::new(),
+        )
+        .unwrap();
         let json = serde_json::to_value(&stated).unwrap();
         assert!(json.as_object().unwrap().contains_key("occurrences"));
-        assert_eq!(serde_json::from_value::<CComplexObject>(json).unwrap(), stated);
+        assert_eq!(
+            serde_json::from_value::<CComplexObject>(json).unwrap(),
+            stated
+        );
 
         for (kind, value) in [
-            ("primitive", serde_json::to_value(CPrimitiveObject::new("DV_TEXT", None, CPrimitive::String { list: Vec::new() })).unwrap()),
-            ("slot", serde_json::to_value(ArchetypeSlot::new("CLUSTER", "id5", None).unwrap()).unwrap()),
-            ("root", serde_json::to_value(CArchetypeRoot::new("CLUSTER", "openEHR-EHR-CLUSTER.x.v1", None).unwrap()).unwrap()),
+            (
+                "primitive",
+                serde_json::to_value(CPrimitiveObject::new(
+                    "DV_TEXT",
+                    None,
+                    CPrimitive::String { list: Vec::new() },
+                ))
+                .unwrap(),
+            ),
+            (
+                "slot",
+                serde_json::to_value(ArchetypeSlot::new("CLUSTER", "id5", None).unwrap()).unwrap(),
+            ),
+            (
+                "root",
+                serde_json::to_value(
+                    CArchetypeRoot::new("CLUSTER", "openEHR-EHR-CLUSTER.x.v1", None).unwrap(),
+                )
+                .unwrap(),
+            ),
         ] {
-            assert!(!value.as_object().unwrap().contains_key("occurrences"), "{kind}");
+            assert!(
+                !value.as_object().unwrap().contains_key("occurrences"),
+                "{kind}"
+            );
         }
 
         // Each type's own accessor answers a stated value as stated —
@@ -1566,15 +1628,24 @@ mod tests {
         // this was asserted.
         let stated = Some(MultiplicityInterval::OPTIONAL);
         assert_eq!(
-            CPrimitiveObject::new("DV_TEXT", stated.clone(), CPrimitive::String { list: Vec::new() }).occurrences(),
+            CPrimitiveObject::new(
+                "DV_TEXT",
+                stated.clone(),
+                CPrimitive::String { list: Vec::new() }
+            )
+            .occurrences(),
             Some(&MultiplicityInterval::OPTIONAL)
         );
         assert_eq!(
-            ArchetypeSlot::new("CLUSTER", "id5", stated.clone()).unwrap().occurrences(),
+            ArchetypeSlot::new("CLUSTER", "id5", stated.clone())
+                .unwrap()
+                .occurrences(),
             Some(&MultiplicityInterval::OPTIONAL)
         );
         assert_eq!(
-            CArchetypeRoot::new("CLUSTER", "openEHR-EHR-CLUSTER.x.v1", stated).unwrap().occurrences(),
+            CArchetypeRoot::new("CLUSTER", "openEHR-EHR-CLUSTER.x.v1", stated)
+                .unwrap()
+                .occurrences(),
             Some(&MultiplicityInterval::OPTIONAL)
         );
     }
@@ -1596,8 +1667,13 @@ mod tests {
 
     fn element_with_occurrences(node_id: &str, occurrences: MultiplicityInterval) -> CObject {
         CObject::Complex(
-            CComplexObject::new("ELEMENT", Some(node_id.to_owned()), Some(occurrences), Vec::new())
-                .unwrap(),
+            CComplexObject::new(
+                "ELEMENT",
+                Some(node_id.to_owned()),
+                Some(occurrences),
+                Vec::new(),
+            )
+            .unwrap(),
         )
     }
 
@@ -1717,7 +1793,9 @@ mod tests {
         // citation (`lib:A-25`), deliberately, and a test that reads like
         // `SECTION.banana` would enter the invariant-coverage report as one.
         let malformed = "banana";
-        assert!(ArchetypeSlot::new("SECTION", malformed, Some(MultiplicityInterval::OPTIONAL)).is_err());
+        assert!(
+            ArchetypeSlot::new("SECTION", malformed, Some(MultiplicityInterval::OPTIONAL)).is_err()
+        );
         let root = CArchetypeRoot::new(
             "SECTION",
             "openEHR-EHR-SECTION.x.v1",
@@ -1735,7 +1813,8 @@ mod tests {
     /// flipped it.
     #[test]
     fn a_slot_defaults_open_and_any_allowed_tracks_all_three_restrictions() {
-        let open = ArchetypeSlot::new("CLUSTER", "at0001", Some(MultiplicityInterval::OPTIONAL)).unwrap();
+        let open =
+            ArchetypeSlot::new("CLUSTER", "at0001", Some(MultiplicityInterval::OPTIONAL)).unwrap();
         assert!(!open.is_closed());
         assert!(open.any_allowed());
 
@@ -1743,7 +1822,9 @@ mod tests {
         assert!(closed.is_closed());
         assert!(!closed.any_allowed());
 
-        let included = open.clone().including("archetype_id/value matches {/.*blood_pressure.*/}");
+        let included = open
+            .clone()
+            .including("archetype_id/value matches {/.*blood_pressure.*/}");
         assert!(!included.is_closed());
         assert!(!included.any_allowed());
 
@@ -1828,10 +1909,7 @@ mod tests {
         let wrapped = CObject::Proxy(proxy);
         assert_eq!(wrapped.rm_type_name(), "ELEMENT");
         assert_eq!(wrapped.node_id(), Some("at0010"));
-        assert_eq!(
-            wrapped.occurrences(),
-            Some(&MultiplicityInterval::OPTIONAL)
-        );
+        assert_eq!(wrapped.occurrences(), Some(&MultiplicityInterval::OPTIONAL));
         assert!(wrapped.attributes().is_empty());
         assert!(wrapped.attribute_tuples().is_empty());
     }
@@ -1963,9 +2041,7 @@ mod tests {
         let with_value = CPrimitiveObject::new(
             "DV_TEXT",
             Some(MultiplicityInterval::MANDATORY),
-            CPrimitive::String {
-                list: Vec::new(),
-            },
+            CPrimitive::String { list: Vec::new() },
         )
         .with_assumed_value(PrimitiveValue::Text("unknown".to_owned()));
         let json = serde_json::to_value(&with_value).unwrap();
@@ -1976,9 +2052,7 @@ mod tests {
         let without_value = CPrimitiveObject::new(
             "DV_TEXT",
             Some(MultiplicityInterval::MANDATORY),
-            CPrimitive::String {
-                list: Vec::new(),
-            },
+            CPrimitive::String { list: Vec::new() },
         );
         let json = serde_json::to_value(&without_value).unwrap();
         assert!(
@@ -1996,7 +2070,10 @@ mod tests {
         let bare = CPrimitiveObject::new(
             "DV_CODED_TEXT",
             Some(MultiplicityInterval::MANDATORY),
-            CPrimitive::Integer { list: vec![1, 2, 3], range: None },
+            CPrimitive::Integer {
+                list: vec![1, 2, 3],
+                range: None,
+            },
         );
         assert_eq!(bare.is_enumerated_type_constraint(), None);
 
@@ -2009,11 +2086,17 @@ mod tests {
         let bare = CPrimitiveObject::new(
             "DV_CODED_TEXT",
             Some(MultiplicityInterval::MANDATORY),
-            CPrimitive::Integer { list: vec![1, 2, 3], range: None },
+            CPrimitive::Integer {
+                list: vec![1, 2, 3],
+                range: None,
+            },
         );
         let bare_json = serde_json::to_value(&bare).unwrap();
         assert!(
-            !bare_json.as_object().unwrap().contains_key("is_enumerated_type_constraint"),
+            !bare_json
+                .as_object()
+                .unwrap()
+                .contains_key("is_enumerated_type_constraint"),
             "an absent is_enumerated_type_constraint was written as null instead of omitted"
         );
         assert_eq!(
@@ -2024,11 +2107,15 @@ mod tests {
         let marked = bare.with_is_enumerated_type_constraint(true);
         let json = serde_json::to_value(&marked).unwrap();
         assert_eq!(json["is_enumerated_type_constraint"], true);
-        assert_eq!(serde_json::from_value::<CPrimitiveObject>(json).unwrap(), marked);
+        assert_eq!(
+            serde_json::from_value::<CPrimitiveObject>(json).unwrap(),
+            marked
+        );
     }
 
     #[test]
-    fn a_primitive_object_serialised_before_is_enumerated_type_constraint_existed_still_deserialises() {
+    fn a_primitive_object_serialised_before_is_enumerated_type_constraint_existed_still_deserialises()
+     {
         // `#[serde(default)]`: a C_PRIMITIVE_OBJECT written by an earlier
         // version of this crate, before this field existed, carries no
         // such key at all — it must still read, as `None`.

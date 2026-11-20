@@ -54,6 +54,93 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
 
 ### P0 — land what exists, and stop saying stale things
 
+- [ ] **Reach and hold 100% production-source test coverage** (`W0.41`,
+      `W-23`). Baseline measured 2026-11-19 with `cargo llvm-cov 0.9.1
+      --all-targets`: `openehr` 94.29% lines / 93.14% functions;
+      `openehr-store` 53.88% / 69.71%; `openehr-sqlite` 82.08% / 51.49%.
+      Those initial figures include inline test support; the normative command
+      is now nightly LCOV with test modules excluded, registry source filtered,
+      and physical source lines coalesced across generic instantiations.
+      Measure the other seven buildable workspaces, add owner-crate tests for
+      every reachable production path, and install a tree-derived CI gate for
+      both line and function coverage. Do not hide reachable code with
+      exclusions or borrow coverage from a downstream crate.
+      First owner-crate AQL tests raised `openehr-store::aql` from 0% to
+      55.06% lines and the crate from 53.88% to 59.70%; writing them exposed
+      and fixed mixed-scalar comparison defect `db:D-18`. A test-only memory
+      `Store` now runs all six shared conformance stories in the owner
+      workspace; complete dialect-contract, historical-read, integrity, and AQL
+      tests bring `openehr-store` to 100% executable lines (1,444/1,444) and
+      functions (112/112). Five safe-Rust-unreachable lines in fail-closed arms
+      over external `#[non_exhaustive]` enums are SHA-256-pinned in the audited
+      exclusion register. Continue with the other nine workspaces, then install
+      the tree-derived gate.
+      The first `openehr` pass established the honest owner baseline at 90.77%
+      physical lines / 91.40% functions after excluding 39 inline test modules.
+      Focused tests for parser refusals, identifier and serde boundaries,
+      intervals, temporal values, access control, audit-chain reconstruction,
+      and public accessors raised that to **92.76% physical lines
+      (9,636/10,388) / 94.05% functions (1,501/1,596)**; only 15 production
+      files retain uncovered executable lines at this checkpoint.
+      It also found `lib:A-84`: serializing a directly constructed non-finite
+      `Real` can silently substitute zero. Decide and specify the refusal before
+      treating that fallback as a coverage target.
+      **Work-in-progress checkpoint, 2026-11-20:** all ten buildable workspaces
+      pass locked tests and strict Clippy; all four benchmark suites run in
+      smoke mode; generated assets, formatting, shell syntax, documentation
+      claims, and patch hygiene pass. Resume by specifying and fixing
+      `lib:A-84`, covering the remaining 15 `openehr` production files, then
+      measuring and closing `openehr-sqlite`, `openehr-postgresql`, the four
+      schema-only dialect crates, `openehr-loco`, and `openehr-assets`. Finish
+      by making the tree-derived line-and-function coverage checker a required
+      CI gate.
+
+- [x] **Check chronology and readiness claims across boundaries** (2026-11-19).
+      The UTC day-boundary regression failed before the fix and passed after
+      it (`lib:A-83`). The corrected documentation check detected 13 stale
+      level cells (`W-22`). The repaired Make target completed locked checks
+      and tests on Rust 1.98 and 1.99.1 in all ten non-fuzz workspaces.
+
+- [x] **Require verified PostgreSQL transport for a remote store**
+      (`db:O10.7`, `db:O10.18`, `db:D-15`). Exercise the public connector
+      against a disposable TLS-enabled server. Assert a trusted certificate
+      for the configured host succeeds and that a wrong hostname, unknown
+      issuer, and plaintext-only server each fail before a record is written.
+      Document trust-root configuration alongside `PostgresqlStore::connect`.
+      Completed 2026-11-19: Rustls with platform roots is the default;
+      `connect_with_ca` supplies a private PEM CA. A disposable live test
+      accepts the correctly named trusted server and refuses a wrong name,
+      unrelated CA, and plaintext-only server, then runs the complete store
+      and concurrency suites over the verified connection.
+
+- [x] **Preserve fractional commit times in historical reads** (`db:D-16`).
+      With commits at `.100` and `.900` in one UTC second, assert no version
+      at `.099`, version one at `.100` and `.500`, and version two at `.900`.
+      Repeat with an equivalent offset across midnight in the shared suite
+      on SQLite and PostgreSQL. Specify how existing databases retain correct
+      reads before changing the index or the on-disk format (`db:O10.14`).
+      Done 2026-11-19. The shared test covers comma and full-stop decimal
+      signs, offsets crossing midnight, equal instants with different lexical
+      precision, a later trunk committed earlier, an unestablished query, and
+      fractions beyond milliseconds. Both live stores pass. Existing rows
+      need no migration because their authoritative text already retains the
+      fraction. Mutation testing found four caught and one unviable mutant,
+      with no survivors or timeouts.
+
+- [x] **Exercise a two-system version-tree race and make the index effective**
+      (`db:D-17`). Eight distinct creating systems previously produced eight
+      successful trunk version 2 commits because nullable branch columns
+      defeated uniqueness. Schema version 5 stores zero for absent branch
+      components and decodes it back to absence. The regression now yields one
+      winner and seven typed refusals on live SQLite and PostgreSQL 18. A
+      focused mutation run caught all five viable conflict/decode mutants; two
+      were unbuildable and none survived.
+
+- [x] **Prove every composition index fact is recoverable from stored JSON**
+      (`db:R4.10`). The shared suite reads each engine's canonical JSON,
+      deserializes it, re-runs the shared projection, and compares the complete
+      index row. Verified on SQLite and PostgreSQL 18.
+
 - [x] **Push the twelve unpushed commits and read the CI run.** Local `main`
       is twelve commits ahead of `origin/main` (`A-58`–`A-69`, 2026-09-02);
       `gh run list` shows CI last ran on the 0.9.0 publication commits. Two
@@ -133,6 +220,16 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       §Open decisions and, if adopted, the comment in `Cargo.toml`. — **S**
 
 ### P1 — the capabilities a CDR reader looks for, specification first
+
+- [x] **Validate rubrics in the record's language** (`lib:D3.7a`, `lib:A-81`).
+      Carry the applicable language through the validation walk. Use the
+      existing Spanish corpus case and a synthetic commit to prove the
+      English-only table cannot cause a refusal. Assert that an unknown rubric
+      is reported as unchecked and that a wrong English rubric is still detected.
+      Completed 2026-11-19: a coded text's own language overrides its enclosing
+      composition; otherwise `COMPOSITION.language` is used. Spanish and an
+      unknown language are unchecked, the English negative control is refused,
+      and the Spanish composition commits through live SQLite and PostgreSQL 18.
 
 - [x] **AQL execution over the SQLite store.** `S1.5`/`K15.29` forbid it
       today; amend under `C0.19` with the reasoning kept, then specify in

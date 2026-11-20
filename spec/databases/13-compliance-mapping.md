@@ -23,14 +23,14 @@ a small library is a sign that somebody has been generous with the word
 
 ## The mapping
 
-Status is as of 2026-08-01 and reflects what is **verified**, not what is
-intended.
+The original assessment dates to 2026-08-01. The transmission-security row
+was reassessed on 2026-11-19 against the PostgreSQL connector.
 
 | Obligation | Supported by | Status |
 | --- | --- | --- |
 | HIPAA §164.312(b) — audit controls | `M3.15`, `PR12.4`, `PR12.10`, `M3.34` | **Partial.** Writes record system, change type, committer, and time, enforced by the model itself. **Reads are not recorded at all** (`PR12.5`). |
 | HIPAA §164.312(c)(1) — integrity | `M3.17`, `M3.36`, `R4.4` | **Partial.** Append-only is enforced by the database on three engines and verified there. This is **not** tamper evidence (`PR12.11`), and there is no hash chain (`M3.16`). |
-| HIPAA §164.312(e) — transmission security | `O10.7` | **Deployment's.** The requirement that a PHI-carrying connection be encrypted is stated; no crate here opens a network connection, so nothing implements it yet (`O10.15`). |
+| HIPAA §164.312(e) — transmission security | `O10.7` | **Implemented, not certified.** PostgreSQL requires verified TLS and refuses a wrong server name, untrusted issuer, and plaintext-only endpoint in a live test (`D-15`). SQLite runs in process. |
 | HIPAA §164.502(b) — minimum necessary | `PR12.8` | **Out of scope.** Nothing here evaluates whether a principal *may* see what it asked for. The store records that it did. |
 | GDPR Art. 17 — erasure | `M3.18` | **Not implemented.** No erasure operation exists, and disabling the append-only triggers to achieve one is forbidden because it removes the guarantee for every other row. |
 | GDPR Art. 30 — records of processing | `PR12.4`, `PR12.10` | **Partial**, for the same reason as §164.312(b): writes only. |

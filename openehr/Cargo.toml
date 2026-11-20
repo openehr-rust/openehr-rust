@@ -58,6 +58,7 @@ criterion = { version = "0.8.2", default-features = false, features = ["cargo_be
 [lints.rust]
 missing_docs = "deny"
 unsafe_code = "forbid"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

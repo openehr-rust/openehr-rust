@@ -119,16 +119,14 @@ impl RmOverlay {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
     #[test]
     fn an_alias_with_no_stated_visibility_is_refused() {
-        let err = RmAttributeVisibility::new(
-            None,
-            Some(TerminologyCode::new("local", "at0099")),
-        )
-        .unwrap_err();
+        let err = RmAttributeVisibility::new(None, Some(TerminologyCode::new("local", "at0099")))
+            .unwrap_err();
         assert_eq!(err.reason, "Inv_alias_validity");
 
         // The same alias is fine once a visibility is stated alongside it.
@@ -181,5 +179,10 @@ mod tests {
         let json = serde_json::to_value(&overlay).unwrap();
         let back: RmOverlay = serde_json::from_value(json).unwrap();
         assert_eq!(back, overlay);
+        let statement = back.visibility("protocol").unwrap();
+        assert_eq!(
+            statement.alias(),
+            Some(&TerminologyCode::new("local", "at0099"))
+        );
     }
 }

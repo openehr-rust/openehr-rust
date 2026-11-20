@@ -161,6 +161,10 @@ impl Date {
         (self.year, self.month.unwrap_or(0), self.day.unwrap_or(0))
     }
 
+    fn epoch_day(&self) -> Option<i64> {
+        Some(days_from_civil(self.year, self.month?, self.day?))
+    }
+
     /// Compares on the components both dates know.
     ///
     /// Returns `None` when the known components are equal but one date knows
@@ -250,9 +254,8 @@ impl FromStr for Date {
 /// Days from the civil epoch (1970-01-01) for a proleptic Gregorian date.
 ///
 /// Howard Hinnant's `days_from_civil`, which is exact for the whole range of
-/// `i32` years and needs no lookup table. Used only for differencing two
-/// instants — this crate does not otherwise convert dates to numbers, because
-/// doing so is what loses partial precision (`D3.9`).
+/// `i32` years and needs no lookup table. Comparing or differencing instants
+/// uses it only for dates with a known month and day (`D3.9`).
 fn days_from_civil(year: i32, month: u8, day: u8) -> i64 {
     let y = i64::from(year) - i64::from(month <= 2);
     let era = if y >= 0 { y } else { y - 399 } / 400;
@@ -347,27 +350,15 @@ impl Time {
         &self.text
     }
 
-    /// Milliseconds since midnight, in the time's own zone.
-    ///
-    /// # Panics
-    ///
-    /// Never: the parser bounds every component.
+    /// The offset-adjusted minute, second (including 60), and decimal fraction.
     #[must_use]
-    fn millis_local(&self) -> i64 {
-        let frac_ms = self.fraction.as_deref().map_or(0, |f| {
-            // Pad or truncate to exactly three digits; anything finer than a
-            // millisecond does not affect an ordering at millisecond
-            // resolution, and anything coarser must not be read as smaller.
-            let mut digits: String = f.chars().take(3).collect();
-            while digits.len() < 3 {
-                digits.push('0');
-            }
-            digits.parse::<i64>().unwrap_or(0)
-        });
-        i64::from(self.hour) * 3_600_000
-            + i64::from(self.minute.unwrap_or(0)) * 60_000
-            + i64::from(self.second.unwrap_or(0)) * 1_000
-            + frac_ms
+    fn ordering_key(&self, day: i64) -> (i64, u8, &str) {
+        let minute = day * 1_440 + i64::from(self.hour) * 60 + i64::from(self.minute.unwrap_or(0))
+            - i64::from(self.offset.map_or(0, |offset| offset.minutes));
+        // Decimal fractions have an implicit trailing zero at every position.
+        // Removing explicit trailing zeros makes digit-string order exact.
+        let fraction = self.fraction().unwrap_or("").trim_end_matches('0');
+        (minute, self.second.unwrap_or(0), fraction)
     }
 }
 
@@ -382,13 +373,15 @@ impl Time {
     /// Not [`PartialOrd`] — see [`Date::semantic_cmp`] (`lib:A-32`).
     #[must_use]
     pub fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.compare_on_days(0, other, 0)
+    }
+
+    fn compare_on_days(&self, day: i64, other: &Self, other_day: i64) -> Option<Ordering> {
         match (self.offset, other.offset) {
             (Some(_), None) | (None, Some(_)) => return None,
             _ => {}
         }
-        let a = self.millis_local() - i64::from(self.offset.map_or(0, |o| o.minutes)) * 60_000;
-        let b = other.millis_local() - i64::from(other.offset.map_or(0, |o| o.minutes)) * 60_000;
-        match a.cmp(&b) {
+        match self.ordering_key(day).cmp(&other.ordering_key(other_day)) {
             Ordering::Equal if self.precision() != other.precision() => None,
             ord => Some(ord),
         }
@@ -607,9 +600,8 @@ impl DateTime {
     /// Seconds from the civil epoch, normalised to UTC where an offset is
     /// present. `None` unless the value has a full date and a time of day.
     fn epoch_seconds(&self) -> Option<i64> {
-        let (month, day) = (self.date.month()?, self.date.day()?);
         let time = self.time.as_ref()?;
-        let days = days_from_civil(self.date.year(), month, day);
+        let days = self.date.epoch_day()?;
         let seconds = i64::from(time.hour()) * 3600
             + i64::from(time.minute().unwrap_or(0)) * 60
             + i64::from(time.second().unwrap_or(0));
@@ -619,22 +611,18 @@ impl DateTime {
 }
 
 impl DateTime {
-    /// Compares the dates first; compares times only when the dates are equal
-    /// to day precision. `None` propagates from either part.
+    /// Compares timed values on a common calendar, accounting for UTC offsets.
+    /// Date-only values retain the partial ordering of their known components.
     ///
     /// Not [`PartialOrd`] — see [`Date::semantic_cmp`] (`lib:A-32`).
     #[must_use]
     pub fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
-        match self.date.semantic_cmp(&other.date)? {
-            Ordering::Equal => {}
-            ord => return Some(ord),
+        if let (Some(a), Some(b)) = (&self.time, &other.time) {
+            return a.compare_on_days(self.date.epoch_day()?, b, other.date.epoch_day()?);
         }
-        match (&self.time, &other.time) {
-            (None, None) => Some(Ordering::Equal),
-            // Same day, one with a time and one without: the timeless one could
-            // be any instant that day.
-            (None, Some(_)) | (Some(_), None) => None,
-            (Some(a), Some(b)) => a.semantic_cmp(b),
+        match self.date.semantic_cmp(&other.date)? {
+            Ordering::Equal if self.time.is_some() || other.time.is_some() => None,
+            order => Some(order),
         }
     }
 }
@@ -1000,9 +988,26 @@ impl SemanticOrd for Duration {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::base::Interval;
+
+    #[test]
+    fn malformed_temporal_components_take_each_specific_refusal_path() {
+        assert!("2024-13".parse::<Date>().is_err());
+        assert_eq!(days_in_month(2024, 13), 0);
+
+        let hour: Time = "12".parse().unwrap();
+        assert_eq!(hour.precision(), TimePrecision::Hour);
+        assert!("12:30.5".parse::<Time>().is_err());
+        assert_eq!(split_offset("+1234"), None);
+
+        assert!("PTnot-a-numberS".parse::<Duration>().is_err());
+        assert!("P999999999999999999999Y".parse::<Duration>().is_err());
+        assert!("P1Q".parse::<Duration>().is_err());
+        assert!("P1".parse::<Duration>().is_err());
+    }
 
     /// `Interval<Date>` etc. compile and behave correctly at all only because
     /// `SemanticOrd` is now implemented for these four types — before it
@@ -1100,6 +1105,42 @@ mod tests {
     fn date_time_rejects_a_time_on_a_partial_date() {
         assert!("2024-05T10:00:00".parse::<DateTime>().is_err());
         assert!("2024-05-17T10:00:00Z".parse::<DateTime>().is_ok());
+    }
+
+    #[test]
+    fn date_times_compare_across_utc_day_boundaries() {
+        use Ordering::{Equal, Less};
+        let dt = |s: &str| s.parse::<DateTime>().unwrap();
+        for (left, right, expected) in [
+            (
+                "2024-03-01T00:15:00+05:45",
+                "2024-02-29T18:30:00Z",
+                Some(Equal),
+            ),
+            (
+                "2025-01-01T00:05:00+14:00",
+                "2024-12-31T23:55:00-10:00",
+                Some(Less),
+            ),
+            (
+                "2024-12-31T20:00:00.499-04:00",
+                "2025-01-01T00:00:00.5Z",
+                Some(Less),
+            ),
+            ("2024-12-31T20:00-04:00", "2025-01-01T00:00:00Z", None),
+            ("2024-12-31T20:00:00", "2025-01-01T00:00:00Z", None),
+            ("2016-12-31T23:59:60Z", "2017-01-01T00:00:00Z", Some(Less)),
+        ] {
+            assert_eq!(
+                dt(left).semantic_cmp(&dt(right)),
+                expected,
+                "{left} vs {right}"
+            );
+            assert_eq!(
+                dt(right).semantic_cmp(&dt(left)),
+                expected.map(Ordering::reverse)
+            );
+        }
     }
 
     #[test]
@@ -1438,14 +1479,7 @@ mod tests {
         }
     }
 
-    /// Ordering two times, and the millisecond arithmetic underneath it.
-    ///
-    /// Every term of `millis_local` survived — the hour, minute and second
-    /// multipliers and all three additions — because the existing comparisons
-    /// differed in a component that dominates whatever the others do. A
-    /// fraction shorter than three digits is padded, not read as smaller:
-    /// `.5` is 500ms, and the loop that pads it was free to run never or
-    /// forever.
+    /// `D3.18`: compare each component and compare across their boundaries.
     #[test]
     fn times_order_by_the_instant_they_denote() {
         let t = |s: &str| s.parse::<Time>().unwrap();
@@ -1488,17 +1522,14 @@ mod tests {
             Some(Ordering::Greater),
             "an hour is not sixty minutes"
         );
-        // The same for the fraction's padding: `.5` is 500ms, not 5000ms, so
-        // it is *less* than a whole second. A pad loop that ran once too often
-        // makes it greater.
+        // A fraction remains within its second.
         assert_eq!(
             t("09:00:00.5").semantic_cmp(&t("09:00:01")),
             Some(Ordering::Less),
             "`.5` was read as five seconds"
         );
 
-        // A short fraction is padded to milliseconds, not treated as smaller.
-        // Compared through `partial_cmp` rather than `==`: `Eq` here is
+        // Trailing zeros preserve the value. `Eq` here is
         // lexical identity, and the two are deliberately different values that
         // denote the same instant (`lib:A-32`).
         assert_eq!(
@@ -1507,9 +1538,10 @@ mod tests {
         );
         let same = Some(Ordering::Equal);
         assert_eq!(t("09:00:00.5").semantic_cmp(&t("09:00:00.500")), same);
-        // And a longer one is truncated at millisecond resolution rather than
-        // overflowing into the seconds.
-        assert_eq!(t("09:00:00.5009").semantic_cmp(&t("09:00:00.500")), same);
+        assert_eq!(
+            t("09:00:00.5009").semantic_cmp(&t("09:00:00.500")),
+            Some(Ordering::Greater)
+        );
 
         // Offsets are normalised before comparing (`D3.18`): the same instant
         // written two ways orders equal, and a later local time can be the

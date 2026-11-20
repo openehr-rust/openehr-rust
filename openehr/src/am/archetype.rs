@@ -134,7 +134,11 @@ impl Archetype {
 
     /// Records the ADL and RM versions the artefact declared.
     #[must_use]
-    pub fn with_versions(mut self, adl_version: Option<String>, rm_release: Option<String>) -> Self {
+    pub fn with_versions(
+        mut self,
+        adl_version: Option<String>,
+        rm_release: Option<String>,
+    ) -> Self {
         self.adl_version = adl_version;
         self.rm_release = rm_release;
         self
@@ -264,9 +268,17 @@ impl Archetype {
         // Inv_valid_assumed_value: a primitive object's assumed_value, if it
         // has one, must conform to its own constraint.
         let mut mismatches = Vec::new();
-        assumed_value_mismatches(self.definition.attributes(), &self.terminology, &mut mismatches);
+        assumed_value_mismatches(
+            self.definition.attributes(),
+            &self.terminology,
+            &mut mismatches,
+        );
         if let Some(node_id) = mismatches.first() {
-            return Err(ParseError::new("ARCHETYPE", "Inv_valid_assumed_value", node_id));
+            return Err(ParseError::new(
+                "ARCHETYPE",
+                "Inv_valid_assumed_value",
+                node_id,
+            ));
         }
 
         Ok(())
@@ -393,24 +405,20 @@ fn assumed_value_conforms(
         (CPrimitive::TerminologyCode { constraint, .. }, PrimitiveValue::Text(code)) => {
             match constraint.as_deref() {
                 None | Some("") => true,
-                Some(c) if c.starts_with("ac") => {
-                    terminology.value_set(c).is_some_and(|set| set.contains(code))
-                }
+                Some(c) if c.starts_with("ac") => terminology
+                    .value_set(c)
+                    .is_some_and(|set| set.contains(code)),
                 Some(c) => code == c,
             }
         }
-        (CPrimitive::Date { range, .. }, PrimitiveValue::Text(s)) => {
-            Date::from_str(s).is_ok_and(|d| range.is_empty() || range.iter().any(|r| r.contains(&d)))
-        }
-        (CPrimitive::Time { range, .. }, PrimitiveValue::Text(s)) => {
-            Time::from_str(s).is_ok_and(|t| range.is_empty() || range.iter().any(|r| r.contains(&t)))
-        }
-        (CPrimitive::DateTime { range, .. }, PrimitiveValue::Text(s)) => {
-            DateTime::from_str(s).is_ok_and(|dt| range.is_empty() || range.iter().any(|r| r.contains(&dt)))
-        }
-        (CPrimitive::Duration { range, .. }, PrimitiveValue::Text(s)) => {
-            Duration::from_str(s).is_ok_and(|d| range.is_empty() || range.iter().any(|r| r.contains(&d)))
-        }
+        (CPrimitive::Date { range, .. }, PrimitiveValue::Text(s)) => Date::from_str(s)
+            .is_ok_and(|d| range.is_empty() || range.iter().any(|r| r.contains(&d))),
+        (CPrimitive::Time { range, .. }, PrimitiveValue::Text(s)) => Time::from_str(s)
+            .is_ok_and(|t| range.is_empty() || range.iter().any(|r| r.contains(&t))),
+        (CPrimitive::DateTime { range, .. }, PrimitiveValue::Text(s)) => DateTime::from_str(s)
+            .is_ok_and(|dt| range.is_empty() || range.iter().any(|r| r.contains(&dt))),
+        (CPrimitive::Duration { range, .. }, PrimitiveValue::Text(s)) => Duration::from_str(s)
+            .is_ok_and(|d| range.is_empty() || range.iter().any(|r| r.contains(&d))),
         (CPrimitive::Unsupported { .. }, _) => true,
         _ => false,
     }
@@ -424,6 +432,7 @@ fn assumed_value_conforms(
 pub const ROOT_OCCURRENCES: MultiplicityInterval = MultiplicityInterval::MANDATORY;
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::am::{
@@ -497,6 +506,19 @@ mod tests {
         assert_eq!(err.input, "at0004");
     }
 
+    #[test]
+    fn node_ids_does_not_invent_an_identifier_for_an_uncoded_root() {
+        let archetype = Archetype::new(
+            "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
+            CComplexObject::new("OBSERVATION", None, Some(ROOT_OCCURRENCES), Vec::new()).unwrap(),
+            // A terminology must define at least one term even though this
+            // uncoded constraint tree refers to none of them.
+            ArchetypeTerminology::new("en", terms(&["id1"])).unwrap(),
+        )
+        .unwrap();
+        assert!(archetype.node_ids().is_empty());
+    }
+
     /// `A-69`: `Archetype.archetype_id` is `ArchetypeHrid`
     /// (`ARCHETYPE.archetype_id: ARCHETYPE_HRID`), not `base::ArchetypeId`
     /// — so a namespaced or prerelease-suffixed identifier, which
@@ -523,7 +545,10 @@ mod tests {
             ArchetypeTerminology::new("en", terms(&["id1"])).unwrap(),
         )
         .unwrap();
-        assert_eq!(prerelease.archetype_id().version_status(), VersionStatus::ReleaseCandidate);
+        assert_eq!(
+            prerelease.archetype_id().version_status(),
+            VersionStatus::ReleaseCandidate
+        );
     }
 
     /// `specialisation_depth` is derived from `ArchetypeHrid::specialisations`
@@ -661,7 +686,10 @@ mod tests {
             let leaf = CPrimitiveObject::new(
                 "DV_BOOLEAN",
                 Some(MultiplicityInterval::MANDATORY),
-                CPrimitive::Boolean { allow_true, allow_false },
+                CPrimitive::Boolean {
+                    allow_true,
+                    allow_false,
+                },
             )
             .with_assumed_value(crate::am::PrimitiveValue::Boolean(assumed));
             Archetype::new(
@@ -672,8 +700,14 @@ mod tests {
         };
         assert!(build(true, false, true).is_ok());
         assert!(build(false, true, false).is_ok());
-        assert_eq!(build(true, false, false).unwrap_err().reason, "Inv_valid_assumed_value");
-        assert_eq!(build(false, true, true).unwrap_err().reason, "Inv_valid_assumed_value");
+        assert_eq!(
+            build(true, false, false).unwrap_err().reason,
+            "Inv_valid_assumed_value"
+        );
+        assert_eq!(
+            build(false, true, true).unwrap_err().reason,
+            "Inv_valid_assumed_value"
+        );
     }
 
     /// The `String` arm: a literal must be in the list, a regex element
@@ -697,18 +731,31 @@ mod tests {
             )
         };
         assert!(build(&["a"], "a").is_ok());
-        assert_eq!(build(&["a"], "c").unwrap_err().reason, "Inv_valid_assumed_value");
-        assert_eq!(build(&["a", "b"], "c").unwrap_err().reason, "Inv_valid_assumed_value");
+        assert_eq!(
+            build(&["a"], "c").unwrap_err().reason,
+            "Inv_valid_assumed_value"
+        );
+        assert_eq!(
+            build(&["a", "b"], "c").unwrap_err().reason,
+            "Inv_valid_assumed_value"
+        );
         assert!(build(&["/x.*/", "a"], "a").is_ok());
-        assert_eq!(build(&["/x.*/", "a"], "c").unwrap_err().reason, "Inv_valid_assumed_value");
+        assert_eq!(
+            build(&["/x.*/", "a"], "c").unwrap_err().reason,
+            "Inv_valid_assumed_value"
+        );
         assert!(build(&["/x.*/"], "anything").is_ok());
     }
 
     /// One leaf with the given constraint and assumed value, under the
     /// usual root, for the per-kind tests below.
-    fn with_assumed(constraint: CPrimitive, assumed: crate::am::PrimitiveValue) -> Result<Archetype, ParseError> {
-        let leaf = CPrimitiveObject::new("DV_ANY", Some(MultiplicityInterval::MANDATORY), constraint)
-            .with_assumed_value(assumed);
+    fn with_assumed(
+        constraint: CPrimitive,
+        assumed: crate::am::PrimitiveValue,
+    ) -> Result<Archetype, ParseError> {
+        let leaf =
+            CPrimitiveObject::new("DV_ANY", Some(MultiplicityInterval::MANDATORY), constraint)
+                .with_assumed_value(assumed);
         Archetype::new(
             "openEHR-EHR-OBSERVATION.blood_pressure.v2".parse().unwrap(),
             observation(&[], vec![CObject::Primitive(leaf)]),
@@ -754,8 +801,20 @@ mod tests {
             constraint: Some(c.to_owned()),
             constraint_status: None,
         };
-        assert!(with_assumed(constraint("at0010"), PrimitiveValue::Text("at0010".to_owned())).is_ok());
-        assert!(with_assumed(constraint("at0010"), PrimitiveValue::Text("at0011".to_owned())).is_err());
+        assert!(
+            with_assumed(
+                constraint("at0010"),
+                PrimitiveValue::Text("at0010".to_owned())
+            )
+            .is_ok()
+        );
+        assert!(
+            with_assumed(
+                constraint("at0010"),
+                PrimitiveValue::Text("at0011".to_owned())
+            )
+            .is_err()
+        );
         assert!(with_assumed(constraint(""), PrimitiveValue::Text("anything".to_owned())).is_ok());
     }
 
@@ -770,7 +829,11 @@ mod tests {
             range: range
                 .iter()
                 .map(|(lo, hi)| {
-                    crate::base::Interval::closed(Date::from_str(lo).unwrap(), Date::from_str(hi).unwrap()).unwrap()
+                    crate::base::Interval::closed(
+                        Date::from_str(lo).unwrap(),
+                        Date::from_str(hi).unwrap(),
+                    )
+                    .unwrap()
                 })
                 .collect(),
             pattern: None,
@@ -784,7 +847,11 @@ mod tests {
             range: range
                 .iter()
                 .map(|(lo, hi)| {
-                    crate::base::Interval::closed(Time::from_str(lo).unwrap(), Time::from_str(hi).unwrap()).unwrap()
+                    crate::base::Interval::closed(
+                        Time::from_str(lo).unwrap(),
+                        Time::from_str(hi).unwrap(),
+                    )
+                    .unwrap()
                 })
                 .collect(),
             pattern: None,
@@ -798,8 +865,11 @@ mod tests {
             range: range
                 .iter()
                 .map(|(lo, hi)| {
-                    crate::base::Interval::closed(DateTime::from_str(lo).unwrap(), DateTime::from_str(hi).unwrap())
-                        .unwrap()
+                    crate::base::Interval::closed(
+                        DateTime::from_str(lo).unwrap(),
+                        DateTime::from_str(hi).unwrap(),
+                    )
+                    .unwrap()
                 })
                 .collect(),
             pattern: None,
@@ -825,8 +895,11 @@ mod tests {
             range: range
                 .iter()
                 .map(|(lo, hi)| {
-                    crate::base::Interval::closed(Duration::from_str(lo).unwrap(), Duration::from_str(hi).unwrap())
-                        .unwrap()
+                    crate::base::Interval::closed(
+                        Duration::from_str(lo).unwrap(),
+                        Duration::from_str(hi).unwrap(),
+                    )
+                    .unwrap()
                 })
                 .collect(),
             pattern: None,

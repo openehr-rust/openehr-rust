@@ -39,7 +39,7 @@ crates.io at 0.10.0; the other ten are `publish = false`.
 | `openehr` | RM types, validation, paths, AQL, security | library |
 | `openehr-store` | schema, projection, commit rules, conformance suite | library |
 | `openehr-sqlite` | SQLite dialect **and a store** | **Verified** |
-| `openehr-postgresql` | PostgreSQL 18 dialect | **Schema** |
+| `openehr-postgresql` | PostgreSQL 18 dialect and store | **Verified** |
 | `openehr-mysql` | MySQL 8.4 dialect | **Schema** |
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
 | `openehr-mssql` | SQL Server dialect | **Schema** |
@@ -197,8 +197,8 @@ and `bench` jobs and two more fuzz targets were added on 2026-08-20 and have
 **not** yet run on `main`; every step of the `msrv` job was run locally,
 including against deliberately broken inputs, which is evidence and is not the
 same evidence (`W0.11`).
-`openehr-sqlite` is now at **Verified**; no other crate is eligible, having no
-`Store` ([`spec/audit.md`](spec/audit.md) **W-02**).
+SQLite and PostgreSQL now both run the shared store suite in CI. The
+[conformance matrix](spec/databases/conformance-matrix.md) records the runs.
 
 ### Fuzzing
 
@@ -293,7 +293,7 @@ version:
 ## Publishing
 
 All eight publishable crates are live on crates.io at **0.10.0**, published
-2026-10-16, and **local matches published** — the per-crate table is in
+2026-10-16, with 0.11.0 staged locally — the per-crate table is in
 [`agents/publishing.md`](agents/publishing.md), which is the one file to trust
 on this and the one to update first.
 
@@ -338,10 +338,10 @@ openehr-store/            engine-agnostic persistence
   benches/store.rs        projection and chain verification
   spec/conformance.md     marked copy of the ladder; C0.8 owns it
   scripts/verify-schema.sh
-openehr-<engine>/         one Dialect each; sqlite also has a Store
+openehr-<engine>/         one Dialect each; sqlite and postgresql also have stores
   spec/14-<engine>-dialect.md  that dialect's annex and its M14.x departures
 openehr-sqlite/examples/01_store_a_record.rs
-                          the persistence tutorial; the only crate with a Store
+                          the embedded persistence tutorial
 openehr-fuzz/             fuzz harness for the RM parsers; publish = false
 openehr-store-fuzz/       projection and integrity; publish = false
 openehr-<engine>-fuzz/    fuzz harness per dialect; publish = false

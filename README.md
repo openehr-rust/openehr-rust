@@ -42,7 +42,7 @@ assert_eq!(back, composition);
 | [`openehr`](openehr) | Reference Model types, validation, openEHR paths, AQL parsing, change-control security | library |
 | [`openehr-store`](openehr-store) | Engine-agnostic persistence: storage model, projection onto rows, commit rules, conformance suite | library |
 | [`openehr-sqlite`](openehr-sqlite) | SQLite dialect **and a complete embedded store** | **Verified** |
-| [`openehr-postgresql`](openehr-postgresql) | PostgreSQL 18 dialect | **Schema** |
+| [`openehr-postgresql`](openehr-postgresql) | PostgreSQL 18 dialect and store | **Verified** |
 | [`openehr-mysql`](openehr-mysql) | MySQL 8.4 dialect | **Schema** |
 | [`openehr-mariadb`](openehr-mariadb) | MariaDB 11.4 dialect | **Schema** |
 | [`openehr-mssql`](openehr-mssql) | SQL Server dialect | **Schema** |
@@ -58,8 +58,7 @@ written:
   tables were observed refusing `UPDATE` and `DELETE` with a row present.
 - **Store** — implements the full `Store` trait against a real database, with the
   shared conformance suite passing.
-- **Verified** — Store, re-checked in CI on every commit. `openehr-sqlite` is
-  here; it is the only crate at Store level and so the only one eligible.
+- **Verified** — Store, re-checked in CI on every commit. SQLite and PostgreSQL are here.
 
 `openehr-loco` is **outside this ladder entirely**: every rung on it is defined
 by DDL, a `Store` implementation, or a database server, and an HTTP service is
@@ -351,9 +350,7 @@ Eight steps, and the last four are the ones worth reading the source for:
   looks at the row: a `FOR EACH ROW` trigger on zero rows never fires
   (`db:C0.12`).
 
-It lives in `openehr-sqlite` because that is the only crate with a `Store`. The
-other five engine crates supply a `Dialect` and no more, so the same tutorial
-there would be demonstrating code that does not exist (`db:C0.11`).
+The tutorial uses embedded SQLite so it runs without provisioning a server.
 
 ## Generating DDL for your engine
 

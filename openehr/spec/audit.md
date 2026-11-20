@@ -15,11 +15,11 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**81 findings, 81 in the table below: 7 High, 44 Medium, 30 Low. 74 fixed or
-classified, 7 open.** These counts are checked against the table by CI
+**83 findings, 83 in the table below: 7 High, 46 Medium, 30 Low. 75 fixed or
+classified, 8 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
-verified), and the check should have failed. Every one of the 6 open findings
+verified), and the check should have failed. Every one of the 8 open findings
 is open by a stated reason rather than by omission — **A-40** is the largest,
 an entire specification section in force with no code behind it — and the
 rest: **A-02**, **A-08** and
@@ -166,8 +166,10 @@ in the documentation, which is the class this register most exists to catch.
 | A-77 | Low | A negative unwrapped `integer_value`/`real_value` (`{-3}`, a `C_ATTRIBUTE_TUPLE` row item; also a plain `attr matches {-3}`) was refused as "expected a primitive value, found `-`": the leading `-` tokenizes as `Symbol('-')` on its own, and neither `starts_inline_primitive` nor `parse_inline_primitive`'s dispatch had a case for it — found in `DV_ORDINAL`'s own canonical `[value, symbol]` tuple, `openEHR-EHR-CLUSTER.symptom.v1` (both the CKM and NEHTA copies), corpus run 5's own new candidate | **fixed** — `Lexer::peek_after_sign`, a two-token lookahead past a leading `+`/`-` to the token the ordinary tokenizer would read next, without consuming either; both call sites use it, and a negative *duration* (`-PT1H`) is unaffected, already reached through the temporal check ahead of it |
 | A-78 | Medium | `Time`/`DateTime`/`Duration::from_str` accepted only `.` as a fractional-second decimal sign, though `openEHR/adl-antlr`'s own `fragment SECOND_DEC_SEP : '.' \| ',' ;` (`base_lexer.g4`) states both, and ISO 8601 itself permits either — found running `EHRbase`'s own reference canonical-JSON test corpus (`tests/json_corpus.rs`, the JSON half of `tasks.md`'s external-corpus item): 21 of 57 real fixtures write `,` and none of them parsed | **fixed** (`D3.10b`) — the fractional-second split in `Time::from_str` and the decimal-sign check in `Duration::from_str`'s scanner both accept either character; the exact input text, separator included, is still what `Display` prints either way (`D3.10`), since neither type ever reconstructs its `Display` form from the parsed digits |
 | A-79 | Medium | `TEMPLATE_ID` refused any value containing whitespace (`I2.16`), though openEHR gives its lexical form as "to be determined" and the requirement's own reasoning already warned that "inventing a stricter grammar would reject valid identifiers from conformant tools" — found by exactly that: `EHRbase`'s own corpus names a real template `Virologischer Befund`, refused by every version of this crate before this fix, in 8 of 57 fixtures | **fixed** — the whitespace check is removed; only emptiness is refused, the one floor `I2.16`'s reasoning actually supports. `I2.16`'s text corrected in place, id unchanged (`C0.5`) |
-| A-81 | Medium | `DV_CODED_TEXT.check_openehr_rubric` compares `value` against an **English-only** rubric table (`terminology::Group::rubric`'s own doc comment already says so), with no way to know the enclosing record's declared `language` — so a valid Spanish rubric (`"evento"` for openEHR code `433`, English `"event"`) is reported as a `Value_is_rubric` *violation*, not *unchecked*, which is exactly the false claim `D3.7` says this check must never make, in the refusing direction. Found running the JSON corpus: `EHRbase`'s own `my_spanish_template_v0_COMPOSITION_EXAMPLE.json`, declared `language: es` | **open, by decision** — closing it needs either threading the record's language through the validation walk and reporting unchecked for anything but English, or sourcing and citing real multi-language rubric data; new `D3.7a` states the gap |
+| A-81 | Medium | `DV_CODED_TEXT.check_openehr_rubric` compared `value` against an **English-only** rubric table with no enclosing language, so valid Spanish `"evento"` for openEHR code `433` was reported as a violation | **fixed** — validation uses the coded text's language or its enclosing `COMPOSITION.language`; only `ISO_639-1::en` reaches the English table, every other declared language is unchecked; direct tests and live SQLite/PostgreSQL commits cover Spanish, unknown, and English-negative cases |
 | A-82 | Low | `am::cadl` refused two real constructs *correctly* but *unhelpfully* — an ADL 1.5-form `use_archetype` with no id code named the archetype's own first word (`` `CIMI` is not a valid id-, at-, or ac-code ``), and ADL 1.4's `matches {*}` wildcard named the token, not the construct (`` expected an attribute name, found `*` ``, 38 files) — both stated as open since corpus run 1's own candidate 3, neither reproduced against the real grammars this parser targets (`openEHR/openEHR-antlr4`'s `Cadl2Parser.g4`/`Cadl14Parser.g4`) until this pass | **fixed** — message only, nothing reparsed; `expect_use_archetype_node_id` clones the lexer to look ahead for the comma ADL 2's grammar requires before choosing which message applies, so a genuinely malformed id code (a comma *does* follow) keeps the original message; `c_complex_object` and its own duplicated tail (`A-40`'s residual) both name the `*` wildcard specifically, confirmed against `Cadl14Parser.g4`'s `cComplexObjectDef` production (one or more `cAttribute`, or a bare `'*'`) having no ADL 2 counterpart at all |
+| A-83 | Medium | `DateTime::semantic_cmp` ordered local calendar dates before applying their UTC offsets, and `Time::semantic_cmp` truncated chronology after three fractional digits. Equal instants across midnight could compare unequal, while distinct sub-millisecond instants could compare equal (`D3.18`). | **fixed** — compare the offset-adjusted calendar minute, second, and every significant fractional digit. |
+| A-84 | Medium | `Real::from_f64` accepts `NaN` and infinities, whose authoritative text is not a JSON number; converting that `Real` into `serde_json::Number` silently substitutes `0` after both parses fail (`base/real.rs:148-155`). Reference Model constructors currently reject such a `Real` before it reaches a document, but the public primitive conversion itself turns an invalid value into a plausible clinical number. Found by the production-only coverage pass: the fallback was the file's only uncovered function. | **open** — specify whether computed non-finite reals are refused at construction or at serialization, then replace the plausible-zero fallback with that explicit failure and add both negative controls. |
 
 
 ---
@@ -4716,7 +4718,7 @@ refusal.
 
 ## A-81 — a non-English rubric is reported as a violation, not unchecked
 
-**Severity: Medium. Status: open, by decision.**
+**Severity: Medium. Status: fixed.**
 
 **Found running the JSON corpus's own third pass** — after `A-78` and
 `A-79` closed, the fixtures that still fail `validate()` rather than
@@ -4745,18 +4747,16 @@ language is a claim about a terminology the crate cannot see, just phrased
 as a refusal instead of an acceptance. A Spanish-language clinical record
 using openEHR's own terminology correctly is told it is wrong.
 
-**Open, by decision, not fixed today.** Two real paths close it, and
-neither is a same-day patch: thread the record's own declared `language`
-down to `check_coded_text` (a real plumbing change — the check currently
-runs several structural layers below where `COMPOSITION.language` is
-known) and report *unchecked* rather than a violation whenever the
-declared language is not the one language this crate's table carries; or
-source and cite real rubric text for the languages openEHR itself
-publishes, the same sourcing discipline `03-data-types.md`'s own
-"Where the quantity invariants come from" section already holds itself
-to — not something to approximate from a single corpus fixture. New
-`D3.7a` states the gap in the specification itself, since `D3.7` alone
-now reads as satisfied when it is not, for any language but English.
+**Fixed and verified 2026-11-19.** `validation::Context` carries the enclosing
+composition language through the walk. A `DV_CODED_TEXT`'s own declared
+language takes precedence; otherwise the composition language applies.
+`DvCodedText::check_openehr_rubric_in` returns *unchecked* for every language
+except `ISO_639-1::en`, the only rubric data this crate actually carries.
+Direct tests assert Spanish and an unknown language are unchecked, English
+`"evento"` is still a violation, and a coded text's Spanish declaration
+overrides an English composition. The shared store fixture then proves the
+Spanish composition commits and the English negative control is refused on
+both live SQLite and PostgreSQL 18.
 
 ## A-82 — two refusals correct in substance, wrong in name
 
@@ -4825,3 +4825,22 @@ inside the body a mutation can remove — matching `expect_archetype_ref`'s
 own already-documented technique exactly. `--re
 'expect_use_archetype_node_id'` over the whole function afterward: 2
 mutants, both caught, 0 missed, 0 timeouts.
+
+## A-83 — UTC comparison ordered the written dates first
+
+**Found and fixed 2026-11-19.** Comparing `2024-03-01T00:15:00+05:45`
+with `2024-02-29T18:30:00Z` returned `Greater`. The two denote the same
+instant. The same early return could give a definite order to a local
+and an offset-bearing date-time even though `D3.14` requires an
+indeterminate result. The public Reference Model version-history lookup
+uses this comparison to decide which versions existed at the requested time.
+
+The same comparator retained only three fractional digits. `.5009` therefore
+compared equal to `.500`, despite the former being later. The corrected key
+keeps the fraction as decimal digits, removes only insignificant trailing
+zeros, and handles leap second `60` separately from the following minute.
+
+`iso8601::tests::date_times_compare_across_utc_day_boundaries` failed on
+the original comparator, then passed on the correction. It covers equality
+after a leap-day rollover, reversed calendar order, fractional seconds,
+mixed precision, a missing offset, and a leap second, in both directions.

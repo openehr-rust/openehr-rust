@@ -82,7 +82,11 @@ fn read(c: &mut Criterion) {
     let mut store = ready_store();
     let ehr_id = conformance::RECORD.parse().expect("literal");
     store
-        .commit_composition(&ehr_id, &conformance::sample_version(1, None, 5), CONTRIBUTOR)
+        .commit_composition(
+            &ehr_id,
+            &conformance::sample_version(1, None, 5),
+            CONTRIBUTOR,
+        )
         .expect("commit");
     let uid = format!("{}::{}::1", conformance::RECORD, conformance::SYSTEM)
         .parse()

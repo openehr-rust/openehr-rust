@@ -50,6 +50,10 @@
 //! returns the bytes it was given.
 
 #![forbid(unsafe_code)]
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+// Current nightly requires the feature gate but also reports it as unused.
+// Keep coverage output warning-free without weakening ordinary builds.
+#![cfg_attr(coverage_nightly, allow(unused_features))]
 
 pub mod aql;
 pub mod conformance;

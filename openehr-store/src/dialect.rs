@@ -285,6 +285,7 @@ pub fn column_sql<D: Dialect + ?Sized>(dialect: &D, column: &Column) -> String {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::{Dialect, Idempotence, ObjectKind, Placeholder, ddl_script};
     use crate::schema::{ColTy, TABLES, Table};
@@ -302,6 +303,7 @@ mod tests {
     /// tested without an engine, and now is.
     struct Minimal;
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     impl Dialect for Minimal {
         fn name(&self) -> &'static str {
             "minimal"
@@ -366,6 +368,21 @@ mod tests {
     }
 
     #[test]
+    fn a_table_without_a_primary_key_does_not_emit_an_empty_clause() {
+        let table = Table {
+            name: "no_primary_key",
+            note: "coverage fixture",
+            columns: &[],
+            primary_key: &[],
+            foreign_keys: &[],
+            indexes: &[],
+            append_only: false,
+        };
+        let sql = Minimal.create_table(&table);
+        assert!(!sql.contains("PRIMARY KEY"), "{sql}");
+    }
+
+    #[test]
     fn the_terminator_ends_every_statement_in_the_script() {
         // Statements span lines — a CREATE TABLE is many — so this counts
         // terminators against statements rather than checking line endings.
@@ -410,6 +427,7 @@ mod tests {
     /// construction.
     struct Guarded;
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     impl Dialect for Guarded {
         fn name(&self) -> &'static str {
             "guarded"

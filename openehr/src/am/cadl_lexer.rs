@@ -132,7 +132,10 @@ impl<'a> Lexer<'a> {
         if self.rest.is_empty() {
             return None;
         }
-        let end = self.rest.find(char::is_whitespace).unwrap_or(self.rest.len());
+        let end = self
+            .rest
+            .find(char::is_whitespace)
+            .unwrap_or(self.rest.len());
         Some(&self.rest[..end])
     }
 
@@ -462,6 +465,7 @@ impl<'a> Lexer<'a> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -496,6 +500,25 @@ mod tests {
                 Token::Integer("1".to_owned()),
             ]
         );
+        assert_eq!(Token::DotDot.to_string(), "`..`");
+    }
+
+    #[test]
+    fn exponent_invalid_strings_and_lookahead_edges_are_tokenised_without_stalling() {
+        assert_eq!(tokens("1.5e-3"), vec![Token::Real("1.5e-3".to_owned())]);
+        let invalid = tokens(r#""bad\n" tail"#);
+        assert!(matches!(invalid.first(), Some(Token::Word(_))));
+
+        let mut plain = Lexer::new("ELEMENT");
+        assert_eq!(plain.try_read_contained_regexp(), Ok(None));
+
+        let mut no_bar = Lexer::new("42");
+        assert_eq!(no_bar.peek_interval_bound(), None);
+        assert_eq!(no_bar.next(), Some(Token::Integer("42".to_owned())));
+
+        let mut only_relations = Lexer::new("| >=");
+        assert_eq!(only_relations.peek_interval_bound(), None);
+        assert_eq!(only_relations.next(), Some(Token::Symbol('|')));
     }
 
     #[test]
@@ -622,7 +645,10 @@ mod tests {
     #[test]
     fn try_read_contained_regexp_keeps_an_escaped_delimiter_inside_the_body() {
         let mut lexer = Lexer::new(r"{/mm\[Hg\]|kPa/}");
-        assert_eq!(lexer.try_read_contained_regexp(), Ok(Some(r"/mm\[Hg\]|kPa/")));
+        assert_eq!(
+            lexer.try_read_contained_regexp(),
+            Ok(Some(r"/mm\[Hg\]|kPa/"))
+        );
     }
 
     /// Not a `CONTAINED_REGEXP` at all — an ordinary `{c_objects}` block, or

@@ -18,7 +18,7 @@ it.
 
 | Question | Answer |
 | --- | --- |
-| Does this software send data anywhere? | **No.** The model crate performs no I/O at all; no published crate opens a network connection (`lib:S1.11`, `db:O10.15`). The one embedded store writes a local SQLite file you name. |
+| Does this software send data anywhere? | The model processes records in memory. SQLite writes locally. The PostgreSQL store sends records to the database server you configure. |
 | Does it phone home, or collect telemetry or analytics? | **No.** There is no such code in the repository. |
 | Does it embed or call an AI model? | **No.** AI was used to *write* it, never to run it — [`AI_STATEMENT.md`](AI_STATEMENT.md) §1. |
 | Does it hold PHI? | Only in the database *you* run, in tables *you* created. The libraries hold data in memory for the duration of a call. |
@@ -26,7 +26,7 @@ it.
 | Does it record who *changed* a record? | **Yes**, on every version, by design (`lib:X11.2`) — and that record contains user identifiers. See below. |
 | Does it record who *read* a record? | **No, not at the persistence layer** (`db:PR12.5`, not implemented). An access investigation asks about reads; this layer cannot answer it yet. |
 | Can I erase a patient? | **Not with anything shipped here.** Deletion is a recorded logical version (`lib:V8.10`); no physical-erasure operation exists at the persistence layer (`db:M3.18` row: Not implemented). |
-| Is the database connection encrypted? | The requirement is stated (`db:O10.7`); nothing here opens a connection to encrypt, so it falls entirely to your deployment. SQLite has no connection. |
+| Is the database connection encrypted? | SQLite runs in process. PostgreSQL requires verified TLS, using platform roots or an explicit private CA; live tests refuse a wrong server name, untrusted issuer, and plaintext-only server (`db:O10.7`, `db:D-15`). |
 | Is it a medical device? Is it HIPAA/GDPR compliant? | **No, and no.** No crate here is certified, and none claims to be. See "Regulatory framing". |
 | Who do I contact? | [`SECURITY.md`](SECURITY.md) for anything sensitive; [`MAINTAINERS.md`](MAINTAINERS.md) otherwise. **Never send real patient data** — a report containing it is deleted, not filed (SECURITY.md §Never send patient data). |
 
@@ -38,7 +38,7 @@ Four kinds of crate, and their PHI posture genuinely differs:
 | --- | --- | --- |
 | [`openehr/`](openehr/) — the model | Reference Model types, validation, paths, AQL parsing, and the security module | **Touches no database and performs no I/O.** If PHI passes through it, that is your program's memory, not a store. The audit chain and redaction live here, in-process. |
 | [`openehr-store/`](openehr-store/) — the persistence core | schema, projection, commit rules, the conformance suite | Links no driver and opens no socket. It defines the shapes; it does not move data. |
-| `openehr-<engine>/` — the six dialects | DDL and SQL for six engines; **SQLite also ships a store** | The SQLite store is the only shipped code that persists anything, into a local file you name. The other five emit DDL for databases *you* operate — check the [conformance matrix](spec/databases/conformance-matrix.md) for what each has been shown to do. |
+| `openehr-<engine>/` — the six dialects | DDL and SQL for six engines | SQLite persists records locally. PostgreSQL persists them on the configured server. The remaining engines provide schema definitions. See the [conformance matrix](spec/databases/conformance-matrix.md). |
 | [`openehr-loco/`](openehr-loco/) — the HTTP service | Axum/Loco service with PASETO token verification | The only component that listens on a socket. **Not published**, and outside the conformance ladder (`W0.32`). |
 
 ## What it does *not* do
@@ -74,7 +74,7 @@ protects (`lib:X11.11`), compared only in constant time (`lib:X11.12`), with
 key identifiers travelling alongside so rotation is additive (`lib:X11.14`).
 A checkpoint form carries counts and digests only — no patient data — so it
 can ship to a long-retention log where clinical data must not go
-(`lib:X11.19`). The database schema itself has no chain (`db:M3.16`);
+(`lib:X11.19`). The database stores a digest chain per versioned object (`db:M3.16`);
 append-only is enforced by triggers on the engines the matrix says have been
 observed refusing `UPDATE` and `DELETE`, which is integrity, not tamper
 evidence (`db:PR12.11`).
@@ -164,12 +164,12 @@ Stated here so you find them from this page rather than from an audit:
 - **No erasure operation exists** (`db:M3.18`), and disabling the append-only
   triggers to improvise one is forbidden, because it removes the guarantee for
   every other row.
-- **Verification depth varies by engine.** Only SQLite is at **Verified**; the
+- **Verification depth varies by engine.** SQLite and PostgreSQL run the shared store tests in CI. The
   [conformance matrix](spec/databases/conformance-matrix.md) is the only
   document that distinguishes the six, and checking it for the engine you
   actually deploy is the audit step that gets skipped.
 - **Repository-level posture gaps are self-declared** in
-  [`SECURITY.md`](SECURITY.md): commits and tags unsigned, no SBOM. (Private
+  [`SECURITY.md`](SECURITY.md): including the absence of a release SBOM. (Private
   vulnerability reporting, Dependabot, and secret scanning, disabled when
   this file was written, were enabled 2026-08-26.)
 - **Open findings live in three audit registers** —

@@ -34,6 +34,10 @@ Requirement prefix: `H5`.
 
   The parts are stored because the commit rules are checked on them (`H5.8`), and
   a store that only kept the string would have to re-parse it on every check.
+  On the trunk, absent `branch_number` and `branch_version` MUST be encoded as
+  zero in their required SQL columns and decoded back to absence at the Rust
+  boundary. Version-tree components are positive integers, so zero is outside
+  the identifier domain and is an unambiguous storage sentinel.
 
 - **H5.7** `creating_system_id` MUST be stored and MUST NOT be dropped as
   redundant. It is what keeps two systems' "version 2" distinct when both were
@@ -57,6 +61,11 @@ Requirement prefix: `H5`.
   exist, so a duplicate commit fails in the database and not only in the library.
   A rule enforced solely in application code is a rule that ends at the first
   process that does not use the library.
+
+  All four indexed columns MUST be non-null. A conventional unique index does
+  not make two `NULL` values equal on SQLite or PostgreSQL, so nullable branch
+  components allow any number of competing trunk versions at the same position
+  while appearing to satisfy this requirement.
 
 ## Deletion is a version
 
@@ -120,6 +129,16 @@ Requirement prefix: `H5`.
   `M3.28`). A store ordering on the lexical form would sort
   `2026-07-31T09:00:00+02:00` after `2026-07-31T08:30:00Z`.
 
+  An as-of read MUST exclude a later commit even when it falls within the
+  query's UTC second. With versions committed at `09:05:00.100Z` and
+  `09:05:00.900Z`, a query at `09:05:00.500Z` on that date returns the
+  first version. The second becomes eligible at its commit time. The cutoff
+  uses all authored fractional digits. Existing databases already hold them
+  in the authoritative text. Use the UTC index to bound the candidates to
+  the query second and the most recent occupied earlier second, then compare
+  their parsed instants. For equal eligible instants prefer the higher trunk
+  version, as in the whole-second lookup.
+
 ## Contributions
 
 - **H5.14** A `CONTRIBUTION` MUST be recorded as its own row and MUST be
@@ -134,9 +153,13 @@ Requirement prefix: `H5`.
   is sufficient for this and is the preferred mechanism, because it holds
   regardless of how many processes are writing.
 
-  **Verified 2026-08-01** by
+  **Verified 2026-08-01**, and strengthened 2026-11-19, by
   `openehr-sqlite/tests/concurrency.rs::racing_commits_to_one_position_produce_one_winner`:
-  eight writers race for one position in a version tree and exactly one wins.
+  eight writers from eight distinct `creating_system_id`s race for one position
+  in a version tree and exactly one wins. Distinct version UIDs are essential
+  evidence for `H5.10`: otherwise the primary key can reject every loser before
+  the unique tree-position index is exercised. The same test runs against a
+  live PostgreSQL server.
 
   It **failed** the first time it ran, and that failure is `D-06` — the seven
   losers were refused, correctly, but the refusal surfaced as an engine error

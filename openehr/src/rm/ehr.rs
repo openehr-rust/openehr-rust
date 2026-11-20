@@ -1636,6 +1636,7 @@ impl From<Section> for ContentItem {
 pub type Label = DvText;
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::base::PartyRef;
@@ -1814,10 +1815,19 @@ mod tests {
 
         // All four combinations, so neither accessor can be a constant and
         // neither can be answering the other's field.
-        for (queryable, modifiable) in [(true, true), (true, false), (false, true), (false, false)] {
+        for (queryable, modifiable) in [(true, true), (true, false), (false, true), (false, false)]
+        {
             let s = status(queryable, modifiable);
-            assert_eq!(s.is_queryable(), queryable, "queryable={queryable} modifiable={modifiable}");
-            assert_eq!(s.is_modifiable(), modifiable, "queryable={queryable} modifiable={modifiable}");
+            assert_eq!(
+                s.is_queryable(),
+                queryable,
+                "queryable={queryable} modifiable={modifiable}"
+            );
+            assert_eq!(
+                s.is_modifiable(),
+                modifiable,
+                "queryable={queryable} modifiable={modifiable}"
+            );
             // `is_active` is derived from modifiability, not from queryability.
             assert_eq!(s.is_active(), modifiable);
         }
@@ -1902,7 +1912,10 @@ mod tests {
         let full = EntryAttrs::about_subject(en(), utf8())
             .with_provider(provider.clone())
             .with_participation(participation);
-        assert_eq!(full.provider().and_then(PartyProxy::name), Some("Dr A Nurse"));
+        assert_eq!(
+            full.provider().and_then(PartyProxy::name),
+            Some("Dr A Nurse")
+        );
         assert_eq!(full.other_participations().len(), 1);
 
         // CARE_ENTRY: the guideline the care followed.
@@ -1955,7 +1968,9 @@ mod tests {
             Some(terminology::instruction_transition::START)
         );
         assert_eq!(
-            moved.careflow_step().map(crate::rm::data_types::DvCodedText::value),
+            moved
+                .careflow_step()
+                .map(crate::rm::data_types::DvCodedText::value),
             Some("dispensed")
         );
         assert_eq!(moved.reason().len(), 1);
@@ -1976,7 +1991,9 @@ mod tests {
             "openEHR-EHR-ACTION.medication.v1",
         )
         .unwrap()
-        .with_timing(crate::rm::data_types::DvParsable::new("R2/2026-08-03/P1D", "ISO8601").unwrap());
+        .with_timing(
+            crate::rm::data_types::DvParsable::new("R2/2026-08-03/P1D", "ISO8601").unwrap(),
+        );
         assert_eq!(
             timed.timing().map(crate::rm::data_types::DvParsable::value),
             Some("R2/2026-08-03/P1D")
@@ -2030,9 +2047,17 @@ mod tests {
             .with_item(doc(1))
             .with_item(doc(2))
             .with_folder(Folder::new(attrs("2026", "at0001")).with_item(doc(3)));
-        assert_eq!(filed.items().len(), 2, "filed documents were reported missing");
+        assert_eq!(
+            filed.items().len(),
+            2,
+            "filed documents were reported missing"
+        );
         assert_eq!(filed.folders().len(), 1);
-        assert_eq!(filed.folders()[0].items().len(), 1, "a sub-folder was reported empty");
+        assert_eq!(
+            filed.folders()[0].items().len(),
+            1,
+            "a sub-folder was reported empty"
+        );
 
         // `details` has no builder — it arrives only by deserialization — so
         // this is the one path that reads it back at all.
@@ -2047,7 +2072,10 @@ mod tests {
         );
         let revived: Folder =
             serde_json::from_value(serde_json::Value::Object(object)).expect("deserialize");
-        assert!(revived.details().is_some(), "recorded folder details were dropped");
+        assert!(
+            revived.details().is_some(),
+            "recorded folder details were dropped"
+        );
         assert_eq!(revived.items().len(), 2);
 
         // EVENT_CONTEXT: end time and other context are optional and reported
@@ -2115,12 +2143,14 @@ mod tests {
             attrs("Order", "openEHR-EHR-INSTRUCTION.medication_order.v3"),
             EntryAttrs::about_subject(en(), utf8()),
             Text::Plain(crate::rm::data_types::DvText::new("Give 5mg at once").unwrap()),
-            vec![Activity::new(
-                attrs("activity", "at0400"),
-                item_structure(),
-                "openEHR-EHR-ACTION.medication.v1",
-            )
-            .unwrap()],
+            vec![
+                Activity::new(
+                    attrs("activity", "at0400"),
+                    item_structure(),
+                    "openEHR-EHR-ACTION.medication.v1",
+                )
+                .unwrap(),
+            ],
         )
         .unwrap()
         .with_expiry_time(DvDateTime::new("2026-08-10T09:00:00Z").unwrap());
@@ -2162,7 +2192,9 @@ mod tests {
             "the link back to the order was lost"
         );
         assert_eq!(
-            linked.instruction_details().map(InstructionDetails::activity_id),
+            linked
+                .instruction_details()
+                .map(InstructionDetails::activity_id),
             Some("activity1")
         );
     }

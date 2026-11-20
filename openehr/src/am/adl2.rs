@@ -196,6 +196,7 @@ pub fn parse_header(source: &str) -> Result<Adl2Header, Adl2Error> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -245,5 +246,31 @@ mod tests {
     fn missing_archetype_id_is_refused_not_defaulted() {
         let err = parse_header("archetype\n").unwrap_err();
         assert!(err.reason.contains("end of input"), "{err}");
+    }
+
+    #[test]
+    fn token_and_parent_identifier_errors_name_what_was_found() {
+        let mut lexer = Lexer::new("[");
+        let err = expect_word(&mut lexer, "archetype").unwrap_err();
+        assert!(err.reason.contains("found `[`"), "{err}");
+
+        let mut lexer = Lexer::new("");
+        let err = expect_word(&mut lexer, "archetype").unwrap_err();
+        assert!(err.reason.contains("end of input"), "{err}");
+
+        let mut lexer = Lexer::new("[");
+        let err = expect_id(&mut lexer, "an identifier").unwrap_err();
+        assert!(err.reason.contains("found `[`"), "{err}");
+
+        let mut lexer = Lexer::new("not-an-archetype-id");
+        let err = expect_archetype_id(&mut lexer, "a parent identifier").unwrap_err();
+        assert!(err.reason.contains("narrower"), "{err}");
+    }
+
+    #[test]
+    fn unterminated_metadata_is_refused_at_the_end() {
+        let err = parse_header("archetype (adl_version=2.4.0").unwrap_err();
+        assert!(err.reason.contains("unterminated"), "{err}");
+        assert_eq!(err.offset, "archetype (adl_version=2.4.0".len());
     }
 }

@@ -709,6 +709,7 @@ impl Chain {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -840,6 +841,10 @@ mod tests {
             "{rendered}"
         );
         assert!(rendered.contains("redacted"));
+
+        let tag = k.tag(b"pre-image");
+        let rendered = format!("{tag:?}");
+        assert_eq!(rendered, "Mac { bytes: 32 }");
     }
 
     #[test]
@@ -919,7 +924,7 @@ mod tests {
 
         let head = chain.head().to_hex();
         for broken in [
-            head[..head.len() - 1].to_owned(),      // odd length
+            head[..head.len() - 1].to_owned(),        // odd length
             format!("{}zz", &head[..head.len() - 2]), // not hex
         ] {
             let corrupted = json.replace(&head, &broken);
@@ -928,6 +933,9 @@ mod tests {
                 "accepted {broken}"
             );
         }
+
+        assert!(serde_json::from_str::<Tag>(r#"{"key_id":"k1","mac":"a"}"#).is_err());
+        assert!(serde_json::from_str::<Tag>(r#"{"key_id":"k1","mac":"zz"}"#).is_err());
     }
 
     /// A tag's key id is what routes verification to a key, so it has to
@@ -939,6 +947,10 @@ mod tests {
         chain.append("v1", &"first", Some(&key)).unwrap();
         assert_eq!(chain.entries()[0].tag.as_ref().unwrap().key_id(), "k1");
         assert_eq!(chain.entries()[0].tag.as_ref().unwrap().mac().len(), 32);
+
+        let stored = Tag::from_stored("stored-key", vec![1, 2, 3]);
+        assert_eq!(stored.key_id(), "stored-key");
+        assert_eq!(stored.mac(), [1, 2, 3]);
 
         // Held under another name: the id is what fails to match, not the tag.
         let renamed = ChainKey::new("k2", vec![7u8; 32]).unwrap();
@@ -1012,6 +1024,12 @@ mod tests {
     /// the witness and prove nothing later.
     #[test]
     fn a_digest_displays_as_hex_and_a_checkpoint_carries_it() {
+        let bytes = [7_u8; 32];
+        let restored = Digest256::from_bytes(bytes);
+        assert_eq!(restored.as_bytes(), &bytes);
+        assert_eq!(Digest256::of(b"content"), Digest256::of(b"content"));
+        assert_ne!(Digest256::of(b"content"), Digest256::of(b"other"));
+
         let mut chain = Chain::new();
         chain.append("v1", &"first", None).unwrap();
         let head = chain.head();

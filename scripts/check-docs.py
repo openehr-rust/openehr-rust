@@ -52,7 +52,7 @@ WORDS = {
     7: "seven", 8: "eight", 9: "nine", 10: "ten", 11: "eleven",
     12: "twelve", 13: "thirteen", 14: "fourteen", 15: "fifteen",
     16: "sixteen", 17: "seventeen", 18: "eighteen", 19: "nineteen",
-    20: "twenty", 21: "twenty-one", 22: "twenty-two",
+    20: "twenty", 21: "twenty-one", 22: "twenty-two", 23: "twenty-three",
 }
 # A number word or a numeral, so a document may spell it either way. Longest
 # first, so that `twenty-one` is not matched as `one` -- and every pattern is
@@ -79,6 +79,13 @@ HISTORICAL = {
 PRUNED = {"target", ".git", "node_modules", "build", ".svelte-kit"}
 
 
+def dialect_crates() -> set[str]:
+    return {
+        path.parent.name for path in ROOT.glob("openehr-*/Cargo.toml")
+        if (path.parent / "examples/ddl.rs").is_file()
+    }
+
+
 def facts() -> dict[str, int]:
     """Everything countable, counted from the tree rather than from prose."""
     manifests = sorted(ROOT.glob("*/Cargo.toml"))
@@ -93,7 +100,7 @@ def facts() -> dict[str, int]:
         "crates": len(crates),
         "published": len(published),
         "unpublished": len(crates) - len(published),
-        "dialects": len([c for c in crates if c.startswith("openehr-") and (ROOT / c / "examples/ddl.rs").is_file()]),
+        "dialects": len(dialect_crates()),
         "fuzz_crates": len(fuzz_crates),
         "fuzz_targets": sum(len(list((ROOT / c / "fuzz_targets").glob("*.rs"))) for c in fuzz_crates),
         "tutorials": len(list((ROOT / "openehr/examples").glob("[0-9]*.rs"))),
@@ -440,11 +447,16 @@ def owned_levels() -> dict[str, str]:
         sys.exit(f"::error file={LEVELS_OWNER}::no `## Conformance levels` section")
     rows = re.findall(
         r"^\| `(openehr-[a-z]+)` \| \*\*(Dialect|Schema|Store|Verified)\*\* \|",
-        section[1], re.MULTILINE,
+        section[1].split("\n## ", 1)[0], re.MULTILINE,
     )
     if not rows:
         sys.exit(f"::error file={LEVELS_OWNER}::the levels table has no readable rows")
-    return dict(rows)
+    levels = dict(rows)
+    expected = dialect_crates()
+    if len(rows) != len(levels) or levels.keys() != expected:
+        sys.exit(f"::error file={LEVELS_OWNER}::expected one level for each of "
+                 f"{sorted(expected)}, found {[crate for crate, _ in rows]}")
+    return levels
 
 
 def check_levels() -> int:
@@ -466,10 +478,12 @@ def check_levels() -> int:
     for rel, text in sources:
         if rel == LEVELS_OWNER:
             continue
-        # A table row naming a crate and a level.
+        # A crate row may have role, engine, or version columns before its level.
         for m in re.finditer(
-            r"\| \[?`(openehr-[a-z]+)`\]?[^|]*\|[^|]*?\*\*(Dialect|Schema|Store|Verified)\*\*",
+            r"^\| \[?`(openehr-[a-z]+)`[^|\n]*\|(?:[^|\n]*\|)*?"
+            r"[ \t]*\*\*(Dialect|Schema|Store|Verified)\*\*",
             text,
+            re.MULTILINE,
         ):
             crate, said = m.group(1), m.group(2)
             if crate in want and said != want[crate]:

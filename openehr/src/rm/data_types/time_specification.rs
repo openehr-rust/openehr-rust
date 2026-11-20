@@ -125,6 +125,7 @@ impl DvGeneralTimeSpecification {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -132,9 +133,11 @@ mod tests {
     fn formalism_is_checked_against_the_class() {
         let pivl = DvParsable::new("[x]/(12 h)", FORMALISM_PIVL).unwrap();
         let gts = DvParsable::new("[x]", FORMALISM_GTS).unwrap();
-        assert!(DvPeriodicTimeSpecification::new(pivl.clone()).is_ok());
+        let periodic = DvPeriodicTimeSpecification::new(pivl.clone()).unwrap();
+        assert_eq!(periodic.value(), &pivl);
         assert!(DvPeriodicTimeSpecification::new(gts.clone()).is_err());
-        assert!(DvGeneralTimeSpecification::new(gts).is_ok());
+        let general = DvGeneralTimeSpecification::new(gts.clone()).unwrap();
+        assert_eq!(general.value(), &gts);
         assert!(DvGeneralTimeSpecification::new(pivl).is_err());
     }
 
@@ -148,6 +151,13 @@ mod tests {
         assert!(matches!(err, Error::Unsupported { .. }));
         // And the refusal names where the exclusion is recorded, so it is
         // traceable rather than merely unimplemented.
+        assert!(err.to_string().contains("spec/01-scope.md"));
+
+        let general =
+            DvGeneralTimeSpecification::new(DvParsable::new("[x]", FORMALISM_EIVL).unwrap())
+                .unwrap();
+        let err = general.calendar_alignment().unwrap_err();
+        assert!(matches!(err, Error::Unsupported { .. }));
         assert!(err.to_string().contains("spec/01-scope.md"));
     }
 }

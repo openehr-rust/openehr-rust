@@ -7,6 +7,56 @@ together.
 
 ## Unreleased
 
+- Raised honest production-only owner-workspace coverage in `openehr` from
+  90.77% lines / 91.40% functions to **92.76% (9,636/10,388) / 94.05%
+  (1,501/1,596)**. New tests cover exact parser refusals, identifier and serde
+  boundaries, interval shapes, temporal values, stored archetype HRIDs,
+  access-control dispatch, and audit-chain reconstruction. The pass also found
+  `lib:A-84` (a non-finite `Real` can serialize as zero); that behavior remains
+  an open specification decision rather than a newly codified contract.
+- Established production-only owner-workspace coverage for `openehr-store`
+  (`W0.41`, `W-23`): a test-only memory store runs every shared conformance
+  story locally, and projection, dialect, historical-read, integrity, and AQL
+  tests bring the crate to **100% executable-line and function coverage**.
+  The checker coalesces generic instantiations and hash-pins five safe-Rust-
+  unreachable, fail-closed arms over external `#[non_exhaustive]` enums. The
+  repository-wide work remains open until the other nine buildable crates also
+  reach 100% under a tree-derived CI gate.
+- Fixed bounded AQL treating values from different scalar families as equal
+  and admitting them through `>=`/`<=` (`db:P6.22`, `db:D-18`). Integer and
+  real-number values remain one numeric family; string, numeric, and boolean
+  families now compare unequal and cannot satisfy cross-family ordering.
+- Fixed non-English openEHR rubrics being rejected against the bundled
+  English-only terminology table (`lib:D3.7a`, `lib:A-81`). Validation now
+  uses a coded text's declared language or its enclosing composition's;
+  languages other than `ISO_639-1::en` are explicitly unchecked. Spanish,
+  unknown-language, English-negative, SQLite-commit, and live PostgreSQL-commit
+  cases are covered.
+- `PostgresqlStore` now requires verified TLS (`db:O10.7`, `db:O10.18`,
+  `db:D-15`). `connect` uses platform trust roots and the new
+  `connect_with_ca` constructor replaces them with an explicit PEM CA. Both
+  force encryption, verify the configured server name and certificate chain,
+  and refuse plaintext fallback. Live PostgreSQL 18 tests cover trusted,
+  wrong-name, unrelated-CA, and plaintext-only endpoints.
+- Fixed Reference Model date-time comparison across UTC day boundaries
+  (`lib:D3.18`, `lib:A-83`). Equal instants written on different local
+  dates now compare equal. A local date-time compared with an offset-bearing
+  date-time gives an indeterminate result even when their dates differ. The
+  comparison now retains every authored fractional digit instead of rounding
+  chronology to milliseconds.
+- Fixed `Store::version_at_time` returning a version committed later within
+  the query's UTC second (`db:H5.13`, `db:D-16`). SQLite and PostgreSQL retain
+  the existing indexed whole-second bound and resolve exact fractions from the
+  authoritative timestamp text. Existing databases require no migration.
+- Fixed concurrent writers with distinct creating systems all taking the same
+  trunk position (`db:H5.10`, `db:D-17`). Branch-position columns are now
+  non-null and encode an absent branch as zero, closing the nullable hole in
+  every dialect's generated unique index. `SCHEMA_VERSION` is now 5; pre-1.0
+  deployments must export, recreate, and reload as specified by `db:O10.14`.
+- The shared store suite now rebuilds each composition index row from canonical
+  JSON read back from the database and compares the complete projection
+  (`db:R4.10`).
+
 ## 0.11.0 - 2026-11-17
 
 **The MSRV moves from 1.97 to 1.98** (N−2 of current stable 1.100), in every

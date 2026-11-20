@@ -141,11 +141,13 @@ Stated so that "not examined" and "examined and sound" stay distinguishable
   consistency with `RV2` and is not evidence of anything. Their real floor is
   whatever nightly `cargo-fuzz` needs, which no job here pins.
 
-- **N−2 is verified; nothing between N−2 and N is.** The job builds exactly two
+- **CI covers stable and N−2.** The workflow builds exactly two
   toolchains, stable and N−2. A break that appears only on 1.99 would reach a
-  user before it reached CI. This is judged an acceptable gap — the compiler is
-  not that discontinuous — rather than an unnoticed one. It is a narrower gap
-  than N−3's, by exactly the one release the offset moved.
+  user before it reached CI. Contributors can exercise that intermediate release
+  with `make test-minimum-supported-rust-version`, which checks all targets and
+  runs tests with the committed locks in each non-fuzz workspace on the MSRV
+  and the following minor. It uses installed host toolchains. The intermediate
+  release remains a local check.
 
 - **The MSRV is verified by compiling, not by the resolver.** `cargo test`
   under N−2 uses the committed `Cargo.lock`, so it proves this dependency graph
