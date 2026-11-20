@@ -10,7 +10,7 @@
 
 use core::cmp::Ordering;
 use openehr::aql::AqlQuery;
-use openehr::base::{Interval, iso8601};
+use openehr::base::{Interval, Real, iso8601};
 use openehr::path::Pathable;
 use openehr::rm::common::{LocatableAttrs, PartyIdentified};
 use openehr::rm::data_structures::{Element, ItemTree};
@@ -431,6 +431,41 @@ fn no_document_this_crate_can_build_carries_a_non_finite_float() {
     assert_eq!(
         openehr::security::to_canonical_string(&f64::INFINITY).unwrap(),
         "null"
+    );
+}
+
+/// A primitive computed outside an RM constructor must have the same barrier.
+///
+/// **Failure mode.** `Real::from_f64` used to accept all three IEEE-754
+/// non-finite classes. Its JSON-number conversion then replaced each with
+/// `0`, turning an invalid computation into a plausible clinical value. A
+/// syntactically valid JSON number beyond `f64` range is different: its text is
+/// authoritative and must survive even though the derived value is infinite.
+#[test]
+fn computed_reals_refuse_non_finite_values_without_substitution() {
+    for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let error = Real::from_f64(value).expect_err("non-finite real was accepted");
+        assert_eq!(error.kind, "REAL");
+        assert_eq!(error.reason, "Finite");
+        assert!(error.input.is_empty(), "a clinical value reached the error");
+        assert!(Real::try_from(value).is_err(), "TryFrom bypassed refusal");
+    }
+
+    let computed = Real::from_f64(12.5).expect("finite real");
+    assert_eq!(serde_json::to_string(&computed).unwrap(), "12.5");
+    assert_eq!(
+        serde_json::Number::try_from(&computed).unwrap().to_string(),
+        "12.5"
+    );
+
+    let beyond_range: Real = serde_json::from_str("1e400").expect("valid JSON number");
+    assert!(!beyond_range.is_finite());
+    assert_eq!(serde_json::to_string(&beyond_range).unwrap(), "1e+400");
+    assert_eq!(
+        serde_json::Number::try_from(&beyond_range)
+            .unwrap()
+            .to_string(),
+        "1e+400"
     );
 }
 

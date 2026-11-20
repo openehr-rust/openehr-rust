@@ -48,8 +48,8 @@ use serde::{Deserialize, Serialize};
 /// assert_eq!(coarse.semantic_cmp(&fine), Some(core::cmp::Ordering::Equal));
 /// assert_eq!(fine.as_f64(), 1.5);
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(from = "serde_json::Number", into = "serde_json::Number")]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(from = "serde_json::Number")]
 pub struct Real {
     /// The number exactly as written.
     text: String,
@@ -64,12 +64,20 @@ impl Real {
     /// `Display for f64` produces — a program that computed `1.5` did not
     /// measure `1.50`, and inventing digits would be a claim about precision
     /// nobody made.
-    #[must_use]
-    pub fn from_f64(value: f64) -> Self {
-        Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseError`](crate::ParseError) when `value` is `NaN` or
+    /// either infinity. Those values are not mathematical reals and have no
+    /// JSON number representation (`D3.18g`).
+    pub fn from_f64(value: f64) -> Result<Self, crate::ParseError> {
+        if !value.is_finite() {
+            return Err(crate::ParseError::invariant("REAL", "Finite"));
+        }
+        Ok(Self {
             text: format!("{value}"),
             value,
-        }
+        })
     }
 
     /// The number as written. Authoritative (`D3.18e`).
@@ -118,8 +126,10 @@ impl fmt::Display for Real {
     }
 }
 
-impl From<f64> for Real {
-    fn from(value: f64) -> Self {
+impl TryFrom<f64> for Real {
+    type Error = crate::ParseError;
+
+    fn try_from(value: f64) -> Result<Self, Self::Error> {
         Self::from_f64(value)
     }
 }
@@ -145,13 +155,23 @@ impl From<serde_json::Number> for Real {
     }
 }
 
-impl From<Real> for serde_json::Number {
-    fn from(r: Real) -> Self {
-        // Reconstructed from the text, so the bytes out are the bytes in.
-        // Parsing cannot fail: `text` came from a `Number` or from `{f64}`.
-        serde_json::from_str(&r.text).unwrap_or_else(|_| {
-            serde_json::Number::from_f64(r.value).unwrap_or_else(|| serde_json::Number::from(0))
-        })
+impl TryFrom<&Real> for serde_json::Number {
+    type Error = crate::ParseError;
+
+    fn try_from(r: &Real) -> Result<Self, Self::Error> {
+        // Reconstructed from the authoritative text, so the bytes out are the
+        // bytes in. Every public construction path establishes this invariant;
+        // keeping the conversion fallible ensures a future path cannot replace
+        // broken text with a plausible clinical number (`D3.18g`).
+        serde_json::from_str(&r.text)
+            .map_err(|_| crate::ParseError::invariant("REAL", "Number_text_valid"))
+    }
+}
+
+impl Serialize for Real {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let number = serde_json::Number::try_from(self).map_err(serde::ser::Error::custom)?;
+        number.serialize(serializer)
     }
 }
 
@@ -226,9 +246,9 @@ mod tests {
     /// A computed value is written as the shortest form that round-trips.
     #[test]
     fn a_computed_value_does_not_invent_digits() {
-        assert_eq!(Real::from_f64(1.5).as_str(), "1.5");
-        assert_eq!(Real::from_f64(184.0).as_str(), "184");
-        assert_eq!(Real::from_f64(-0.25).as_str(), "-0.25");
+        assert_eq!(Real::from_f64(1.5).unwrap().as_str(), "1.5");
+        assert_eq!(Real::from_f64(184.0).unwrap().as_str(), "184");
+        assert_eq!(Real::from_f64(-0.25).unwrap().as_str(), "-0.25");
     }
 
     /// Reading is total on a value that passed no constructor (`D3.18f`).

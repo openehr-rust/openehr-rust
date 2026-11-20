@@ -388,7 +388,7 @@ impl DvScale {
             return Err(ParseError::invariant("DV_SCALE", "Value_finite"));
         }
         Ok(Self {
-            value: Real::from_f64(value),
+            value: Real::from_f64(value)?,
             symbol,
             ordered: OrderedAttrs::default(),
         })
@@ -506,7 +506,7 @@ impl DvQuantity {
             return Err(ParseError::invariant("DV_QUANTITY", "Units_valid"));
         }
         Ok(Self {
-            magnitude: Real::from_f64(magnitude),
+            magnitude: Real::from_f64(magnitude)?,
             units,
             precision: None,
             units_system: None,
@@ -594,7 +594,7 @@ impl DvQuantity {
         if is_percent && !(0.0..=100.0).contains(&accuracy) {
             return Err(ParseError::invariant("DV_AMOUNT", "Accuracy_validity"));
         }
-        self.accuracy = Some(Real::from_f64(accuracy));
+        self.accuracy = Some(Real::from_f64(accuracy)?);
         self.accuracy_is_percent = Some(is_percent);
         Ok(self)
     }
@@ -901,8 +901,8 @@ impl DvProportion {
             _ => {}
         }
         Ok(Self {
-            numerator: Real::from_f64(numerator),
-            denominator: Real::from_f64(denominator),
+            numerator: Real::from_f64(numerator)?,
+            denominator: Real::from_f64(denominator)?,
             kind,
             precision: None,
             ordered: OrderedAttrs::default(),

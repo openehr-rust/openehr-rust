@@ -586,11 +586,11 @@ fn parse_cardinality(lexer: &mut Lexer<'_>) -> Result<Cardinality, CadlError> {
         let offset = lexer.offset();
         match lexer.next() {
             Some(Token::Word(w)) if w.eq_ignore_ascii_case("ordered") => {
-                cardinality = cardinality.ordered()
+                cardinality = cardinality.ordered();
             }
             Some(Token::Word(w)) if w.eq_ignore_ascii_case("unordered") => {}
             Some(Token::Word(w)) if w.eq_ignore_ascii_case("unique") => {
-                cardinality = cardinality.unique()
+                cardinality = cardinality.unique();
             }
             Some(other) => {
                 return Err(CadlError::at(

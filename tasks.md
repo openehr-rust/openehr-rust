@@ -82,18 +82,22 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       and public accessors raised that to **92.76% physical lines
       (9,636/10,388) / 94.05% functions (1,501/1,596)**; only 15 production
       files retain uncovered executable lines at this checkpoint.
-      It also found `lib:A-84`: serializing a directly constructed non-finite
-      `Real` can silently substitute zero. Decide and specify the refusal before
-      treating that fallback as a coverage target.
+      It also found and fixed `lib:A-84`: serializing a directly constructed
+      non-finite `Real` could silently substitute zero. `lib:D3.18g` now
+      requires construction-time refusal; the fallible API rejects `NaN` and
+      both infinities, while a valid out-of-range JSON number still round-trips
+      by authoritative text.
       **Work-in-progress checkpoint, 2026-11-20:** all ten buildable workspaces
       pass locked tests and strict Clippy; all four benchmark suites run in
       smoke mode; generated assets, formatting, shell syntax, documentation
-      claims, and patch hygiene pass. Resume by specifying and fixing
-      `lib:A-84`, covering the remaining 15 `openehr` production files, then
-      measuring and closing `openehr-sqlite`, `openehr-postgresql`, the four
-      schema-only dialect crates, `openehr-loco`, and `openehr-assets`. Finish
-      by making the tree-derived line-and-function coverage checker a required
-      CI gate.
+      claims, and patch hygiene pass. **Continuation checkpoint:** `lib:A-84`
+      is specified and fixed; its focused production integration test passes.
+      The full crate suite and refreshed LCOV totals have not been rerun after
+      that API change. Resume with those two checks, cover the remaining 15
+      `openehr` production files, then measure and close `openehr-sqlite`,
+      `openehr-postgresql`, the four schema-only dialect crates,
+      `openehr-loco`, and `openehr-assets`. Finish by making the tree-derived
+      line-and-function coverage checker a required CI gate.
 
 - [x] **Check chronology and readiness claims across boundaries** (2026-11-19).
       The UTC day-boundary regression failed before the fix and passed after

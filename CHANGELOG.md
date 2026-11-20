@@ -12,8 +12,9 @@ together.
   (1,501/1,596)**. New tests cover exact parser refusals, identifier and serde
   boundaries, interval shapes, temporal values, stored archetype HRIDs,
   access-control dispatch, and audit-chain reconstruction. The pass also found
-  `lib:A-84` (a non-finite `Real` can serialize as zero); that behavior remains
-  an open specification decision rather than a newly codified contract.
+  and fixed `lib:A-84`: computed non-finite `Real` values could serialize as
+  zero. `Real::from_f64` is now fallible, infallible `From<f64>` is removed,
+  and serialization never substitutes a plausible number (`lib:D3.18g`).
 - Established production-only owner-workspace coverage for `openehr-store`
   (`W0.41`, `W-23`): a test-only memory store runs every shared conformance
   story locally, and projection, dialect, historical-read, integrity, and AQL

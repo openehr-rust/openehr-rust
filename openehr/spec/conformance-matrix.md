@@ -213,6 +213,7 @@ Process requirements; they govern this specification rather than the code.
 | D3.18d | • | `base::real::tests::a_measured_precision_survives_a_round_trip`; `every_digit_survives_and_only_the_exponent_form_is_normalised`, which asserts the one departure |
 | D3.18e | • | `base::real::tests::equality_and_order_answer_different_questions` — lexical equality, numeric order, and no `PartialOrd` |
 | D3.18f | • | `base::real::tests::a_real_that_never_saw_a_constructor_is_still_readable` |
+| D3.18g | • | `guarantees::computed_reals_refuse_non_finite_values_without_substitution` — all three non-finite classes are refused, while an out-of-range JSON number round-trips by authoritative text (`A-84`) |
 | D3.19 | • | `quantity::tests::non_finite_magnitudes_are_refused` |
 | D3.19a | doc | declared narrowing; recorded here and in §3 |
 | D3.20, D3.20a | • | `quantity::tests::precision_accepts_the_unlimited_sentinel`; `validation::tests::the_unlimited_precision_sentinel_validates` |

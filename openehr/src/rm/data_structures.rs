@@ -1259,6 +1259,10 @@ mod tests {
     /// The expected values are calendar arithmetic done by hand, not by
     /// running the function.
     #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one mutation-focused calendar story keeps its boundary cases together"
+    )]
     fn an_interval_event_reports_when_its_window_opened() {
         let event = |time: &str, width: &str| {
             IntervalEvent::new(

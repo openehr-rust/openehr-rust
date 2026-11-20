@@ -15,11 +15,11 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**83 findings, 83 in the table below: 7 High, 46 Medium, 30 Low. 75 fixed or
-classified, 8 open.** These counts are checked against the table by CI
+**83 findings, 83 in the table below: 7 High, 46 Medium, 30 Low. 76 fixed or
+classified, 7 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
-verified), and the check should have failed. Every one of the 8 open findings
+verified), and the check should have failed. Every one of the 7 open findings
 is open by a stated reason rather than by omission — **A-40** is the largest,
 an entire specification section in force with no code behind it — and the
 rest: **A-02**, **A-08** and
@@ -169,7 +169,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-81 | Medium | `DV_CODED_TEXT.check_openehr_rubric` compared `value` against an **English-only** rubric table with no enclosing language, so valid Spanish `"evento"` for openEHR code `433` was reported as a violation | **fixed** — validation uses the coded text's language or its enclosing `COMPOSITION.language`; only `ISO_639-1::en` reaches the English table, every other declared language is unchecked; direct tests and live SQLite/PostgreSQL commits cover Spanish, unknown, and English-negative cases |
 | A-82 | Low | `am::cadl` refused two real constructs *correctly* but *unhelpfully* — an ADL 1.5-form `use_archetype` with no id code named the archetype's own first word (`` `CIMI` is not a valid id-, at-, or ac-code ``), and ADL 1.4's `matches {*}` wildcard named the token, not the construct (`` expected an attribute name, found `*` ``, 38 files) — both stated as open since corpus run 1's own candidate 3, neither reproduced against the real grammars this parser targets (`openEHR/openEHR-antlr4`'s `Cadl2Parser.g4`/`Cadl14Parser.g4`) until this pass | **fixed** — message only, nothing reparsed; `expect_use_archetype_node_id` clones the lexer to look ahead for the comma ADL 2's grammar requires before choosing which message applies, so a genuinely malformed id code (a comma *does* follow) keeps the original message; `c_complex_object` and its own duplicated tail (`A-40`'s residual) both name the `*` wildcard specifically, confirmed against `Cadl14Parser.g4`'s `cComplexObjectDef` production (one or more `cAttribute`, or a bare `'*'`) having no ADL 2 counterpart at all |
 | A-83 | Medium | `DateTime::semantic_cmp` ordered local calendar dates before applying their UTC offsets, and `Time::semantic_cmp` truncated chronology after three fractional digits. Equal instants across midnight could compare unequal, while distinct sub-millisecond instants could compare equal (`D3.18`). | **fixed** — compare the offset-adjusted calendar minute, second, and every significant fractional digit. |
-| A-84 | Medium | `Real::from_f64` accepts `NaN` and infinities, whose authoritative text is not a JSON number; converting that `Real` into `serde_json::Number` silently substitutes `0` after both parses fail (`base/real.rs:148-155`). Reference Model constructors currently reject such a `Real` before it reaches a document, but the public primitive conversion itself turns an invalid value into a plausible clinical number. Found by the production-only coverage pass: the fallback was the file's only uncovered function. | **open** — specify whether computed non-finite reals are refused at construction or at serialization, then replace the plausible-zero fallback with that explicit failure and add both negative controls. |
+| A-84 | Medium | `Real::from_f64` accepted `NaN` and infinities, whose authoritative text is not a JSON number; converting that `Real` into `serde_json::Number` silently substituted `0` after both parses failed (`base/real.rs:148-155`). Reference Model constructors rejected such a `Real` before it reached a document, but the public primitive conversion itself turned an invalid value into a plausible clinical number. Found by the production-only coverage pass: the fallback was the file's only uncovered function. | **fixed** — `D3.18g` chooses construction-time refusal: `from_f64` and `TryFrom<f64>` return a PHI-safe error for all three non-finite classes, infallible `From<f64>` is removed, and serialization reconstructs only from authoritative number text with no substitute. A syntactically valid out-of-range JSON number still round-trips by that text. |
 
 
 ---

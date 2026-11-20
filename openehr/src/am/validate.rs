@@ -1018,7 +1018,10 @@ fn walk_primitive(
             // that denotes `1.5`. That is a real imprecision, stated rather
             // than silently applied: the path this value arrived through
             // does not carry enough to do better.
-            let candidate = Real::from_f64(value);
+            let Ok(candidate) = Real::from_f64(value) else {
+                ctx.violation(archetype_id, path, "C_REAL");
+                return;
+            };
             let in_list = list.is_empty()
                 || list
                     .iter()
@@ -1796,7 +1799,13 @@ mod tests {
                 Some(MultiplicityInterval::MANDATORY),
                 CPrimitive::Real {
                     list: Vec::new(),
-                    range: Some(Interval::closed(low.into(), high.into()).unwrap()),
+                    range: Some(
+                        Interval::closed(
+                            Real::try_from(low).unwrap(),
+                            Real::try_from(high).unwrap(),
+                        )
+                        .unwrap(),
+                    ),
                 },
             ),
         ])

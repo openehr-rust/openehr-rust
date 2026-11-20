@@ -267,6 +267,15 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
   `D3.30a` says the same about `DV_URI`, for the same reason and after the same
   defect (`A-36`).
 
+- **D3.18g** *(added 2026-11-20)* Constructing a real from a computed `f64`
+  MUST refuse `NaN` and both infinities. The fallible constructor MUST NOT be
+  hidden behind `From<f64>`, because `From` cannot report that refusal. A real
+  read from a syntactically valid JSON number outside `f64`'s finite range MUST
+  remain readable and serialize back as its authoritative number text; the
+  derived `f64` remains non-finite so the enclosing Reference Model invariant
+  can report it. No conversion or serializer may replace a refused real with a
+  plausible finite value such as zero (`A-84`).
+
 - **D3.19** `DV_QUANTITY` MUST require a finite magnitude and a non-empty
   `units`. A quantity with no units is a number, and openEHR has `DV_COUNT`.
 - **D3.19a** The non-empty requirement in `D3.19` is a **declared narrowing** of
