@@ -491,7 +491,7 @@ archetypes nobody here wrote, five times: 969 of the 1,379 ADL 2 files in
 name, up from 178 at the first run through seven findings the runs
 produced (`lib:A-70`–`A-76`;
 [`openehr/spec/corpus.md`](openehr/spec/corpus.md) has the counts, the
-corpus commit, and what is still refused). **Sixteen of the thirty-three
+corpus commit, and what is still refused). **Sixteen of the thirty-four
 requirements have no code**: no parser for a whole ADL archetype (the `definition` section and
 the header are read; they do not compose into an `Archetype`), no ADL 1.4
 body, no flattening, no template expansion, no operational template, and no
@@ -631,7 +631,7 @@ eight fuzz harnesses — are not.
 | [`SECURITY.md`](SECURITY.md) | how to report a vulnerability, what is in scope, and this project's own posture gaps |
 | [`AI_STATEMENT.md`](AI_STATEMENT.md) | how this code was written, what checks it, and what that does not prove |
 | [`CITATION.cff`](CITATION.cff) | how to cite this work |
-| [`LICENSE.md`](LICENSE.md) | five licences, your choice of any one |
+| [`LICENSE.md`](LICENSE.md) | seven licences, your choice of any one |
 | [`help/outreach/index.md`](help/outreach/index.md) | where this project is being taken to its professional audience |
 | [`llms.txt`](llms.txt) / [`llms.json`](llms.json) | a curated map of this repository's most important content, for an AI tool to read instead of crawling everything ([llmstxt.org](https://llmstxt.org/)) |
 
@@ -680,5 +680,5 @@ Any of these, at your option:
 * [GNU General Public License v2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html)
 * [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0-standalone.html)
 
-SPDX: `MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only`.
+SPDX: `MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only OR OGL-UK-3.0 OR CC-BY-NC-SA-4.0`.
 See [`LICENSE.md`](LICENSE.md).

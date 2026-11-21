@@ -12,13 +12,17 @@ License is any of these or contact us for custom license options.
 
 * [BSD 3-Clause License](https://opensource.org/license/bsd-3-clause) ([SPDX: BSD-3-Clause](https://spdx.org/licenses/BSD-3-Clause.html))
 
+* [UK Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/) ([SPDX: OGL-UK-3.0](https://spdx.org/licenses/OGL-UK-3.0.html))
+
+* [Creative Commons Attribution Non Commercial Share Alike 4.0 International](https://creativecommons.org/licenses/by-nc-sa/4.0/) ([SPDX: CC-BY-NC-SA-4.0](https://spdx.org/licenses/CC-BY-NC-SA-4.0.html))
+
 The SPDX expression, as declared in every crate's `Cargo.toml`, is:
 
 ```
-MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only
+MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only OR OGL-UK-3.0 OR CC-BY-NC-SA-4.0
 ```
 
-`OR` means your choice: you may use this software under **any one** of the five,
+`OR` means your choice: you may use this software under **any one** of the seven,
 whichever suits your project. You do not need to comply with all of them.
 
 Copyright (c) 2026 Joel Parker Henderson

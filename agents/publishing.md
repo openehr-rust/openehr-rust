@@ -286,11 +286,11 @@ ended up.
   siblings depend on. A mismatch resolves to a published crate rather than the
   local path, which is how a workspace silently tests something other than what
   it ships.
-- **The licence expression is the full five** (`W0.22`), identical in all eight
+- **The licence expression is the full seven** (`W0.22`), identical in all eight
   manifests, and `LICENSE.md` is the crate's only licence file (`W0.23`):
 
   ```
-  MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only
+  MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only OR OGL-UK-3.0 OR CC-BY-NC-SA-4.0
   ```
 
   crates.io validates this as an SPDX expression and displays it on the crate

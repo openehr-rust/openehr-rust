@@ -210,7 +210,7 @@ def build_sections() -> list[dict[str, object]]:
                 link("NEWS.md", "NEWS.md", "the short form of the changelog, and what is coming"),
                 link("TRADEMARKS.md", "TRADEMARKS.md",
                      "the openEHR mark, what is and is not claimed"),
-                link("LICENSE.md", "LICENSE.md", "five licences, your choice of any one"),
+                link("LICENSE.md", "LICENSE.md", "seven licences, your choice of any one"),
                 link("BENCHMARKS.md", "BENCHMARKS.md",
                      "what is measured, and why nothing here is gated on timing"),
                 link("AI_STATEMENT.md", "AI_STATEMENT.md",

@@ -300,14 +300,15 @@ Twenty-one targets in total.
 - **W0.22** Every crate MUST carry the same licence expression:
 
   ```
-  MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only
+  MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only OR OGL-UK-3.0 OR CC-BY-NC-SA-4.0
   ```
 
   `OR` is a grant of choice: a user may take the software under any **one** of
-  the five. This matches the convention already established across these
-  projects — `assertables` and the sibling FHIR monorepo declare the same five.
+  the seven. The first five match the convention already established across these
+  projects (`assertables`, the sibling FHIR monorepo); OGL-UK-3.0 and
+  CC-BY-NC-SA-4.0 are added to them.
 
-- **W0.23** Every crate MUST ship a `LICENSE.md` naming all five with their SPDX
+- **W0.23** Every crate MUST ship a `LICENSE.md` naming all seven with their SPDX
   identifiers, and that file MUST be the only licence file in the crate. Shipping
   the full text of some licences and not others privileges those and understates
   the grant — which is the same defect class as claiming more than is verified

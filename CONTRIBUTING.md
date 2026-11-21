@@ -136,8 +136,8 @@ outcome, that fact belongs beside the claim.
 ## Licensing of contributions
 
 Inbound matches outbound. By contributing you offer your work under the same
-five-way choice the project publishes ([`LICENSE.md`](LICENSE.md)): MIT,
-Apache-2.0, BSD-3-Clause, GPL-2.0-only, or GPL-3.0-only, at the recipient's
+seven-way choice the project publishes ([`LICENSE.md`](LICENSE.md)): MIT,
+Apache-2.0, BSD-3-Clause, GPL-2.0-only, GPL-3.0-only, OGL-UK-3.0, or CC-BY-NC-SA-4.0, at the recipient's
 option. **There is no CLA and no copyright assignment.**
 
 Do not contribute code you cannot license that way, including material copied

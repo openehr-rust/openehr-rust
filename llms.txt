@@ -58,7 +58,7 @@ This project is not affiliated with, endorsed by, or certified by openEHR Intern
 - [CHANGELOG.md](https://github.com/openehr-rust/openehr-rust/blob/main/CHANGELOG.md): what changed in each release, and why it was that version number
 - [NEWS.md](https://github.com/openehr-rust/openehr-rust/blob/main/NEWS.md): the short form of the changelog, and what is coming
 - [TRADEMARKS.md](https://github.com/openehr-rust/openehr-rust/blob/main/TRADEMARKS.md): the openEHR mark, what is and is not claimed
-- [LICENSE.md](https://github.com/openehr-rust/openehr-rust/blob/main/LICENSE.md): five licences, your choice of any one
+- [LICENSE.md](https://github.com/openehr-rust/openehr-rust/blob/main/LICENSE.md): seven licences, your choice of any one
 - [BENCHMARKS.md](https://github.com/openehr-rust/openehr-rust/blob/main/BENCHMARKS.md): what is measured, and why nothing here is gated on timing
 - [AI_STATEMENT.md](https://github.com/openehr-rust/openehr-rust/blob/main/AI_STATEMENT.md): how this code was written, and what that does and does not prove
 - [RFC.md](https://github.com/openehr-rust/openehr-rust/blob/main/RFC.md): what this project does not know, and the feedback that would change it

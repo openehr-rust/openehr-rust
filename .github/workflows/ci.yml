@@ -943,13 +943,13 @@ jobs:
       - name: Licence expression is harmonized
         run: |
           set -eu
-          want='license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only"'
+          want='license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only OR OGL-UK-3.0 OR CC-BY-NC-SA-4.0"'
           bad=0
           n=0
           for d in $(ls -d */Cargo.toml | sed 's|/Cargo.toml$||'); do
             n=$((n + 1))
             grep -qxF "$want" "$d/Cargo.toml" \
-              || { echo "::error file=$d/Cargo.toml::licence is not the harmonized five"; bad=1; }
+              || { echo "::error file=$d/Cargo.toml::licence is not the harmonized seven"; bad=1; }
             [ -f "$d/LICENSE.md" ] \
               || { echo "::error::$d has no LICENSE.md"; bad=1; }
             for stray in LICENSE-MIT LICENSE-APACHE LICENSE LICENSE.txt; do
@@ -962,7 +962,7 @@ jobs:
             bad=1
           }
           [ "$bad" -eq 0 ] || exit 1
-          echo "all $n crates declare the same five licences and ship LICENSE.md"
+          echo "all $n crates declare the same seven licences and ship LICENSE.md"
 
   # `T13.2`: a test that cannot fail is not a test, and this repository has
   # shipped several — the first property tests passed vacuously (`lib:A-17`),

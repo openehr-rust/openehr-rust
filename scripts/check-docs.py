@@ -119,7 +119,7 @@ PATTERNS: list[tuple[str, str, str]] = [
     ("crates", rf"({NUMBER}) crates implementing openEHR in Rust", "the crate count"),
     ("crates", rf"declared identically by all ({NUMBER}) crates", "the crate count"),
     ("crates", rf"all ({NUMBER}) MUST declare the \*\*same\*\* value", "the crate count"),
-    ("crates", rf"\*\*all ({NUMBER})\*\* crates declare the same five licences", "the crate count"),
+    ("crates", rf"\*\*all ({NUMBER})\*\* crates declare the same seven licences", "the crate count"),
     ("unpublished", rf"the other ({NUMBER}) are `publish = false`", "the unpublished count"),
     ("unpublished", rf"The other ({NUMBER}) MUST declare `publish = false`", "the unpublished count"),
     ("unpublished", rf"the other ({NUMBER}) — `openehr-loco`", "the unpublished count"),
