@@ -364,43 +364,42 @@ impl VersionTreeId {
         *self == Self::FIRST
     }
 
-    /// The next version along the same line.
+    /// The next version along the same line, or `None` when that counter is
+    /// already `u32::MAX`.
     ///
     /// Trunk `2` follows trunk `1`; branch `2.1.4` is followed by `2.1.5`. The
     /// trunk number of a branch never advances — that is what makes it a
     /// branch.
     ///
+    /// No fallback is declared for the full counter (RCA-DECL-5): a versioned
+    /// object with four billion versions is a runaway writer, and wrapping to
+    /// version `0` or holding at `u32::MAX` would put two versions at one
+    /// position and corrupt the history rather than surface the bug. The caller
+    /// refuses the write.
+    ///
     /// ```
     /// use openehr::base::VersionTreeId;
     ///
-    /// assert_eq!(VersionTreeId::FIRST.next().to_string(), "2");
-    /// assert_eq!("2.1.4".parse::<VersionTreeId>().unwrap().next().to_string(), "2.1.5");
+    /// assert_eq!(VersionTreeId::FIRST.checked_next().unwrap().to_string(), "2");
+    /// assert_eq!(
+    ///     "2.1.4".parse::<VersionTreeId>().unwrap().checked_next().unwrap().to_string(),
+    ///     "2.1.5"
+    /// );
+    /// let last: VersionTreeId = "4294967295".parse().unwrap();
+    /// assert_eq!(last.checked_next(), None);
     /// ```
-    ///
-    /// # Panics
-    ///
-    /// Panics if the relevant counter is `u32::MAX`. A versioned object with
-    /// four billion versions is a runaway writer, and silently wrapping to
-    /// version `0` would corrupt the history rather than surface the bug.
     #[must_use]
-    pub fn next(&self) -> Self {
-        match self.branch {
+    pub fn checked_next(&self) -> Option<Self> {
+        Some(match self.branch {
             None => Self {
-                trunk_version: self
-                    .trunk_version
-                    .checked_add(1)
-                    .expect("version tree trunk overflowed u32"),
+                trunk_version: self.trunk_version.checked_add(1)?,
                 branch: None,
             },
             Some((n, v)) => Self {
                 trunk_version: self.trunk_version,
-                branch: Some((
-                    n,
-                    v.checked_add(1)
-                        .expect("version tree branch overflowed u32"),
-                )),
+                branch: Some((n, v.checked_add(1)?)),
             },
-        }
+        })
     }
 }
 
@@ -1307,9 +1306,30 @@ mod tests {
     #[test]
     fn version_tree_next_advances_the_right_counter() {
         let trunk: VersionTreeId = "3".parse().unwrap();
-        assert_eq!(trunk.next().to_string(), "4");
+        assert_eq!(trunk.checked_next().unwrap().to_string(), "4");
         let branch: VersionTreeId = "3.2.9".parse().unwrap();
-        assert_eq!(branch.next().to_string(), "3.2.10");
+        assert_eq!(branch.checked_next().unwrap().to_string(), "3.2.10");
+    }
+
+    /// RCA-TEST-2: the first counter value with no successor is refused, with
+    /// no wrap and no hold, on the trunk and on a branch.
+    #[test]
+    fn version_tree_next_refuses_a_full_counter() {
+        let last_trunk: VersionTreeId = "4294967295".parse().unwrap();
+        assert_eq!(last_trunk.checked_next(), None);
+        let before_last: VersionTreeId = "4294967294".parse().unwrap();
+        assert_eq!(
+            before_last.checked_next().unwrap().to_string(),
+            "4294967295"
+        );
+        let last_branch: VersionTreeId = "3.2.4294967295".parse().unwrap();
+        assert_eq!(last_branch.checked_next(), None);
+        // A full trunk counter does not stop a branch from advancing.
+        let full_trunk_branch: VersionTreeId = "4294967295.1.1".parse().unwrap();
+        assert_eq!(
+            full_trunk_branch.checked_next().unwrap().to_string(),
+            "4294967295.1.2"
+        );
     }
 
     /// A `VERSION_TREE_ID`'s three numbers, each refused at zero on its own

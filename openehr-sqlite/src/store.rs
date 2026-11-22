@@ -562,6 +562,7 @@ impl Store for SqliteStore {
                     row.versioned_object_uid,
                     row.creating_system_id,
                     row.trunk_version,
+                    // Fallback: 0 — `db:H5.6` stores an absent trunk branch component as zero.
                     row.branch_number.unwrap_or(0),
                     row.branch_version.unwrap_or(0),
                     row.preceding_version_uid,
@@ -724,6 +725,7 @@ impl Store for SqliteStore {
                     row.versioned_object_uid,
                     row.creating_system_id,
                     row.trunk_version,
+                    // Fallback: 0 — `db:H5.6` stores an absent trunk branch component as zero.
                     row.branch_number.unwrap_or(0),
                     row.branch_version.unwrap_or(0),
                     row.preceding_version_uid,

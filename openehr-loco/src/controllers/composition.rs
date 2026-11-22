@@ -34,10 +34,14 @@ pub struct Paging {
 
 impl Paging {
     const MAX: usize = 100;
+    const DEFAULT_COUNT: usize = 20;
 
     fn resolve(&self) -> (usize, usize) {
+        // Declared: `db:P6.7` bounds a page so a caller cannot ask for a record's
+        // whole history. Fallbacks: a page is `DEFAULT_COUNT` (20) rows when no
+        // `_count` is given, is at most `MAX` (100), and starts at `0` with no `_offset`.
         (
-            self.count.unwrap_or(20).min(Self::MAX),
+            self.count.unwrap_or(Self::DEFAULT_COUNT).min(Self::MAX),
             self.offset.unwrap_or(0),
         )
     }
@@ -455,4 +459,49 @@ pub fn routes() -> Routes {
         .add("/{uid}", delete(remove))
         .add("/{uid}/_history", get(history))
         .add("/{uid}/version/{version_uid}", get(vread))
+}
+
+#[cfg(test)]
+mod paging_tests {
+    use super::Paging;
+
+    /// RCA-TEST-2: each declared fallback and bound, at the first input that
+    /// reaches it (`db:P6.7`).
+    #[test]
+    fn a_page_defaults_and_is_capped_at_the_declared_bound() {
+        // No `_count`: the declared default; no `_offset`: the start.
+        assert_eq!(
+            Paging {
+                count: None,
+                offset: None
+            }
+            .resolve(),
+            (20, 0)
+        );
+        // At the cap, and one past it.
+        assert_eq!(
+            Paging {
+                count: Some(100),
+                offset: Some(7)
+            }
+            .resolve(),
+            (100, 7)
+        );
+        assert_eq!(
+            Paging {
+                count: Some(101),
+                offset: None
+            }
+            .resolve(),
+            (100, 0)
+        );
+        assert_eq!(
+            Paging {
+                count: Some(usize::MAX),
+                offset: None
+            }
+            .resolve(),
+            (100, 0)
+        );
+    }
 }

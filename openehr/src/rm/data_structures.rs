@@ -767,10 +767,34 @@ impl IntervalEvent {
                 spec_ref: "spec/04-data-structures.md R4.9",
             });
         };
-        let seconds = width.approx_seconds();
+        // A width whose length in seconds is unknown has no start time to derive.
+        let seconds = width.approx_seconds().ok_or(crate::Error::Unsupported {
+            what: "INTERVAL_EVENT.interval_start_time with a width that is not a finite number of seconds",
+            spec_ref: "spec/04-data-structures.md R4.9",
+        })?;
         let start = subtract_seconds(self.time.value().date(), time, seconds)?;
         DvDateTime::new(&start).map_err(Into::into)
     }
+}
+
+const SECONDS_PER_MINUTE: i64 = 60;
+const SECONDS_PER_HOUR: i64 = 3_600;
+const SECONDS_PER_DAY: i64 = 86_400;
+
+/// A whole `f64` as an `i64`, or `None` for `NaN`, an infinity, a fraction, or
+/// a value outside the `i64` range (RCA-CONV-3).
+fn checked_whole_seconds(value: f64) -> Option<i64> {
+    // 2^63 is exactly representable as an `f64`; `i64::MAX` is not.
+    const TWO_POW_63: f64 = 9_223_372_036_854_775_808.0;
+    if !(value.is_finite() && value.fract() == 0.0 && (-TWO_POW_63..TWO_POW_63).contains(&value)) {
+        return None;
+    }
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "RCA-CONV-3: finite, integral and within [-2^63, 2^63), checked above"
+    )]
+    let converted = value as i64;
+    Some(converted)
 }
 
 /// Subtracts a whole number of seconds from a date and time, in the value's own
@@ -786,22 +810,38 @@ fn subtract_seconds(
             spec_ref: "spec/04-data-structures.md R4.9",
         });
     };
-    let total = i64::from(time.hour()) * 3600
-        + i64::from(time.minute().unwrap_or(0)) * 60
-        + i64::from(time.second().unwrap_or(0));
-    #[allow(clippy::cast_possible_truncation)]
-    let mut remaining = total - seconds.round() as i64;
+    // No fallback is declared for a figure that overflows (RCA-DECL-5): the
+    // start of the interval is refused, never placed on a guessed day.
+    let out_of_range = || crate::Error::Unsupported {
+        what: "INTERVAL_EVENT.interval_start_time outside the range this crate can compute",
+        spec_ref: "spec/04-data-structures.md R4.9",
+    };
+    // Fallback: 0 — a time written to the hour or the minute has no minutes or
+    // seconds, so they are zero (ISO 8601 reduced precision; `hh` is `hh:00:00`).
+    let minute = i64::from(time.minute().unwrap_or(0));
+    let second = i64::from(time.second().unwrap_or(0));
+    let total = i64::from(time.hour())
+        .checked_mul(SECONDS_PER_HOUR)
+        .and_then(|t| t.checked_add(minute.checked_mul(SECONDS_PER_MINUTE)?))
+        .and_then(|t| t.checked_add(second))
+        .ok_or_else(out_of_range)?;
+    // `seconds` is a float from a parsed duration: NaN, an infinity or a value
+    // outside `i64` has no whole-second count.
+    let width = checked_whole_seconds(seconds.round()).ok_or_else(out_of_range)?;
+    let mut remaining = total.checked_sub(width).ok_or_else(out_of_range)?;
     let mut y = date.year();
     let mut m = month;
     let mut d = day;
     while remaining < 0 {
-        remaining += 86_400;
-        d -= 1;
+        remaining = remaining
+            .checked_add(SECONDS_PER_DAY)
+            .ok_or_else(out_of_range)?;
+        d = d.checked_sub(1).ok_or_else(out_of_range)?;
         if d == 0 {
-            m -= 1;
+            m = m.checked_sub(1).ok_or_else(out_of_range)?;
             if m == 0 {
                 m = 12;
-                y -= 1;
+                y = y.checked_sub(1).ok_or_else(out_of_range)?;
             }
             d = iso8601::days_in_month(y, m);
         }
@@ -1061,7 +1101,7 @@ impl History {
     /// strength of that declaration will draw the wrong picture.
     #[must_use]
     pub fn is_period_consistent(&self) -> Option<bool> {
-        let period = self.period.as_ref()?.value().approx_seconds();
+        let period = self.period.as_ref()?.value().approx_seconds()?;
         // A calendar period — months or years — has no fixed length in
         // seconds, so the modulo is not defined. Refuse rather than approximate
         // (`R4.16` takes the same position on interval widths).
@@ -1069,15 +1109,17 @@ impl History {
         if p.years() > 0 || p.months() > 0 {
             return None;
         }
-        #[allow(clippy::cast_possible_truncation)]
-        let period = period.round() as i64;
+        // A period that is not a whole number of seconds in `i64` is "cannot be
+        // answered" (`None`), not a rounded or saturated one.
+        let period = checked_whole_seconds(period.round())?;
         if period == 0 {
             return None;
         }
         let mut all = true;
         for event in &self.events {
             let offset = self.offset_seconds(event)?;
-            if offset % period != 0 {
+            // `checked_rem` is `None` only for `i64::MIN % -1`: unknown, not zero.
+            if offset.checked_rem(period)? != 0 {
                 all = false;
             }
         }
@@ -1572,5 +1614,28 @@ mod tests {
                 "{calendar} was treated as a fixed number of seconds"
             );
         }
+
+        // RCA-TEST-2: a period beyond `i64` seconds is unknown, not saturated:
+        // 2^63 seconds is the first whole-second count that does not fit.
+        let beyond = history(vec![event(0), event(5)])
+            .with_period(crate::rm::data_types::DvDuration::new("PT9223372036854775808S").unwrap())
+            .unwrap();
+        assert_eq!(beyond.is_period_consistent(), None);
+    }
+
+    /// RCA-CONV-3: a whole-second count is exact or absent.
+    #[test]
+    fn whole_second_counts_are_exact_or_refused() {
+        assert_eq!(checked_whole_seconds(0.0), Some(0));
+        assert_eq!(
+            checked_whole_seconds(-9_223_372_036_854_775_808.0),
+            Some(i64::MIN)
+        );
+        // The first values that do not convert.
+        assert_eq!(checked_whole_seconds(9_223_372_036_854_775_808.0), None);
+        assert_eq!(checked_whole_seconds(f64::NAN), None);
+        assert_eq!(checked_whole_seconds(f64::INFINITY), None);
+        assert_eq!(checked_whole_seconds(f64::NEG_INFINITY), None);
+        assert_eq!(checked_whole_seconds(0.5), None);
     }
 }

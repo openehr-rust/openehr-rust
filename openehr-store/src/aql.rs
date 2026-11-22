@@ -265,8 +265,12 @@ pub fn execute(
         });
     }
 
-    let offset = usize::try_from(query.offset.unwrap_or(0)).unwrap_or(usize::MAX);
-    let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+    // Fallback: `BEYOND_ANY_RESULT_SET` for an offset or limit that does not fit
+    // `usize` — it exceeds the length of any result set held in memory, so an
+    // offset that large skips every row and a limit that large keeps them all,
+    // which is what the figure means. An absent offset is `0` (AQL: no skip).
+    let offset = usize::try_from(query.offset.unwrap_or(0)).unwrap_or(BEYOND_ANY_RESULT_SET);
+    let limit = usize::try_from(limit).unwrap_or(BEYOND_ANY_RESULT_SET);
     let rows = matched
         .into_iter()
         .skip(offset)
@@ -536,12 +540,46 @@ fn compare(lhs: &Cell, op: CompareOp, rhs: &Cell) -> Result<bool> {
     }
 }
 
+/// A row count above any result set that fits in memory.
+const BEYOND_ANY_RESULT_SET: usize = usize::MAX;
+
 /// Numeric-aware equality: `Integer(2)` and `Number(2.0)` are the same
 /// value under any comparison operator, the same as SQL and as AQL's own
 /// arithmetic — a caller writing `magnitude = 2` must not depend on which
 /// of the two a store happened to parse the literal as.
 fn cells_eq(a: &Cell, b: &Cell) -> bool {
     compare_cells(a, b) == Ordering::Equal
+}
+
+/// Orders an integer against a float exactly, or `None` when `number` is `NaN`.
+///
+/// RCA-CONV-4: `i64 as f64` rounds above 2^53, so a large integer would compare
+/// equal to a float it is not equal to. The comparison is made in the integer
+/// domain instead, where it is exact.
+fn compare_integer_with_number(integer: i64, number: f64) -> Option<Ordering> {
+    // 2^63 is exactly representable as an `f64`; `i64::MAX` is not.
+    const TWO_POW_63: f64 = 9_223_372_036_854_775_808.0;
+    if number.is_nan() {
+        return None;
+    }
+    if number >= TWO_POW_63 {
+        return Some(Ordering::Less);
+    }
+    if number < -TWO_POW_63 {
+        return Some(Ordering::Greater);
+    }
+    // Here `-2^63 <= number < 2^63`, so its floor is an integral value that fits `i64`.
+    let floor = number.floor();
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "RCA-CONV-3: finite, integral and within [-2^63, 2^63), checked above"
+    )]
+    let floor_integer = floor as i64;
+    Some(match integer.cmp(&floor_integer) {
+        // The integer is the floor: it is below the number only when a fraction remains.
+        Ordering::Equal if number > floor => Ordering::Less,
+        order => order,
+    })
 }
 
 /// Orders two cells of possibly-different scalar kinds.
@@ -560,15 +598,13 @@ fn compare_cells(a: &Cell, b: &Cell) -> Ordering {
         (Cell::Boolean(a), Cell::Boolean(b)) => a.cmp(b),
         (Cell::Integer(a), Cell::Integer(b)) => a.cmp(b),
         (Cell::Number(a), Cell::Number(b)) => a.partial_cmp(b).unwrap_or(Ordering::Equal),
+        // `NaN` has no order against anything; `Equal` is this function's existing
+        // answer for unordered pairs (it only has to give `sort_by` a total order).
         (Cell::Integer(a), Cell::Number(b)) => {
-            #[allow(clippy::cast_precision_loss)]
-            let a = *a as f64;
-            a.partial_cmp(b).unwrap_or(Ordering::Equal)
+            compare_integer_with_number(*a, *b).unwrap_or(Ordering::Equal)
         }
         (Cell::Number(a), Cell::Integer(b)) => {
-            #[allow(clippy::cast_precision_loss)]
-            let b = *b as f64;
-            a.partial_cmp(&b).unwrap_or(Ordering::Equal)
+            compare_integer_with_number(*b, *a).map_or(Ordering::Equal, Ordering::reverse)
         }
         (Cell::Null, Cell::Null) => Ordering::Equal,
         (Cell::Null, _) => Ordering::Less,
@@ -581,8 +617,8 @@ fn compare_cells(a: &Cell, b: &Cell) -> Ordering {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::{
-        Cell, compare, compare_cells, eval_expr, eval_operand, execute, literal_to_cell,
-        resolve_scalar, scalar_to_cell, single_containment,
+        Cell, compare, compare_cells, compare_integer_with_number, eval_expr, eval_operand,
+        execute, literal_to_cell, resolve_scalar, scalar_to_cell, single_containment,
     };
     use crate::conformance::{self, RECORD};
     use crate::record::{CompositionIndexRow, VersionRow};
@@ -976,6 +1012,68 @@ mod tests {
         assert_eq!(
             compare_cells(&Cell::Integer(1), &Cell::Null),
             std::cmp::Ordering::Greater
+        );
+        // RCA-CONV-4: 2^53 + 1 is the first integer an `f64` cannot hold, so
+        // `as f64` would have called it equal to 2^53.
+        assert_eq!(
+            compare_cells(
+                &Cell::Integer(9_007_199_254_740_993),
+                &Cell::Number(9_007_199_254_740_992.0)
+            ),
+            std::cmp::Ordering::Greater
+        );
+        assert_eq!(
+            compare_cells(
+                &Cell::Number(9_007_199_254_740_992.0),
+                &Cell::Integer(9_007_199_254_740_993)
+            ),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            compare_cells(
+                &Cell::Integer(9_007_199_254_740_992),
+                &Cell::Number(9_007_199_254_740_992.0)
+            ),
+            std::cmp::Ordering::Equal
+        );
+        // Range edges: 2^63 is above every `i64`, and -2^63 is `i64::MIN` exactly.
+        assert_eq!(
+            compare_integer_with_number(i64::MAX, 9_223_372_036_854_775_808.0),
+            Some(std::cmp::Ordering::Less)
+        );
+        assert_eq!(
+            compare_integer_with_number(i64::MIN, -9_223_372_036_854_775_808.0),
+            Some(std::cmp::Ordering::Equal)
+        );
+        assert_eq!(
+            compare_integer_with_number(i64::MIN, -9_223_372_036_854_777_856.0),
+            Some(std::cmp::Ordering::Greater)
+        );
+        assert_eq!(
+            compare_integer_with_number(-3, -2.5),
+            Some(std::cmp::Ordering::Less)
+        );
+        assert_eq!(
+            compare_integer_with_number(-2, -2.5),
+            Some(std::cmp::Ordering::Greater)
+        );
+        assert_eq!(
+            compare_integer_with_number(2, 2.5),
+            Some(std::cmp::Ordering::Less)
+        );
+        assert_eq!(
+            compare_integer_with_number(0, f64::NEG_INFINITY),
+            Some(std::cmp::Ordering::Greater)
+        );
+        assert_eq!(
+            compare_integer_with_number(0, f64::INFINITY),
+            Some(std::cmp::Ordering::Less)
+        );
+        // Unordered: `NaN` keeps `compare_cells`'s existing answer, `Equal`.
+        assert_eq!(compare_integer_with_number(0, f64::NAN), None);
+        assert_eq!(
+            compare_cells(&Cell::Integer(0), &Cell::Number(f64::NAN)),
+            std::cmp::Ordering::Equal
         );
         assert_eq!(
             compare_cells(&Cell::Number(f64::NAN), &Cell::Number(1.0)),

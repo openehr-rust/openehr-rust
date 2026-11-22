@@ -793,7 +793,15 @@ impl ProportionKind {
     /// The openEHR integer encoding.
     #[must_use]
     pub fn as_i32(self) -> i32 {
-        self as i32
+        // The openEHR values, written out so no numeric `as` cast is needed
+        // (RCA-CONV-2); `from_i32` below is the inverse.
+        match self {
+            Self::Ratio => 0,
+            Self::Unitary => 1,
+            Self::Percent => 2,
+            Self::Fraction => 3,
+            Self::IntegerFraction => 4,
+        }
     }
 
     /// Parses the openEHR integer encoding.

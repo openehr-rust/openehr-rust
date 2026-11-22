@@ -31,18 +31,35 @@ use sha2::Digest as _;
 mod base64 {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
+    /// The capacity hint of "no pre-sizing": the string grows on demand.
+    const NO_CAPACITY_HINT: usize = 0;
+
     pub fn encode(bytes: &[u8]) -> String {
-        let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+        // Fallback: `NO_CAPACITY_HINT` — only a capacity hint, so a size that
+        // does not fit `usize` just means the string is not pre-sized.
+        let capacity = bytes
+            .len()
+            .div_ceil(3)
+            .checked_mul(4)
+            .unwrap_or(NO_CAPACITY_HINT);
+        let mut out = String::with_capacity(capacity);
         for chunk in bytes.chunks(3) {
-            let b = [
-                chunk[0],
-                chunk.get(1).copied().unwrap_or(0),
-                chunk.get(2).copied().unwrap_or(0),
+            // A chunk is 1 to 3 bytes; the missing ones are zero padding (RFC 4648 section 4).
+            let first = chunk.first().copied().unwrap_or(0);
+            let second = chunk.get(1).copied().unwrap_or(0);
+            let third = chunk.get(2).copied().unwrap_or(0);
+            // The four 6-bit groups of the 24 bits `first ++ second ++ third`.
+            // RCA-BIT-2: bit-field work with constant shifts, no quantities.
+            let groups = [
+                first >> 2,
+                ((first & 0x03) << 4) | (second >> 4),
+                ((second & 0x0F) << 2) | (third >> 6),
+                third & 0x3F,
             ];
-            let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
-            for i in 0..4 {
+            for (i, group) in groups.into_iter().enumerate() {
                 if i <= chunk.len() {
-                    out.push(ALPHABET[((n >> (18 - i * 6)) & 0x3F) as usize] as char);
+                    // `group` is at most 0x3F = 63, so it indexes the 64-entry alphabet.
+                    out.push(char::from(ALPHABET[usize::from(group)]));
                 } else {
                     out.push('=');
                 }
@@ -70,7 +87,8 @@ mod base64 {
             bits += 6;
             if bits >= 8 {
                 bits -= 8;
-                out.push(((acc >> bits) & 0xFF) as u8);
+                // The low byte of `acc >> bits`: the mask makes it at most 0xFF.
+                out.push(u8::try_from((acc >> bits) & 0xFF).ok()?);
             }
         }
         Some(out)
@@ -216,7 +234,9 @@ impl DvMultimedia {
             encapsulated: EncapsulatedAttrs::default(),
             alternate_text: None,
             uri: None,
-            size: Some(i64::try_from(data.len()).unwrap_or(i64::MAX)),
+            // `size` is `None` ("unknown") when the length does not fit an
+            // `i64`; a maximum would state a size that is not the size (RCA-P-3).
+            size: i64::try_from(data.len()).ok(),
             data: Some(data),
             media_type,
             compression_algorithm: None,

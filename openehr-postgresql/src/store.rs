@@ -863,6 +863,7 @@ fn insert_version(transaction: &mut postgres::Transaction<'_>, row: &VersionRow)
     let committed_utc =
         PostgresqlStore::utc_seconds_to_timestamptz(row.audit_time_committed.utc_seconds)?;
     let tag_mac = row.chain.tag_mac.map(|m| m.to_vec());
+    // Fallback: 0 — `db:H5.6` stores an absent trunk branch component as zero.
     let branch_number = row.branch_number.unwrap_or(0);
     let branch_version = row.branch_version.unwrap_or(0);
     // Bound to a slice with its element type stated up front: each `&row.…`

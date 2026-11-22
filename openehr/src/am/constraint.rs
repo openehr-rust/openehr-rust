@@ -200,11 +200,21 @@ impl CAttribute {
         children: Vec<CObject>,
     ) -> Result<Self, ParseError> {
         let mut attribute = Self::new_raw(rm_attribute_name, existence, children)?;
-        let required: u32 = attribute
-            .children
-            .iter()
-            .map(|child| child.occurrences().map_or(0, MultiplicityInterval::lower))
-            .sum();
+        // RCA-AGG-1: the lower bounds come from an archetype, so they are summed
+        // with a checked add. A total that does not fit `u32` is invalid data
+        // (RCA-DECL-5), refused rather than saturated or wrapped.
+        let required: Option<u32> = attribute.children.iter().try_fold(0_u32, |total, child| {
+            // Fallback: 0 — a child with no stated occurrences adds nothing to the
+            // required total; its bound is inferred separately (`K15.32`).
+            let lower = child.occurrences().map_or(0, MultiplicityInterval::lower);
+            total.checked_add(lower)
+        });
+        let Some(required) = required else {
+            return Err(ParseError::invariant(
+                "C_ATTRIBUTE",
+                "the children's required occurrences do not fit a 32-bit count",
+            ));
+        };
         if let Some(upper) = cardinality.interval().upper() {
             if required > upper {
                 return Err(ParseError::invariant(
@@ -1675,6 +1685,40 @@ mod tests {
             )
             .unwrap(),
         )
+    }
+
+    /// RCA-AGG-1 / RCA-TEST-2: the required-occurrence total is a checked sum.
+    /// `u32::MAX` alone fits; one more required occurrence is the first total
+    /// that does not, and it is refused with its own reason, not wrapped into a
+    /// small total that would pass the cardinality check.
+    #[test]
+    fn required_occurrences_that_overflow_the_counter_are_refused() {
+        let largest = MultiplicityInterval::new(u32::MAX, None).unwrap();
+        let one = MultiplicityInterval::new(1, None).unwrap();
+        let open = Cardinality::new(MultiplicityInterval::new(0, None).unwrap());
+        assert!(
+            CAttribute::container(
+                "items",
+                MultiplicityInterval::MANDATORY,
+                open.clone(),
+                vec![element_with_occurrences("at0001", largest.clone())],
+            )
+            .is_ok()
+        );
+        let err = CAttribute::container(
+            "items",
+            MultiplicityInterval::MANDATORY,
+            open,
+            vec![
+                element_with_occurrences("at0001", largest),
+                element_with_occurrences("at0002", one),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.reason,
+            "the children's required occurrences do not fit a 32-bit count"
+        );
     }
 
     /// `VACMCU`: a cardinality's finite upper bound must hold every child's

@@ -545,7 +545,13 @@ fn walk_attribute(
         return;
     }
 
-    let count = u32::try_from(children.len()).unwrap_or(u32::MAX);
+    // A cardinality is a `u32` interval (AOM2 `MULTIPLICITY_INTERVAL`), so a
+    // child count that does not fit `u32` cannot satisfy any declared one: no
+    // fallback count is invented for it, it is a cardinality violation.
+    let Ok(count) = u32::try_from(children.len()) else {
+        ctx.violation(archetype_id, &attr_path, "Cardinality");
+        return;
+    };
     match attribute.cardinality() {
         Some(cardinality) => {
             if !cardinality.interval().contains(count) {

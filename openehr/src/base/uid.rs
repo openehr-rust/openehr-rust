@@ -286,9 +286,11 @@ impl FromStr for InternetId {
             return Err(ParseError::new("INTERNET_ID", "empty", s));
         }
         for label in s.split('.') {
-            if label.is_empty() {
+            // The first and last bytes exist exactly when the label is not empty.
+            let (Some(&first), Some(&last)) = (label.as_bytes().first(), label.as_bytes().last())
+            else {
                 return Err(ParseError::new("INTERNET_ID", "empty label", s));
-            }
+            };
             if !label
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
@@ -299,8 +301,6 @@ impl FromStr for InternetId {
                     s,
                 ));
             }
-            let first = label.as_bytes()[0];
-            let last = label.as_bytes()[label.len() - 1];
             if !first.is_ascii_alphanumeric() || !last.is_ascii_alphanumeric() {
                 return Err(ParseError::new(
                     "INTERNET_ID",

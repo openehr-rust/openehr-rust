@@ -7,6 +7,18 @@ together.
 
 ## Unreleased
 
+- **Checked arithmetic** (`spec/rust-checked-arithmetic`), banned patterns only.
+  Breaking while 0.11.0 is unpublished: `VersionTreeId::next` is now
+  `checked_next`, returning `None` at a full counter instead of panicking, and
+  `Duration::approx_seconds` returns `Option<f64>` (`None` for a non-finite
+  length; a seconds component written with a comma was read as zero and is now
+  read). An `INTERVAL_EVENT` width or `HISTORY` period that is not a whole
+  number of `i64` seconds is refused or unknown, not saturated. Integer against
+  float comparison in the AQL executor is exact above 2^53. An absent
+  `DV_MULTIMEDIA.size` is `None` when the data length does not fit `i64`. The
+  required occurrences of a container attribute's children are summed with
+  checked adds. Every workspace root turns on `overflow-checks` in
+  `[profile.release]`, and each buildable crate has a `clippy.toml`.
 - Raised honest production-only owner-workspace coverage in `openehr` from
   90.77% lines / 91.40% functions to **92.76% (9,630/10,382) / 94.16%
   (1,499/1,592)**. New tests cover exact parser refusals, identifier and serde

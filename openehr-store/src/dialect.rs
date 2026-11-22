@@ -343,7 +343,10 @@ mod tests {
 
         // Indexes are separate statements unless the dialect inlines them.
         assert_ne!(Minimal.index_idempotence(), Idempotence::Inline);
-        let expected: usize = TABLES.iter().map(|t| t.indexes.len()).sum();
+        let expected: usize = TABLES
+            .iter()
+            .try_fold(0_usize, |total, t| total.checked_add(t.indexes.len()))
+            .unwrap();
         assert_eq!(
             statements
                 .iter()

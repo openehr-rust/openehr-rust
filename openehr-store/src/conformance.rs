@@ -1222,6 +1222,16 @@ pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
     Ok(())
 }
 
+/// The sum of statement counts, which come from the crate's own static tables
+/// and not from input. RCA-AGG-1: a checked add, and a harness that panics on
+/// failure by contract names the overflow instead of wrapping.
+fn checked_total(mut counts: impl Iterator<Item = usize>) -> usize {
+    let Some(total) = counts.try_fold(0_usize, usize::checked_add) else {
+        panic!("conformance: the statement count does not fit usize");
+    };
+    total
+}
+
 /// Checks one dialect's DDL without a database.
 ///
 /// # Panics
@@ -1233,17 +1243,18 @@ pub fn check_dialect(dialect: &dyn Dialect) {
     let index_statements = if dialect.index_idempotence() == crate::Idempotence::Inline {
         0
     } else {
-        crate::TABLES.iter().map(|t| t.indexes.len()).sum::<usize>()
+        checked_total(crate::TABLES.iter().map(|t| t.indexes.len()))
     };
     assert_eq!(
         statements.len(),
         crate::TABLES.len()
             + index_statements
-            + crate::TABLES
-                .iter()
-                .filter(|t| t.append_only)
-                .map(|t| dialect.append_only_sql(t).len())
-                .sum::<usize>(),
+            + checked_total(
+                crate::TABLES
+                    .iter()
+                    .filter(|t| t.append_only)
+                    .map(|t| dialect.append_only_sql(t).len()),
+            ),
         "{name}: unexpected statement count"
     );
 

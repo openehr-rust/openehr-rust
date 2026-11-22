@@ -128,7 +128,10 @@ fn run(corpus: &Path, report: Option<&mut fs::File>) -> (usize, usize, usize) {
         files.len(),
         parsed_clean,
         parsed_with_violations,
-        parse_errors.values().sum::<usize>()
+        parse_errors
+            .values()
+            .try_fold(0_usize, |total, n| total.checked_add(*n))
+            .unwrap()
     );
     if !parse_errors.is_empty() {
         println!("-- parse errors --");

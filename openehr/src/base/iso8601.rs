@@ -770,10 +770,24 @@ impl Duration {
             && self.days == 0
             && self.hours == 0
             && self.minutes == 0
-            && self
-                .seconds
-                .as_deref()
-                .is_none_or(|s| s.parse::<f64>().is_ok_and(|v| v == 0.0))
+            && self.seconds_value().is_some_and(|v| v == 0.0)
+    }
+
+    /// The seconds component as a number: `Some(0.0)` when none was written,
+    /// and `None` when the text is not a finite number.
+    ///
+    /// The decimal sign may be `,` or `.` (`D3.10b`), and the text keeps
+    /// whichever was written, so `,` is read as `.` here.
+    fn seconds_value(&self) -> Option<f64> {
+        let Some(text) = self.seconds.as_deref() else {
+            // Fallback: no seconds component means zero seconds (ISO 8601 4.4.3.2:
+            // a duration states only the components it has).
+            return Some(0.0);
+        };
+        text.replace(',', ".")
+            .parse::<f64>()
+            .ok()
+            .filter(|seconds| seconds.is_finite())
     }
 
     /// The exact text this duration was parsed from.
@@ -790,20 +804,22 @@ impl Duration {
     /// days and a year is 365 or 366. Use this for ordering and rough bucketing,
     /// never for computing a due date — `P1M` after 31 January is 28 February,
     /// which no fixed number of seconds produces.
+    ///
+    /// `None` when the seconds component is not a finite number, or the total
+    /// is not finite (RCA-FLT-2): an unknown length, never `0`.
     #[must_use]
-    pub fn approx_seconds(&self) -> f64 {
+    pub fn approx_seconds(&self) -> Option<f64> {
         let secs = f64::from(self.years) * 365.2425 * 86_400.0
             + f64::from(self.months) * 30.436_875 * 86_400.0
             + f64::from(self.weeks) * 7.0 * 86_400.0
             + f64::from(self.days) * 86_400.0
             + f64::from(self.hours) * 3_600.0
             + f64::from(self.minutes) * 60.0
-            + self
-                .seconds
-                .as_deref()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0.0);
-        if self.negative { -secs } else { secs }
+            + self.seconds_value()?;
+        if !secs.is_finite() {
+            return None;
+        }
+        Some(if self.negative { -secs } else { secs })
     }
 }
 
@@ -824,7 +840,7 @@ impl Duration {
     /// and `.50` are different stored strings and the same length.
     #[must_use]
     pub fn semantic_cmp(&self, other: &Self) -> Option<Ordering> {
-        let (a, b) = (self.approx_seconds(), other.approx_seconds());
+        let (a, b) = (self.approx_seconds()?, other.approx_seconds()?);
         let calendarish = |d: &Self| d.years > 0 || d.months > 0;
         match a.partial_cmp(&b)? {
             Ordering::Equal
@@ -1644,8 +1660,8 @@ mod tests {
             + 6.0 * 60.0
             + 7.5;
         assert!(
-            (d.approx_seconds() - want).abs() < 1e-6,
-            "{} != {want}",
+            (d.approx_seconds().unwrap() - want).abs() < 1e-6,
+            "{:?} != {want}",
             d.approx_seconds()
         );
 
@@ -1663,8 +1679,8 @@ mod tests {
         ] {
             let d: Duration = text.parse().unwrap_or_else(|e| panic!("{text}: {e}"));
             assert!(
-                (d.approx_seconds() - seconds).abs() < 1e-6,
-                "{text}: {} != {seconds}",
+                (d.approx_seconds().unwrap() - seconds).abs() < 1e-6,
+                "{text}: {:?} != {seconds}",
                 d.approx_seconds()
             );
         }
@@ -1673,7 +1689,7 @@ mod tests {
         for (more, less) in [("P2W", "P1W"), ("P2D", "P1D"), ("PT2S", "PT1S")] {
             let (a, b): (Duration, Duration) = (more.parse().unwrap(), less.parse().unwrap());
             assert!(
-                a.approx_seconds() > b.approx_seconds(),
+                a.approx_seconds().unwrap() > b.approx_seconds().unwrap(),
                 "{more} is not longer than {less}"
             );
         }
@@ -1765,7 +1781,7 @@ mod tests {
         assert!(minus_day.is_negative());
         // A day is a whole number of seconds, so this is exact — but say so
         // rather than relying on it.
-        assert!((minus_day.approx_seconds() - -86_400.0).abs() < f64::EPSILON);
+        assert!((minus_day.approx_seconds().unwrap() - -86_400.0).abs() < f64::EPSILON);
         assert_eq!(minus_day.as_str(), "-P1D");
 
         assert!(!d("P1D").is_negative());
@@ -1796,5 +1812,24 @@ mod tests {
             let t: DateTime = text.parse().unwrap();
             assert_eq!(t.diff_seconds(&epoch), Some(seconds), "{text}");
         }
+    }
+
+    /// RCA-FLT-2 / RCA-TEST-2: a seconds component written with a comma is read
+    /// (it was once silently `0`), and one that is not a finite number makes the
+    /// length unknown rather than zero or infinite.
+    #[test]
+    fn approx_seconds_reads_a_comma_and_refuses_a_non_finite_length() {
+        let comma: Duration = "PT7,5S".parse().unwrap();
+        assert_eq!(comma.approx_seconds(), Some(7.5));
+        let zero_comma: Duration = "PT0,0S".parse().unwrap();
+        assert!(zero_comma.is_zero());
+        assert_eq!(zero_comma.approx_seconds(), Some(0.0));
+        let absent: Duration = "P1D".parse().unwrap();
+        assert_eq!(absent.approx_seconds(), Some(86_400.0));
+        // 400 nines is the first width that overflows `f64`.
+        let huge: Duration = format!("PT{}S", "9".repeat(400)).parse().unwrap();
+        assert_eq!(huge.approx_seconds(), None);
+        assert!(!huge.is_zero());
+        assert_eq!(huge.semantic_cmp(&absent), None);
     }
 }
