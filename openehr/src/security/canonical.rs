@@ -68,8 +68,9 @@ pub fn to_canonical_bytes<T: Serialize>(value: &T) -> Result<Vec<u8>, serde_json
 /// Returns [`serde_json::Error`] if the value cannot be serialized.
 pub fn to_canonical_string<T: Serialize>(value: &T) -> Result<String, serde_json::Error> {
     let bytes = to_canonical_bytes(value)?;
-    // Every byte came from serde_json's own writer, which emits UTF-8.
-    Ok(String::from_utf8(bytes).unwrap_or_default())
+    // Every byte came from serde_json's own writer, which emits UTF-8; if not,
+    // that is an error, not an empty string.
+    String::from_utf8(bytes).map_err(serde::ser::Error::custom)
 }
 
 fn write_canonical(value: &Value, out: &mut Vec<u8>) {

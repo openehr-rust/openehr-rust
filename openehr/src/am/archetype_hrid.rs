@@ -337,6 +337,13 @@ fn parse_version(text: &str) -> Result<(String, VersionStatus, String), ParseErr
             text,
         ));
     }
+    if parts.iter().any(|part| part.parse::<u32>().is_err()) {
+        return Err(ParseError::new(
+            "ARCHETYPE_HRID",
+            "a release_version component does not fit in u32",
+            text,
+        ));
+    }
 
     let (version_status, build_count) = match rest {
         None => (VersionStatus::Released, String::new()),
@@ -448,6 +455,20 @@ impl FromStr for ArchetypeHrid {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::{ArchetypeHrid, VersionStatus};
+
+    #[test]
+    fn a_version_component_that_does_not_fit_u32_is_refused() {
+        // RCA-IN-2, RCA-TEST-8: refused at the boundary, not left to panic in
+        // `major_version` or vanish as `None` in `minor_version`.
+        for v in ["v99999999999", "v1.99999999999", "v1.2.99999999999"] {
+            let text = format!("openEHR-EHR-OBSERVATION.blood_pressure.{v}");
+            assert!(text.parse::<ArchetypeHrid>().is_err(), "{text}");
+        }
+        let ok: ArchetypeHrid = "openEHR-EHR-OBSERVATION.blood_pressure.v4294967295"
+            .parse()
+            .unwrap();
+        assert_eq!(ok.major_version(), u32::MAX);
+    }
 
     #[test]
     fn a_plain_released_hrid_round_trips_through_its_own_display() {

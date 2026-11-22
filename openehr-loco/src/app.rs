@@ -55,9 +55,18 @@ pub type SharedOpenehrStore = Arc<Mutex<SqliteStore>>;
 /// different schema version, which is refused rather than half-served
 /// (`db:O10.15`).
 pub fn open_store() -> Result<SqliteStore> {
-    open_store_at(std::path::Path::new(
-        &std::env::var("OPENEHR_SQLITE_PATH").unwrap_or_else(|_| "openehr.sqlite3".to_owned()),
-    ))
+    let path = match std::env::var("OPENEHR_SQLITE_PATH") {
+        Ok(path) => path,
+        // RCA-IN-3: absent only. An unset variable means the default file.
+        Err(std::env::VarError::NotPresent) => "openehr.sqlite3".to_owned(),
+        // RCA-IN-4: a supplied but unusable setting stops startup.
+        Err(std::env::VarError::NotUnicode(_)) => {
+            return Err(loco_rs::Error::Message(
+                "OPENEHR_SQLITE_PATH is not valid Unicode".to_owned(),
+            ));
+        }
+    };
+    open_store_at(std::path::Path::new(&path))
 }
 
 /// Opens and installs the store at an explicit path.

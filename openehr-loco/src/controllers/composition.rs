@@ -19,11 +19,12 @@ use crate::views::{Page, VersionView};
 
 type Reply<T> = Result<(StatusCode, HeaderMap, Json<T>), (StatusCode, String)>;
 
-/// `_count` and `_offset`, with a cap.
+/// `_count` and `_offset`, with a bound.
 ///
-/// The cap is not politeness. An uncapped `_count` lets one request ask for a
+/// The bound is not politeness. An unbounded `_count` lets one request ask for a
 /// record's entire history, and a store that answers it has handed a caller the
-/// ability to exhaust its own memory (`db:P6.7`).
+/// ability to exhaust its own memory (`db:P6.7`). A `_count` outside the bound
+/// is refused with 400 naming it, never clamped to the bound (RCA-IN-2).
 #[derive(Debug, Deserialize)]
 pub struct Paging {
     #[serde(rename = "_count")]
@@ -36,14 +37,23 @@ impl Paging {
     const MAX: usize = 100;
     const DEFAULT_COUNT: usize = 20;
 
-    fn resolve(&self) -> (usize, usize) {
-        // Declared: `db:P6.7` bounds a page so a caller cannot ask for a record's
-        // whole history. Fallbacks: a page is `DEFAULT_COUNT` (20) rows when no
-        // `_count` is given, is at most `MAX` (100), and starts at `0` with no `_offset`.
-        (
-            self.count.unwrap_or(Self::DEFAULT_COUNT).min(Self::MAX),
-            self.offset.unwrap_or(0),
-        )
+    /// # Errors
+    ///
+    /// 400 naming `_count` and `1 ..= 100` when `_count` is supplied outside that range.
+    fn resolve(&self) -> Result<(usize, usize), (StatusCode, String)> {
+        // RCA-IN-3: absent only. `db:P6.7` bounds a page; an absent `_count` is
+        // `DEFAULT_COUNT` (20) rows and an absent `_offset` is `0`.
+        let count = match self.count {
+            None => Self::DEFAULT_COUNT,
+            Some(n) if (1..=Self::MAX).contains(&n) => n,
+            Some(n) => {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    format!("_count {n} is out of range: it must be 1 ..= {}", Self::MAX),
+                ));
+            }
+        };
+        Ok((count, self.offset.unwrap_or(0))) // RCA-IN-3: absent only, `db:P6.7`
     }
 }
 
@@ -200,7 +210,7 @@ async fn history(
         outcome_of(&found),
     )?;
     let all = found.map_err(|e| status_for(&e))?;
-    let (count, offset) = paging.resolve();
+    let (count, offset) = paging.resolve()?;
     let items = all.iter().skip(offset).take(count).map(view).collect();
     Ok((
         StatusCode::OK,
@@ -241,13 +251,19 @@ async fn search(
         outcome_of(&found),
     )?;
     let rows = found.map_err(|e| status_for(&e))?;
-    let (count, offset) = paging.resolve();
+    let (count, offset) = paging.resolve()?;
     let items = rows
         .iter()
         .skip(offset)
         .take(count)
-        .map(|r| serde_json::to_value(r).unwrap_or(serde_json::Value::Null))
-        .collect();
+        .map(serde_json::to_value)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("a stored row does not serialize: {e}"),
+            )
+        })?;
     Ok((
         StatusCode::OK,
         HeaderMap::new(),
@@ -465,43 +481,18 @@ pub fn routes() -> Routes {
 mod paging_tests {
     use super::Paging;
 
-    /// RCA-TEST-2: each declared fallback and bound, at the first input that
-    /// reaches it (`db:P6.7`).
+    /// RCA-TEST-8: absent takes the declared default; supplied out of range is
+    /// refused, never clamped (RCA-IN-2).
     #[test]
-    fn a_page_defaults_and_is_capped_at_the_declared_bound() {
-        // No `_count`: the declared default; no `_offset`: the start.
-        assert_eq!(
-            Paging {
-                count: None,
-                offset: None
-            }
-            .resolve(),
-            (20, 0)
-        );
-        // At the cap, and one past it.
-        assert_eq!(
-            Paging {
-                count: Some(100),
-                offset: Some(7)
-            }
-            .resolve(),
-            (100, 7)
-        );
-        assert_eq!(
-            Paging {
-                count: Some(101),
-                offset: None
-            }
-            .resolve(),
-            (100, 0)
-        );
-        assert_eq!(
-            Paging {
-                count: Some(usize::MAX),
-                offset: None
-            }
-            .resolve(),
-            (100, 0)
-        );
+    fn a_page_defaults_when_absent_and_refuses_a_count_out_of_range() {
+        let page = |count, offset| Paging { count, offset }.resolve();
+        assert_eq!(page(None, None).unwrap(), (20, 0));
+        assert_eq!(page(Some(1), None).unwrap(), (1, 0));
+        assert_eq!(page(Some(100), Some(7)).unwrap(), (100, 7));
+        for bad in [0, 101, usize::MAX] {
+            let (status, message) = page(Some(bad), None).unwrap_err();
+            assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+            assert!(message.contains("_count"), "{message}");
+        }
     }
 }

@@ -484,21 +484,36 @@ async fn a_page_reports_the_total_before_paging() {
 }
 
 #[tokio::test]
-async fn an_uncapped_count_cannot_be_asked_for() {
+async fn a_count_outside_its_bound_is_refused_not_clamped() {
     let served = Served::new();
+    // RCA-IN-2, RCA-TEST-8: valid `_count` is 1 ..= 100. 0, 101 and `abc` are
+    // client errors, never 1, 100 or the default 20.
+    for bad in ["0", "101", "100000", "abc", "-1", ""] {
+        let (status, body, _) = served
+            .get(&format!(
+                "{}/_history?_count={bad}",
+                served.composition(GONE)
+            ))
+            .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "_count={bad:?}: {body}");
+    }
+    // Boundaries accepted; absent takes the declared default of 20.
+    for ok in ["1", "100"] {
+        let (status, body, _) = served
+            .get(&format!(
+                "{}/_history?_count={ok}",
+                served.composition(GONE)
+            ))
+            .await;
+        assert_eq!(status, StatusCode::OK, "_count={ok}: {body}");
+    }
     let (status, body, _) = served
-        .get(&format!(
-            "{}/_history?_count=100000",
-            served.composition(GONE)
-        ))
+        .get(&format!("{}/_history", served.composition(GONE)))
         .await;
-
     assert_eq!(status, StatusCode::OK, "{body}");
-    // The cap is not politeness. An uncapped `_count` hands a caller the
-    // ability to exhaust the server's memory against a long history (P6.7).
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&body).expect("json")["count"],
-        100
+        20
     );
 }
 

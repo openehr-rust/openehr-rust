@@ -7,6 +7,17 @@ together.
 
 ## Unreleased
 
+- **Input rejection** (`spec/rust-checked-arithmetic` RCA-IN-2..7). A supplied
+  invalid input is an error, never a clamp or a default. `openehr-loco`:
+  `_count` outside `1 ..= 100` (including `0`) is now 400 naming `_count`
+  instead of being clamped to 100; an absent `_count` is still 20. A
+  non-Unicode `OPENEHR_SQLITE_PATH` fails `open_store` instead of using
+  `openehr.sqlite3`. A history row that does not serialize is a 500, not
+  `null`. `openehr-store` AQL: an `OFFSET` or `LIMIT` that does not fit
+  `usize` is `StoreError::AqlUnsupported` instead of `usize::MAX`.
+  `openehr`: `ArchetypeHrid` refuses a release-version component that does not
+  fit `u32` (it could panic in `major_version`); `to_canonical_string` returns
+  an error rather than an empty string if the bytes were not UTF-8.
 - **Checked arithmetic** (`spec/rust-checked-arithmetic`), banned patterns only.
   Breaking while 0.11.0 is unpublished: `VersionTreeId::next` is now
   `checked_next`, returning `None` at a full counter instead of panicking, and

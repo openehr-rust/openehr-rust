@@ -265,12 +265,21 @@ pub fn execute(
         });
     }
 
-    // Fallback: `BEYOND_ANY_RESULT_SET` for an offset or limit that does not fit
-    // `usize` — it exceeds the length of any result set held in memory, so an
-    // offset that large skips every row and a limit that large keeps them all,
-    // which is what the figure means. An absent offset is `0` (AQL: no skip).
-    let offset = usize::try_from(query.offset.unwrap_or(0)).unwrap_or(BEYOND_ANY_RESULT_SET);
-    let limit = usize::try_from(limit).unwrap_or(BEYOND_ANY_RESULT_SET);
+    // RCA-IN-2: an OFFSET or LIMIT that does not fit `usize` is refused, not
+    // replaced by a stand-in. An absent OFFSET is `0` (AQL: no skip).
+    let offset = match query.offset {
+        None => 0, // RCA-IN-3: absent only, AQL: no OFFSET means no skip
+        Some(n) => usize::try_from(n).map_err(|_| {
+            unsupported(format!(
+                "OFFSET {n} does not fit a row count on this platform"
+            ))
+        })?,
+    };
+    let limit = usize::try_from(limit).map_err(|_| {
+        unsupported(format!(
+            "LIMIT {limit} does not fit a row count on this platform"
+        ))
+    })?;
     let rows = matched
         .into_iter()
         .skip(offset)
@@ -539,9 +548,6 @@ fn compare(lhs: &Cell, op: CompareOp, rhs: &Cell) -> Result<bool> {
         _ => Err(unsupported(format!("WHERE ... {op} ..."))),
     }
 }
-
-/// A row count above any result set that fits in memory.
-const BEYOND_ANY_RESULT_SET: usize = usize::MAX;
 
 /// Numeric-aware equality: `Integer(2)` and `Number(2.0)` are the same
 /// value under any comparison operator, the same as SQL and as AQL's own
