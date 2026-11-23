@@ -991,6 +991,10 @@ mod tests {
                 "{op}"
             );
         }
+    }
+
+    #[test]
+    fn comparisons_of_like_and_mixed_numeric_cells() {
         assert!(!compare(&Cell::Null, CompareOp::NotEqual, &Cell::Integer(1)).unwrap());
         assert!(compare(&Cell::Boolean(false), CompareOp::Less, &Cell::Boolean(true)).unwrap());
         assert!(
@@ -1006,7 +1010,10 @@ mod tests {
         assert!(compare(&Cell::Integer(2), CompareOp::Equal, &Cell::Integer(2)).unwrap());
         assert!(compare(&Cell::Number(2.0), CompareOp::Equal, &Cell::Number(2.0)).unwrap());
         assert!(compare(&Cell::Integer(1), CompareOp::Like, &Cell::Integer(1)).is_err());
+    }
 
+    #[test]
+    fn compare_cells_orders_nulls_and_integers_against_numbers_exactly() {
         assert_eq!(
             compare_cells(&Cell::Null, &Cell::Null),
             std::cmp::Ordering::Equal
@@ -1042,6 +1049,10 @@ mod tests {
             ),
             std::cmp::Ordering::Equal
         );
+    }
+
+    #[test]
+    fn integer_number_comparison_handles_range_edges_and_unordered_values() {
         // Range edges: 2^63 is above every `i64`, and -2^63 is `i64::MIN` exactly.
         assert_eq!(
             compare_integer_with_number(i64::MAX, 9_223_372_036_854_775_808.0),

@@ -237,19 +237,14 @@ impl PostgresqlStore {
     /// Three states, and the third is the one that matters — see
     /// `SqliteStore::check_schema_version`, which this mirrors exactly.
     fn check_schema_version(&self) -> Result<()> {
-        // `.ok().flatten()`, not `?`: on a genuinely fresh database the
-        // table itself does not exist yet, and the query errors rather than
-        // returning zero rows. Swallowed into "nothing recorded" here for
-        // the same reason the `legacy` probe below swallows its own —
-        // `SqliteStore::check_schema_version` does the same
-        // (`.optional().unwrap_or(None)`, which discards a "no such table"
-        // error identically to a genuine zero-row answer).
+        // Only "the table does not exist" (SQLSTATE 42P01) means "nothing
+        // recorded": on a genuinely fresh database the table is not there yet.
+        // Any other error propagates (RCA-IN-6).
         let recorded: Option<i64> = self
             .client
             .borrow_mut()
             .query_opt("SELECT version FROM openehr_schema_version LIMIT 1", &[])
-            .ok()
-            .flatten()
+            .or_else(|e| absent_if_undefined_table(&e))?
             .map(|row| row.get(0));
 
         if let Some(found) = recorded {
@@ -264,16 +259,12 @@ impl PostgresqlStore {
 
         // No version recorded. Either fresh, or older than versioning itself
         // — told apart, as `SqliteStore` does, by whether `openehr_ehr` holds
-        // anything. Errors are swallowed into "nothing recorded" here: on a
-        // genuinely fresh database the table itself does not exist yet, and
-        // the query errors rather than returning zero rows — exactly what
-        // "fresh" looks like.
+        // anything. A missing table (42P01) is "fresh"; other errors propagate.
         let legacy: Option<i64> = self
             .client
             .borrow_mut()
             .query_opt("SELECT count(*) FROM openehr_ehr", &[])
-            .ok()
-            .flatten()
+            .or_else(|e| absent_if_undefined_table(&e))?
             .map(|row| row.get(0));
         if legacy.is_some_and(|n| n > 0) {
             return Err(StoreError::SchemaVersionMismatch {
@@ -390,6 +381,16 @@ fn hex32(bytes: &[u8; 32]) -> String {
         let _ = write!(out, "{b:02x}");
     }
     out
+}
+
+/// Maps `undefined_table` (SQLSTATE 42P01) to "absent" (`Ok(None)`) and
+/// propagates every other error (RCA-IN-6).
+fn absent_if_undefined_table<T>(error: &postgres::Error) -> Result<Option<T>> {
+    if error.code() == Some(&postgres::error::SqlState::UNDEFINED_TABLE) {
+        Ok(None)
+    } else {
+        Err(engine(error))
+    }
 }
 
 /// Wraps a driver error without letting row data into the message.

@@ -160,7 +160,7 @@ impl SqliteStore {
                 |row| row.get(0),
             )
             .optional()
-            .unwrap_or(None);
+            .or_else(|e| absent_if_no_such_table(&e))?;
 
         if let Some(found) = recorded {
             if found != openehr_store::SCHEMA_VERSION {
@@ -177,7 +177,7 @@ impl SqliteStore {
             .connection
             .query_row("SELECT count(*) FROM openehr_ehr", [], |row| row.get(0))
             .optional()
-            .unwrap_or(None);
+            .or_else(|e| absent_if_no_such_table(&e))?;
         if legacy.is_some_and(|n| n > 0) {
             return Err(StoreError::SchemaVersionMismatch {
                 found: 0,
@@ -303,6 +303,21 @@ fn hex32(bytes: &[u8; 32]) -> String {
 }
 
 /// Wraps a driver error without letting row data into the message.
+/// Maps `SQLite`'s "no such table" error to "absent" (`Ok(None)`) and
+/// propagates every other error (RCA-IN-6: a failed read is an error, never
+/// silently a missing value). `SQLite` reports a missing table as the generic
+/// `SQLITE_ERROR` code, so the message is the only discriminator.
+fn absent_if_no_such_table<T>(error: &rusqlite::Error) -> Result<Option<T>> {
+    match error {
+        rusqlite::Error::SqliteFailure(_, Some(message))
+            if message.starts_with("no such table") =>
+        {
+            Ok(None)
+        }
+        _ => Err(engine(error)),
+    }
+}
+
 fn engine(error: &rusqlite::Error) -> StoreError {
     if let Some(conflict) = commit_conflict(error) {
         return conflict;

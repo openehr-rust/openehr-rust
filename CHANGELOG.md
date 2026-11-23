@@ -7,6 +7,14 @@ together.
 
 ## Unreleased
 
+- **Schema probes no longer swallow errors** (`spec/rust-checked-arithmetic`
+  RCA-IN-6). `SqliteStore::install` and `PostgresqlStore::install` treated any
+  failure of the schema-version and legacy-data probes as "fresh database"
+  (`.optional().unwrap_or(None)` / `.ok().flatten()`). Only a missing table
+  (`SQLite` "no such table"; PostgreSQL SQLSTATE 42P01) is now "absent"; every
+  other database error is returned as `StoreError::Engine`. An install against
+  a database that fails these probes for another reason now errors instead of
+  proceeding.
 - **Input rejection** (`spec/rust-checked-arithmetic` RCA-IN-2..7). A supplied
   invalid input is an error, never a clamp or a default. `openehr-loco`:
   `_count` outside `1 ..= 100` (including `0`) is now 400 naming `_count`
