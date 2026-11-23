@@ -7,6 +7,10 @@ together.
 
 ## Unreleased
 
+- **Wrong-length chain tag MAC is an error** (`spec/rust-checked-arithmetic`
+  RCA-IN-2, RCA-IN-6). `VersionRow::project` turned a tag MAC that was not 32
+  bytes into `None`, indistinguishable from an unkeyed chain. It now returns
+  `StoreError::Engine`; only a missing tag yields no MAC. No signature change.
 - **Schema probes no longer swallow errors** (`spec/rust-checked-arithmetic`
   RCA-IN-6). `SqliteStore::install` and `PostgresqlStore::install` treated any
   failure of the schema-version and legacy-data probes as "fresh database"

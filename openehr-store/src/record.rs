@@ -157,10 +157,13 @@ impl VersionRow {
             content: *entry.content.as_bytes(),
             digest: *entry.digest.as_bytes(),
             tag_key_id: entry.tag.as_ref().map(|t| t.key_id().to_owned()),
+            // RCA-IN-3: no tag is the only "absent" here. A tag whose MAC is
+            // not 32 bytes is malformed (RCA-IN-2), never `None`.
             tag_mac: entry
                 .tag
                 .as_ref()
-                .and_then(|t| <[u8; 32]>::try_from(t.mac()).ok()),
+                .map(|t| tag_mac_bytes(t.mac()))
+                .transpose()?,
         };
         Ok(Self {
             uid: uid.to_string(),
@@ -185,6 +188,20 @@ impl VersionRow {
             chain,
         })
     }
+}
+
+/// A tag's MAC as the fixed-width column value.
+///
+/// # Errors
+///
+/// Returns [`crate::StoreError::Engine`] if the MAC is not 32 bytes. Storing it
+/// as `NULL` would read back as "unkeyed chain", hiding a malformed tag as an
+/// absent one (RCA-IN-2).
+fn tag_mac_bytes(mac: &[u8]) -> Result<[u8; 32]> {
+    <[u8; 32]>::try_from(mac).map_err(|_| crate::StoreError::Engine {
+        engine: "openehr-store",
+        message: format!("chain tag MAC is {} bytes, expected 32", mac.len()),
+    })
 }
 
 /// Canonical JSON for a slice, or `None` when it is empty.
@@ -281,7 +298,21 @@ impl CompositionIndexRow {
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
-    use super::{CompositionIndexRow, VersionRow};
+    /// RCA-TEST-8: a wrong-length tag MAC is an error, not an absent MAC.
+    #[test]
+    fn wrong_length_tag_mac_is_rejected_not_none() {
+        for len in [0usize, 31, 33, 64] {
+            let err = tag_mac_bytes(&vec![7u8; len]).expect_err("wrong length must fail");
+            assert!(
+                matches!(&err, crate::StoreError::Engine { message, .. }
+                    if message.contains(&format!("is {len} bytes, expected 32"))),
+                "{err}"
+            );
+        }
+        assert_eq!(tag_mac_bytes(&[7u8; 32]).expect("32 bytes"), [7u8; 32]);
+    }
+
+    use super::{CompositionIndexRow, VersionRow, tag_mac_bytes};
     use openehr::rm::common::{AuditDetails, OriginalVersion, PartyIdentified, Version};
     use openehr::rm::data_types::{DvDateTime, Text};
     use openehr::rm::ehr::{Composition, EventContext};
