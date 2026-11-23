@@ -106,6 +106,18 @@ python3 scripts/check-docs.py          # --fix rewrites copies from their owner
 (cd openehr-store && cargo bench -- --test)
 ```
 
+Faster local runs with cargo-nextest (optional; CI keeps `cargo test`). Every
+crate has a `.config/nextest.toml`; from a crate directory:
+
+```sh
+cargo nextest run --no-fail-fast   # one process per test; retries are off
+cargo test --doc                   # nextest skips doctests, so run both
+```
+
+The `#[ignore]`d live-server tests of `openehr-postgresql` stay ignored, as under
+`cargo test`; `cargo nextest run --run-ignored all` runs them (they need a
+server) in a one-thread `live-db` group so binaries do not share it at once.
+
 The MSRV is **N−2** — two Rust releases behind stable, currently 1.98 (raised
 from N−3 on 2026-08-29) — and the `msrv` job re-derives that number rather than
 trusting a constant, so it goes red within six weeks of every Rust release. Fix

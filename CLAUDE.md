@@ -89,6 +89,18 @@ python3 scripts/generate-llms-files.py      # or: --write
 sh openehr-store/scripts/verify-schema.sh postgresql|mysql|mariadb
 ```
 
+Faster local runs with cargo-nextest (optional; CI keeps `cargo test`). Every
+crate has a `.config/nextest.toml`; from a crate directory:
+
+```sh
+cargo nextest run --no-fail-fast   # one process per test; retries are off
+cargo test --doc                   # nextest skips doctests, so run both
+```
+
+The `#[ignore]`d live-server tests of `openehr-postgresql` stay ignored, as under
+`cargo test`; `cargo nextest run --run-ignored all` runs them (they need a
+server) in a one-thread `live-db` group so binaries do not share it at once.
+
 Lints are `deny` (`missing_docs`, `missing_errors_doc`, `missing_panics_doc`),
 `unsafe_code` is `forbid`, clippy runs at `pedantic`. **The tree is at zero
 warnings — keep it there.**
