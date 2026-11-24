@@ -1184,6 +1184,20 @@ change. The three advisories `deny.toml` and CI once accepted for `loco-rs`
 (`RUSTSEC-2026-0194`, `-0195`, `-0235`, and `-2024-0449`) are gone with it:
 `cargo deny` and `cargo audit` report none.
 
+Route census against the published REST description, 2026-11-24, found while
+assessing `axa-openapi-docs`: the `ehr-validation` and `query-validation`
+OpenAPI files in `openEHR/specifications-ITS-REST` (`master`, `computable/OAS`)
+define 39 operations; `openehr-axa` mounts 10 of them, and 4 further routes the
+files do not define (`GET .../composition` search, `.../_history`,
+`.../version/{version_uid}`, `GET /metadata`). Not served include `PUT
+/ehr/{ehr_id}/ehr_status`, `PUT /ehr/{ehr_id}`, the whole `versioned_*`
+family, `contribution` reads, `directory`, `tags`, and every stored-query route
+except `POST /query/aql`. The comparison was made by a throwaway script over
+`AppRoutes::mounted()`, not by `axa_openapi_docs::drift`, against `master` and
+not a numbered release, and the OpenAPI files were not vendored. The service
+describes itself as an openEHR REST API and claims no coverage of this
+surface; the gap is recorded so that the description is not read as one.
+
 ## What this audit did not cover
 
 Stated so that "not examined" and "examined and sound" stay distinguishable
