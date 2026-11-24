@@ -1177,10 +1177,12 @@ as `detail` through `controllers::Refusal`, which since Axa 0.23 (2026-11-24) de
 `(StatusCode, String)` now gets a generic problem with the message dropped, and
 no compiler error says so. (2) Axa 0.22.0 was under the two-day minimum publish
 age, so 0.21 is pinned and nothing here has been run against 0.22. (3) Request
-timeout, CORS and HSTS now follow Axa's environment defaults; the container
-sets the timeout to the old ten seconds. (4) The container binding and
-environment are set in the `Containerfile`, which has not been built since the
-change. The three advisories `deny.toml` and CI once accepted for `loco-rs`
+timeout, CORS and HSTS now follow Axa's environment defaults; `app::defaults()`
+sets the timeout to the old ten seconds (since Axa 0.23; unobserved in the
+running container). (4) The container binding and
+environment are set in the `Containerfile`. Built with podman on 2026-11-24, it
+started, listened on 0.0.0.0:5150 and answered `GET /openehr/v1/metadata` 200;
+the authenticated routes were not exercised in the container. The three advisories `deny.toml` and CI once accepted for `loco-rs`
 (`RUSTSEC-2026-0194`, `-0195`, `-0235`, and `-2024-0449`) are gone with it:
 `cargo deny` and `cargo audit` report none.
 
