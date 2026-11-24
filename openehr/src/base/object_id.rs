@@ -1660,4 +1660,31 @@ mod tests {
         // Larger than a u32.
         assert_eq!(reason("4294967296"), "number does not fit in u32");
     }
+
+    /// The accessors the rustdoc examples exercise are also run here, because
+    /// the coverage gate measures unit tests and not doctests (`W0.41`), so a
+    /// line only a doctest runs counts as uncovered.
+    #[test]
+    fn an_archetype_id_reports_its_version_and_the_class_it_constrains() {
+        let id: ArchetypeId = "openEHR-EHR-OBSERVATION.blood_pressure.v2.1.0"
+            .parse()
+            .unwrap();
+        assert_eq!(id.version_id(), "v2.1.0");
+        assert!(id.constrains("OBSERVATION"));
+        assert!(!id.constrains("EVALUATION"));
+    }
+
+    /// A terminology id renders its version in parentheses, and only when it
+    /// has one; and a `GENERIC_ID` arriving without `_type` is still one.
+    #[test]
+    fn a_terminology_id_renders_its_version_and_a_generic_id_defaults_its_type() {
+        let plain: TerminologyId = "SNOMED-CT".parse().unwrap();
+        assert_eq!(plain.to_string(), "SNOMED-CT");
+        let versioned: TerminologyId = "SNOMED-CT(2024)".parse().unwrap();
+        assert_eq!(versioned.to_string(), "SNOMED-CT(2024)");
+
+        let id: GenericId =
+            serde_json::from_str(r#"{"value":"NHS-1","scheme":"uk.nhs"}"#).expect("no _type");
+        assert_eq!(id.scheme(), "uk.nhs");
+    }
 }
