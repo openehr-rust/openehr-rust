@@ -39,7 +39,7 @@ Four kinds of crate, and their PHI posture genuinely differs:
 | [`openehr/`](openehr/) — the model | Reference Model types, validation, paths, AQL parsing, and the security module | **Touches no database and performs no I/O.** If PHI passes through it, that is your program's memory, not a store. The audit chain and redaction live here, in-process. |
 | [`openehr-store/`](openehr-store/) — the persistence core | schema, projection, commit rules, the conformance suite | Links no driver and opens no socket. It defines the shapes; it does not move data. |
 | `openehr-<engine>/` — the six dialects | DDL and SQL for six engines | SQLite persists records locally. PostgreSQL persists them on the configured server. The remaining engines provide schema definitions. See the [conformance matrix](spec/databases/conformance-matrix.md). |
-| [`openehr-loco/`](openehr-loco/) — the HTTP service | Axum/Loco service with PASETO token verification | The only component that listens on a socket. **Not published**, and outside the conformance ladder (`W0.32`). |
+| [`openehr-loco/`](openehr-loco/) — the HTTP service | Axum/Axa service with PASETO token verification | The only component that listens on a socket. **Not published**, and outside the conformance ladder (`W0.32`). |
 
 ## What it does *not* do
 

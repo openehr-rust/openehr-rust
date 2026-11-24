@@ -1,6 +1,6 @@
 # openehr-loco
 
-A RESTful openEHR® API server on **Axum** and **Loco 1.0.1**, over
+A RESTful openEHR® API server on **Axum** and **Axa 0.21**, over
 [`openehr-sqlite`](../openehr-sqlite).
 
 > openEHR® is the registered trademark of the openEHR Foundation and is used
@@ -12,8 +12,8 @@ Not published, and it sits **outside the conformance ladder** — every rung the
 is defined by DDL, a `Store` implementation, or a database server, and this
 crate is none of those. So it states evidence instead of a level (`W0.32`).
 
-**Demonstrated.** 54 tests. `tests/http.rs` serves real requests through Loco's
-own router: `410` for a deleted composition against `404` for one that never
+**Demonstrated.** 54 tests. `tests/http.rs` serves real requests through the
+service's own router (Axa's `AppRoutes::into_app`, so the standard middleware is in the path): `410` for a deleted composition against `404` for one that never
 existed, the history still readable behind that `410`, `401` on every clinical
 route without a token and an identical body whether or not the record exists,
 the weak `ETag`, `_count`/`_offset`/`total` and the paging cap, `501` on
@@ -27,8 +27,8 @@ assertion, a token naming nobody, a `v4.local` token offered as `v4.public`,
 and spoofed identity headers. `tests/tasks.rs` executes the **built binary** and
 reads its output. `src/app.rs` covers the request-rate limiter directly (`50`
 requests through, the `51`st `429`) — `tests/http.rs`'s own router-building
-fixture never calls `after_routes`, the hook the limiter is layered in, the
-same gap `install`'s own test closes for `before_run`.
+fixture never calls `app::router`, the function the limiter is layered in, the
+same gap `install`'s own test closes for `app::prepare`.
 
 The server has also been booted by hand and answered `curl`: `/metadata` served,
 `401` with `WWW-Authenticate: Bearer` on a clinical route, and a refusal to start
@@ -142,10 +142,9 @@ inability. Commit a deleted version instead.
 ## Shape
 
 ```
-config/            development.yaml, test.yaml
 src/
   main.rs          the binary
-  app.rs           Hooks: routes, before_run, and open_store
+  app.rs           routes, prepare (startup), router, run, and open_store
   auth.rs          PASETO v4.public verification
   controllers/     mod.rs owns the status-code mapping
   views.rs         what goes over the wire
@@ -154,11 +153,12 @@ src/
 
 There is no `initializers.rs`. It held one initializer whose `after_routes`
 returned the router unchanged while its doc comment described echoing a request
-id. Loco's own `request_id` middleware does that, it is switched on in
-`config/development.yaml`, and the header is visible on every response.
+id. Axa's standard middleware does that, and `x-request-id` is visible on every
+response.
 
-**Stores are opened in `before_run`, not `boot`.** `boot` is not on the path
-`start` takes; initialising there left every request answering `503` while the
+**The store is opened by `app::prepare`, before the server listens, and by no
+later, lazier path.** Opening it on first use or in a hook that is not on the
+path `start` takes left every request answering `503` while the
 health check stayed green — the worst combination available, because a load
 balancer keeps a wholly broken instance in rotation and reports it healthy.
 
@@ -167,18 +167,29 @@ checkpoint is only worth anything published somewhere the database administrator
 does not control (`M3.16c`), and an endpoint on this service invites storing it
 beside the data it attests to.
 
-## Loco features
+## Axa features
 
-`default-features = false`, with only `cli`.
+Axa is a library, not a framework: there are no lifecycle hooks, and `AppContext`
+is plain Axum state. Only its defaults are taken — no database feature, no
+`queue`, and no `paseto`.
 
-Loco's defaults include `with-db`, which pulls SeaORM, `sea-orm-migration`, and
-`sqlx`. This repository already has a persistence layer built on a storage model
-that is deliberately *not* shredded (`S1.5`); taking Loco's as well would mean
-two persistence layers with two ideas of what a record is, and the one Loco
-brings does not know what a `COMPOSITION` is.
+A database feature would bring a second persistence layer beside the one this
+repository already has, built on a storage model that is deliberately *not*
+shredded (`S1.5`), and one that does not know what a `COMPOSITION` is. Axa's
+`paseto` feature is off because this crate carries its own verifier, written for
+`v4.public` only. See below.
 
-`auth` is off for a different reason: it is `jsonwebtoken`, and this service
-verifies PASETO instead. See below.
+**Error bodies are problems.** Axa never sends a handler's plain-text error; its
+middleware replaces one with a generic RFC 9457 problem. A message a caller needs
+— where a deleted record's history is, what to send in place of `DELETE` — is
+therefore returned as a `Refusal`, which travels as the problem's `detail`.
+
+**Configuration is environment variables**, with this service's defaults in
+`app::defaults` (port 5150, 8 MB bodies). There are no `config/*.yaml` files and
+no `LOCO_ENV`; `APP_ENV` selects `development`, `test`, or `production`, and
+`cargo run -- check` prints the effective settings. A release build is
+`production` unless told otherwise, where CORS sends nothing until
+`CORS_ALLOWED_ORIGINS` lists origins.
 
 ## Verifying the caller
 
@@ -354,10 +365,11 @@ curl -H 'Authorization: Bearer v4.public.…' \
 ```
 
 This section said `cargo run` from the day the crate was written, and there was
-no `[[bin]]` target and no `config/`. It answered *"a bin target must be
-available"*, and nothing noticed because the tests built the router directly and
-never went near `boot`. Both now exist, and `tests/tasks.rs` executes the binary
-so the claim stays true.
+no `[[bin]]` target. It answered *"a bin target must be available"*, and nothing
+noticed because the tests built the router directly and never went near startup.
+The binary exists now, and `tests/tasks.rs` executes it so the claim stays true.
+Since the move to Axa (2026-11-24) it was also started by hand: `/_health/live`
+and `/_health/ready` answered `200`, and a clinical route without a token `401`.
 
 ## Read auditing
 
@@ -397,8 +409,8 @@ looked at a withdrawn record is a sharper question.
 ## Tasks
 
 ```sh
-cargo loco task checkpoint container:<versioned-object-uid> [path:<db>]
-cargo loco task verify     container:<versioned-object-uid> [path:<db>]
+cargo run -- task checkpoint container:<versioned-object-uid> [path:<db>]
+cargo run -- task verify     container:<versioned-object-uid> [path:<db>]
 ```
 
 `checkpoint` prints a count, a head digest, and the head version's identifier,

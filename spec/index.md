@@ -157,7 +157,7 @@ Not published, and not on the conformance ladder — see `W0.32` above.
 
 | Crate | Role |
 | --- | --- |
-| [`openehr-loco`](../openehr-loco) | HTTP API server over `openehr-sqlite`, on Axum and Loco |
+| [`openehr-loco`](../openehr-loco) | HTTP API server over `openehr-sqlite`, on Axum and Axa |
 | [`openehr-assets`](../openehr-assets) | regenerates the committed schema/DDL assets; fails the build if one is stale |
 
 ### The fuzz crates

@@ -44,7 +44,7 @@ crates.io at 0.10.0; the other ten are `publish = false`.
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
 | `openehr-mssql` | SQL Server dialect | **Schema** |
 | `openehr-oracle` | Oracle dialect | **Schema** |
-| `openehr-loco` | HTTP service on Axum and Loco; verifies PASETO `v4.public` | outside the ladder (`W0.32`) |
+| `openehr-loco` | HTTP service on Axum and Axa; verifies PASETO `v4.public` | outside the ladder (`W0.32`) |
 | `openehr-assets` | regenerates `assets/`, and fails the build on a stale one | not published |
 | `openehr-fuzz`, `openehr-<engine>-fuzz` × 6 | fuzz harnesses | not published |
 

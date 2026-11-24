@@ -116,9 +116,10 @@ jobs:
   # policy against `cargo metadata`, versus the RustSec advisory database
   # against `Cargo.lock`) and disagreed once already finding this job's own
   # baseline -- `cargo-audit` flagged `RUSTSEC-2026-0235` in `openehr-loco`'s
-  # dependency tree (`rkyv`, via `rust_decimal`/`byte-unit`/`loco-rs`) that
-  # `cargo deny` did not, even against the same crate and a freshly fetched
-  # database.
+  # then dependency tree (`rkyv`, via `rust_decimal`/`byte-unit`/`loco-rs`)
+  # that `cargo deny` did not, even against the same crate and a freshly
+  # fetched database. `loco-rs` is gone, and with it every advisory this job
+  # once had to accept (`audit_ignore` is no longer used by any crate).
   #
   # `deny.toml` lives at the repository root, not per crate: there is no root
   # workspace here (each crate is its own, deliberately), so nothing discovers
@@ -141,19 +142,7 @@ jobs:
           - crate: openehr-mariadb
           - crate: openehr-mssql
           - crate: openehr-oracle
-          # Three advisories accepted here, not fixable by `cargo update`:
-          # confirmed by hand (`cargo update -p quick-xml --precise 0.42.0`,
-          # `cargo update -p rkyv --precise 0.8.17`, both refused, each naming
-          # the exact upstream pin) that `loco-rs`'s own dependency tree
-          # (`opendal`'s `quick-xml = "^0.39.3"`; `rust_decimal`'s `rkyv =
-          # "^0.7"`) has no compatible fixed version available yet. All three
-          # are in features `openehr-loco`'s own request-handling code never
-          # calls. `RUSTSEC-2026-0194`/`-0195` are declared in `deny.toml`
-          # (`cargo deny` does flag them); `RUSTSEC-2026-0235` needs
-          # `cargo audit`'s own `--ignore`, since `cargo deny` never flagged it
-          # to begin with. Revisit when either upstream crate widens its pin.
           - crate: openehr-loco
-            audit_ignore: "--ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195 --ignore RUSTSEC-2026-0235"
           - crate: openehr-assets
           - crate: openehr-fuzz
           - crate: openehr-postgresql-fuzz

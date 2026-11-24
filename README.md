@@ -47,7 +47,7 @@ assert_eq!(back, composition);
 | [`openehr-mariadb`](openehr-mariadb) | MariaDB 11.4 dialect | **Schema** |
 | [`openehr-mssql`](openehr-mssql) | SQL Server dialect | **Schema** |
 | [`openehr-oracle`](openehr-oracle) | Oracle Database dialect | **Schema** |
-| [`openehr-loco`](openehr-loco) | An HTTP API server over `openehr-sqlite`, on Axum and Loco | not on the ladder |
+| [`openehr-loco`](openehr-loco) | An HTTP API server over `openehr-sqlite`, on Axum and Axa | not on the ladder |
 | [`openehr-assets`](openehr-assets) | Regenerates the committed DDL/schema files; fails the build if they are stale | tooling |
 
 **Levels are claims about what has been verified**, not about what has been
@@ -386,7 +386,7 @@ optional, **not published** crate that puts a RESTful API in front of
 never signs), `410 Gone` for a deleted composition against `404` for one that
 never existed, `403`/`422` split for "not the committer" against "the committer
 cannot be identified", and `If-Match` concurrency control. 54 tests, including
-`tests/http.rs` serving real requests through Loco's own router.
+`tests/http.rs` serving real requests through the service's own router.
 
 It depends on the storage crates; nothing depends on it, and deleting it changes
 nothing else (`S1.7`). Its job is narrow by design — translate HTTP to store

@@ -45,7 +45,7 @@ without tracking it (`spec/audit.md` **W-10**).
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
 | `openehr-mssql` | SQL Server dialect | **Schema** |
 | `openehr-oracle` | Oracle dialect | **Schema** |
-| `openehr-loco` | HTTP service: Axum, Loco, PASETO verification | not published |
+| `openehr-loco` | HTTP service: Axum, Axa, PASETO verification | not published |
 | `openehr-assets` | regenerates `assets/`; fails on a stale one | not published |
 | `openehr-fuzz` | fuzz harness for the RM parsers | not published |
 | `openehr-<engine>-fuzz` × 6 | dialect fuzz harnesses | not published |

@@ -23,29 +23,12 @@ feature-depth = 1
 
 [advisories]
 db-urls = ["https://github.com/rustsec/advisory-db"]
-ignore = [
-    # `quick-xml` 0.39.4, pulled in by `opendal-core` (via `loco-rs`, in
-    # `openehr-loco`), which pins `quick-xml = "^0.39.3"` — a fixed release
-    # exists (0.42.0) but `cargo update` cannot reach it while that upstream
-    # pin stands; confirmed by hand (`cargo update -p quick-xml --precise
-    # 0.42.0` refuses, naming this exact constraint). Both are DoS-shaped
-    # (quadratic attribute-name checking; unbounded namespace-declaration
-    # allocation) in an XML feature this crate's own request-handling code
-    # never calls — `openehr-loco` is a JSON API and reaches `quick-xml` only
-    # through whichever storage backend `opendal` compiles in, not through
-    # anything openEHR data reaches. Not verified absent, only unreached by
-    # this crate's own code; tracked as `spec/audit.md` residual rather than
-    # silenced. Revisit when `loco-rs`/`opendal` widen the pin.
-    { id = "RUSTSEC-2026-0194", reason = "transitive via opendal's pinned quick-xml; unreached by this crate's own code; no compatible fix available upstream" },
-    { id = "RUSTSEC-2026-0195", reason = "transitive via opendal's pinned quick-xml; unreached by this crate's own code; no compatible fix available upstream" },
-    # `unsafe-libyaml` 0.2.11 (RUSTSEC-2024-0449, "unmaintained", not a
-    # vulnerability), via `serde_yaml`/`serde_yaml_ng`, via `loco-rs` and its
-    # `loco-gen`/`rrgen` code generator, in `openehr-loco`. Both parents are
-    # `loco-rs` 1.2.0's own dependencies, so nothing in this repository can
-    # replace it; `openehr-loco` parses no YAML from openEHR data. Revisit
-    # when `loco-rs` moves off `serde_yaml`.
-    { id = "RUSTSEC-2024-0449", reason = "unmaintained (not vulnerable); transitive via loco-rs's serde_yaml; unreachable from this crate's own code" },
-]
+# No advisory is ignored. The three that were — `RUSTSEC-2026-0194`,
+# `RUSTSEC-2026-0195` (`quick-xml`, via `opendal`) and `RUSTSEC-2024-0449`
+# (`unsafe-libyaml`, via `serde_yaml`) — all came in through `loco-rs`, which
+# `openehr-loco` no longer depends on; `cargo deny` reports none of them in
+# any dependency graph now.
+ignore = []
 
 # Every licence actually present in the graph is named here explicitly, not
 # matched by a wildcard, so a new dependency with an unreviewed licence fails
@@ -61,10 +44,6 @@ allow = [
     "Zlib",
     "CC0-1.0",
     "MPL-2.0",
-    # `quoted_printable`, via `lettre`, via `loco-rs`, in `openehr-loco`.
-    "0BSD",
-    # `webpki-roots`, via `lettre`, via `loco-rs`, in `openehr-loco`.
-    "CDLA-Permissive-2.0",
     # `libfuzzer-sys`, in every `openehr-*-fuzz` crate.
     "NCSA",
 ]

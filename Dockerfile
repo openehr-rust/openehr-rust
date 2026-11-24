@@ -72,6 +72,11 @@ COPY --from=builder /build/openehr-loco/target/release/openehr-loco /usr/local/b
 # container's own loopback, which a published port never reaches.
 ENV APP_ENV=production
 ENV BINDING=0.0.0.0
+# The Loco configuration allowed a request ten seconds; Axa's production default
+# is sixty. The shorter limit is kept: a request this service answers from one
+# serialised SQLite connection that is still running after ten seconds is
+# holding every other request behind it.
+ENV REQUEST_TIMEOUT_SECONDS=10
 
 # `OPENEHR_SQLITE_PATH` names a file under this volume, not the volume path
 # itself — see `docker-compose.yml`, which is the piece that actually

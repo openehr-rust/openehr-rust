@@ -228,7 +228,7 @@ pub fn with_rate_limit(router: AxumRouter) -> Result<AxumRouter> {
 
 /// The settings Axa reads, with this service's own defaults.
 ///
-/// The port and the 8 MB body limit are the ones the Loco configuration files
+/// The port and the 8 MB body limit are the ones the Loco configuration files this service used to carry
 /// carried, so a proxy or health check pointed at the old service still finds
 /// this one. The service has no database of Axa's (an empty name): its store is
 /// `openehr-store`, opened by [`prepare`].
