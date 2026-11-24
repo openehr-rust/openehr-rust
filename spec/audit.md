@@ -1158,9 +1158,13 @@ fit, `checked_total`'s overflow panic and the keyed-tag columns of both
 the `?` on `tag_mac_bytes`. `Chain::append` only produces 32-byte MACs, so no
 safe input reaches that arm without a seam; it stays under a floor of 1 rather
 than being excluded, because `W0.41` allows exclusion only for arms over
-external `#[non_exhaustive]` enums. Floors at this date: `openehr` 226 lines /
-43 functions, `openehr-sqlite` 16 / 19, `openehr-store` 1 / 0. Seven further workspaces
-are not yet measured.
+external `#[non_exhaustive]` enums. Floors at this date: `openehr` 203 lines /
+42 functions, `openehr-sqlite` 16 / 19, `openehr-store` 1 / 0. Seven further workspaces
+are not yet measured. Found while covering `cadl.rs` (2026-11-24): the refusal tables
+in its tests assert only `is_err()`, and their `allow_archetype` entries begin at the
+top level, where a slot is not legal, so they failed at offset 15 and never reached the
+slot parser; the new test `refusals_under_an_attribute_name_the_defect` asserts the
+message. The older tables are unchanged and may hide the same shape elsewhere.
 
 Found while testing, not fixed: `IntervalEvent::interval_start_time` subtracts
 a width one day at a time (`subtract_seconds`, `rm/data_structures.rs`), so a

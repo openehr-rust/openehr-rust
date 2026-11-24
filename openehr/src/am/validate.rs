@@ -1725,7 +1725,10 @@ mod tests {
         )]);
         let report = validate_against_archetype(&archetype, entry.as_node());
         assert_eq!(report.violations().len(), 1, "{report:?}");
-        assert_eq!(report.violations()[0].constraint(), "Primitive_kind_mismatch");
+        assert_eq!(
+            report.violations()[0].constraint(),
+            "Primitive_kind_mismatch"
+        );
     }
 
     /// A constraint kind the crate only carries (`C_UNSUPPORTED`) is reported

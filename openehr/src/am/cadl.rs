@@ -2112,6 +2112,81 @@ mod tests {
     use super::*;
     use crate::am::CObject;
 
+    /// Each of these is refused for the reason the message names.
+    ///
+    /// The older refusal tables only assert `is_err()`, and every
+    /// `allow_archetype` entry in them starts at the top level, where a slot is
+    /// not a legal start: they fail at offset 15 for that reason and never
+    /// reach the slot parser. Here each input sits under an attribute, where
+    /// the construct is legal, and the message is checked, so the refusal
+    /// asserted is the one the case was written for.
+    #[test]
+    fn refusals_under_an_attribute_name_the_defect() {
+        let cases: &[(&str, &str)] = &[
+            (
+                "allow_archetype ITEM[id2] matches { include",
+                "expected an assertion path, found end of input",
+            ),
+            (
+                "allow_archetype ITEM[id2] matches { include ?",
+                "expected `matches`, found end of input",
+            ),
+            (
+                "allow_archetype ITEM[id2] matches { ? }",
+                "expected `include`, `exclude`, or `}`, found `?`",
+            ),
+            (
+                "allow_archetype ITEM[id2] matches { include a }",
+                "expected `matches`, found `}`",
+            ),
+            (
+                "allow_archetype ITEM[id2] matches { include archetype_id/value matches {/a/} exclude",
+                "expected an assertion path, found end of input",
+            ),
+            (
+                "allow_archetype ITEM[id2] matches { include archetype_id/value matches {/a",
+                "malformed CONTAINED_REGEXP",
+            ),
+            (
+                "Integer[id3] matches {",
+                "expected an integer, found end of input",
+            ),
+            (
+                "Integer[id3] matches {1; -",
+                "expected an integer, found end of input",
+            ),
+            (
+                "Boolean[id3] matches {",
+                "expected `true` or `false`, found end of input",
+            ),
+            (
+                "Boolean[id3] matches {tr",
+                "expected `true` or `false`, found `tr`",
+            ),
+            ("String[id3] matches {\"abc", "expected a string literal"),
+            (
+                "Real[id3] matches {|1.0..2.0|, |3.0..4.0|} } } }",
+                "more than one C_REAL range",
+            ),
+            (
+                "Date[id3] matches {|2020-01-01..2021-01-01|, |2022-01-01..2023-01-01|} } } }",
+                "CPrimitive::Date",
+            ),
+            (
+                "Duration[id3] matches {|PT1H..PT2H|, |PT3H..PT4H|} } } }",
+                "CPrimitive::Duration",
+            ),
+        ];
+        for (tail, expected) in cases {
+            let source = format!("X[id1] matches {{ items matches {{ {tail}");
+            let message = parse_definition(&source).expect_err(&source).to_string();
+            assert!(
+                message.contains(expected),
+                "{source:?}: wanted {expected:?}, got {message:?}"
+            );
+        }
+    }
+
     /// The token-level helpers each have a "wrong token" and an "end of
     /// input" refusal; both are reached directly here.
     #[test]
