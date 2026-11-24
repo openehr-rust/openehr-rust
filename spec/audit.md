@@ -1158,9 +1158,17 @@ fit, `checked_total`'s overflow panic and the keyed-tag columns of both
 the `?` on `tag_mac_bytes`. `Chain::append` only produces 32-byte MACs, so no
 safe input reaches that arm without a seam; it stays under a floor of 1 rather
 than being excluded, because `W0.41` allows exclusion only for arms over
-external `#[non_exhaustive]` enums. Floors at this date: `openehr` 275 lines /
-48 functions, `openehr-sqlite` 16 / 19, `openehr-store` 1 / 0. Seven further workspaces
+external `#[non_exhaustive]` enums. Floors at this date: `openehr` 250 lines /
+44 functions, `openehr-sqlite` 16 / 19, `openehr-store` 1 / 0. Seven further workspaces
 are not yet measured.
+
+Found while testing, not fixed: `IntervalEvent::interval_start_time` subtracts
+a width one day at a time (`subtract_seconds`, `rm/data_structures.rs`), so a
+width of `P4000000000D` (accepted by the duration parser, which allows any
+`u32`) took 37 seconds to be refused on a development machine, measured once.
+A width of 800 000 days is refused at once, because the year underflows. A closed-form day count would remove the
+loop. Until then a caller that derives start times from untrusted widths pays
+for it in CPU.
 
 ## What this audit did not cover
 

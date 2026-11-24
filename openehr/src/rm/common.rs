@@ -1904,6 +1904,59 @@ mod tests {
     use crate::base::{HierObjectId, ObjectId};
     use crate::rm::data_types::DvText;
 
+    /// Every constructor names the invariant it refuses on, and a party read
+    /// as related without its relationship is a missing field, not a guess.
+    #[test]
+    fn constructors_and_decoders_refuse_what_they_cannot_hold() {
+        fn named<T>(r: Result<T, ParseError>) -> String {
+            r.err().map_or_else(String::new, |e| e.to_string())
+        }
+        let id = |v: u32| -> ObjectVersionId {
+            format!("87284370-2D4B-4E3D-A3F3-F303D2F4F34B::ehr1.example.org::{v}")
+                .parse()
+                .unwrap()
+        };
+        assert!(
+            named(Archetyped::new("openEHR-EHR-OBSERVATION.x.v1", "")).contains("Rm_version_valid")
+        );
+        assert!(
+            named(LocatableAttrs::new(DvText::new("n").unwrap().into(), ""))
+                .contains("Archetype_node_id_valid")
+        );
+        assert!(named(RevisionHistoryItem::new(id(1), Vec::new())).contains("Audit_valid"));
+        assert!(
+            named(AuditDetails::new(
+                "ehr1.example.org",
+                DvDateTime::new("2026-07-31T09:15:00Z").unwrap(),
+                "no-such-code",
+                PartyIdentified::named("Dr A Nurse").unwrap().into(),
+            ))
+            .contains("Change_type_valid")
+        );
+        let (_, owner) = versioned();
+        assert!(
+            named(OriginalVersion::new(
+                id(1),
+                None,
+                "no-such-state",
+                Some("x".to_string()),
+                audit(terminology::audit_change_type::CREATION),
+                owner,
+            ))
+            .contains("Lifecycle_state_valid")
+        );
+        let related = serde_json::from_str::<PartyProxy>(r#"{"_type":"PARTY_RELATED","name":"A"}"#);
+        assert!(related.unwrap_err().to_string().contains("relationship"));
+        let uid = HierObjectId::from_uid_str("6BA7B810-9DAD-11D1-80B4-00C04FD430C8").unwrap();
+        let c = Contribution::new(
+            uid.clone(),
+            vec![id(1)],
+            audit(terminology::audit_change_type::CREATION),
+        )
+        .unwrap();
+        assert_eq!(c.uid(), &uid);
+    }
+
     fn audit(code: &str) -> AuditDetails {
         AuditDetails::new(
             "ehr1.example.org",

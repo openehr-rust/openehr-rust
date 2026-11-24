@@ -1144,6 +1144,69 @@ mod tests {
     use super::*;
     use crate::rm::data_types::{DvCount, DvQuantity};
 
+    /// An item that is a cluster answers its identity as an element does; a
+    /// table cell that is a cluster is not an element; and both kinds of event
+    /// answer every accessor from the event they wrap.
+    #[test]
+    fn items_and_events_dispatch_to_the_kind_they_wrap() {
+        let el = r#"{"_type":"ELEMENT","name":{"value":"e"},"archetype_node_id":"at0004",
+                     "value":{"_type":"DV_COUNT","magnitude":1}}"#;
+        let cluster: Item = serde_json::from_str(&format!(
+            r#"{{"_type":"CLUSTER","name":{{"value":"c"}},"archetype_node_id":"at0003","items":[{el}]}}"#
+        ))
+        .unwrap();
+        assert_eq!(cluster.archetype_node_id(), "at0003");
+        assert_eq!(cluster.name().value(), "c");
+
+        let table: ItemTable = serde_json::from_str(&format!(
+            r#"{{"name":{{"value":"t"}},"archetype_node_id":"at0001","rows":[
+                {{"name":{{"value":"r"}},"archetype_node_id":"at0002","items":[
+                {{"_type":"CLUSTER","name":{{"value":"c"}},"archetype_node_id":"at0003","items":[{el}]}}]}}]}}"#
+        ))
+        .unwrap();
+        assert!(table.element_at_cell(0, 0).is_none());
+
+        let data = r#""data":{"_type":"ITEM_SINGLE","name":{"value":"d"},"archetype_node_id":"at0005",
+                              "item":{"_type":"ELEMENT","name":{"value":"e"},"archetype_node_id":"at0006",
+                              "value":{"_type":"DV_COUNT","magnitude":1}}}"#;
+        let state = data.replace("\"data\"", "\"state\"");
+        let head = r#""name":{"value":"ev"},"archetype_node_id":"at0007",
+                       "time":{"value":"2026-08-01T09:00:00Z"}"#;
+        let point: Event = serde_json::from_str(&format!(
+            r#"{{"_type":"POINT_EVENT",{head},{data},{state}}}"#
+        ))
+        .unwrap();
+        let interval: Event = serde_json::from_str(&format!(
+            r#"{{"_type":"INTERVAL_EVENT",{head},{data},{state},"width":{{"value":"PT5M"}},
+                "math_function":{{"value":"mean","defining_code":
+                  {{"terminology_id":{{"value":"openehr"}},"code_string":"146"}}}}}}"#
+        ))
+        .unwrap();
+        for (event, name) in [(&point, "POINT_EVENT"), (&interval, "INTERVAL_EVENT")] {
+            assert_eq!(event.type_name(), name);
+            assert_eq!(event.data().type_name(), "ITEM_SINGLE");
+            assert!(event.state().is_some());
+            assert_eq!(event.locatable().archetype_node_id(), "at0007");
+            assert!(event.archetype_details().is_none());
+        }
+    }
+
+    /// A width whose start falls outside the calendar this crate can compute
+    /// is refused, never placed on a guessed day.
+    #[test]
+    fn an_interval_start_beyond_the_calendar_is_refused() {
+        let data = ItemSingle::new(attrs("d", "at0002"), count_element("v", 1)).into();
+        let event = IntervalEvent::new(
+            attrs("huge", "at0006"),
+            DvDateTime::new("2026-07-31T08:00:00Z").unwrap(),
+            data,
+            DvDuration::new("P800000D").unwrap(),
+            terminology::event_math_function::TOTAL,
+        )
+        .unwrap();
+        assert!(event.interval_start_time().is_err());
+    }
+
     /// Every `ITEM_STRUCTURE` shape, decoded from JSON, answers the same
     /// questions through the enum as through its own type.
     #[test]
