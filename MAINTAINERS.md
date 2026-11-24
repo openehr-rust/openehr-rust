@@ -90,7 +90,7 @@ No document can conjure a succession plan. What is true instead:
 - **Nothing new ships.** No release, no fix, no advisory. A dependent stays on
   the version it pinned, indefinitely.
 - **The work is not lost, and forking is the intended remedy.** The licence is a
-  five-way choice (see [`LICENSE.md`](LICENSE.md)), the history is public, and —
+  seven-way choice (see [`LICENSE.md`](LICENSE.md)), the history is public, and —
   unusually — the reasoning is in the tree rather than in someone's head: the
   specifications in [`spec/`](spec/index.md), the operational guides in
   [`agents/`](agents/index.md), and the register of known defects in

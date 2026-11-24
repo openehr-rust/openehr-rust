@@ -146,7 +146,7 @@ conformance matrix publishes where the boundary is.
 
 ## 6. Licensing and provenance
 
-The project offers a five-way licence choice ([`LICENSE.md`](LICENSE.md)). The
+The project offers a seven-way licence choice ([`LICENSE.md`](LICENSE.md)). The
 position on generated output follows the reasoning published by the Apache
 Software Foundation and LLVM rather than a convenient shortcut: a tool's output
 does not launder anyone's copyright, the provenance of generated text is not
