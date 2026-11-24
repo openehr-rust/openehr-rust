@@ -1644,6 +1644,87 @@ mod tests {
     use crate::rm::data_structures::{Element, ItemSingle};
     use crate::rm::data_types::{DataValue, DvCount};
 
+    fn entry_of(kind: &str, extra: &str) -> Entry {
+        serde_json::from_str(&format!(
+            r#"{{"_type":"{kind}","name":{{"value":"n"}},
+              "archetype_node_id":"openEHR-EHR-{kind}.x.v1",
+              "archetype_details":{{"archetype_id":"openEHR-EHR-{kind}.x.v1","rm_version":"1.1.0"}},
+              "language":{{"terminology_id":{{"value":"ISO_639-1"}},"code_string":"en"}},
+              "encoding":{{"terminology_id":{{"value":"IANA_character-sets"}},"code_string":"UTF-8"}},
+              "subject":{{"_type":"PARTY_SELF"}}{extra}}}"#
+        ))
+        .unwrap_or_else(|e| panic!("{kind}: {e}"))
+    }
+
+    /// Every `ENTRY` kind, decoded from JSON, answers the class-name and
+    /// archetype questions through the enum (a dispatcher that fell through
+    /// to one arm would answer `OBSERVATION` for all of them), and a content
+    /// item reports the locatable of whichever it holds.
+    #[test]
+    fn every_entry_kind_dispatches_its_class_name_and_archetype() {
+        let tree =
+            r#"{"_type":"ITEM_TREE","name":{"value":"d"},"archetype_node_id":"at0001","items":[]}"#;
+        let history = r#"{"name":{"value":"h"},"archetype_node_id":"at0001",
+                          "origin":{"value":"2026-08-01T09:00:00Z"}}"#;
+        let entries = [
+            ("OBSERVATION", format!(r#","data":{history}"#)),
+            ("EVALUATION", format!(r#","data":{tree}"#)),
+            ("ADMIN_ENTRY", format!(r#","data":{tree}"#)),
+            ("INSTRUCTION", r#","narrative":{"value":"n"}"#.to_owned()),
+            (
+                "ACTION",
+                format!(
+                    r#","time":{{"value":"2026-08-01T09:00:00Z"}},"description":{tree},
+                       "ism_transition":{{"current_state":{{"value":"x","defining_code":
+                        {{"terminology_id":{{"value":"openehr"}},"code_string":"245"}}}}}}"#
+                ),
+            ),
+        ];
+        for (kind, extra) in entries {
+            let entry = entry_of(kind, &extra);
+            assert_eq!(entry.type_name(), kind);
+            let details = entry.archetype_details().expect("archetype root");
+            assert_eq!(
+                details.archetype_id().to_string(),
+                format!("openEHR-EHR-{kind}.x.v1")
+            );
+            let item = ContentItem::from(entry.clone());
+            assert_eq!(item.locatable().name().value(), "n");
+            assert_eq!(item.entries().count(), 1);
+        }
+    }
+
+    #[test]
+    fn an_ehr_reports_its_identifiers_and_creation_time() {
+        let id = |u: &str| HierObjectId::from_uid_str(u).unwrap();
+        let reference = |ty: &str, u: &str| {
+            ObjectRef::new("local", ty, crate::base::ObjectId::HierObjectId(id(u))).unwrap()
+        };
+        let ehr = Ehr::new(
+            id("11111111-2222-3333-4444-555555555555"),
+            id("87284370-2D4B-4E3D-A3F3-F303D2F4F34B"),
+            reference(
+                "VERSIONED_EHR_STATUS",
+                "5B1FBA00-6C2E-4E9B-9A9C-DDEDD8B87C43",
+            ),
+            reference(
+                "VERSIONED_EHR_ACCESS",
+                "87284370-2D4B-4E3D-A3F3-F303D2F4F34B",
+            ),
+            DvDateTime::new("2026-08-01T09:00:00Z").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            ehr.system_id().to_string(),
+            "11111111-2222-3333-4444-555555555555"
+        );
+        assert_eq!(
+            ehr.ehr_id().to_string(),
+            "87284370-2D4B-4E3D-A3F3-F303D2F4F34B"
+        );
+        assert_eq!(ehr.time_created().as_str(), "2026-08-01T09:00:00Z");
+    }
+
     #[test]
     fn excluding_a_record_from_queries_is_reported_and_leaves_it_writable() {
         let status = EhrStatus::new(

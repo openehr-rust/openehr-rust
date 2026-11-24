@@ -1158,8 +1158,8 @@ fit, `checked_total`'s overflow panic and the keyed-tag columns of both
 the `?` on `tag_mac_bytes`. `Chain::append` only produces 32-byte MACs, so no
 safe input reaches that arm without a seam; it stays under a floor of 1 rather
 than being excluded, because `W0.41` allows exclusion only for arms over
-external `#[non_exhaustive]` enums. Floors at this date: `openehr` 341 lines /
-59 functions, `openehr-sqlite` 16 / 19, `openehr-store` 1 / 0. Seven further workspaces
+external `#[non_exhaustive]` enums. Floors at this date: `openehr` 300 lines /
+50 functions, `openehr-sqlite` 16 / 19, `openehr-store` 1 / 0. Seven further workspaces
 are not yet measured.
 
 ## What this audit did not cover

@@ -906,6 +906,54 @@ mod tests {
         assert_eq!(Node::Scalar(Scalar::Integer(2)).type_name(), "primitive");
     }
 
+    /// Every node kind answers the four questions a path walk asks of it —
+    /// class, node id, archetype details, name — from the thing it wraps, not
+    /// from a neighbouring arm.
+    #[test]
+    fn every_structural_node_reports_what_it_wraps() {
+        use crate::rm::common::Locatable as _;
+        use crate::rm::data_structures::{Cluster, Element, History};
+        use crate::rm::ehr::Section;
+        let head = |n: &str, id: &str| {
+            format!(
+                r#""name":{{"value":"{n}"}},"archetype_node_id":"{id}",
+                   "archetype_details":{{"archetype_id":"openEHR-EHR-CLUSTER.x.v1","rm_version":"1.1.0"}}"#
+            )
+        };
+        let element: Element = serde_json::from_str(&format!(
+            r#"{{{},"value":{{"_type":"DV_COUNT","magnitude":1}}}}"#,
+            head("el", "at0004")
+        ))
+        .unwrap();
+        let cluster: Cluster = serde_json::from_str(&format!(
+            r#"{{{},"items":[{{"_type":"ELEMENT",{},"value":{{"_type":"DV_COUNT","magnitude":1}}}}]}}"#,
+            head("cl", "at0003"),
+            head("el", "at0004")
+        ))
+        .unwrap();
+        let section: Section =
+            serde_json::from_str(&format!(r#"{{{},"items":[]}}"#, head("se", "at0002"))).unwrap();
+        let history: History = serde_json::from_str(&format!(
+            r#"{{{},"origin":{{"value":"2026-08-01T09:00:00Z"}}}}"#,
+            head("hi", "at0001")
+        ))
+        .unwrap();
+
+        let nodes = [
+            (element.as_node(), "ELEMENT", "el"),
+            (cluster.as_node(), "CLUSTER", "cl"),
+            (section.as_node(), "SECTION", "se"),
+            (history.as_node(), "HISTORY", "hi"),
+        ];
+        for (node, class, name) in nodes {
+            assert_eq!(node.type_name(), class);
+            assert_eq!(node.name(), Some(name), "{class}");
+            assert!(node.archetype_node_id().is_some(), "{class}");
+            assert!(node.archetype_details().is_some(), "{class}");
+        }
+        assert_eq!(element.archetype_node_id(), "at0004");
+    }
+
     #[test]
     fn nodes_report_their_class_name_id_and_name() {
         let comp = blood_pressure();
