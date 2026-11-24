@@ -1033,7 +1033,7 @@ pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
     // naive executor gets wrong: trusting the index's own indexed version
     // uid instead of asking the store for the container's *current* one
     // would answer with a composition this record no longer has. Found
-    // exactly this way, via `openehr-loco`'s own HTTP fixture reusing
+    // exactly this way, via `openehr-axa`'s own HTTP fixture reusing
     // `Encounter 1` for two different containers, one of which was later
     // deleted — the shared suite gets its own direct case for it here
     // rather than relying on that coincidence to keep catching it.

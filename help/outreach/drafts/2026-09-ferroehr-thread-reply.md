@@ -118,7 +118,7 @@ post").
   the answer, not a number from a laptop.
 - It does not promise dates for the ambiguities register, AQL execution, or
   OPT — all in `tasks.md`, none scheduled.
-- It does not describe `openehr-loco` as an openEHR REST API; it has eleven
+- It does not describe `openehr-axa` as an openEHR REST API; it has eleven
   endpoints and sits outside the conformance ladder (`W0.32`).
 
 ## Trademarks

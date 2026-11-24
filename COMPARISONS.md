@@ -48,7 +48,7 @@ this afternoon, one of the projects below is the better answer.
   (`openehr/spec/corpus.md`) — a parser, not archetype support. Archie
   is the library for that work today, and every CDR above validates a
   composition against an uploaded template, which this project does not.
-- **…you need the openEHR REST API as a supported product.** `openehr-loco` is
+- **…you need the openEHR REST API as a supported product.** `openehr-axa` is
   an HTTP service over the SQLite store, it is `publish = false`, and it sits
   outside the conformance ladder entirely (`W0.32`) because every rung on that
   ladder is defined by DDL, a `Store`, or a database server. It states evidence,

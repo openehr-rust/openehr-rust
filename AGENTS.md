@@ -44,11 +44,11 @@ crates.io at 0.10.0; the other ten are `publish = false`.
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
 | `openehr-mssql` | SQL Server dialect | **Schema** |
 | `openehr-oracle` | Oracle dialect | **Schema** |
-| `openehr-loco` | HTTP service on Axum and Axa; verifies PASETO `v4.public` | outside the ladder (`W0.32`) |
+| `openehr-axa` | HTTP service on Axum and Axa; verifies PASETO `v4.public` | outside the ladder (`W0.32`) |
 | `openehr-assets` | regenerates `assets/`, and fails the build on a stale one | not published |
 | `openehr-fuzz`, `openehr-<engine>-fuzz` × 6 | fuzz harnesses | not published |
 
-`openehr-loco` states **evidence** rather than a level: every rung on the ladder
+`openehr-axa` states **evidence** rather than a level: every rung on the ladder
 is defined by DDL, a `Store`, or a database server, and a service crate is none
 of those (`W0.32`).
 
@@ -83,13 +83,13 @@ cd openehr && cargo test
 # theoretical: a lint that fires only under it passed locally and failed in CI.
 cd openehr && RUSTFLAGS="-D warnings" cargo clippy --all-targets
 
-# Every buildable crate. The list is ten, not eight: `openehr-loco` and
+# Every buildable crate. The list is ten, not eight: `openehr-axa` and
 # `openehr-assets` build and test like the rest, and `openehr-assets` spent its
 # whole life outside every matrix with nine tests nobody ran (`spec/audit.md`
 # W-12).
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \
          openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
-         openehr-loco openehr-assets; do
+         openehr-axa openehr-assets; do
   (cd "$d" && cargo test --quiet \
      && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) || echo "FAIL $d"
 done
@@ -249,9 +249,9 @@ None of these crates is published (`publish = false`).
 ### Benchmarks
 
 `openehr/benches/rm.rs`, `openehr-store/benches/store.rs`,
-`openehr-sqlite/benches/store.rs`, and `openehr-loco/benches/http.rs` — the
+`openehr-sqlite/benches/store.rs`, and `openehr-axa/benches/http.rs` — the
 last two added 2026-09-07, once a real connection (`openehr-sqlite`) and a
-real router (`openehr-loco`) existed to benchmark honestly; see
+real router (`openehr-axa`) existed to benchmark honestly; see
 `BENCHMARKS.md` for why `openehr-store` itself only measures projection and
 verification, not a commit or a read.
 

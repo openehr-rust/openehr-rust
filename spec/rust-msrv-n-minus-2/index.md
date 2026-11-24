@@ -31,7 +31,7 @@ two failure modes this whole specification tree is about.
 
 **It was not checked, and it was false.** No job ever built this repository on
 1.90. Run by hand — `cargo +1.90 check --all-targets --all-features`, per crate,
-which is the whole method — six crates passed and **`openehr-loco` failed**: its
+which is the whole method — six crates passed and **`openehr-axa` failed**: its
 own framework, `loco-rs` 1.0.1, requires 1.94. "Requires Rust 1.90+" had been
 wrong for that crate since the day it was written, and nothing in the repository
 could tell. That is `W0.3` exactly, and the six that did build were luck rather

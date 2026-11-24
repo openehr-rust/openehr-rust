@@ -122,7 +122,7 @@ PATTERNS: list[tuple[str, str, str]] = [
     ("crates", rf"\*\*all ({NUMBER})\*\* crates declare the same seven licences", "the crate count"),
     ("unpublished", rf"the other ({NUMBER}) are `publish = false`", "the unpublished count"),
     ("unpublished", rf"The other ({NUMBER}) MUST declare `publish = false`", "the unpublished count"),
-    ("unpublished", rf"the other ({NUMBER}) — `openehr-loco`", "the unpublished count"),
+    ("unpublished", rf"the other ({NUMBER}) — `openehr-axa`", "the unpublished count"),
     ("fuzz_crates", rf"({NUMBER}) fuzz harnesses", "the fuzz-crate count"),
     ("fuzz_crates", rf"({NUMBER}) fuzz crates are `publish = false`", "the fuzz-crate count"),
     ("fuzz_crates", rf"({NUMBER}) fuzz crates are not built by the `msrv` job", "the fuzz-crate count"),
@@ -760,7 +760,7 @@ def check_changelog_is_current() -> int:
     changed = [
         f
         for f in git("diff", "--name-only", f"{release}..HEAD").splitlines()
-        if f.endswith(".rs") and "/src/" in f and not f.startswith("openehr-loco/")
+        if f.endswith(".rs") and "/src/" in f and not f.startswith("openehr-axa/")
     ]
     if not changed:
         print("no library source changed since the last release")

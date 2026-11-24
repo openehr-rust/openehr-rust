@@ -1,5 +1,5 @@
 //! A throwaway PASETO v4 keypair and a token signed by it, for testing this
-//! service by hand or with `openehr-loco/scripts/conformance.sh`.
+//! service by hand or with `openehr-axa/scripts/conformance.sh`.
 //!
 //! Not a credential-management tool: the secret key exists only in this
 //! process's memory and is discarded when it exits. Anyone running this gets

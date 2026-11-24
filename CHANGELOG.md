@@ -20,7 +20,7 @@ together.
   a database that fails these probes for another reason now errors instead of
   proceeding.
 - **Input rejection** (`spec/rust-checked-arithmetic` RCA-IN-2..7). A supplied
-  invalid input is an error, never a clamp or a default. `openehr-loco`:
+  invalid input is an error, never a clamp or a default. `openehr-axa`:
   `_count` outside `1 ..= 100` (including `0`) is now 400 naming `_count`
   instead of being clamped to 100; an absent `_count` is still 20. A
   non-Unicode `OPENEHR_SQLITE_PATH` fails `open_store` instead of using
@@ -125,7 +125,7 @@ is why this is a minor bump (`RV6`).
   `Store::find_compositions_by_archetype` and `Store::latest_version` —
   no dialect, no SQL, no driver — so it works against any engine with a
   `Store` today: `SQLite` and `PostgreSQL`, both passing the new shared
-  conformance test, `conformance::run_aql`. `openehr-loco` gains
+  conformance test, `conformance::run_aql`. `openehr-axa` gains
   `POST /openehr/v1/query/aql` (ITS-REST's own request/response shape —
   `q` and `query_parameters` in, `q`/`columns`/`rows` out), mapping the
   new `StoreError::AqlUnsupported` to `400` — a caller-fixable request,
@@ -377,7 +377,7 @@ is why this is a minor bump (`RV6`).
   implementation with no `commit_ehr_status` will not compile against this
   release. This is the storage prerequisite thread #5/#6's `is_modifiable`
   sequencing item needs (`tasks.md`, re-scoped 2026-09-06); the commit rule
-  itself and `openehr-loco`'s `GET`/`PUT …/ehr_status` endpoints are not
+  itself and `openehr-axa`'s `GET`/`PUT …/ehr_status` endpoints are not
   part of this change.
 - **Breaking.** `openehr-sqlite::SqliteStore::commit_composition` now
   refuses a content commit — a `COMPOSITION`, a `FOLDER` — when the `EHR`'s
@@ -388,12 +388,12 @@ is why this is a minor bump (`RV6`).
   `EHR_STATUS` version with `is_modifiable = true`, via
   `commit_ehr_status`) admits the content again — even later in the same
   `CONTRIBUTION`, since the check re-reads `is_modifiable` fresh on every
-  call rather than caching an answer across a request. `openehr-loco` maps
+  call rather than caching an answer across a request. `openehr-axa` maps
   the new variant to `409 Conflict`, alongside `Conflict` and `Commit`, for
   the same reason both are already there: the request is well-formed and
   conflicts with the record's current state, not malformed. This is
   thread #5/#6's `is_modifiable` sequencing item itself (`tasks.md`),
-  built on the prerequisite above; `openehr-loco`'s `GET`/`PUT …/ehr_status`
+  built on the prerequisite above; `openehr-axa`'s `GET`/`PUT …/ehr_status`
   endpoints remain a separate, not-yet-done slice.
 
 ## 0.9.0 — 2026-09-02
@@ -700,7 +700,7 @@ the checker enforces it.** The shape is `<short description>. <notice> This
 project is an independent work.` — 0.7.2's descriptions carry the notice but
 not the closing independent-work sentence, and `openehr-mysql`'s runs "DDL"
 straight into "openEHR®" with no full stop. Both are immutable in 0.7.2;
-this release is the remedy. `openehr-loco` carries the same shape by the
+this release is the remedy. `openehr-axa` carries the same shape by the
 lockstep convention even though it is never published.
 
 **`scripts/check-trademarks.py` now verifies the descriptions**: every
@@ -908,7 +908,7 @@ never a silent change in behaviour — which is the property that made the
   clear message rather than miscompiling, so the damage is bounded.
 
   1.90 was never verified: no job had ever compiled this repository with a 1.90
-  toolchain, and the claim was **false** for `openehr-loco`, whose framework
+  toolchain, and the claim was **false** for `openehr-axa`, whose framework
   requires 1.94. CI now derives N−3 from the stable toolchain it installs and
   builds and tests every crate on it (`spec/audit.md` **W-09**).
 

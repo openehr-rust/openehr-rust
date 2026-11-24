@@ -28,14 +28,14 @@ spelling — the five-table schema, the projection onto rows, the commit rules,
 and the conformance suite. Six engine crates each supply one `Dialect`, owning
 exactly four things: type spellings, identifier quoting, placeholder style,
 and append-only enforcement. Only `openehr-sqlite` also has a `Store`.
-`openehr-loco` puts an HTTP API in front of it, outside the conformance
+`openehr-axa` puts an HTTP API in front of it, outside the conformance
 ladder (`W0.32`). `openehr-assets` regenerates the committed DDL/schema files
 and fails the build if one is stale. Eight fuzz harnesses drive 21 targets —
 six over the dialects, `openehr-fuzz` over the Reference Model parsers, and
 `openehr-store-fuzz` over projection and the integrity check.
 
 The eight publishable crates (`openehr`, `openehr-store`, and the six dialect
-crates) are live on crates.io at **0.10.0**; the other ten — `openehr-loco`,
+crates) are live on crates.io at **0.10.0**; the other ten — `openehr-axa`,
 `openehr-assets`, and the eight fuzz harnesses — are `publish = false`.
 [`publishing.md`](publishing.md) is the file that tracks versions; this
 paragraph restates one and is not the place to change it. Each engine crate

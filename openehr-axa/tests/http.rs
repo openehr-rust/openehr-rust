@@ -10,7 +10,7 @@
 //!
 //! # How the router is built
 //!
-//! Through [`AppRoutes::into_app`](axa::routes::AppRoutes::into_app), the same call [`openehr_loco::app::router`] builds on, rather
+//! Through [`AppRoutes::into_app`](axa::routes::AppRoutes::into_app), the same call [`openehr_axa::app::router`] builds on, rather
 //! than a hand-assembled router. Axa normalises a route's prefix and path when
 //! it collects them — `"/composition"` plus `"/"` becomes `/composition`, not
 //! `/composition/` — so a test that concatenated them itself would exercise
@@ -30,7 +30,7 @@ use openehr::{
     },
     terminology::{audit_change_type, version_lifecycle_state},
 };
-use openehr_loco::{
+use openehr_axa::{
     access::{AccessLog, SharedAccessLog},
     app::SharedOpenehrStore,
     auth::{PasetoVerifier, SharedVerifier},
@@ -198,7 +198,7 @@ impl Served {
                 .expect("ehr_status v1");
         }
 
-        let ctx = openehr_loco::app::test_context();
+        let ctx = openehr_axa::app::test_context();
         ctx.shared_store.insert::<SharedVerifier>(Arc::new(
             PasetoVerifier::new(&paserk, None, None, None).expect("verifier"),
         ));
@@ -208,7 +208,7 @@ impl Served {
             .insert::<SharedAccessLog>(Arc::new(access_log));
 
         Self {
-            router: openehr_loco::app::routes()
+            router: openehr_axa::app::routes()
                 .into_app(ctx.clone())
                 .expect("router"),
             authorization: format!("Bearer {token}"),
@@ -566,7 +566,7 @@ async fn a_service_without_its_store_reports_503_and_not_404() {
     // `before_run` failed or has not finished. The distinction matters to a
     // load balancer: 503 is "not me, not yet", and 404 is "this will never
     // work", and only one of them gets retried.
-    let ctx = openehr_loco::app::test_context();
+    let ctx = openehr_axa::app::test_context();
     let pair = AsymmetricKeyPair::<V4>::generate().expect("keypair");
     let mut paserk = String::new();
     pair.public.fmt(&mut paserk).expect("PASERK");
@@ -574,7 +574,7 @@ async fn a_service_without_its_store_reports_503_and_not_404() {
         PasetoVerifier::new(&paserk, None, None, None).expect("verifier"),
     ));
 
-    let router = openehr_loco::app::routes()
+    let router = openehr_axa::app::routes()
         .into_app(ctx.clone())
         .expect("router");
     let mut claims = Claims::new().expect("claims");
@@ -921,7 +921,7 @@ async fn a_read_that_cannot_be_recorded_is_not_served() {
     // access log was never installed, which is what a failed `before_run`
     // leaves behind.
     let served = Served::new();
-    let ctx = openehr_loco::app::test_context();
+    let ctx = openehr_axa::app::test_context();
     ctx.shared_store.insert::<SharedVerifier>(Arc::new(
         PasetoVerifier::new(&served.paserk, None, None, None).expect("verifier"),
     ));
@@ -932,7 +932,7 @@ async fn a_read_that_cannot_be_recorded_is_not_served() {
             store
         })));
 
-    let router = openehr_loco::app::routes()
+    let router = openehr_axa::app::routes()
         .into_app(ctx.clone())
         .expect("router");
     let response = router
@@ -1095,7 +1095,7 @@ async fn a_version_view_carries_a_full_chain_digest() {
 #[tokio::test]
 async fn ehr_status_answers_404_when_nothing_has_ever_been_committed() {
     // The ordinary case today: `POST /ehr` mints no `EHR_STATUS`
-    // (`openehr_loco::controllers::ehr_status`'s own module doc). A `200`
+    // (`openehr_axa::controllers::ehr_status`'s own module doc). A `200`
     // with a fabricated `is_modifiable: true` body would assert a committed
     // fact that does not exist; `404` says exactly what is true.
     let served = Served::new();
@@ -1297,7 +1297,7 @@ fn every_store_error_maps_to_a_distinct_status() {
     // arms could be deleted with every test still passing — a duplicate commit
     // answering `500` instead of `409` tells a caller to retry when it should
     // re-read.
-    use openehr_loco::controllers::status_for;
+    use openehr_axa::controllers::status_for;
     use openehr_store::StoreError;
 
     let cases = [

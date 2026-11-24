@@ -45,12 +45,12 @@ without tracking it (`spec/audit.md` **W-10**).
 | `openehr-mariadb` | MariaDB 11.4 dialect | **Schema** |
 | `openehr-mssql` | SQL Server dialect | **Schema** |
 | `openehr-oracle` | Oracle dialect | **Schema** |
-| `openehr-loco` | HTTP service: Axum, Axa, PASETO verification | not published |
+| `openehr-axa` | HTTP service: Axum, Axa, PASETO verification | not published |
 | `openehr-assets` | regenerates `assets/`; fails on a stale one | not published |
 | `openehr-fuzz` | fuzz harness for the RM parsers | not published |
 | `openehr-<engine>-fuzz` × 6 | dialect fuzz harnesses | not published |
 
-`openehr-loco` is outside the conformance ladder: every rung there is defined by
+`openehr-axa` is outside the conformance ladder: every rung there is defined by
 DDL, a `Store`, or a database server (`W0.32`). It states evidence instead.
 
 ## Commands
@@ -59,14 +59,14 @@ DDL, a `Store`, or a database server (`W0.32`). It states evidence instead.
 cd <crate> && cargo test
 # `RUSTFLAGS="-D warnings"` is what CI sets. Without it a lint that fires only
 # under `-D warnings` passes locally and fails in CI -- which is how
-# `openehr-loco` went red on `clippy::unused_async_trait_impl` after a local
+# `openehr-axa` went red on `clippy::unused_async_trait_impl` after a local
 # run reported clean.
 cd <crate> && RUSTFLAGS="-D warnings" cargo clippy --all-targets
 
 # everything
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \
          openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
-         openehr-loco openehr-assets; do
+         openehr-axa openehr-assets; do
   (cd "$d" && cargo test --quiet \
      && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) \
     || echo "FAIL $d"

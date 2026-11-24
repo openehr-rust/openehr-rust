@@ -47,7 +47,7 @@ assert_eq!(back, composition);
 | [`openehr-mariadb`](openehr-mariadb) | MariaDB 11.4 dialect | **Schema** |
 | [`openehr-mssql`](openehr-mssql) | SQL Server dialect | **Schema** |
 | [`openehr-oracle`](openehr-oracle) | Oracle Database dialect | **Schema** |
-| [`openehr-loco`](openehr-loco) | An HTTP API server over `openehr-sqlite`, on Axum and Axa | not on the ladder |
+| [`openehr-axa`](openehr-axa) | An HTTP API server over `openehr-sqlite`, on Axum and Axa | not on the ladder |
 | [`openehr-assets`](openehr-assets) | Regenerates the committed DDL/schema files; fails the build if they are stale | tooling |
 
 **Levels are claims about what has been verified**, not about what has been
@@ -60,10 +60,10 @@ written:
   shared conformance suite passing.
 - **Verified** — Store, re-checked in CI on every commit. SQLite and PostgreSQL are here.
 
-`openehr-loco` is **outside this ladder entirely**: every rung on it is defined
+`openehr-axa` is **outside this ladder entirely**: every rung on it is defined
 by DDL, a `Store` implementation, or a database server, and an HTTP service is
 none of those (`W0.32`). It states evidence instead of a level — see
-[its own README](openehr-loco/README.md).
+[its own README](openehr-axa/README.md).
 
 Full definitions in [`spec/index.md`](spec/index.md); current status in
 [`openehr-store/spec/conformance.md`](openehr-store/spec/conformance.md).
@@ -380,7 +380,7 @@ refuse `UPDATE` and `DELETE` with that row present and intact afterwards.
 
 ## An HTTP service, if you want one
 
-None of the above talks HTTP. [`openehr-loco`](openehr-loco) is a separate,
+None of the above talks HTTP. [`openehr-axa`](openehr-axa) is a separate,
 optional, **not published** crate that puts a RESTful API in front of
 `openehr-sqlite`: PASETO `v4.public` bearer auth (verify-only — this service
 never signs), `410 Gone` for a deleted composition against `404` for one that
@@ -392,10 +392,10 @@ It depends on the storage crates; nothing depends on it, and deleting it changes
 nothing else (`S1.7`). Its job is narrow by design — translate HTTP to store
 calls and get the status codes right — and it adds no clinical behaviour of its
 own. Details, and what it does not yet demonstrate, are in
-[its own README](openehr-loco/README.md).
+[its own README](openehr-axa/README.md).
 
 ```sh
-cd openehr-loco
+cd openehr-axa
 OPENEHR_SQLITE_PATH=openehr.sqlite3 \
 OPENEHR_PASETO_PUBLIC_KEYS=k4.public.… \
   cargo run -- start
@@ -503,7 +503,7 @@ archetype already merged in what a parser and flattening would have. The
 conformance matrix marks each unimplemented requirement `spec`, and `lib:A-40`
 keeps the gap countable.
 
-This table is the **library's** scope. `openehr-loco` (above) is a separate,
+This table is the **library's** scope. `openehr-axa` (above) is a separate,
 optional, unpublished crate that puts a narrow REST API in front of the store —
 it does not change what the library itself implements, and does not add
 archetype validation, AQL execution, or any of the rest of this table.
@@ -601,7 +601,7 @@ openehr-store/             engine-agnostic persistence
   scripts/verify-schema.sh Dialect -> Schema verification
 openehr-<engine>/          one Dialect each; sqlite also has a Store
   spec/14-<engine>-dialect.md   that dialect's annex and departures
-openehr-loco/              HTTP API server, outside the conformance ladder; not published
+openehr-axa/              HTTP API server, outside the conformance ladder; not published
 openehr-assets/            regenerates committed DDL/schema files; not published
 openehr-fuzz/              fuzz harness for the RM parsers; not published
 openehr-store-fuzz/        fuzz harness for projection and integrity; not published
@@ -612,7 +612,7 @@ openehr-<engine>-fuzz/     fuzz harness per dialect; not published
 
 Eighteen crates, **each its own Cargo workspace** — run cargo from inside a
 crate directory. Eight are published (`openehr`, `openehr-store`, and the six
-dialect crates); the other ten — `openehr-loco`, `openehr-assets`, and the
+dialect crates); the other ten — `openehr-axa`, `openehr-assets`, and the
 eight fuzz harnesses — are not.
 
 ## Project documents
@@ -654,7 +654,7 @@ library, not building it.
 ```sh
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \
          openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
-         openehr-loco openehr-assets; do
+         openehr-axa openehr-assets; do
   (cd "$d" && cargo test --quiet \
      && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) \
     || echo "FAIL $d"

@@ -1,4 +1,4 @@
-# cargo-nextest configuration for the openehr-loco crate. Opt-in and local: CI keeps
+# cargo-nextest configuration for the openehr-axa crate. Opt-in and local: CI keeps
 # using `cargo test`. Run `cargo nextest run` from this directory (each crate is
 # its own workspace); nextest does not run doctests, so also run
 # `cargo test --doc`.

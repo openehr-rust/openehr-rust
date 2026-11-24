@@ -1,4 +1,4 @@
-# Multi-stage build for `openehr-loco`, the one crate here that is a service
+# Multi-stage build for `openehr-axa`, the one crate here that is a service
 # rather than a library — see `AGENTS.md` for why it is versioned outside the
 # eight published crates and never itself published to crates.io.
 #
@@ -26,8 +26,8 @@ FROM docker.io/library/rust:1.98-bookworm AS builder
 WORKDIR /build
 
 # The crate and its two path dependencies, in the shape `cargo build` needs
-# to resolve them — `openehr-loco` depends on `openehr`, `openehr-store`, and
-# `openehr-sqlite` by path (see `openehr-loco/Cargo.toml`), and each of those
+# to resolve them — `openehr-axa` depends on `openehr`, `openehr-store`, and
+# `openehr-sqlite` by path (see `openehr-axa/Cargo.toml`), and each of those
 # is its own Cargo workspace (`CLAUDE.md`: "There is no root workspace").
 # Copying only these four keeps the build's own cache invalidated only by
 # what the binary can actually depend on, not by an unrelated dialect crate's
@@ -35,10 +35,10 @@ WORKDIR /build
 COPY openehr ./openehr
 COPY openehr-store ./openehr-store
 COPY openehr-sqlite ./openehr-sqlite
-COPY openehr-loco ./openehr-loco
+COPY openehr-axa ./openehr-axa
 
-WORKDIR /build/openehr-loco
-RUN cargo build --release --bin openehr-loco
+WORKDIR /build/openehr-axa
+RUN cargo build --release --bin openehr-axa
 
 FROM docker.io/library/debian:bookworm-slim AS runtime
 
@@ -62,10 +62,10 @@ RUN useradd --system --create-home --home-dir /home/openehr openehr
 USER openehr
 WORKDIR /home/openehr
 
-COPY --from=builder /build/openehr-loco/target/release/openehr-loco /usr/local/bin/openehr-loco
+COPY --from=builder /build/openehr-axa/target/release/openehr-axa /usr/local/bin/openehr-axa
 
 # Axa reads no configuration file: its settings are environment variables with
-# defaults in `openehr_loco::app::defaults`. A release build already answers
+# defaults in `openehr_axa::app::defaults`. A release build already answers
 # `production` when `APP_ENV` is unset; it is stated here so that the image's
 # behaviour does not depend on how it was built. `BINDING` is the one setting
 # that must differ from the default inside a container: `localhost` is the
@@ -85,5 +85,5 @@ VOLUME ["/home/openehr/data"]
 
 EXPOSE 5150
 
-ENTRYPOINT ["openehr-loco"]
+ENTRYPOINT ["openehr-axa"]
 CMD ["start"]

@@ -14,7 +14,7 @@ every requirement, so CI can check it covers each **exactly once**
 library matrix"). `spec/databases/conformance-matrix.md` is not that shape: it
 is five topic tables — per-engine, store-level, service, cross-cutting, and
 "not implemented in the store" — and a requirement can legitimately appear in
-more than one. `PR12.5` is marked satisfied in the service table (`openehr-loco`
+more than one. `PR12.5` is marked satisfied in the service table (`openehr-axa`
 audits reads) and listed absent in "not implemented in the store" (a program
 embedding `openehr-store` directly gets none of that), and both statements are
 true at once. An "exactly once" checker would flag that as a defect; it is the

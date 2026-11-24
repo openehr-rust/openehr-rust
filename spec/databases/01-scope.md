@@ -81,7 +81,7 @@ reader deciding whether to use these crates needs the reason more than the fact.
   intact.
 
   What changed is the sentence "nothing in this repository builds either".
-  `openehr-loco` now does — a service crate that depends *inward* on
+  `openehr-axa` now does — a service crate that depends *inward* on
   `openehr-sqlite` and can be deleted without touching anything it depends on.
   Amending rather than quietly contradicting, because a specification that
   disagrees with the tree is worse than one that is narrower than expected
@@ -113,7 +113,7 @@ reader deciding whether to use these crates needs the reason more than the fact.
   deployment (§12, `lib:X11.1`).
 
   A *service* crate may go one step further and **verify** an assertion the
-  deployment signed — `openehr-loco` does (`PR12.13`–`PR12.15`). That is
+  deployment signed — `openehr-axa` does (`PR12.13`–`PR12.15`). That is
   checking a signature, not establishing an identity, and it changes nothing
   above: `openehr`, `openehr-store`, and the six engine crates still contain no
   credential, no key, and no principal. Neither the core nor any service

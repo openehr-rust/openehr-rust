@@ -520,7 +520,7 @@ this file is the one to trust"* disagreed with **itself**:
 - `R4.2` was marked **~** because "four `VERSION`/`AUDIT_DETAILS` attributes are
   accepted and silently dropped — `D-07`", months after `D-07` was fixed. The
   matrix understated the crate.
-- `PR12.5`/`PR12.6` were listed as absent after `openehr-loco` implemented read
+- `PR12.5`/`PR12.6` were listed as absent after `openehr-axa` implemented read
   auditing above the store.
 
 **Why it happened.** The matrix is prose. Every other claim in this repository
@@ -642,7 +642,7 @@ investigation.
 
 **Disposition.** *(2026-08-02 — **fixed above the store, still open in it**.)*
 `PR12.5` always said a deployment must provide read auditing above the storage
-layer. A layer above now exists: `openehr-loco` records every read before
+layer. A layer above now exists: `openehr-axa` records every read before
 returning it, fails the read when it cannot, and reports in its metadata which
 of the two it is doing.
 
@@ -875,7 +875,7 @@ run, twice, for real:
   know — `all_versions` is the example the requirement's own text gives.
   `find_compositions_by_archetype` (`openehr-store::Store`) is not:
   `Vec<CompositionIndexRow>`, no `LIMIT`, no page parameter, in the trait
-  signature or in `openehr-sqlite`'s own SQL. `openehr-loco` bounds it
+  signature or in `openehr-sqlite`'s own SQL. `openehr-axa` bounds it
   above the store (`_count`/`_offset`, capped at 100) — the same shape as
   `PR12.5`'s read-auditing gap, so it joins that table rather than getting
   a bare `✗`: satisfied by the service, absent from the store a program
@@ -891,7 +891,7 @@ restates `M3.28`; `P6.19` restates `P6.18` — `Json`/`LongText` cannot be
 indexed at all, structurally, so neither can be given a path index
 specifically). 3 landed `?` (`P6.10`, true by inspection of the schema;
 `P6.15`, vacuously true since the store applies no bound at all to
-truncate silently — the real cap is `openehr-loco`'s; `P6.17`, vacuous
+truncate silently — the real cap is `openehr-axa`'s; `P6.17`, vacuous
 while `P6.18` already establishes nothing needs an adjunct yet).
 
 **2026-09-10, batch 8: `G2`, 8 of 8.** Schema generation — emission order,
@@ -972,7 +972,7 @@ Trust/principal/audit and projection/round-trip. 9 of 10 landed `•`:
 archetype-validation code path exists to reject on); `R4.6` against every
 `Store` method taking typed `HierObjectId`/`ObjectVersionId`, never a bare
 string; `R4.9` restates `M3.35`. Two found their evidence in the code's
-own words rather than a test: `PR12.8` — `openehr-loco/src/auth.rs`'s
+own words rather than a test: `PR12.8` — `openehr-axa/src/auth.rs`'s
 module doc cites this requirement by number, "the practical consequence
 is that `db:PR12.8` still holds"; `PR12.11` — `PHI.md`'s own text draws
 exactly the append-only/tamper-evidence distinction the requirement asks

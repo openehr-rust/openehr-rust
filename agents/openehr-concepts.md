@@ -107,7 +107,7 @@ trace, and a paging alert at once.
 | External terminology lookup | needs a terminology server; codes are carried opaquely |
 | HL7 `GTS`/`PIVL` timing evaluation | a partial timing engine produces a dosing schedule that is right most of the time |
 
-This is the **library's** scope. `openehr-loco` is a separate, optional,
+This is the **library's** scope. `openehr-axa` is a separate, optional,
 unpublished crate putting a narrow REST API in front of the store — it adds no
 archetype validation, AQL execution, or anything else in this table; see its
 own README.

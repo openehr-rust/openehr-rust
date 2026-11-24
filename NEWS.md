@@ -160,7 +160,7 @@ derivation moved from `stable − 3` to `stable − 2`, and every prose
 statement of the floor updated to match. Verified before publishing, not
 only declared: `cargo +1.96 test --all-features` run for real across all
 ten buildable crates — including `openehr-sqlite`, which compiles its own
-bundled SQLite, and `openehr-loco`, whose `loco-rs` dependency needs only
+bundled SQLite, and `openehr-axa`, whose `loco-rs` dependency needs only
 1.94 — and CI ran green on the exact commit that cut the release before
 any crate went out. No public API changed.
 

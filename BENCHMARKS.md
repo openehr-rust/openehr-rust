@@ -33,7 +33,7 @@ distinct timings a run reports.
 | | `integrity/verify_versions/{1,10,100}` | re-verifying stored version digests, at three sizes |
 | [`openehr-sqlite/benches/store.rs`](openehr-sqlite/benches/store.rs) | `commit/composition` | one commit against a real (in-memory) connection: validation, the commit rules, projection, and `SQLite`'s own transaction |
 | | `read/get_version`, `read/latest_version` | reading one committed version back, by identity and by container head |
-| [`openehr-loco/benches/http.rs`](openehr-loco/benches/http.rs) | `http/read_composition` | a full `GET` for a composition through the real router — auth, routing, the store read, response serialisation |
+| [`openehr-axa/benches/http.rs`](openehr-axa/benches/http.rs) | `http/read_composition` | a full `GET` for a composition through the real router — auth, routing, the store read, response serialisation |
 
 The three `verify_versions` sizes exist to show **shape**, not speed: whether the
 integrity check is linear in the number of versions is a property worth knowing,
@@ -42,7 +42,7 @@ and it is one a single measurement cannot tell you.
 `openehr-store` measures projection and verification specifically, not a commit
 or a read, because it has no connection to round-trip through — see that
 suite's own module documentation. `openehr-sqlite` is the crate with a real
-connection behind `Store`, so it is where those two numbers live; `openehr-loco`
+connection behind `Store`, so it is where those two numbers live; `openehr-axa`
 is where "how long does a request actually take" lives, one route deep through
 the same in-memory connection, with no network socket opened (`tower::oneshot`
 drives the router in process).
@@ -53,14 +53,14 @@ drives the router in process).
 (cd openehr && cargo bench)
 (cd openehr-store && cargo bench)
 (cd openehr-sqlite && cargo bench)
-(cd openehr-loco && cargo bench)
+(cd openehr-axa && cargo bench)
 
 # the one-iteration form CI runs -- proves the benchmarks still compile and run,
 # and measures nothing
 (cd openehr && cargo bench -- --test)
 (cd openehr-store && cargo bench -- --test)
 (cd openehr-sqlite && cargo bench -- --test)
-(cd openehr-loco && cargo bench -- --test)
+(cd openehr-axa && cargo bench -- --test)
 
 # one group only
 (cd openehr && cargo bench -- iso8601)
@@ -104,7 +104,7 @@ performance claim, not a service level, not a comparison, and not a threshold.
 ## A second measurement, added with the suites it covers
 
 **2026-09-07**, the day `openehr-sqlite/benches/store.rs` and
-`openehr-loco/benches/http.rs` were written — recorded immediately, on the
+`openehr-axa/benches/http.rs` were written — recorded immediately, on the
 same terms as the table above, rather than left for a later run that might
 not happen.
 
@@ -173,7 +173,7 @@ not happen.
   router in the same process, so this is the cost of this crate's own code —
   auth, routing, the store, serialisation — and not of TLS, a reverse proxy,
   or an actual network hop, none of which this crate terminates itself
-  (`openehr-loco/README.md`: "no TLS").
+  (`openehr-axa/README.md`: "no TLS").
 
 ## Trademarks
 

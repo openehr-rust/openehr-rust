@@ -170,7 +170,7 @@ Requirement prefix: `H5`.
 
 ## Preconditions on a write
 
-Added 2026-08-02, when `openehr-loco` gained an update endpoint. These bind a
+Added 2026-08-02, when `openehr-axa` gained an update endpoint. These bind a
 **service**; the core has no notion of a request.
 
 - **H5.15** A service offering an update MUST require a precondition naming the

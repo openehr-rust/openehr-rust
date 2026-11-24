@@ -13,7 +13,7 @@ use axa::{
     AppContext,
     task::{Task as _, Vars},
 };
-use openehr_loco::{
+use openehr_axa::{
     app::open_store_at,
     tasks::{Checkpoint, Verify, checkpoint_line, verify_line},
 };
@@ -28,7 +28,7 @@ fn temp_db(tag: &str) -> PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .expect("after the epoch")
         .as_nanos();
-    let path = std::env::temp_dir().join(format!("openehr-loco-task-{tag}-{nanos}.sqlite3"));
+    let path = std::env::temp_dir().join(format!("openehr-axa-task-{tag}-{nanos}.sqlite3"));
     let _ = std::fs::remove_file(&path);
     path
 }
@@ -70,7 +70,7 @@ fn vars(path: &Path) -> Vars {
 /// would fail here, which is the point of building the context this way rather
 /// than the way the HTTP tests do.
 fn bare_context() -> AppContext {
-    openehr_loco::app::test_context()
+    openehr_axa::app::test_context()
 }
 
 #[tokio::test]
@@ -160,7 +160,7 @@ async fn the_verify_task_fails_on_a_tampered_history() {
 /// the rest of the path nothing else touches: `src/main.rs`, `config/`,
 /// argument parsing, and task registration.
 fn run_binary(args: &[&str]) -> (bool, String) {
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_openehr-loco"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_openehr-axa"))
         .args(args)
         .output()
         .expect("the binary runs");

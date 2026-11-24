@@ -40,7 +40,7 @@ A worked pass, in the order that has actually found things here:
 # 1. Does it build and test clean?
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \
          openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
-         openehr-loco openehr-assets; do
+         openehr-axa openehr-assets; do
   (cd "$d" && cargo test --quiet \
      && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) \
     || echo "FAIL $d"

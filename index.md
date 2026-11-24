@@ -5,7 +5,7 @@ this is the fastest route; if you do not, start with [`README.md`](README.md).
 
 Eighteen crates, each its own Cargo workspace: the [`openehr`](openehr/)
 Reference Model library, the engine-agnostic [`openehr-store`](openehr-store/),
-six `openehr-<engine>/` dialect crates, the [`openehr-loco`](openehr-loco/)
+six `openehr-<engine>/` dialect crates, the [`openehr-axa`](openehr-axa/)
 HTTP service, the asset generator, and eight fuzz harnesses. Eight are
 published to crates.io; [`agents/publishing.md`](agents/publishing.md) tracks
 the version. [`spec/index.md`](spec/index.md) is the root of every
@@ -80,7 +80,7 @@ this table restates it and is checked against it.
 | [`openehr-oracle`](openehr-oracle/) | **Schema** |
 
 `openehr` and `openehr-store` are libraries outside the engine ladder;
-`openehr-loco` states evidence rather than a level (`W0.32`).
+`openehr-axa` states evidence rather than a level (`W0.32`).
 
 ## Reading order, if you have an hour
 

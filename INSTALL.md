@@ -111,7 +111,7 @@ that only fires under `-D warnings` passes locally and fails in CI:
 ```sh
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \
          openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
-         openehr-loco openehr-assets; do
+         openehr-axa openehr-assets; do
   (cd "$d" && cargo test --quiet \
      && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) \
     || echo "FAIL $d"
@@ -138,7 +138,7 @@ round-trips canonical JSON bytes through the server unchanged.
 
 ## Run the HTTP service
 
-`openehr-loco` is the one crate here that is a service rather than a library
+`openehr-axa` is the one crate here that is a service rather than a library
 (`AGENTS.md`). A `docker compose up` is the whole quickstart — the only input
 it needs is a PASETO public key to verify bearer tokens against, and there is
 no default for that (`docker-compose.yml`'s own comment explains why: this
@@ -146,7 +146,7 @@ service verifies tokens against a key it is given and holds no secret of its
 own). Generate a throwaway one:
 
 ```sh
-cd openehr-loco && cargo run --example generate_test_token
+cd openehr-axa && cargo run --example generate_test_token
 ```
 
 That prints an `OPENEHR_PASETO_PUBLIC_KEYS=k4.public…` line and an

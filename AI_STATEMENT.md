@@ -27,7 +27,7 @@ operational guides, and this file.
 
 **This software ships no AI.** No model is trained, embedded, downloaded, or
 called. Nothing in any of the eighteen crates performs inference, and
-`openehr-loco` — the HTTP service — talks to a database and nothing else. AI is
+`openehr-axa` — the HTTP service — talks to a database and nothing else. AI is
 used to *write* this software, in the sense that a compiler and a linter are
 used to build it.
 

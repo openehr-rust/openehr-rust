@@ -14,7 +14,7 @@
 
 #![forbid(unsafe_code)]
 
-use openehr_loco::app;
+use openehr_axa::app;
 
 #[tokio::main]
 async fn main() -> axa::Result<()> {

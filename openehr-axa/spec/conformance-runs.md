@@ -36,7 +36,7 @@ claim than the backlog item's own headline, and the honest one.
 
 ## Run 1 — 2026-09-08
 
-**Target A: `openehr-loco`.** `cargo run --example generate_test_token` for a
+**Target A: `openehr-axa`.** `cargo run --example generate_test_token` for a
 throwaway keypair, `OPENEHR_SQLITE_PATH=/tmp/conformance-test.sqlite3` and the
 printed `OPENEHR_PASETO_PUBLIC_KEYS`, `cargo run -- start`. EHR created by
 hand first (`POST /ehr` with this crate's own `Ehr` JSON shape — its own

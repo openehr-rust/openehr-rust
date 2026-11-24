@@ -1117,7 +1117,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "openehr-loco"
+name = "openehr-axa"
 version = "0.11.0"
 dependencies = [
  "async-trait",

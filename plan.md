@@ -3,7 +3,7 @@
 Goal: a production-grade, spec-driven Rust monorepo for openEHR — the
 `openehr/` model crate (Reference Model, paths, AQL parsing, RM validation,
 audit-chain security), six `openehr-<engine>/` database ports,
-`openehr-store/`, `openehr-loco/`, and the fuzz crates; eight crates
+`openehr-store/`, `openehr-axa/`, and the fuzz crates; eight crates
 published together (release history in [the publishing guide](agents/publishing.md)) —
 professionalized for its real audience: healthcare
 professionals and the engineers who serve them, worldwide, in settings where
@@ -202,7 +202,7 @@ posture. Open items for each are in `tasks.md`.
   infers `0..*`). The table is small and the RM is already in `rm::`; the
   decision is whether to derive it there once (`lib:A-33`'s shape) or carry
   a second table in `am`. A requirement first, then code.
-- **`openehr-loco`'s configured system identity** — opened 2026-09-12,
+- **`openehr-axa`'s configured system identity** — opened 2026-09-12,
   investigating the `POST /ehr` request-shape mismatch (`tasks.md`'s
   ITS-REST item). ITS-REST's real `POST /ehr` mints the `EHR` and its
   `EHR_STATUS`/`EHR_ACCESS` container references from an optional
@@ -211,7 +211,7 @@ posture. Open items for each are in `tasks.md`.
   (`creating_system_id`, `H5.7`), and minting that fresh per request would
   be wrong, not merely untidy: the field exists precisely so one
   deployment's records carry the *same* value over time, distinguishing
-  its "version 2" from another system's. Nothing in `openehr-loco` reads a
+  its "version 2" from another system's. Nothing in `openehr-axa` reads a
   configured system identity today (checked: `src/`, `config/`). The
   decision is what that value is and where it lives — a config key in
   `config/production.yaml` threaded through `AppContext` is the obvious

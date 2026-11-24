@@ -62,7 +62,7 @@ RUSTFLAGS="-D warnings" cargo clippy --all-targets
 # Before opening a pull request, from the repository root:
 for d in openehr openehr-store openehr-sqlite openehr-postgresql \
          openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
-         openehr-loco openehr-assets; do
+         openehr-axa openehr-assets; do
   (cd "$d" && cargo test --quiet \
      && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) \
     || echo "FAIL $d"

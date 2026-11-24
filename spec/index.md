@@ -94,7 +94,7 @@ than either alone.
 
 - **W0.32** *(added 2026-08-02)* The ladder above describes **engine** crates.
   Every rung is defined by DDL, by a `Store` implementation, or by a database
-  server, so a crate that is none of those — `openehr-loco` — cannot occupy one.
+  server, so a crate that is none of those — `openehr-axa` — cannot occupy one.
 
   Such a crate MUST NOT borrow the nearest-looking rung, and MUST NOT be
   described as unverified when it is tested. It states, in the first screenful,
@@ -125,7 +125,7 @@ than either alone.
 ## What is in this repository
 
 **Eighteen crates**, each its own Cargo workspace: eight that are published,
-and ten that are not — `openehr-loco`, `openehr-assets`, and eight fuzz
+and ten that are not — `openehr-axa`, `openehr-assets`, and eight fuzz
 harnesses.
 
 ### The published crates
@@ -157,7 +157,7 @@ Not published, and not on the conformance ladder — see `W0.32` above.
 
 | Crate | Role |
 | --- | --- |
-| [`openehr-loco`](../openehr-loco) | HTTP API server over `openehr-sqlite`, on Axum and Axa |
+| [`openehr-axa`](../openehr-axa) | HTTP API server over `openehr-sqlite`, on Axum and Axa |
 | [`openehr-assets`](../openehr-assets) | regenerates the committed schema/DDL assets; fails the build if one is stale |
 
 ### The fuzz crates

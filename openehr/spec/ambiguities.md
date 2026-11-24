@@ -148,9 +148,9 @@ version *before* the content it is meant to admit. `SqliteStore`'s own
 private `ehr_is_modifiable` is the implementation;
 `openehr_store::conformance::run_is_modifiable_gate` is the conformance test,
 covering both orderings, run against `openehr-sqlite` in CI.
-`openehr-loco`'s `GET`/`PUT …/ehr_status` HTTP endpoints remain undone —
+`openehr-axa`'s `GET`/`PUT …/ehr_status` HTTP endpoints remain undone —
 the store-level guarantee holds without them for every `Store` caller and
-for `openehr-loco`'s existing composition endpoints.
+for `openehr-axa`'s existing composition endpoints.
 
 **Filed upstream:** not this project's own tracking (`#2673`) — filed by
 thread #6 already, hence a number to cite rather than a gap to fill.

@@ -39,7 +39,7 @@ Four kinds of crate, and their PHI posture genuinely differs:
 | [`openehr/`](openehr/) — the model | Reference Model types, validation, paths, AQL parsing, and the security module | **Touches no database and performs no I/O.** If PHI passes through it, that is your program's memory, not a store. The audit chain and redaction live here, in-process. |
 | [`openehr-store/`](openehr-store/) — the persistence core | schema, projection, commit rules, the conformance suite | Links no driver and opens no socket. It defines the shapes; it does not move data. |
 | `openehr-<engine>/` — the six dialects | DDL and SQL for six engines | SQLite persists records locally. PostgreSQL persists them on the configured server. The remaining engines provide schema definitions. See the [conformance matrix](spec/databases/conformance-matrix.md). |
-| [`openehr-loco/`](openehr-loco/) — the HTTP service | Axum/Axa service with PASETO token verification | The only component that listens on a socket. **Not published**, and outside the conformance ladder (`W0.32`). |
+| [`openehr-axa/`](openehr-axa/) — the HTTP service | Axum/Axa service with PASETO token verification | The only component that listens on a socket. **Not published**, and outside the conformance ladder (`W0.32`). |
 
 ## What it does *not* do
 
@@ -136,19 +136,19 @@ public tree that a reader can check.
 
 Stated here so you find them from this page rather than from an audit:
 
-- **`openehr-loco` has no TLS.** It speaks plain HTTP; a deployment terminates
+- **`openehr-axa` has no TLS.** It speaks plain HTTP; a deployment terminates
   TLS at a reverse proxy and this process holds no certificate — one fewer
   secret in a component that already holds no other. Not a gap awaiting a fix:
   a service that never receives a key cannot leak one.
 - **One PASETO key set is the whole authorization model, not an
   authentication *and* authorization model.** Every caller a token verifies
   for is trusted with every record that token's scope reaches — there is no
-  role, no per-record grant, no care-team check. See `openehr-loco/README.md`
+  role, no per-record grant, no care-team check. See `openehr-axa/README.md`
   §What it still does not do and §The deployment perimeter for the full
   statement; a questionnaire asking "how is access to a specific patient's
   record restricted" has no answer in this crate, and needs one from whatever
   issues the tokens or from a layer this service cannot see.
-- **Rate limiting is global, not per-caller.** `openehr-loco` layers a single,
+- **Rate limiting is global, not per-caller.** `openehr-axa` layers a single,
   fixed request budget over the whole service — every caller draws from the
   same quota, deliberately, because behind the reverse proxy this service is
   meant to sit behind, a per-IP limit would see only the proxy's address and
@@ -158,7 +158,7 @@ Stated here so you find them from this page rather than from an audit:
   not defend against a distributed flood, which stays the reverse proxy's job.
 - **Read access is not audited** at the persistence layer (`db:PR12.5`). The
   version history records changes; an access complaint asks about reads.
-  `openehr-loco` can audit reads at the HTTP edge (`OPENEHR_ACCESS_LOG`,
+  `openehr-axa` can audit reads at the HTTP edge (`OPENEHR_ACCESS_LOG`,
   off by default) — see its README §Read auditing — but that is this
   service's own log, not a property of the store underneath it.
 - **No erasure operation exists** (`db:M3.18`), and disabling the append-only
@@ -183,7 +183,7 @@ Cite this file for the posture, `openehr/spec/11-security.md` for the
 requirement-level statements, the two compliance mappings for the regulation
 rows — their **Partial** and **Not implemented** words are load-bearing — and
 the conformance matrix for what your specific engine has been shown to do. If
-you are deploying `openehr-loco`, its own README §The deployment perimeter has
+you are deploying `openehr-axa`, its own README §The deployment perimeter has
 the service-specific answers — TLS, the authorization model, and rate
 limiting — that this file states only in summary above. If a question has no
 answer in those, ask: an unanswered question is more useful to this project

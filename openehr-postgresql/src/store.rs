@@ -41,7 +41,7 @@ const ENGINE: &str = "PostgreSQL";
 /// widening it — a second borrow while one is outstanding panics rather than
 /// racing two queries over one connection, which is the behaviour a
 /// single-threaded-at-a-time `Store` (this one, used from behind a `Mutex`
-/// exactly as `SqliteStore` is in `openehr-loco`) is supposed to have anyway.
+/// exactly as `SqliteStore` is in `openehr-axa`) is supposed to have anyway.
 pub struct PostgresqlStore {
     client: RefCell<Client>,
 }

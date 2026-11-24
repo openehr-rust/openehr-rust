@@ -185,7 +185,7 @@ recorded in the levels table above. The per-requirement marks here cover SQLite.
 | `M3.35` projection is one function, shared | • | one `project` function in `openehr-store::record`; the guarantee is structural — today only `openehr-sqlite` calls it, since it is the only `Store` |
 | `P6.11` a store offers version-by-id, latest, at-time, every-version, and archetype search | • | all five exercised in `openehr-store/src/conformance.rs`, including `find_compositions_by_archetype` |
 | `P6.14` time-ranged queries use the derived UTC column | • | the same indexed candidate bound as `M3.28`; exact fractional resolution uses authoritative text (`D-16`) |
-| `P6.15` no silent truncation of a result set | ? | vacuously true at this layer — the store applies no bound to `find_compositions_by_archetype` at all, so nothing here truncates; the caller-facing page/cap (`_count`/`_offset`, capped at 100) is `openehr-loco`'s own, above the store |
+| `P6.15` no silent truncation of a result set | ? | vacuously true at this layer — the store applies no bound to `find_compositions_by_archetype` at all, so nothing here truncates; the caller-facing page/cap (`_count`/`_offset`, capped at 100) is `openehr-axa`'s own, above the store |
 | `P6.20` the executor calls only `Store` trait methods, never SQL | • | `openehr-store::aql` depends on `openehr::aql`/`openehr::path` and `Store::find_compositions_by_archetype`/`latest_version` alone — no dialect, no driver |
 | `P6.21` `FROM` limited to one `EHR`-scoped, archetype-predicated `COMPOSITION` | • | `single_containment`/`ehr_id_from_predicate` in `openehr-store::aql`, refusing every other `FROM` shape by name |
 | `P6.22` `WHERE` limited to `Compare`/`And`/`Or`/`Not` over scalar leaves; no match is `false`, an ambiguous or non-scalar match aborts the query | • | `check_expr_shape` and `resolve_scalar`; all six operators plus `AND`/`OR`/`NOT`; owner-crate tests prove integer/real numeric comparison and that different scalar families cannot compare equal or satisfy an ordering predicate (`D-18`); the live suite also covers a stale/deleted archetype-index candidate |
@@ -195,7 +195,7 @@ recorded in the levels table above. The per-requirement marks here cover SQLite.
 
 ## Service requirements
 
-`openehr-loco` only. It sits **outside the conformance ladder** — every rung
+`openehr-axa` only. It sits **outside the conformance ladder** — every rung
 there is defined by DDL, a `Store`, or a database server (`W0.32`) — so it
 states evidence and takes no level. Nothing here is published.
 
@@ -217,7 +217,7 @@ states evidence and takes no level. Nothing here is published.
 | `H5.15` update requires a precondition; `412` not `409` | • | stale, absent, and `*` all tested |
 | `H5.16` both `W/"uid"` and the bare uid accepted | • | |
 | `PR12.12` tamper detection | — | the store's, not the service's |
-| `S1.19` a service crate implements no clinical behaviour | ? | no controller calls `validate()` or any store-internal check directly (`openehr-loco/src/controllers/`) — true by absence, and an absence is not what a test demonstrates |
+| `S1.19` a service crate implements no clinical behaviour | ? | no controller calls `validate()` or any store-internal check directly (`openehr-axa/src/controllers/`) — true by absence, and an absence is not what a test demonstrates |
 
 ## Cross-cutting
 
@@ -240,8 +240,8 @@ states evidence and takes no level. Nothing here is published.
 | `S1.3` stores every class `openehr` models, without loss | • | `R4.2`'s lossless round-trip, including the four `VERSION`/`AUDIT_DETAILS` attributes `D-07` found dropped |
 | `S1.5` no per-attribute shredding | • | six tables total (`M3.21`), none per-attribute; archetyped content stays in `data_json` (`M3.43`) |
 | `S1.6` *(amended 2026-09-13)* `AQL` execution limited to the bounded subset `P6.20`–`P6.24` state, refusing every other construct by name | • | `openehr_store::aql::execute`; `conformance::run_aql` covers a plain query, `WHERE`, `LIMIT`/`OFFSET`, a missing-`LIMIT` refusal, and a two-level `CONTAINS` refusal, run against both `openehr-sqlite` and `openehr-postgresql` — see `P6.20`–`P6.24` below for the subset itself |
-| `S1.7` no HTTP dependency or server in the core | ? | no `axum`/`hyper`/`tokio`/`tower` line in `openehr`, `openehr-store`, or any of the six engine crates' `Cargo.toml` — checked by hand for this assessment, not yet a named CI check; `openehr-loco` is the stated exception |
-| `S1.8` the core does not authenticate or authorize | ? | no credential, key, or principal type anywhere in the core; `openehr-loco` verifies without authenticating (`PR12.13`–`PR12.15`, service table), which is a different crate |
+| `S1.7` no HTTP dependency or server in the core | ? | no `axum`/`hyper`/`tokio`/`tower` line in `openehr`, `openehr-store`, or any of the six engine crates' `Cargo.toml` — checked by hand for this assessment, not yet a named CI check; `openehr-axa` is the stated exception |
+| `S1.8` the core does not authenticate or authorize | ? | no credential, key, or principal type anywhere in the core; `openehr-axa` verifies without authenticating (`PR12.13`–`PR12.15`, service table), which is a different crate |
 | `S1.9` no terminology resolution, unit conversion, or timing interpretation | ? | inherited exclusion from `openehr` (`lib:S1.8`–`lib:S1.10`); unchecked at this layer specifically |
 | `S1.10` no encryption at rest or key management | ? | no such code exists in the core; both belong to the deployment and the engine |
 | `S1.11` an unimplemented operation returns `StoreError::Unsupported`, never a default | ? | the variant exists with exactly this shape (`engine`, `what`, `spec_ref`) but is constructed nowhere in the tree — no engine crate below Store level implements enough of `Store` to reach it yet |
@@ -294,7 +294,7 @@ states evidence and takes no level. Nothing here is published.
 | `T11.8` an audit test asserts committing-system/change-type AND database-enforced append-only | ~ | append-only: • on all six dialects (`M3.17`, per-engine). Tamper evidence: truncation-under-checkpoint and content-verification are tested (`M3.16`, `M3.16c`, `M3.16d`); key-rotation additivity is not, at this layer (`db:D-13`) |
 | `T11.10` a test proven to fail without its fix | • | `cargo mutants --in-diff`, the `mutants` CI job — the continuous, automated form of exactly this check |
 | `T11.11` a regression pinned by the narrowest assertion that catches it | ? | followed throughout this session's own additions (exact values and named sets, not thresholds) — a style discipline, not machine-enforced |
-| `T11.12` coverage does not degrade silently; a skip that checks nothing fails | • | the `verify` task's own behaviour: "exits non-zero when the history is not intact, including when it verified nothing" (`openehr-loco/README.md`) |
+| `T11.12` coverage does not degrade silently; a skip that checks nothing fails | • | the `verify` task's own behaviour: "exits non-zero when the history is not intact, including when it verified nothing" (`openehr-axa/README.md`) |
 | `T11.13` a self-skipping test is not the sole evidence for a level | • | `C0.8`'s own ladder, above — Schema and above require a CI job that fails, not skips, without the engine |
 | `T11.14` an `#[ignore]`d test has a matrix entry | ? | vacuously true — no test in any database crate is currently `#[ignore]`d — demonstrated correctly in the sibling `openehr` crate's own corpus tests, not exercised here |
 | `T11.15` every dialect has golden DDL tests | • | the same `tests/ddl.rs` evidence as `G2.9`, above |
@@ -314,7 +314,7 @@ states evidence and takes no level. Nothing here is published.
 | `O10.12` a contributor's local check and CI run the same script | • | the same `T11.19` row — this requirement's own text cites it |
 | `O10.13` no bound parameter logged at a level a production deployment would enable | • | the same zero-logging evidence as `O10.2` |
 | `O10.18` a network driver documents TLS and verifies the connection by default | • | `PostgresqlStore::connect` uses platform roots and `connect_with_ca` replaces them with an explicit PEM CA. Live tests accept the trusted configured name and reject a wrong name, unrelated issuer, and plaintext fallback (`D-15`). |
-| `PR12.8` the trust boundary is stated plainly: this layer does not authenticate | • | `openehr-loco/src/auth.rs`'s own module doc cites this requirement by number: "the practical consequence is that `db:PR12.8` still holds" |
+| `PR12.8` the trust boundary is stated plainly: this layer does not authenticate | • | `openehr-axa/src/auth.rs`'s own module doc cites this requirement by number: "the practical consequence is that `db:PR12.8` still holds" |
 | `PR12.11` append-only is not tamper evidence, and documentation must not conflate them | • | `PHI.md`'s own text draws exactly this distinction, citing `db:PR12.11` by number |
 | `X15.1` the portable core exists in exactly one crate, not copied | • | the same `S1.1` evidence — `openehr-store` is the one crate; the `layering` job keeps it that way |
 | `X15.2` canonical form is computed in Rust, one shared function, never delegated to the database | • | the same `R4.11` evidence: shared `to_canonical_string` |
@@ -334,7 +334,7 @@ states evidence and takes no level. Nothing here is published.
 ## Not implemented in the store
 
 Specified, and absent **from `openehr-store` and its engines**. A requirement
-satisfied by `openehr-loco` above them can still appear here — `PR12.5` does —
+satisfied by `openehr-axa` above them can still appear here — `PR12.5` does —
 because a program embedding the store directly gets the store's behaviour and
 not the service's.
 
@@ -344,9 +344,9 @@ Listed so the gap is visible rather than inferred from silence (`W0.4`).
 | --- | --- | --- |
 
 | `M3.18` | GDPR Art. 17 erasure | no erasure operation |
-| `PR12.5`, `PR12.6` | read auditing **in the store** | `openehr-loco` records reads above it (see the service table); a program embedding `openehr-store` directly still records none, which is the case `PR12.5` was written for |
+| `PR12.5`, `PR12.6` | read auditing **in the store** | `openehr-axa` records reads above it (see the service table); a program embedding `openehr-store` directly still records none, which is the case `PR12.5` was written for |
 | `O10.14` | schema migration | no migration mechanism, and none before 1.0 by decision. The applied version **is** recorded — see `O10.15` above |
-| `P6.7` | bounded result sets **in the store** | `find_compositions_by_archetype` returns every match, unbounded, with no opt-in a caller can decline — no `LIMIT`, no page parameter. `openehr-loco` bounds it above the store (`_count`/`_offset`, capped at 100, `P6.15` above); a program embedding `openehr-store` directly gets none of that, the same shape as `PR12.5` |
+| `P6.7` | bounded result sets **in the store** | `find_compositions_by_archetype` returns every match, unbounded, with no opt-in a caller can decline — no `LIMIT`, no page parameter. `openehr-axa` bounds it above the store (`_count`/`_offset`, capped at 100, `P6.15` above); a program embedding `openehr-store` directly gets none of that, the same shape as `PR12.5` |
 
 
 | `T11.7` | redaction test over emitted logs | |

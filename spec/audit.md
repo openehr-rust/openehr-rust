@@ -415,7 +415,7 @@ reader is entitled to rely on.
 **Found.** Nothing had ever compiled this repository with a 1.90 toolchain. The
 `test` job installs `stable` and nothing else; there was no MSRV job. Running it
 by hand — `cargo +1.90 check --all-targets --all-features`, per crate, which is
-the whole method — six crates passed and **`openehr-loco` failed**:
+the whole method — six crates passed and **`openehr-axa` failed**:
 
 ```
 error: rustc 1.90.0 is not supported by the following packages:
@@ -452,7 +452,7 @@ next one just as unchecked:
    buildable crates under it (`RV3`). All eighteen manifests, the ten prose
    statements, and the specification's own headline sentence are checked against
    the same derived value (`RV2`, `RV4`).
-3. **The number moved to 1.95** and `openehr-loco` builds on it, which was
+3. **The number moved to 1.95** and `openehr-axa` builds on it, which was
    confirmed by running `cargo +1.95 test` rather than by observing that 1.95 is
    above 1.94.
 
@@ -512,7 +512,7 @@ recurring in cheaper and cheaper forms.
 specification — read: "The repository holds **fourteen** crates: `openehr`,
 `openehr-store`, six dialect crates, and six `openehr-<engine>-fuzz` harnesses."
 
-There are seventeen. `openehr-loco`, `openehr-assets`, and `openehr-fuzz` were
+There are seventeen. `openehr-axa`, `openehr-assets`, and `openehr-fuzz` were
 added and the requirement was not amended, while `spec/index.md`, `README.md`,
 `AGENTS.md`, `CLAUDE.md`, and `agents/index.md` all said seventeen.
 
@@ -1170,7 +1170,7 @@ A width of 800 000 days is refused at once, because the year underflows. A close
 loop. Until then a caller that derives start times from untrusted widths pays
 for it in CPU.
 
-`openehr-loco` moved from Loco to Axa 0.21 on 2026-11-24, which changed what a
+`openehr-axa` moved from Loco to Axa 0.21 on 2026-11-24, which changed what a
 caller sees, recorded here because the tests do not all notice. (1) Error
 bodies are RFC 9457 problems, not plain text; messages the caller needs travel
 as `detail` through `controllers::Refusal`. A handler that returns a bare

@@ -114,9 +114,9 @@ Based on my analysis of **openehr-rust**—a sophisticated, specification-driven
 | **EN-013** | **Implement SBOM generation** | 1d | Medium |
 | | Per `agents/publishing.md`: Generate CycloneDX SBOM for each release and attach to GitHub releases. | | |
 | **EN-014** | **Add OpenTelemetry instrumentation** | 3d | Medium |
-| | Add tracing to `openehr-sqlite` and `openehr-loco` for observability in production. | | |
+| | Add tracing to `openehr-sqlite` and `openehr-axa` for observability in production. | | |
 | **EN-015** | **Implement connection pooling** for HTTP service | 2d | Medium |
-| | `openehr-loco` currently creates new connections per request. Add `r2d2` or `bb8` pooling. | | |
+| | `openehr-axa` currently creates new connections per request. Add `r2d2` or `bb8` pooling. | | |
 
 ---
 

@@ -131,7 +131,7 @@ where
 #[allow(clippy::too_many_lines)]
 // A caller's own parameter map, built however it likes; requiring the
 // default hasher's generic parameter here for one function's sake is
-// friction `openehr-loco`'s own eventual caller would have to carry too.
+// friction `openehr-axa`'s own eventual caller would have to carry too.
 #[allow(clippy::implicit_hasher)]
 pub fn execute(
     store: &dyn Store,

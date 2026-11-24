@@ -92,7 +92,7 @@ updates:
       interval: weekly
       day: monday
   - package-ecosystem: cargo
-    directory: /openehr-loco
+    directory: /openehr-axa
     open-pull-requests-limit: 0
     schedule:
       interval: weekly

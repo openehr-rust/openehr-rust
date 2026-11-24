@@ -15,7 +15,7 @@ Requirement prefix: `W16`.
 
 - **W16.1** *(amended 2026-08-20)* The repository holds **eighteen** crates:
   `openehr` (the Reference Model), `openehr-store` (engine-agnostic
-  persistence), six `openehr-<engine>` dialect crates, `openehr-loco` (the HTTP
+  persistence), six `openehr-<engine>` dialect crates, `openehr-axa` (the HTTP
   service), `openehr-assets` (the generator for the committed assets), and
   **eight** fuzz harnesses — one per dialect, plus `openehr-fuzz` over the
   Reference Model parsers and `openehr-store-fuzz` over projection and the
@@ -26,7 +26,7 @@ Requirement prefix: `W16`.
   dialects. The other ten MUST declare `publish = false` (`W0.25`).
 
   This requirement said **fourteen** until 2026-08-20, having been amended once
-  already when the layout changed and then not again when `openehr-loco`,
+  already when the layout changed and then not again when `openehr-axa`,
   `openehr-assets`, and `openehr-fuzz` were added. A count is the cheapest
   possible claim to check and the easiest to leave behind; `spec/index.md`,
   `README.md`, and `AGENTS.md` all said seventeen while this said fourteen, and

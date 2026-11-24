@@ -52,7 +52,7 @@ jobs:
           - openehr-mariadb
           - openehr-mssql
           - openehr-oracle
-          - openehr-loco
+          - openehr-axa
           # `openehr-assets` carries nine unit tests and was in no matrix: the
           # `assets` job runs `cargo run -- check` and nothing ran `cargo test`
           # or clippy on it. Nine tests that never execute report the same green
@@ -100,7 +100,7 @@ jobs:
   #     commit that touched nothing to do with Rust versions. That is deliberate
   #     (`RV5`). The alternative is what this repository had: `rust-version =
   #     "1.90"` committed on 2026-08-01, when stable was 1.97, checked by
-  #     nothing and wrong for `openehr-loco` from the day it was written
+  #     nothing and wrong for `openehr-axa` from the day it was written
   #     (`spec/audit.md` W-09).
   #
   #   * The declared floor is COMPILED, not merely declared (`RV3`). An MSRV no
@@ -115,7 +115,7 @@ jobs:
   # in for the other: they query different sources (an embedded license/ban
   # policy against `cargo metadata`, versus the RustSec advisory database
   # against `Cargo.lock`) and disagreed once already finding this job's own
-  # baseline -- `cargo-audit` flagged `RUSTSEC-2026-0235` in `openehr-loco`'s
+  # baseline -- `cargo-audit` flagged `RUSTSEC-2026-0235` in `openehr-axa`'s
   # then dependency tree (`rkyv`, via `rust_decimal`/`byte-unit`/`loco-rs`)
   # that `cargo deny` did not, even against the same crate and a freshly
   # fetched database. `loco-rs` is gone, and with it every advisory this job
@@ -142,7 +142,7 @@ jobs:
           - crate: openehr-mariadb
           - crate: openehr-mssql
           - crate: openehr-oracle
-          - crate: openehr-loco
+          - crate: openehr-axa
           - crate: openehr-assets
           - crate: openehr-fuzz
           - crate: openehr-postgresql-fuzz
@@ -347,7 +347,7 @@ jobs:
           bad=0
           for d in openehr openehr-store openehr-sqlite openehr-postgresql \
                    openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
-                   openehr-loco openehr-assets; do
+                   openehr-axa openehr-assets; do
             echo "::group::$d on ${{ steps.msrv.outputs.msrv }}"
             ( cd "$d" && cargo +${{ steps.msrv.outputs.msrv }} test --all-features ) \
               || { echo "::error::$d does not build or test on ${{ steps.msrv.outputs.msrv }}"; bad=1; }
@@ -419,12 +419,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # `openehr-sqlite` and `openehr-loco` joined 2026-09-07, when they
+        # `openehr-sqlite` and `openehr-axa` joined 2026-09-07, when they
         # first gained a `benches/` directory. A crate with a bench nobody
         # runs is exactly `bench_crates`'s own count moving from 2 to 4
         # without this list moving with it — the same "guard only as wide as
         # its list" shape `W-13` already found once.
-        crate: [openehr, openehr-store, openehr-sqlite, openehr-loco]
+        crate: [openehr, openehr-store, openehr-sqlite, openehr-axa]
     steps:
       - uses: actions/checkout@v7
       - name: Install Rust
@@ -915,7 +915,7 @@ jobs:
           echo "no requirement is both satisfied and absent"
 
       # W0.22-W0.23: one licence expression across the eight published crates
-      # plus `openehr-loco` (unpublished, but distributed as source and worth
+      # plus `openehr-axa` (unpublished, but distributed as source and worth
       # the same clarity), and LICENSE.md as the only licence file. Shipping
       # the full text of some licences and not others privileges those and
       # understates the grant.
@@ -1031,7 +1031,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        crate: [openehr, openehr-store, openehr-sqlite, openehr-loco]
+        crate: [openehr, openehr-store, openehr-sqlite, openehr-axa]
     steps:
       - uses: actions/checkout@v7
         with:

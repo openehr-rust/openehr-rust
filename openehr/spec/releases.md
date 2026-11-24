@@ -25,7 +25,7 @@ whether it does.
 | **AM** | `src/am/` | `openEHR/specifications-AM`, many named `.adoc` files; `openEHR/adl-antlr`'s grammar files; `openEHR/adl-archetypes` for the corpus | Repo + filename, no date, **except** the corpus run, which is commit-pinned (`093c77ea003742b9540e3dd377d615e2b26f2996`, `openehr/spec/corpus.md`) | `Release-2.3.0`, 2024-03-20 — two sampled `.adoc` files this crate cites (`c_primitive_object`, `archetype_hrid`) exist at that tag, but both have since changed on `master` (last commit 2026-03-31, a different blob than the tag's) |
 | **TERM** | `src/terminology.rs` | `openEHR/specifications-TERM`, `computable/XML/en/openehr_terminology.xml`, **read 2026-07-31** — the one citation in the tree with both a file and a date | Dated, not commit-pinned | `Release-3.0.0`, 2023-06-26 — the cited file does not match that tag either (different blob; last real change 2024-09-22, over a year after the tag). The 2026-07-31 read was of `master`, and `master` has not moved since, so re-reading it today reproduces exactly what was read then |
 | **QUERY** (AQL) | `src/aql.rs`, `src/path.rs` | **Nothing.** No file, repo, or date names any AQL specification source anywhere in the tree | — | `Release-1.1.0`, 2021-05-14 |
-| **ITS-REST** | `openehr-loco` | **Nothing.** No file, repo, or date names an ITS-REST specification source anywhere in the tree, crate or spec | — | `Release-1.1.0`, 2026-07-19 — **six weeks old as of this file.** `openehr-loco`'s own base-path uncertainty (`/openehr/v1` here, `/rest/openehr/v1` expected by tooling — `tasks.md`'s "ITS-REST completeness" item) was never checked against this or any other ITS-REST release |
+| **ITS-REST** | `openehr-axa` | **Nothing.** No file, repo, or date names an ITS-REST specification source anywhere in the tree, crate or spec | — | `Release-1.1.0`, 2026-07-19 — **six weeks old as of this file.** `openehr-axa`'s own base-path uncertainty (`/openehr/v1` here, `/rest/openehr/v1` expected by tooling — `tasks.md`'s "ITS-REST completeness" item) was never checked against this or any other ITS-REST release |
 
 ## What this does and does not close
 
@@ -50,7 +50,7 @@ generally.
 
 **Names two areas with no citation at all**, which is worse than a stale one:
 QUERY and ITS-REST. Nothing in this tree has ever been checked against an AQL
-grammar or an ITS-REST specification file. `openehr-loco`'s REST surface and
+grammar or an ITS-REST specification file. `openehr-axa`'s REST surface and
 `src/aql.rs`'s grammar were both written from general knowledge of openEHR
 rather than against a named, dated source — a fact the "ITS-REST completeness"
 item in `tasks.md` already treats as work to do, and this file is what
@@ -63,7 +63,7 @@ most likely to matter:
 
 1. **ITS-REST** — the only area whose latest release postdates this crate's
    own work on it (`Release-1.1.0`, 2026-07-19). Read it before writing another
-   line of `openehr-loco`'s REST surface, rather than after.
+   line of `openehr-axa`'s REST surface, rather than after.
 2. **QUERY** — no citation exists to go stale; the first read is also the
    first citation.
 3. **BASE** and **AM** — `master` has diverged from the last tagged release in

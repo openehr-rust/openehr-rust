@@ -1,4 +1,4 @@
-# openehr-loco
+# openehr-axa
 
 A RESTful openEHR® API server on **Axum** and **Axa 0.21**, over
 [`openehr-sqlite`](../openehr-sqlite).
@@ -312,7 +312,7 @@ whole perimeter in one place, not assembled from several sections above.
 
 **No TLS.** This process speaks plain HTTP. A deployment terminates TLS at a
 reverse proxy and reaches this service over a network the proxy alone can
-answer to — the same posture `openehr-loco/Dockerfile` builds toward: nothing
+answer to — the same posture `openehr-axa/Dockerfile` builds toward: nothing
 in the image or `docker-compose.yml` opens a TLS listener, and nothing should,
 because a certificate held by this process would be one more thing to rotate
 in a component that already holds no other secret (see "Public key only",
@@ -355,7 +355,7 @@ and give this service the public half:
 ```sh
 OPENEHR_SQLITE_PATH=openehr.sqlite3 \
 OPENEHR_PASETO_PUBLIC_KEYS=k4.public.… \
-OPENEHR_PASETO_AUDIENCE=openehr-loco \
+OPENEHR_PASETO_AUDIENCE=openehr-axa \
   cargo run -- start
 ```
 

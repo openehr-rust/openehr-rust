@@ -34,9 +34,9 @@ tasks below are ordered by these gaps.
 | --- | --- | --- |
 | **Conformance that is not self-graded**: a machine-readable catalogue, every case citing the spec section, negative twins for every refusal, cross-run against EHRbase, a bring-your-own-server runner, a public ambiguities register | #15 (Haarbrandt, SEC), #16 | A conformance *ladder* and two matrices, self-checked counts, three audit registers — strong on honesty, but no external corpus has ever been run through this code, no test cites a spec section by id, and `db:D-11` says 144 of 221 database requirements have never been assessed at all |
 | **Which spec generation, pinned where**: RM/BASE/LANG releases coupled as openEHR publishes them; a `stable` profile refusing surfaces the released specs do not define | #7 (Iancu, SEC), #8 | Release targets exist per requirement (`S1.16`, `K15.2`) and terminology provenance is recorded to the file and date, but there is no one table of every specification release this tree is transcribed from |
-| **Lifecycle edge cases**: `is_modifiable` toggled inside one contribution | #5, #6 | **Done at the `Store` level, 2026-09-12** (`db:H5.17`): `SqliteStore::commit_composition` refuses content while deactivated and admits it again once reactivated, even later in the same contribution. `openehr-loco`'s `GET …/ehr_status` HTTP endpoints are done the same day; `PUT` waits on the `POST /ehr` request-shape fix below |
+| **Lifecycle edge cases**: `is_modifiable` toggled inside one contribution | #5, #6 | **Done at the `Store` level, 2026-09-12** (`db:H5.17`): `SqliteStore::commit_composition` refuses content while deactivated and admits it again once reactivated, even later in the same contribution. `openehr-axa`'s `GET …/ehr_status` HTTP endpoints are done the same day; `PUT` waits on the `POST /ehr` request-shape fix below |
 | **Performance**, with an outsider offering to rerun the numbers | #4, #14 | Benchmarks exist and are run-never-gated (`W0.35`); no store commit latency or HTTP round-trip has ever been published |
-| **Runs in sixty seconds**: `docker compose up`, a Codespace, a hosted sandbox with Swagger, and a *correct* quickstart | #9, #10, #11, #13, #21 | `Dockerfile`, compose file, and devcontainer exist and are verified (`curl /openehr/v1/metadata` → 200); no OpenAPI document yet, and `openehr-loco` is still `publish = false`, SQLite-only |
+| **Runs in sixty seconds**: `docker compose up`, a Codespace, a hosted sandbox with Swagger, and a *correct* quickstart | #9, #10, #11, #13, #21 | `Dockerfile`, compose file, and devcontainer exist and are verified (`curl /openehr/v1/metadata` → 200); no OpenAPI document yet, and `openehr-axa` is still `publish = false`, SQLite-only |
 | **A REST surface tools can talk to**: ITS-REST 1.1.0, AQL over HTTP, templates, EHR_STATUS, an admin scheme — openEHR Explorer added FerroEHR as a server type within three days | #1, #21 | Eleven endpoints: EHR, contribution, composition commit/read/history/vread, one index search. No `/query/aql`, no template endpoints, no `EHR_STATUS`, `DELETE` answers `501` |
 | **AQL that executes** | #1 | AQL is parsed and statically checked and **not executed** — a deliberate rule (`S1.5`, reaffirmed `K15.29`) that a CDR reader will read as the headline gap |
 | **Templates**: OPT 1.4, ADL 2.4, WebTemplate, FLAT/STRUCTURED, validated at upload | #1 | AOM2 types, `am::validate` against an in-memory archetype, and a `definition`-only cADL reader (`A-40`, `A-62`–`A-69`). No OPT, no template, no flattening, no ADL 1.4 body |
@@ -122,7 +122,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       Clippy, and production-only LCOV before updating the baseline.
       Then close the other 13 `openehr` files; measure and close
       `openehr-sqlite`, `openehr-postgresql`, the four schema-only dialect
-      crates, `openehr-loco`, and `openehr-assets`; and finally make the
+      crates, `openehr-axa`, and `openehr-assets`; and finally make the
       tree-derived line-and-function coverage checker a required CI gate.
 
 - [x] **Check chronology and readiness claims across boundaries** (2026-11-19).
@@ -215,9 +215,9 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       `-D warnings`, and 437 tests all green.* — **S**
 - [x] **Remove the stray build directories.** `openehr-cdr-{mariadb,mssql,
       mysql,oracle,postgresql,sqlite}/` contain only `target/` and are not
-      crates; `openehr-loco-fuzz/` is untracked. Either add the fuzz crate
+      crates; `openehr-axa-fuzz/` is untracked. Either add the fuzz crate
       with a target and a CI row (`W-13`: a guard is only as wide as its
-      list) or delete it. *Done 2026-09-03: `openehr-loco-fuzz/` held only a
+      list) or delete it. *Done 2026-09-03: `openehr-axa-fuzz/` held only a
       cargo-fuzz `corpus/` (2,324 inputs) and two empty `artifacts/`
       directories for targets named `paseto_token` and `ehr_json`, which
       exist in no crate in the tree — run output from a harness that was
@@ -270,7 +270,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       thread's own praise for FerroEHR: "rejects unsupported constructs
       explicitly"). SQLite first — it is the only crate at **Verified**.
       *Evidence:* new `Q12.x`/`db:` requirements, a conformance-suite test
-      per operator, the matrix row, and `POST /query/aql` in `openehr-loco`.
+      per operator, the matrix row, and `POST /query/aql` in `openehr-axa`.
       — **XL**
 
       **2026-09-13, done — as a deliberately bounded first slice, not
@@ -313,14 +313,14 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       when a container is later amended or logically deleted (`H5.2`) —
       so a first draft that read a candidate's own *indexed* version
       directly could answer a query with content a record no longer has.
-      Found by `openehr-loco`'s own HTTP fixture, which happened to reuse
+      Found by `openehr-axa`'s own HTTP fixture, which happened to reuse
       one composition name across two containers, one later deleted;
       fixed by reading each candidate's *container* current state
       (`Store::latest_version`) instead, and given its own direct
       regression case in `run_aql` (a fourth container, committed then
       deleted) rather than left to that coincidence to keep catching it.
 
-      `POST /openehr/v1/query/aql` in `openehr-loco`, ITS-REST's own
+      `POST /openehr/v1/query/aql` in `openehr-axa`, ITS-REST's own
       request/response shape (`q`/`query_parameters` in,
       `q`/`columns`/`rows` out); the new `StoreError::AqlUnsupported`
       maps to `400`, a caller-fixable request, not the `501` this service
@@ -328,7 +328,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       executor itself is architecturally unreachable from inside
       `openehr-store`'s own test suite (the same shape `run`/
       `run_ehr_status`/`run_is_modifiable_gate` already have, and now
-      excluded the same way, `.cargo/mutants.toml`); `openehr-loco`'s new
+      excluded the same way, `.cargo/mutants.toml`); `openehr-axa`'s new
       controller: 6 caught, 6 unviable, 0 missed.
 
       **Deliberately not attempted**: anything the bounded subset
@@ -396,7 +396,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       reactivate it. Specify it as a `db:H5.x` commit rule, then test both
       orderings against `openehr-sqlite`. *Evidence:* the requirement, two
       conformance cases, and `EHR_STATUS` read/update in the `Store` trait
-      and `openehr-loco` (`GET`/`PUT …/ehr_status`). — **M**
+      and `openehr-axa` (`GET`/`PUT …/ehr_status`). — **M**
       - **Scope corrected 2026-09-06, before writing any of it.** `Ehr.ehr_status`
         (`openehr::rm::ehr`) is only an `ObjectRef` — a pointer to a
         `VERSIONED_EHR_STATUS` elsewhere, per RM — and `openehr-store`'s
@@ -436,7 +436,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         new gap. **Breaking** (`CHANGELOG.md`): a new required trait
         method. **Not done in this pass**: the `db:H5.x` commit rule itself
         (refuse content only when deactivated *and* the contribution does
-        not reactivate) and `openehr-loco`'s `GET`/`PUT …/ehr_status` — the
+        not reactivate) and `openehr-axa`'s `GET`/`PUT …/ehr_status` — the
         prerequisite was the whole scope, deliberately, so it could be
         verified on its own rather than folded into a larger, harder-to-
         review change.
@@ -466,7 +466,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         cached — the exact sequencing `#2673` names. `SqliteStore` gained a
         private `ehr_is_modifiable`, called from `commit_composition`
         before the write; `StoreError::NotModifiable` is the new refusal.
-        `openehr-loco`'s `status_for` maps it to `409 Conflict`, beside
+        `openehr-axa`'s `status_for` maps it to `409 Conflict`, beside
         `Conflict`/`Commit`, for the reason both already are (well-formed
         request, conflicting state). Two conformance orderings, both in
         `openehr_store::conformance::run_is_modifiable_gate`, run against
@@ -492,15 +492,15 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
         production-correct shape, since two different `VERSIONED_OBJECT`s
         never share a uid. All tests pass, including the two that regressed.
 
-        **Not done in this pass, deliberately**: `openehr-loco`'s
+        **Not done in this pass, deliberately**: `openehr-axa`'s
         `GET`/`PUT …/ehr_status` endpoints. The commit-rule guarantee holds
         for every caller of the `Store` trait directly, and for
-        `openehr-loco`'s existing composition endpoints, without them; what
+        `openehr-axa`'s existing composition endpoints, without them; what
         remains is exposing `EHR_STATUS` itself — reading the current one
         and toggling `is_modifiable` — over HTTP, a separate, self-contained
         slice left for a follow-up rather than folded into this one.
 
-      **2026-09-12, the `GET` half.** `openehr-loco::controllers::ehr_status`:
+      **2026-09-12, the `GET` half.** `openehr-axa::controllers::ehr_status`:
       `GET /openehr/v1/ehr/{ehr_id}/ehr_status` (with `?version_at_time=`,
       the one query parameter ITS-REST defines for this resource) and
       `GET …/ehr_status/{version_uid}` (vread, path shape matched to
@@ -628,7 +628,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       and `spec/databases/audit.md`'s dated corrections, `CHANGELOG.md`,
       `RFC.md`, `COMPARISONS.md`, and the outreach draft/index.
 - [ ] **ITS-REST completeness, and say which release.** State the ITS-REST
-      version `openehr-loco` targets and its base path (`/openehr/v1` here;
+      version `openehr-axa` targets and its base path (`/openehr/v1` here;
       `/rest/openehr/v1` is what tooling expects — thread #21 had to add a
       per-server URL scheme). Add `EHR_STATUS`, `VERSIONED_COMPOSITION`
       (`…/versioned_composition/{uid}`), `POST /query/aql` (blocked on the
@@ -640,7 +640,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
 
       **2026-09-08: three more concrete divergences, found running the new
       conformance runner against a real EHRbase 2.35.1**
-      (`openehr-loco/spec/conformance-runs.md`), not read off its docs:
+      (`openehr-axa/spec/conformance-runs.md`), not read off its docs:
       `POST /ehr` expects a caller-built `Ehr` object here, against
       query parameters or an `EHR_STATUS` body there — a real request-shape
       mismatch, not only a base-path one; the real ITS-REST history and
@@ -661,7 +661,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       for every `EHR`. `Ehr::new`'s own signature requires those references
       as caller-supplied parameters rather than minting them, so fixing
       `POST /ehr` to match is not a request-shape edit alone; it needs
-      `openehr-loco` to generate fresh container identifiers and call
+      `openehr-axa` to generate fresh container identifiers and call
       `commit_ehr_status` with a default (or caller-supplied) `EhrStatus`
       as part of the same handler. This is also the reason
       `PUT …/ehr_status` remains undone (`tasks.md`'s `is_modifiable`
@@ -677,7 +677,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       untidy — `H5.7` states the reason the field exists at all: it "keeps
       two systems' 'version 2' distinct", which only holds if one
       deployment's records all carry the *same* `creating_system_id` over
-      time. Nothing in `openehr-loco` today reads a configured system
+      time. Nothing in `openehr-axa` today reads a configured system
       identity (`grep -rn "system_id" src config` finds nothing at all),
       so fixing `POST /ehr` properly means adding one to
       `config/production.yaml` and threading it through `AppContext`
@@ -686,7 +686,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       of it: no `uuid`-shaped crate is a dependency anywhere in this
       eighteen-crate tree today (checked directly, not assumed), so minting
       `ehr_id` and the two container identifiers needs one, justified the
-      way every other dependency in `openehr-loco/Cargo.toml` already is;
+      way every other dependency in `openehr-axa/Cargo.toml` already is;
       a default `EHR_STATUS`'s `is_queryable`/`is_modifiable` values are a
       real, if small, policy choice; and `ehr_access`'s own container gets
       an identifier under this fix but still nothing ever commits an
@@ -759,7 +759,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       line was never checked. The only path that loses this guarantee is
       deserializing into `serde_json::Value` first — which nothing on the
       ingestion path (`axum::Json<Version<Composition>>` in
-      `openehr-loco`) does.
+      `openehr-axa`) does.
 
       **`deny_unknown_fields` cannot be adopted as this task describes,
       because a stated policy already exists and says the opposite:
@@ -791,7 +791,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       them is a maintainer decision, not code**, the same footing
       `tasks.md`'s own regex item already stands on. One shape that
       resolves it without repealing `J9.9`: strictness as an opt-in posture
-      at the ingestion boundary (`openehr-loco`, or a `Store::commit_*`
+      at the ingestion boundary (`openehr-axa`, or a `Store::commit_*`
       flag) rather than baked into the RM's own `Deserialize` — refusing at
       the edge an operator chooses to run strict, while the library itself
       keeps reading tomorrow's payload. Not decided here.
@@ -932,7 +932,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
 
 - [x] **`Dockerfile`, `docker-compose.yml`, `.devcontainer/`.** Thread #9
       lost an afternoon to a compose override; #21's whole review was "one
-      `docker compose up` and it's running". Build `openehr-loco` as a
+      `docker compose up` and it's running". Build `openehr-axa` as a
       static binary in a multi-stage image, compose it with nothing but a
       volume, and add a devcontainer so a Codespace boots the published
       image. *Evidence:* `docker compose up` answers `curl /openehr/v1/
@@ -940,7 +940,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       command, not a paragraph. — **M**
 
       **2026-09-08.** Two scope corrections against the task's own words,
-      both because there is no publishing pipeline for `openehr-loco`
+      both because there is no publishing pipeline for `openehr-axa`
       images (it is `publish = false`, `AGENTS.md`) and standing one up is
       a maintainer-level release decision, not this task's to make:
       "static binary" is scoped to what is actually true — `rusqlite`'s
@@ -998,7 +998,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       image for anyone without this machine's exact cache.
 
       Full, real verification, in order: `podman build` (multi-stage,
-      producing `openehr-loco:test`) → `podman run` with the port, volume,
+      producing `openehr-axa:test`) → `podman run` with the port, volume,
       and env vars `docker-compose.yml` declares → `cargo run --example
       generate_test_token` for a throwaway key → `curl
       http://localhost:5150/openehr/v1/metadata` → `200`. Then the actual
@@ -1013,7 +1013,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       no crate's `cargo test`/`clippy` run was needed.
 - [x] **Publish measured numbers.** Add store commit and read benchmarks
       to `openehr-store/benches/store.rs` and an HTTP round-trip benchmark
-      for `openehr-loco`, run them on a named machine, and put the numbers
+      for `openehr-axa`, run them on a named machine, and put the numbers
       with their date and hardware in `BENCHMARKS.md`. Keep `W0.35`/`W0.36`:
       run, never gated. Then take #4's offer. *Evidence:* dated numbers in
       the file, reproducible by the command beside them. — **M**
@@ -1030,7 +1030,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       with, not a departure from, the store crate's own stated reasoning.
       New benches: `commit/composition`, `read/get_version`,
       `read/latest_version` (`openehr-sqlite`) and `http/read_composition`
-      (`openehr-loco`, `tower::oneshot` in process, no socket opened).
+      (`openehr-axa`, `tower::oneshot` in process, no socket opened).
       Numbers dated 2026-09-07 in `BENCHMARKS.md`, same machine as the
       2026-08-26 measurement it sits beside rather than replaces. `cargo
       test`/`clippy -D warnings` clean in both crates; `check-docs.py`'s
@@ -1059,7 +1059,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       since there is no root workspace for either tool to find a config in on
       its own. Real findings along the way, not a rubber stamp: a yanked
       `chacha20` fixed by `cargo update`; two missing-but-legitimate licences
-      added (`0BSD`, `CDLA-Permissive-2.0` for `openehr-loco`'s mail
+      added (`0BSD`, `CDLA-Permissive-2.0` for `openehr-axa`'s mail
       dependencies; `NCSA` for every fuzz crate's `libfuzzer-sys`); a `bans`
       false positive from `wildcards = "deny"` misreading this monorepo's own
       unversioned sibling path-dependencies as registry wildcards, reverted
@@ -1071,16 +1071,16 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       closed:** `cargo cyclonedx` verified and documented as a pre-publish
       step (`agents/publishing.md`), but no release has cut since, so no SBOM
       has yet accompanied a real one. `cargo auditable` (embeds a dependency
-      manifest into a *binary*) has no target at all yet — `openehr-loco` is
+      manifest into a *binary*) has no target at all yet — `openehr-axa` is
       the one crate that builds a binary, and nothing distributes it
       anywhere (no Docker image, no release artefact); that gap belongs to
       the `Dockerfile`/`docker-compose.yml` item below, not manufactured
       here. `SECURITY.md` updated to match exactly this state, not more.
-- [x] **State the production perimeter.** `openehr-loco` has no TLS, no
+- [x] **State the production perimeter.** `openehr-axa` has no TLS, no
       rate limiting, no read audit at the store (`db:D-04`, "fixed above the
       store"), no RBAC. Write the deployment statement — TLS terminated by
       a reverse proxy, what is and is not audited, that one PASETO key set
-      is the whole authorisation model — into `openehr-loco/README.md` and
+      is the whole authorisation model — into `openehr-axa/README.md` and
       `PHI.md` §Known limits, and add rate limiting at the router. *Evidence:*
       a reviewer can answer `PHI.md`'s questionnaire section from the
       documents alone. — **S**
@@ -1107,21 +1107,21 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       body replaced with `Ok(Default::default())`), caught.
 
       The deployment statement itself: a new "§The deployment perimeter"
-      section in `openehr-loco/README.md` (no TLS in this process — a
+      section in `openehr-axa/README.md` (no TLS in this process — a
       reverse proxy terminates it; one PASETO key set is the whole
       authorization model, not authentication *and* authorization; rate
       limiting is global, stated with the reasoning above; read auditing
       is off by default and per-deployment), and four new bullets in
       `PHI.md` §Known limits carrying the same three points plus a
       cross-reference from the existing read-auditing bullet to the HTTP
-      edge log `openehr-loco` can turn on. `PHI.md` §If you are filling in
-      a questionnaire now points a deployer of `openehr-loco` at its
+      edge log `openehr-axa` can turn on. `PHI.md` §If you are filling in
+      a questionnaire now points a deployer of `openehr-axa` at its
       README section directly, closing the evidence bar in the task's own
       words: the questionnaire is answerable from the documents, not
       assembled from source by the reviewer.
 
       Test count moved from 53 to 54 in three places (`README.md`,
-      `openehr-loco/README.md`, and the new test itself) — `cargo test`
+      `openehr-axa/README.md`, and the new test itself) — `cargo test`
       confirms 54 (18 lib + 29 http + 7 tasks). `RUSTFLAGS="-D warnings"
       cargo clippy --all-targets` and `cargo deny check` both clean with
       `tower_governor` and its transitive dependencies (`governor`,
@@ -1271,7 +1271,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       search target must declare a kind — the framework exists, but no
       declaration exists for any of the seven real indexed columns) and
       `P6.7` (`find_compositions_by_archetype` returns every match,
-      unbounded, no `LIMIT`, no page parameter — `openehr-loco` bounds it
+      unbounded, no `LIMIT`, no page parameter — `openehr-axa` bounds it
       above the store, the same shape as `PR12.5`, so it joins that table
       rather than getting a bare `✗`). 4 landed `•` (`P6.4`'s seven named
       indexes confirmed in the one shared declaration; `P6.11`'s five
@@ -1332,7 +1332,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       type; `PR12.10` against `openehr_contribution`'s own audit columns;
       `R4.3` against the same `V9.9` evidence; `R4.6` against every `Store`
       method taking a typed identifier, never a bare string; `PR12.8` and
-      `PR12.11` each found in the code's own words — `openehr-loco/src/
+      `PR12.11` each found in the code's own words — `openehr-axa/src/
       auth.rs` and `PHI.md` both cite their requirement by number). 1
       landed `?` (`R4.10`, plausible by construction, untested). 0 landed
       `✗`/`~`.
@@ -1376,7 +1376,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       the kind of unchecked number this repository's culture forbids, so it
       was not named. The "re-vendor check" the item's own text asks for is
       in the file: read `ITS-REST` first (its own latest release, `1.1.0`,
-      postdates `openehr-loco`'s work on it by weeks), then `QUERY` (no
+      postdates `openehr-axa`'s work on it by weeks), then `QUERY` (no
       citation to go stale — the first read is the first citation), then
       `BASE`/`AM` (confirmed drifted), `RM` last (stable, matches its tag).
 - [ ] **An ambiguities register, and file it upstream.** SEC asked (#19)
@@ -1412,9 +1412,9 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
 - [x] **A conformance runner anyone can point at any server.** Thread #16's
       `scripts/conformance.sh` with bring-your-own-SUT is the model: a
       catalogue of HTTP cases against ITS-REST, runnable against
-      `openehr-loco`, EHRbase, or FerroEHR, with verdicts committed. Start
+      `openehr-axa`, EHRbase, or FerroEHR, with verdicts committed. Start
       with the eleven endpoints that exist. *Evidence:* the runner, a
-      committed run against `openehr-loco`, and one against a stock EHRbase.
+      committed run against `openehr-axa`, and one against a stock EHRbase.
       — **M**
 
       **2026-09-08.** "The eleven endpoints" turned out not to be one shared
@@ -1429,12 +1429,12 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       ITS-REST at all, absent from EHRbase's own OpenAPI paths, with nothing
       to check them against. What is genuinely shared, checked and
       landed: reading an EHR that exists, and reading one that does not —
-      [`openehr-loco/scripts/conformance.sh`](openehr-loco/scripts/conformance.sh)
-      plus [`openehr-loco/examples/generate_test_token.rs`](openehr-loco/examples/generate_test_token.rs)
+      [`openehr-axa/scripts/conformance.sh`](openehr-axa/scripts/conformance.sh)
+      plus [`openehr-axa/examples/generate_test_token.rs`](openehr-axa/examples/generate_test_token.rs)
       (a throwaway PASETO keypair and token, for running it by hand), with
       both required runs committed and dated in
-      [`openehr-loco/spec/conformance-runs.md`](openehr-loco/spec/conformance-runs.md)
-      — `2 passed, 0 failed` against `openehr-loco` (a keypair from the new
+      [`openehr-axa/spec/conformance-runs.md`](openehr-axa/spec/conformance-runs.md)
+      — `2 passed, 0 failed` against `openehr-axa` (a keypair from the new
       example, `cargo run -- start`) and against a real EHRbase 2.35.1
       (`podman`, no Keycloak needed despite the upstream compose file making
       it a startup dependency — confirmed by using Basic auth successfully

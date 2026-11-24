@@ -424,7 +424,7 @@ mod tests {
     /// constant left over from a mutation.
     #[test]
     fn the_app_names_and_versions_itself() {
-        assert_eq!(app_name(), "openehr_loco", "CARGO_CRATE_NAME changed?");
+        assert_eq!(app_name(), "openehr_axa", "CARGO_CRATE_NAME changed?");
         assert!(app_version().contains(env!("CARGO_PKG_VERSION")));
     }
 

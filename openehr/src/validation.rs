@@ -2230,7 +2230,7 @@ mod tests {
     /// The version envelope, checked here rather than only from the crates
     /// that call it.
     ///
-    /// `A-23` added this impl and its tests live in `openehr-loco` and
+    /// `A-23` added this impl and its tests live in `openehr-axa` and
     /// `openehr-sqlite`. `cargo mutants` runs the tests of the crate it
     /// mutates, so replacing the whole `visit` body with `()` left `openehr`
     /// green — the fix for a High finding, removable without this crate

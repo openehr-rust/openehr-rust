@@ -552,10 +552,10 @@ an empty slice hashes nothing, builds an empty chain, and `verify` reports
 | `openehr-store/integrity.rs` | **15 of 15** | 0 | every test was in `openehr-sqlite` |
 | `openehr-store/record.rs` | 4 of 6 | 0 | `M3.34` and half of `D-07` asserted on one side only |
 | `openehr-store/dialect.rs` | 25 of 27 | 5 | the shared generator is only run by the six engine crates |
-| `openehr-loco/auth.rs` | 0 of 6 | 0 | already covered; the module was written test-first with mutation checks |
-| `openehr-loco/controllers/` | 6 of 36 | 0 | an endpoint with no test at all, and the status mapping |
+| `openehr-axa/auth.rs` | 0 of 6 | 0 | already covered; the module was written test-first with mutation checks |
+| `openehr-axa/controllers/` | 6 of 36 | 0 | an endpoint with no test at all, and the status mapping |
 | `openehr/validation.rs` | 25 of 115 | 9 | three whole `visit` bodies removable, two of them added the day before |
-| `openehr-loco/access.rs` | 1 of 4 | 0 | a public accessor with no caller |
+| `openehr-axa/access.rs` | 1 of 4 | 0 | a public accessor with no caller |
 | `openehr-sqlite/store.rs` | 9 of 28 | 1 | `create_contribution` could write nothing |
 | `openehr/security/redact.rs` | 8 of 33 | 0 | two of three redaction rule kinds had no test |
 | `openehr/security/access.rs` | 6 of 20 | 1 | the `EHR_ACCESS` accessors |
@@ -568,7 +568,7 @@ an empty slice hashes nothing, builds an empty chain, and `verify` reports
 | `openehr/rm/demographic.rs` + `terminology.rs` + `base/{object_ref,uid}.rs` | **49 of 148** | **0** | `ObjectRef::is_local`, `Role::was_held_on` — closes `openehr`'s measurable surface |
 | five engine crates: `src/lib.rs` (`postgresql`, `mysql`, `mariadb`, `mssql`, `oracle`) | 20 of 59 | **0** | `Dialect::name` and `append_only_sql` were unchecked in all five |
 | `openehr-sqlite/dialect.rs` | 2 of 10 | **0** | `Dialect::name`, same as the five above |
-| `openehr-loco/app.rs` + `tasks.rs` + `views.rs` | 4 of 25 | 1, structural | `App::before_run` never installed anything under test — see below |
+| `openehr-axa/app.rs` + `tasks.rs` + `views.rs` | 4 of 25 | 1, structural | `App::before_run` never installed anything under test — see below |
 
 `record.rs` is the one worth reading twice. A test called
 `the_attributes_that_used_to_be_dropped_are_persisted` existed, named for
@@ -582,7 +582,7 @@ anything, while `M3.34` — an anonymous committer stored as `NULL`, so that a
 privacy decision does not become a data-quality problem someone later cleans
 up — was marked **•** in the conformance matrix.
 
-`openehr-loco` is the counter-example that makes the pattern legible. `auth.rs`
+`openehr-axa` is the counter-example that makes the pattern legible. `auth.rs`
 missed **nothing** on the first run — it is the one module written test-first,
 with a mutation check per guarantee. The controllers missed six, and the
 sharpest was `contribution::routes` returning `Default::default()`: an endpoint
@@ -599,7 +599,7 @@ should re-read.
 that matters most, and it found three `Validate` impls whose **entire body**
 could be replaced with `()` while `openehr` stayed green.
 
-- `Version<T>` — `A-23`'s fix. Its tests are in `openehr-loco` and
+- `Version<T>` — `A-23`'s fix. Its tests are in `openehr-axa` and
   `openehr-sqlite`, so the remedy for a High finding was removable without this
   crate noticing.
 - `EhrAccess` and `Party` — added the day before, **with no test at all**. Not
@@ -997,7 +997,7 @@ not the whole of it.
 schema-only crates did, confirming the pattern is about the trait method's one
 call site, not about any one crate's test discipline.
 
-**`openehr-loco`'s `App::before_run` never actually ran in a test.**
+**`openehr-axa`'s `App::before_run` never actually ran in a test.**
 `before_run` is the fail-closed startup path the module's own doc comment
 singles out — a service that started without a working verifier would serve an
 entire EHR to anyone who asked, with a green health check and no symptom
@@ -1366,7 +1366,7 @@ did not mention `OriginalVersion` once. The store validated
 
 So a version arriving as JSON was checked by nothing. Measured, not inferred: a
 document naming lifecycle state `9999` and carrying no data at all deserialized
-to `Ok`, and `openehr-loco`'s `POST` accepted exactly that shape.
+to `Ok`, and `openehr-axa`'s `POST` accepted exactly that shape.
 
 **A third invariant was enforced nowhere.**
 `VERSION.Preceding_version_uid_validity` — `uid.version_tree_id.is_first xor
@@ -1710,7 +1710,7 @@ whether an invariant is **named** somewhere in the crate.
 URI parser refuses invalid text and reports itself". True of the parser. The
 disposition described gate one and was read as covering both.
 
-**Consequence.** `openehr-loco` deserializes documents from HTTP. A composition
+**Consequence.** `openehr-axa` deserializes documents from HTTP. A composition
 carrying one malformed link target was a panic in a request handler, and one
 carrying a well-formed `https://` target was accepted and stored. Neither
 required anything unusual — a hand-written JSON document reaches both.

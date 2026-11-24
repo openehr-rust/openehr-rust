@@ -26,7 +26,7 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 # No advisory is ignored. The three that were — `RUSTSEC-2026-0194`,
 # `RUSTSEC-2026-0195` (`quick-xml`, via `opendal`) and `RUSTSEC-2024-0449`
 # (`unsafe-libyaml`, via `serde_yaml`) — all came in through `loco-rs`, which
-# `openehr-loco` no longer depends on; `cargo deny` reports none of them in
+# `openehr-axa` no longer depends on; `cargo deny` reports none of them in
 # any dependency graph now.
 ignore = []
 

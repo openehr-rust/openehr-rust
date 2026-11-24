@@ -5,7 +5,7 @@
 # server, and that boundary is what keeps them embeddable. The service lives
 # out here, depends inward, and can be deleted without touching either.
 [package]
-name = "openehr-loco"
+name = "openehr-axa"
 version = "0.11.0"
 edition = "2024"
 rust-version = "1.98"

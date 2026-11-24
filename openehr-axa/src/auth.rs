@@ -548,7 +548,7 @@ mod tests {
     #[test]
     fn a_token_for_another_audience_is_refused() {
         let pair = AsymmetricKeyPair::<V4>::generate().expect("keypair");
-        let verifier = PasetoVerifier::new(&paserk(&pair), None, Some("openehr-loco"), None)
+        let verifier = PasetoVerifier::new(&paserk(&pair), None, Some("openehr-axa"), None)
             .expect("verifier");
         let mut claims = subject_claims("clinician-4417");
         claims.audience("some-other-service").expect("audience");

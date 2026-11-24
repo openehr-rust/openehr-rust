@@ -29,7 +29,7 @@ use axum::{
     http::{Request, header},
 };
 use criterion::{Criterion, criterion_group, criterion_main};
-use openehr_loco::{
+use openehr_axa::{
     access::{AccessLog, SharedAccessLog},
     app::SharedOpenehrStore,
     auth::{PasetoVerifier, SharedVerifier},
@@ -75,7 +75,7 @@ fn served() -> (Router, String, String) {
         )
         .expect("commit");
 
-    let ctx = openehr_loco::app::test_context();
+    let ctx = openehr_axa::app::test_context();
     let mut paserk = String::new();
     pair.public.fmt(&mut paserk).expect("PASERK");
     ctx.shared_store.insert::<SharedVerifier>(Arc::new(
@@ -86,7 +86,7 @@ fn served() -> (Router, String, String) {
     ctx.shared_store
         .insert::<SharedAccessLog>(Arc::new(AccessLog::off()));
 
-    let router = openehr_loco::app::routes()
+    let router = openehr_axa::app::routes()
         .into_app(ctx.clone())
         .expect("router");
     (router, format!("Bearer {token}"), ehr_id.to_string())

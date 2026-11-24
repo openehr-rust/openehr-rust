@@ -112,7 +112,7 @@ formality: the run before 0.4.0's was **red**, and reading it is what produced
 > those checks, so their first green run had to precede it.
 >
 > The run before it, `decd78b`, was **red**: `fuzz / openehr` had been failing
-> since 2026-08-04 (`lib:A-37`) and `test / openehr-loco` failed a lint that
+> since 2026-08-04 (`lib:A-37`) and `test / openehr-axa` failed a lint that
 > only fires under `RUSTFLAGS="-D warnings"`. Both are fixed in `adcfaae`.
 
 | Crate | crates.io | Local |
@@ -126,8 +126,8 @@ formality: the run before 0.4.0's was **red**, and reading it is what produced
 | `openehr-mssql` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, 0.7.3, 0.7.4, **0.8.0**, **0.9.0**, **0.10.0** | 0.10.0 |
 | `openehr-oracle` | 0.1.1, 0.2.0, 0.3.0, 0.4.0, 0.5.0, 0.6.0, 0.7.0, 0.7.1, 0.7.2, 0.7.3, 0.7.4, **0.8.0**, **0.9.0**, **0.10.0** | 0.10.0 |
 
-`openehr-loco`, `openehr-assets`, and the eight fuzz crates are `publish = false`
-and are not on crates.io. `openehr-loco`'s own version moves in lockstep with
+`openehr-axa`, `openehr-assets`, and the eight fuzz crates are `publish = false`
+and are not on crates.io. `openehr-axa`'s own version moves in lockstep with
 the published crates for consistency (0.9.0 locally) even though it is never
 itself published.
 

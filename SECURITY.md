@@ -65,7 +65,7 @@ straightforward.
 ## Scope
 
 **In scope** — the eight published crates, the DDL they emit, and
-`openehr-loco`:
+`openehr-axa`:
 
 - Anything that makes this crate **disclose protected health information** it
   was supposed to withhold. `X11.7` forbids node content in errors, no `Display`
@@ -85,7 +85,7 @@ straightforward.
 - **Memory-safety or panic-based denial of service** from a document, a path, or
   an AQL query that a service would plausibly accept. `unsafe_code` is `forbid`,
   so this means panics and unbounded resource use rather than corruption.
-- `openehr-loco`'s **PASETO verification** and its authorisation checks.
+- `openehr-axa`'s **PASETO verification** and its authorisation checks.
 
 **Out of scope** — real, but not this project's to fix:
 
@@ -177,7 +177,7 @@ none (`W0.3`):
   with a dated reason in `deny.toml`/the workflow itself: `RUSTSEC-2026-0194`,
   `-0195` (`quick-xml`, pinned by `opendal`'s own dependency requirement, no
   compatible release available), and `-0235` (`rkyv`, pinned by
-  `rust_decimal`'s), all three reaching `openehr-loco` only, in a feature its
+  `rust_decimal`'s), all three reaching `openehr-axa` only, in a feature its
   own request-handling code never calls — confirmed unfixable by hand
   (`cargo update --precise` refused for each, naming the exact upstream pin),
   not merely unfixed.
@@ -197,7 +197,7 @@ none (`W0.3`):
   per crate against this tree — 31 components for `openehr` alone). What
   remains open: no SBOM has yet accompanied an *actual* release (the step
   exists, unused until the next one cuts), and `cargo auditable` — embedding
-  a dependency manifest into a **binary** — has no target yet: `openehr-loco`
+  a dependency manifest into a **binary** — has no target yet: `openehr-axa`
   is the one crate here that builds a binary, and it is not published or
   distributed anywhere (no Docker image, no release artefact) for
   `cargo auditable` to embed anything into. That is its own gap, tracked

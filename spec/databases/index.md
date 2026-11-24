@@ -161,7 +161,7 @@ what it meant (`C0.6`).
 | [`openehr-mssql`](../../openehr-mssql) | SQL Server | **Schema** |
 | [`openehr-oracle`](../../openehr-oracle) | Oracle Database | **Schema** |
 
-`openehr-loco` is an HTTP service over `openehr-sqlite` (`S1.7` as amended).
+`openehr-axa` is an HTTP service over `openehr-sqlite` (`S1.7` as amended).
 It is not an engine crate, carries no conformance level, and is not published.
 
 The [conformance ladder](00-conformance.md) defines each level. The

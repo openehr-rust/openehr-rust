@@ -27,7 +27,7 @@ Requirement prefix: `PR12`.
   the deployment did before calling, and a reader of the audit trail cannot tell
   from the data which happened. Saying so is the only honest option.
 
-  *(2026-08-02)* `openehr-loco` now verifies a signed assertion before it
+  *(2026-08-02)* `openehr-axa` now verifies a signed assertion before it
   accepts a request (`PR12.13`). That does not soften this requirement, and it
   is worth being exact about why: the service checks that an issuer signed a
   statement, not that the statement is true. A careless issuer produces
@@ -39,7 +39,7 @@ Requirement prefix: `PR12`.
 
 ## Verifying the caller's assertion
 
-Added 2026-08-02, when `openehr-loco` gained token verification. These bind a
+Added 2026-08-02, when `openehr-axa` gained token verification. These bind a
 **service** crate; the core is unaffected and `S1.8` continues to forbid it any
 of this.
 
@@ -130,7 +130,7 @@ of this.
   someone else's name, which is precisely the forgery `PR12.15` is built to
   prevent, arriving through the front door instead.
 
-  *(2026-08-02 — **implemented**.)* `openehr-loco` refuses both, and refuses
+  *(2026-08-02 — **implemented**.)* `openehr-axa` refuses both, and refuses
   them differently, because they are different mistakes. A committer naming
   somebody else is `403`: authentication succeeded and the claim about who did
   the work did not. A committer carrying **no identifier** is `422`: the caller
@@ -207,7 +207,7 @@ of this.
 
 ## Read access is not recorded
 
-- **PR12.5** *(amended 2026-08-02 — **implemented in `openehr-loco`, not in the
+- **PR12.5** *(amended 2026-08-02 — **implemented in `openehr-axa`, not in the
   store**)* A complete audit of access to clinical data requires recording
   **reads**, not only writes.
 
@@ -217,13 +217,13 @@ of this.
 
   This requirement always said a deployment must provide read auditing **above**
   the storage layer, and that has not changed — what changed is that a layer
-  above now exists. `openehr-loco` records every read before returning it. The
+  above now exists. `openehr-axa` records every read before returning it. The
   store still records none, and still cannot: a principal exists at the service
   and nowhere below, so an access column inside the store would be null for
   every embedded user.
 
   It is **opt-in**, and a service MUST report which it is doing rather than
-  leave a caller to assume. `openehr-loco` answers `records_reads` in its
+  leave a caller to assume. `openehr-axa` answers `records_reads` in its
   metadata and lists read auditing among its absences only while it is off.
 
 - **PR12.6** *(amended 2026-08-02 — **stated and implemented**)* Read auditing
@@ -259,7 +259,7 @@ of this.
   from a successful one. Someone probing for records they cannot see is what an
   investigation is looking for, and a log of successes only omits it.
 
-  `openehr-loco` distinguishes `ok`, `not_found`, `gone`, and `refused`. `gone`
+  `openehr-axa` distinguishes `ok`, `not_found`, `gone`, and `refused`. `gone`
   is separate from `ok` because who looked at a **withdrawn** record is a
   sharper question than who looked at a live one.
 
