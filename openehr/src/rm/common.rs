@@ -1914,6 +1914,57 @@ mod tests {
         .unwrap()
     }
 
+    /// An imported version answers every `Version` accessor from the wrapped
+    /// item or its own import audit, never from a default; and the
+    /// remaining plain accessors report what they were built with.
+    #[test]
+    fn imported_versions_links_and_related_parties_report_what_they_hold() {
+        let (mut vo, owner) = versioned();
+        let original = version(1, None, &owner, terminology::audit_change_type::CREATION);
+        let Version::Original(inner) = original.clone() else {
+            unreachable!("version() builds an original")
+        };
+        let import_audit = audit(terminology::audit_change_type::CREATION);
+        let imported: Version<String> =
+            ImportedVersion::new(inner, import_audit.clone(), owner.clone()).into();
+        assert_eq!(imported.uid(), original.uid());
+        assert_eq!(imported.preceding_version_uid(), None);
+        assert_eq!(imported.attestations(), original.attestations());
+        assert_eq!(
+            imported.other_input_version_uids(),
+            original.other_input_version_uids()
+        );
+        assert_eq!(imported.signature(), None);
+        assert_eq!(imported.data(), original.data());
+        assert_eq!(imported.commit_audit(), &import_audit);
+        assert_eq!(
+            imported.lifecycle_state_code(),
+            original.lifecycle_state_code()
+        );
+        assert!(!imported.is_deleted());
+        vo.commit(imported).unwrap();
+        assert_eq!(vo.owner_id(), &owner);
+        assert_eq!(vo.time_created().as_str(), "2026-07-31T09:00:00Z");
+
+        let link = Link::new(
+            DvText::new("meaning").unwrap().into(),
+            DvText::new("issue").unwrap().into(),
+            DvEhrUri::new("ehr://example.org/records/1").unwrap(),
+        );
+        assert_eq!(link.meaning().value(), "meaning");
+        assert_eq!(link.link_type().value(), "issue");
+
+        let related: PartyProxy = PartyRelated::new(
+            PartyIdentified::named("A Mother").unwrap(),
+            terminology::subject_relationship::MOTHER,
+        )
+        .unwrap()
+        .into();
+        assert_eq!(related.external_ref(), None);
+        assert!(related.identifiers().is_empty());
+        assert_eq!(related.name(), Some("A Mother"));
+    }
+
     fn versioned() -> (VersionedObject<String>, ObjectRef) {
         let uid = HierObjectId::from_uid_str("87284370-2D4B-4E3D-A3F3-F303D2F4F34B").unwrap();
         let owner = ObjectRef::new("local", "EHR", ObjectId::HierObjectId(uid.clone())).unwrap();

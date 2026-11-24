@@ -90,6 +90,22 @@ fn unsupported(detail: String) -> StoreError {
     StoreError::AqlUnsupported(detail)
 }
 
+/// A `LIMIT` or `OFFSET` as a row count, or the refusal naming which clause
+/// did not fit. Generic over the source type so that a test can hand it a
+/// value that does not fit on *this* platform: on a 64-bit target no `u64`
+/// the parser produces ever fails, which left the refusal unrun
+/// (`W0.41`: a platform-specific path is still in the denominator).
+fn row_count<N>(n: N, clause: &str) -> Result<usize>
+where
+    N: Copy + std::fmt::Display + TryInto<usize>,
+{
+    n.try_into().map_err(|_| {
+        unsupported(format!(
+            "{clause} {n} does not fit a row count on this platform"
+        ))
+    })
+}
+
 /// Executes `query` against `store`, binding `$name` parameters from `params`.
 ///
 /// # Errors
@@ -269,17 +285,9 @@ pub fn execute(
     // replaced by a stand-in. An absent OFFSET is `0` (AQL: no skip).
     let offset = match query.offset {
         None => 0, // RCA-IN-3: absent only, AQL: no OFFSET means no skip
-        Some(n) => usize::try_from(n).map_err(|_| {
-            unsupported(format!(
-                "OFFSET {n} does not fit a row count on this platform"
-            ))
-        })?,
+        Some(n) => row_count(n, "OFFSET")?,
     };
-    let limit = usize::try_from(limit).map_err(|_| {
-        unsupported(format!(
-            "LIMIT {limit} does not fit a row count on this platform"
-        ))
-    })?;
+    let limit = row_count(limit, "LIMIT")?;
     let rows = matched
         .into_iter()
         .skip(offset)
@@ -624,8 +632,17 @@ fn compare_cells(a: &Cell, b: &Cell) -> Ordering {
 mod tests {
     use super::{
         Cell, compare, compare_cells, compare_integer_with_number, eval_expr, eval_operand,
-        execute, literal_to_cell, resolve_scalar, scalar_to_cell, single_containment,
+        execute, literal_to_cell, resolve_scalar, row_count, scalar_to_cell, single_containment,
     };
+    #[test]
+    fn a_count_that_does_not_fit_usize_is_refused_naming_its_clause() {
+        assert_eq!(row_count(5_u64, "LIMIT").expect("fits"), 5);
+        for clause in ["LIMIT", "OFFSET"] {
+            let err = row_count(u128::MAX, clause).expect_err("cannot fit");
+            assert!(err.to_string().contains(clause), "{err}");
+        }
+    }
+
     use crate::conformance::{self, RECORD};
     use crate::record::{CompositionIndexRow, VersionRow};
     use crate::{CommitOutcome, Result, Store};

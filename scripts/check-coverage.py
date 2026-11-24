@@ -10,6 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 REGISTER = ROOT / "coverage-exclusions.tsv"
+FLOORS = ROOT / "coverage-floor.tsv"
 
 
 def arguments() -> argparse.Namespace:
@@ -53,16 +54,45 @@ def exclusions(workspace: str) -> dict[tuple[Path, int], str]:
     return found
 
 
+def floor(workspace: str) -> tuple[int, int] | None:
+    """The transitional ratchet for a workspace not yet at 100% (`W0.41a`).
+
+    Returns `(uncovered_lines, uncovered_functions)` the workspace is allowed,
+    or `None` when it owes the full 100%. A floor may only fall: a workspace
+    that beats its floor fails until the floor is lowered, so a gain cannot be
+    given back by the next change.
+    """
+    if not FLOORS.exists():
+        return None
+    for number, raw in enumerate(FLOORS.read_text().splitlines(), 1):
+        if not raw or raw.startswith("#"):
+            continue
+        fields = raw.split("\t")
+        if len(fields) != 4:
+            raise SystemExit(f"{FLOORS}:{number}: expected four tab-separated fields")
+        if fields[0] == workspace:
+            return int(fields[1]), int(fields[2])
+    return None
+
+
 def main() -> None:
     args = arguments()
     line_hits: dict[tuple[Path, int], int] = {}
     functions_found = 0
     functions_hit = 0
     source: Path | None = None
+    own_src = (ROOT / args.workspace / "src").resolve()
+    in_scope = False
 
+    # Only this workspace's own `src/` is its production source. A path
+    # dependency's lines (and stray profile data from other projects sharing a
+    # target directory) are another owner's evidence (`W0.41`).
     for raw in args.lcov.read_text().splitlines():
         if raw.startswith("SF:"):
             source = Path(raw[3:]).resolve()
+            in_scope = source.is_relative_to(own_src)
+        elif not in_scope:
+            continue
         elif raw.startswith("DA:"):
             if source is None:
                 raise SystemExit("DA record appeared before SF")
@@ -84,6 +114,29 @@ def main() -> None:
     if stale:
         rendered = "\n".join(f"  {path}:{line}" for path, line in sorted(stale))
         raise SystemExit(f"stale coverage exclusions (remove them):\n{rendered}")
+    functions_missed = functions_found - functions_hit
+    allowance = floor(args.workspace)
+    if allowance is not None:
+        max_lines, max_functions = allowance
+        if len(unregistered) > max_lines or functions_missed > max_functions:
+            rendered = "\n".join(f"  {path}:{line}" for path, line in sorted(unregistered))
+            raise SystemExit(
+                f"{args.workspace} fell below its coverage floor: "
+                f"{len(unregistered)} uncovered lines (floor {max_lines}), "
+                f"{functions_missed} uncovered functions (floor {max_functions}):\n{rendered}"
+            )
+        if len(unregistered) < max_lines or functions_missed < max_functions:
+            raise SystemExit(
+                f"{args.workspace} beat its coverage floor "
+                f"({len(unregistered)}/{max_lines} lines, {functions_missed}/{max_functions} "
+                f"functions): lower it in coverage-floor.tsv so the gain is kept"
+            )
+        total = len(line_hits) - len(allowed)
+        print(
+            f"{args.workspace}: ratchet held at {total - len(unregistered)}/{total} lines, "
+            f"{functions_hit}/{functions_found} functions (target 100%; W0.41a)"
+        )
+        return
     if unregistered:
         rendered = "\n".join(f"  {path}:{line}" for path, line in sorted(unregistered))
         raise SystemExit(f"uncovered production lines:\n{rendered}")

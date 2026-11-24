@@ -153,6 +153,7 @@ exists. It runs, on every push and pull request:
 | `layering` | that `openehr` and `openehr-store` depend inward only, dev-dependencies included, against a crate list **derived** from the tree (**W-13**) |
 | `claims` | that no engine crate claims Schema or above without a `schema` job backing it (the check list emptied 2026-09-06, once `openehr-oracle` and then `openehr-mssql` each got one); that the **library** matrix covers every requirement exactly once, and that both conformance matrices do not contradict themselves — the databases matrix has no exactly-once check: it is five topic tables in which one requirement can legitimately appear more than once; that every one of the databases matrix's 221 requirements is mentioned at least once (`scripts/check-databases-matrix-coverage.py`, wired in 2026-09-10 once `db:D-11`'s own ten-batch assessment closed it — a mention is not a mark, so this floor does not replace reading the matrix); that this file's summary paragraph counts itself correctly; that the licence expression is harmonized across every crate (`W0.22`); that no requirement marked satisfied calls itself unverified (**W-17**); that the documentation's countable claims match the tree (`scripts/check-docs.py`); and that `openehr/spec/corpus-index.md` — a reverse index from a requirement or finding id to where a corpus run cites it — is current (`scripts/generate-corpus-index.py`) |
 | `trademarks` | `scripts/check-trademarks.py`: every root document and every published crate's rustdoc that uses the openEHR mark in prose carries the professionalization rule 5 notice verbatim (added 2026-08-26, once the changes it was deferred behind had landed) |
+| `coverage` | Production-source line and function coverage of `openehr`, `openehr-store` and `openehr-sqlite`, each in its own workspace under nightly `cargo llvm-cov` (`W0.41`). A crate in `coverage-floor.tsv` may not fall below its floor and must lower it when it improves (`W0.41a`, a ratchet toward 100%); a crate not listed owes 100%. Only the crate's own `src/` counts. Does not yet cover the other crates (`W-23`) |
 | `mutants` | `cargo-mutants --in-diff` over the lines a push or a pull request changed, scoped to the diff because a full run is hours per crate. Pull-request-only until **W-18**. `openehr-sqlite` uses `--in-place`, not the isolated copy every other crate in the matrix gets, since its sibling dev-dependencies do not resolve inside one (**W-20**) |
 
 The `schema` jobs **fail rather than skip** when no container runtime is present
@@ -1135,6 +1136,31 @@ also exposed and then closed `lib:A-84`: `lib:D3.18g` now refuses computed
 non-finite `Real` values at construction and never substitutes zero during
 serialization. The full locked suite and this refreshed LCOV run pass after
 that API change.
+
+**Progress 2026-11-24.** The gate now exists: a `coverage` CI job measures
+`openehr`, `openehr-store` and `openehr-sqlite` with the `W0.41` command, and
+`scripts/check-coverage.py` enforces `coverage-floor.tsv` as a ratchet
+(`W0.41a`). Measuring `openehr-store` on a clean build showed it **no longer
+meets `W0.41`**: ten production lines and two functions were uncovered, all
+introduced by the `RCA-IN-2..7` commits (`OFFSET`/`LIMIT` conversions in
+`aql.rs`, `checked_total` in `conformance.rs`, the tag-MAC conversion in
+`record.rs`) after the 100% result above was recorded. The earlier claim was
+true when written and was not defended afterwards, which is why a gate was
+needed. `openehr-sqlite/tests/faults.rs` injects 39 faults (removed tables
+and columns, wrongly shaped stored values, refused writes) into a live store
+and runs one battery of every `Store` operation under each; uncovered lines in
+`openehr-sqlite` fell from 98 to 16. Reading `read_version` also showed each
+branch column was read twice, the second read's error arm unreachable; it is
+now read once. The same day `openehr-store` was repaired: the `OFFSET`/`LIMIT`
+conversion became a generic `row_count` a test can hand a value that does not
+fit, `checked_total`'s overflow panic and the keyed-tag columns of both
+`project` instantiations gained tests, leaving **one** line, `record.rs:166`,
+the `?` on `tag_mac_bytes`. `Chain::append` only produces 32-byte MACs, so no
+safe input reaches that arm without a seam; it stays under a floor of 1 rather
+than being excluded, because `W0.41` allows exclusion only for arms over
+external `#[non_exhaustive]` enums. Floors at this date: `openehr` 345 lines /
+60 functions, `openehr-sqlite` 16 / 19, `openehr-store` 1 / 0. Seven further workspaces
+are not yet measured.
 
 ## What this audit did not cover
 

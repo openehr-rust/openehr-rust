@@ -2021,12 +2021,22 @@ mod property_tests {
     //! to catch, and asserts the property rejects it.
 
     use super::assert_tamper_detected;
+    use super::checked_total;
     use super::{
         CodePhrase, Composition, LocatableAttrs, PartyIdentified, RECORD, SYSTEM, check_col_sql,
         check_dialect, check_projection, check_quote, check_stored_instant, check_verify_versions,
         composition_category, dialects_are_distinct, projection_outcome, sample_composition,
         sample_ehr, sample_version,
     };
+    #[test]
+    fn a_statement_count_that_overflows_is_named_not_wrapped() {
+        assert_eq!(checked_total([2_usize, 3].into_iter()), 5);
+        let overflow = std::panic::catch_unwind(|| {
+            checked_total([usize::MAX, 1].into_iter());
+        });
+        assert!(overflow.is_err(), "an overflowing sum wrapped silently");
+    }
+
     use crate::{ColTy, Dialect, Idempotence, ObjectKind, Placeholder, Table};
     use openehr::base::iso8601;
     use openehr::rm::common::{OriginalVersion, Version};

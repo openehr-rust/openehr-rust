@@ -344,6 +344,26 @@ mod tests {
         build(original).into()
     }
 
+    /// A keyed chain stores the tag's key id and its 32-byte MAC; an unkeyed
+    /// one stores neither (RCA-IN-3: "no tag" is the only absent).
+    #[test]
+    fn a_keyed_projection_stores_the_tag_and_an_unkeyed_one_does_not() {
+        let key = openehr::security::ChainKey::new("key-1", vec![9_u8; 32]).expect("key");
+        let keyed = VersionRow::project(&version(|v| v), "c", None, Some(&key)).expect("keyed");
+        assert_eq!(keyed.chain.tag_key_id.as_deref(), Some("key-1"));
+        assert!(keyed.chain.tag_mac.is_some());
+        // `project` is generic over the content type, and each instantiation is
+        // its own code: the tag columns of an `EHR_STATUS` version are not
+        // covered by those of a composition.
+        let status = crate::conformance::sample_ehr_status_version(1, None, 1, true);
+        let keyed_status = VersionRow::project(&status, "c", None, Some(&key)).expect("status");
+        assert_eq!(keyed_status.chain.tag_key_id.as_deref(), Some("key-1"));
+        assert!(keyed_status.chain.tag_mac.is_some());
+        let plain = VersionRow::project(&version(|v| v), "c", None, None).expect("plain");
+        assert_eq!(plain.chain.tag_key_id, None);
+        assert_eq!(plain.chain.tag_mac, None);
+    }
+
     #[test]
     fn projection_carries_both_context_instants() {
         let composition = crate::conformance::sample_composition("Encounter")

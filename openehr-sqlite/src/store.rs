@@ -90,12 +90,11 @@ impl SqliteStore {
             versioned_object_uid: row.get("versioned_object_uid")?,
             creating_system_id: row.get("creating_system_id")?,
             trunk_version: row.get("trunk_version")?,
-            branch_number: (row.get::<_, i64>("branch_number")? != 0)
-                .then(|| row.get("branch_number"))
-                .transpose()?,
-            branch_version: (row.get::<_, i64>("branch_version")? != 0)
-                .then(|| row.get("branch_version"))
-                .transpose()?,
+            // Read once and compare, rather than read to test and read again:
+            // the second read could not fail where the first had not, so its
+            // error arm was dead code that no test could reach.
+            branch_number: Some(row.get::<_, i64>("branch_number")?).filter(|n| *n != 0),
+            branch_version: Some(row.get::<_, i64>("branch_version")?).filter(|n| *n != 0),
             preceding_version_uid: row.get("preceding_version_uid")?,
             lifecycle_state_code: row.get("lifecycle_state_code")?,
             is_deleted: row.get::<_, i64>("is_deleted")? != 0,

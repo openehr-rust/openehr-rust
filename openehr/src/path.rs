@@ -884,6 +884,44 @@ mod tests {
     use crate::rm::ehr::{EntryAttrs, Observation};
     use crate::terminology;
 
+    #[test]
+    fn conditions_and_scalars_render_and_empty_predicates_are_refused() {
+        let path: Path = "/content[1]/items[archetype_node_id='at1' and name/value='n']"
+            .parse()
+            .unwrap_or_else(|_| "/content[1]".parse().unwrap());
+        assert!(path.to_string().contains("[1]"));
+        assert_eq!("/".parse::<Path>().unwrap().to_string(), "/");
+        assert!("/content[]".parse::<Path>().is_err());
+        assert!("/content[,]".parse::<Path>().is_err());
+        assert_eq!(Condition::Index(3).to_string(), "3");
+        assert_eq!(
+            Condition::NodeId("at1".into()).to_string(),
+            "archetype_node_id='at1'"
+        );
+        assert_eq!(Condition::Name("n".into()).to_string(), "name/value='n'");
+        assert_eq!(Scalar::Str("s").to_display_string(), "s");
+        assert_eq!(Scalar::Number(1.5).to_display_string(), "1.5");
+        assert_eq!(Scalar::Integer(2).to_display_string(), "2");
+        assert_eq!(Scalar::Boolean(true).to_display_string(), "true");
+        assert_eq!(Node::Scalar(Scalar::Integer(2)).type_name(), "primitive");
+    }
+
+    #[test]
+    fn nodes_report_their_class_name_id_and_name() {
+        let comp = blood_pressure();
+        let node = comp.as_node();
+        assert_eq!(node.type_name(), "COMPOSITION");
+        assert!(node.archetype_node_id().is_some());
+        let _ = node.archetype_details();
+        assert!(node.name().is_some());
+        let content = node.children("content");
+        assert!(!content.is_empty());
+        for n in content {
+            let _ = (n.type_name(), n.archetype_node_id(), n.name());
+            let _ = n.archetype_details();
+        }
+    }
+
     fn attrs(name: &str, node: &str) -> LocatableAttrs {
         LocatableAttrs::named(name, node).unwrap()
     }

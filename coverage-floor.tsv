@@ -1,0 +1,8 @@
+# workspace	max uncovered lines	max uncovered functions	note
+# A transitional ratchet (W0.41a), read by scripts/check-coverage.py. A workspace
+# listed here may not fall below its floor AND must lower the floor when it
+# beats it, so a gain is kept. A workspace not listed owes the full 100% of W0.41.
+# Measured 2026-11-24 with `cargo +nightly llvm-cov --lib --tests --lcov`.
+openehr	345	60	not yet 100%: cadl.rs/validation.rs error arms, path.rs Node arms (W-23)
+openehr-sqlite	16	19	engine-error arms that need a fault no test injects yet (W-23)
+openehr-store	1	0	record.rs:166 `?` on tag_mac_bytes: Chain::append only yields 32-byte MACs, so no safe input reaches the error arm; covering it needs a seam, not a test (W-23)

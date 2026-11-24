@@ -1144,6 +1144,62 @@ mod tests {
     use super::*;
     use crate::rm::data_types::{DvCount, DvQuantity};
 
+    /// Every `ITEM_STRUCTURE` shape, decoded from JSON, answers the same
+    /// questions through the enum as through its own type.
+    #[test]
+    fn every_item_structure_shape_dispatches_its_accessors() {
+        let el = r#"{"_type":"ELEMENT","name":{"value":"e"},"archetype_node_id":"at0002",
+                     "value":{"_type":"DV_COUNT","magnitude":1}}"#;
+        let head = r#""name":{"value":"s"},"archetype_node_id":"at0001""#;
+        let shapes = [
+            (
+                format!(r#"{{"_type":"ITEM_SINGLE",{head},"item":{el}}}"#),
+                "ITEM_SINGLE",
+                1,
+            ),
+            (
+                format!(r#"{{"_type":"ITEM_LIST",{head},"items":[{el},{el}]}}"#),
+                "ITEM_LIST",
+                2,
+            ),
+            (
+                format!(
+                    r#"{{"_type":"ITEM_TABLE",{head},"rows":[
+                        {{"name":{{"value":"r"}},"archetype_node_id":"at0003","items":[{el}]}}]}}"#
+                ),
+                "ITEM_TABLE",
+                1,
+            ),
+            (
+                format!(r#"{{"_type":"ITEM_TREE",{head},"items":[{el}]}}"#),
+                "ITEM_TREE",
+                1,
+            ),
+        ];
+        for (json, name, count) in shapes {
+            let s: ItemStructure =
+                serde_json::from_str(&json).unwrap_or_else(|e| panic!("{json}: {e}"));
+            assert_eq!(s.type_name(), name);
+            assert_eq!(s.locatable().name().value(), "s");
+            assert!(s.archetype_details().is_none());
+            assert_eq!(s.elements().count(), count, "{name}");
+        }
+
+        let table: ItemTable = serde_json::from_str(&format!(
+            r#"{{{head},"rows":[{{"name":{{"value":"r"}},"archetype_node_id":"at0003",
+                "items":[{{"_type":"CLUSTER","name":{{"value":"c"}},"archetype_node_id":"at0004",
+                          "items":[{el}]}}]}}]}}"#
+        ))
+        .unwrap();
+        assert!(
+            table.element_at_cell(0, 0).is_none(),
+            "a cluster is not an element"
+        );
+        let item: Item = table.rows()[0].items()[0].clone();
+        assert_eq!(item.name().value(), "c");
+        assert_eq!(item.archetype_node_id(), "at0004");
+    }
+
     fn attrs(name: &str, node: &str) -> LocatableAttrs {
         LocatableAttrs::named(name, node).unwrap()
     }

@@ -1233,6 +1233,69 @@ mod object_id_serde {
 mod tests {
     use super::*;
 
+    const UID: &str = "87284370-2D4B-4E3D-A3F3-F303D2F4F34B";
+
+    #[test]
+    fn constructors_and_accessors_refuse_and_report_what_they_hold() {
+        let root: Uid = UID.parse().unwrap();
+        assert!(HierObjectId::new(root.clone(), Some(String::new())).is_err());
+        let hier = HierObjectId::new(root.clone(), Some("ext".into())).unwrap();
+        assert_eq!(hier.to_string(), format!("{UID}::ext"));
+
+        assert!(GenericId::new("", "scheme").is_err());
+        assert!(GenericId::new("value", "").is_err());
+        let g = GenericId::new("v", "s").unwrap();
+        assert_eq!((g.value(), g.scheme()), ("v", "s"));
+
+        assert!("x(".parse::<TerminologyId>().is_err());
+        assert!("x()".parse::<TerminologyId>().is_err());
+
+        let ovi: ObjectVersionId = format!("{UID}::sys.example::2").parse().unwrap();
+        assert_eq!(ovi.creating_system_id().to_string(), "sys.example");
+        assert!(!ovi.is_branch());
+        let rebuilt = ObjectVersionId::new(
+            ovi.object_id().clone(),
+            ovi.creating_system_id().clone(),
+            *ovi.version_tree_id(),
+        );
+        assert_eq!(rebuilt, ovi);
+
+        let uid_based = UidBasedId::from(ovi.clone());
+        assert_eq!(uid_based.root(), ovi.object_id());
+        assert_eq!(uid_based.type_name(), "OBJECT_VERSION_ID");
+        assert_eq!(uid_based.extension(), None);
+        let hier_based = UidBasedId::HierObjectId(hier);
+        assert_eq!(hier_based.root().to_string(), UID);
+        assert_eq!(hier_based.extension(), Some("ext"));
+    }
+
+    #[test]
+    fn identifiers_deserialize_from_bare_strings_and_typed_objects() {
+        let ovi = format!("{UID}::sys.example::2");
+        let from_str: UidBasedId = serde_json::from_str(&format!("\"{ovi}\"")).unwrap();
+        assert_eq!(from_str.type_name(), "OBJECT_VERSION_ID");
+        let obj: ObjectId = serde_json::from_str(&format!("\"{UID}\"")).unwrap();
+        assert!(matches!(obj, ObjectId::HierObjectId(_)));
+        let obj: ObjectId = serde_json::from_str(&format!("\"{ovi}\"")).unwrap();
+        assert!(matches!(obj, ObjectId::ObjectVersionId(_)));
+        // A typed object without a recognised `_type` is inferred from `value`.
+        let obj: ObjectId =
+            serde_json::from_str(&format!(r#"{{"value":"{UID}","extra":1}}"#)).unwrap();
+        assert!(matches!(obj, ObjectId::HierObjectId(_)));
+        let uid: UidBasedId = serde_json::from_str(&format!(r#"{{"value":"{UID}"}}"#)).unwrap();
+        assert_eq!(uid.type_name(), "HIER_OBJECT_ID");
+        assert!(serde_json::from_str::<ObjectId>("\"\"").is_err());
+        assert!(serde_json::from_str::<UidBasedId>("\"\"").is_err());
+        assert!(serde_json::from_str::<ObjectId>("1").is_err());
+        assert!(serde_json::from_str::<UidBasedId>("1").is_err());
+    }
+
+    #[test]
+    fn an_archetype_id_version_too_large_for_u32_is_refused() {
+        let id = "openEHR-EHR-OBSERVATION.blood_pressure.v99999999999";
+        assert!(id.parse::<ArchetypeId>().is_err());
+    }
+
     #[test]
     fn version_id_round_trips_exactly() {
         for text in [

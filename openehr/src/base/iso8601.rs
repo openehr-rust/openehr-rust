@@ -1007,6 +1007,21 @@ impl SemanticOrd for Duration {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn malformed_durations_are_refused_by_designator() {
+        for text in [
+            "PT1.5.5S",
+            "PTxS",
+            "P1.5D",
+            "PT1.5M",
+            "P99999999999D",
+            "P1X",
+            "PT1D",
+        ] {
+            assert!(text.parse::<Duration>().is_err(), "{text}");
+        }
+    }
     use crate::base::Interval;
 
     #[test]

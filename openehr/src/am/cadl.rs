@@ -2112,6 +2112,137 @@ mod tests {
     use super::*;
     use crate::am::CObject;
 
+    /// The token-level helpers each have a "wrong token" and an "end of
+    /// input" refusal; both are reached directly here.
+    #[test]
+    fn the_token_helpers_refuse_wrong_and_missing_tokens() {
+        let err = |r: Result<(), CadlError>| r.unwrap_err().to_string();
+        assert!(err(expect_dotdot(&mut Lexer::new("x"))).contains("`..`"));
+        assert!(err(expect_dotdot(&mut Lexer::new(""))).contains("end of input"));
+        assert!(err(expect_symbol(&mut Lexer::new(""), '{')).contains("end of input"));
+        assert!(err(expect_symbol(&mut Lexer::new("x"), '{')).contains("expected `{`"));
+        assert!(err(expect_keyword(&mut Lexer::new(""), "matches")).contains("end of input"));
+        assert!(err(expect_keyword(&mut Lexer::new("x"), "matches")).contains("matches"));
+        assert!(expect_word(&mut Lexer::new(""), "a name").is_err());
+        assert!(expect_word(&mut Lexer::new("{"), "a name").is_err());
+        assert!(expect_signed_integer(&mut Lexer::new("")).is_err());
+        assert!(expect_signed_integer(&mut Lexer::new("-")).is_err());
+        assert!(expect_signed_integer(&mut Lexer::new("99999999999999999999")).is_err());
+        assert!(expect_signed_real(&mut Lexer::new("")).is_err());
+        assert!(expect_signed_real(&mut Lexer::new("{")).is_err());
+        assert!(parse_assumed_string(&mut Lexer::new(";")).is_err());
+        assert!(parse_assumed_string(&mut Lexer::new("; 1")).is_err());
+    }
+
+    #[test]
+    fn malformed_primitives_and_slots_are_refused() {
+        let cases = [
+            // two integer / real / temporal ranges
+            "X[id1] matches { a matches {|0..1|, |2..3|} }",
+            "X[id1] matches { a matches {|0.0..1.0|, |2.0..3.0|} }",
+            "X[id1] matches { a matches {|2024-01-01..2024-12-31|, |2025-01-01..2025-12-31|} }",
+            // dangling interval, sign, boolean, string, assumed value
+            "X[id1] matches { a matches {|0..1|; }",
+            "X[id1] matches { a matches {|-}",
+            "X[id1] matches { a matches {true; }",
+            "X[id1] matches { a matches {true; 1}",
+            "X[id1] matches { a matches {\"a\"; }",
+            "X[id1] matches { a matches {/x/; 1}",
+            "X[id1] matches { a matches {/x/; ",
+            "X[id1] matches { a matches {\"a\", }",
+            "X[id1] matches { a matches {[at1, ",
+            "X[id1] matches { a matches {[at1; ",
+            "X[id1] matches { a matches {[atx]} }",
+            "X[id1] matches { a matches {2024-",
+            "X[id1] matches { a matches {PT",
+            // slots
+            "allow_archetype X[id1] matches { include }",
+            "allow_archetype X[id1] matches { include a }",
+            "allow_archetype X[id1] matches { include / }",
+            "allow_archetype X[id1] matches { include archetype_id/value matches {/a/} exclude",
+            "allow_archetype X[id1] matches { include archetype_id/value matches {/a/} ?",
+            "allow_archetype X[id1] matches { include archetype_id/value matches {/a",
+            "allow_archetype X[id1] matches { include archetype_id/value",
+            "allow_archetype X[id1] matches { include archetype_id/value matches {",
+            // generic parameters, trailing content, defaults
+            "LIST<DV_TEXT>[id1]",
+            "X[id1] trailing",
+            "X[id1] matches { a matches {1} } }",
+            "X[id1] matches { a existence matches {1..} matches {Y[id2]} }",
+            "X[id1] matches { a cardinality matches {*..",
+            "X[id1] matches { a cardinality matches {0..*; unordered; } }",
+            "X[id1] matches { a cardinality matches {0..*; } }",
+            "X[id1] matches { a cardinality matches {0..*; ordered",
+            "X[id1] matches { a cardinality matches {0..*; ",
+            "X[id1] occurrences matches {*",
+            "X[id1] occurrences matches {0..*",
+            "X[id1] occurrences matches {1..2",
+            "X[id1] matches { a matches {use_node} }",
+            "X[id1] matches { a matches {use_node Y} }",
+            "X[id1] matches { a matches {use_archetype} }",
+            "X[id1] matches { (a, b) matches {[{1}, {2}]} }",
+            "X[id1] matches { (a, b) matches {",
+            "X[id1] matches { (a, b) }",
+        ];
+        for c in cases {
+            assert!(parse_definition(c).is_err(), "should be refused: {c:?}");
+        }
+    }
+
+    /// Every one of these is malformed in a distinct way, and each must be
+    /// refused rather than parsed or panicked on. They exist to run the
+    /// error arms of the parser (`W0.3`: an arm no test runs is a claim no
+    /// one checked).
+    #[test]
+    fn malformed_definitions_are_refused() {
+        let cases = [
+            "DV_TEXT[id1] matches { value matches {1.. } }",
+            "DV_TEXT[id1] matches { value matches {1.",
+            "DV_TEXT[id1] occurrences matches {",
+            "DV_TEXT[id1] occurrences matches {a}",
+            "DV_TEXT[id1] occurrences matches {99999999999999999999}",
+            "DV_TEXT[id1] occurrences matches {1..99999999999999999999}",
+            "DV_TEXT[id1] occurrences matches {1..x}",
+            "DV_TEXT[id1] occurrences matches {1..",
+            "DV_TEXT[id1] occurrences matches {-1}",
+            "X[id1] matches { items existence matches {0..-1} matches {Y[id2]} }",
+            "X[id1] matches { items cardinality matches {0..*; ",
+            "X[id1] matches { items cardinality matches {0..*; foo} matches {Y[id2]} }",
+            "X[id1] matches { value matches {true, maybe} }",
+            "X[id1] matches { value matches {true, ",
+            "X[id1] matches { value matches {\"a\", 1} }",
+            "X[id1] matches { value matches {1, 5..8} }",
+            "X[id1] matches { value matches {1.5, 2.5..3.5} }",
+            "X[id1] matches { value matches {|1..|} }",
+            "X[id1] matches { value matches {|-",
+            "X[id1] matches { value matches {|",
+            "X[id1] matches { value matches {",
+            "X[id1] matches { value matches {[at99999999999999999999",
+            "X[id1] matches { value matches {[zz1]} }",
+            "X[id1] matches { value matches {/abc",
+            "X[id1] matches { value matches {/abc\n/} }",
+            "X[id1] matches { _default = <1> }",
+            "X[id1] matches { value matches {Y[id2] matches {",
+            "use_node X /a/b",
+            "use_node",
+            "use_archetype X[openEHR-EHR-X.y.v1]",
+            "allow_archetype X[id1] matches { include",
+            "allow_archetype X[id1] matches { foo",
+            "allow_archetype X[id1] matches { include matches {",
+            "allow_archetype X[id1] matches { include",
+            "",
+            "[",
+            "X[",
+            "X[id1] matches",
+            "X[id1] matches {",
+            "X[id1] matches { a matches",
+            "X[id1] matches { a matches {",
+        ];
+        for c in cases {
+            assert!(parse_definition(c).is_err(), "should be refused: {c:?}");
+        }
+    }
+
     #[test]
     fn a_bare_root_with_no_attributes_is_any_allowed() {
         let root = parse_definition("DV_TEXT[id1]").unwrap();

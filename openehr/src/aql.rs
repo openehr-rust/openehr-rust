@@ -1361,6 +1361,49 @@ fn split_path(text: &str) -> IdentifiedPath {
 mod tests {
     use super::*;
 
+    /// Each query uses a construct the main fixture does not, and must
+    /// survive parse → render → parse unchanged (`A-05`).
+    #[test]
+    fn less_common_constructs_round_trip_through_their_rendering() {
+        let queries = [
+            "SELECT DISTINCT TOP 3 c/uid/value FROM EHR e CONTAINS COMPOSITION c LIMIT 2 OFFSET 1",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c AND OBSERVATION o",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c OR OBSERVATION o",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c NOT CONTAINS OBSERVATION o",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c WHERE EXISTS c/context",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c WHERE NOT EXISTS c/context",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c WHERE c/name/value MATCHES {'a', 'b'}",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c WHERE c/name/value MATCHES ('a', $p)",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c WHERE (c/a = 1 AND c/b = 2.0) OR c/d = true",
+            "SELECT 1.0, 'x', true, $q FROM EHR e",
+            "SELECT e/ehr_id/value FROM EHR e ORDER BY e/ehr_id/value DESC",
+        ];
+        for text in queries {
+            let q: AqlQuery = text.parse().unwrap_or_else(|e| panic!("{text}: {e}"));
+            let _ = (q.parameters(), q.check());
+            let again: AqlQuery = q.to_string().parse().unwrap();
+            assert_eq!(again, q, "{text}");
+        }
+    }
+
+    #[test]
+    fn malformed_queries_are_refused() {
+        for text in [
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c NOT OBSERVATION o",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c WHERE c/a MATCHES 'x'",
+            "SELECT c/uid/value AS 5 FROM EHR e",
+            "SELECT c/uid/value FROM EHR e LIMIT -1",
+            "SELECT c/uid/value FROM EHR e LIMIT x",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c WHERE c/a = @",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c WHERE = 1",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c WHERE (c/a = 1",
+            "SELECT",
+            "SELECT c/a FROM",
+        ] {
+            assert!(text.parse::<AqlQuery>().is_err(), "{text}");
+        }
+    }
+
     const BLOOD_PRESSURE: &str = "
         SELECT
             o/data[at0001]/events[at0006]/data[at0003]/items[at0004]/value/magnitude AS systolic,

@@ -637,6 +637,72 @@ mod tests {
     use crate::rm::data_structures::{Element, ItemSingle};
     use crate::rm::data_types::{DataValue, DvText};
 
+    fn party_attrs(name: &str) -> PartyAttrs {
+        PartyAttrs::new(
+            attrs_with_uid(name, "openEHR-DEMOGRAPHIC-PERSON.person.v1"),
+            vec![identity()],
+        )
+        .unwrap()
+    }
+
+    /// Every `PARTY` variant answers `party()` with the attributes it was
+    /// built from, and the plain accessors report what they hold
+    /// (`lib:A-09`: an accessor that returned a constant would pass every
+    /// test that never asked it twice).
+    #[test]
+    fn every_party_kind_and_plain_accessor_reports_what_it_holds() {
+        let kinds = [
+            Party::Person(Person::new(party_attrs("p"))),
+            Party::Organisation(Organisation::new(party_attrs("o"))),
+            Party::Group(Group::new(party_attrs("g"))),
+            Party::Agent(Agent::new(party_attrs("a"))),
+            Party::Role(Role::new(
+                party_attrs("r"),
+                PartyRef::new(
+                    "demographic",
+                    "PERSON",
+                    ObjectId::HierObjectId(
+                        HierObjectId::from_uid_str("11111111-2222-3333-4444-555555555555").unwrap(),
+                    ),
+                )
+                .unwrap(),
+            )),
+        ];
+        let names = ["p", "o", "g", "a", "r"];
+        for (party, name) in kinds.iter().zip(names) {
+            assert_eq!(party.party().identities().len(), 1);
+            assert_eq!(party.party().locatable.name().value(), name);
+        }
+
+        let details = identity().details().clone();
+        let addr = Address::new(
+            LocatableAttrs::named("a", "at0001").unwrap(),
+            details.clone(),
+        );
+        assert_eq!(addr.details(), &details);
+        let cap = Capability::new(
+            LocatableAttrs::named("c", "at0001").unwrap(),
+            details.clone(),
+        );
+        assert_eq!(cap.credentials(), &details);
+
+        let person = Person::new(party_attrs("p")).with_actor_attrs(ActorAttrs::default());
+        assert_eq!(person.party().identities().len(), 1);
+        let role = Role::new(
+            party_attrs("r"),
+            PartyRef::new(
+                "demographic",
+                "PERSON",
+                ObjectId::HierObjectId(
+                    HierObjectId::from_uid_str("11111111-2222-3333-4444-555555555555").unwrap(),
+                ),
+            )
+            .unwrap(),
+        );
+        assert_eq!(role.performer().type_name(), "PERSON");
+        assert_eq!(role.party().identities().len(), 1);
+    }
+
     fn attrs_with_uid(name: &str, node: &str) -> LocatableAttrs {
         LocatableAttrs::named(name, node)
             .unwrap()

@@ -396,6 +396,76 @@ impl From<Text> for DataValue {
 mod tests {
     use super::*;
 
+    /// One value of each class that the other tests do not build, decoded
+    /// from canonical JSON: `type_name` and `display_value` are total over
+    /// the whole enum, and each answers for the class it was handed.
+    #[test]
+    fn type_name_and_display_value_cover_every_decoded_class() {
+        let cases = [
+            (
+                r#"{"_type":"DV_BOOLEAN","value":true}"#,
+                "DV_BOOLEAN",
+                Some("true"),
+            ),
+            (
+                r#"{"_type":"DV_STATE","value":{"value":"active","defining_code":{"terminology_id":{"value":"local"},"code_string":"at1"}},"is_terminal":false}"#,
+                "DV_STATE",
+                Some("active"),
+            ),
+            (r#"{"_type":"DV_TEXT","value":"hi"}"#, "DV_TEXT", Some("hi")),
+            (
+                r#"{"_type":"DV_CODED_TEXT","value":"yes","defining_code":{"terminology_id":{"value":"local"},"code_string":"at1"}}"#,
+                "DV_CODED_TEXT",
+                Some("yes"),
+            ),
+            (
+                r#"{"_type":"DV_COUNT","magnitude":4}"#,
+                "DV_COUNT",
+                Some("4"),
+            ),
+            (
+                r#"{"_type":"DV_PROPORTION","numerator":1.0,"denominator":2.0,"type":0}"#,
+                "DV_PROPORTION",
+                Some("1/2"),
+            ),
+            (
+                r#"{"_type":"DV_DATE","value":"2024-05"}"#,
+                "DV_DATE",
+                Some("2024-05"),
+            ),
+            (
+                r#"{"_type":"DV_TIME","value":"10:30:00"}"#,
+                "DV_TIME",
+                Some("10:30:00"),
+            ),
+            (
+                r#"{"_type":"DV_DATE_TIME","value":"2024-05-01T10:30:00Z"}"#,
+                "DV_DATE_TIME",
+                Some("2024-05-01T10:30:00Z"),
+            ),
+            (
+                r#"{"_type":"DV_DURATION","value":"PT5M"}"#,
+                "DV_DURATION",
+                Some("PT5M"),
+            ),
+            (
+                r#"{"_type":"DV_URI","value":"http://a.example/"}"#,
+                "DV_URI",
+                Some("http://a.example/"),
+            ),
+            (
+                r#"{"_type":"DV_EHR_URI","value":"ehr:a/b"}"#,
+                "DV_EHR_URI",
+                Some("ehr:a/b"),
+            ),
+        ];
+        for (json, name, shown) in cases {
+            let v: DataValue = serde_json::from_str(json).unwrap_or_else(|e| panic!("{json}: {e}"));
+            assert_eq!(v.type_name(), name);
+            assert_eq!(v.display_value().as_deref(), shown, "{json}");
+        }
+    }
+
     /// Every arm of `DataValue::semantic_cmp` actually compares.
     ///
     /// **Failure mode, and it is the one `lib:A-28` records about a different

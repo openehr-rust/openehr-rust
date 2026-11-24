@@ -980,6 +980,47 @@ jobs:
   # It does not assert the rest of the tree is mutation-clean. It is not. The
   # `T13.2` row in each conformance matrix says so, and this job must not be
   # cited as though it said otherwise (`W0.3`).
+  # Production-source coverage gate (`W0.41`, `W0.41a`, `W-23`). Each crate is
+  # measured in its own workspace with the command the spec documents, and
+  # `scripts/check-coverage.py` decides: a crate listed in `coverage-floor.tsv`
+  # may not fall below its floor and must lower the floor when it beats it;
+  # a crate not listed owes the full 100%. Only the crate's own `src/` counts,
+  # so a path dependency's tests are never another crate's evidence.
+  coverage:
+    name: coverage / ${{ matrix.crate }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [openehr, openehr-store, openehr-sqlite]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust
+        run: |
+          rustup toolchain install nightly --profile minimal --component llvm-tools-preview
+          rustup default nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ matrix.crate }}
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Measure
+        # RUSTFLAGS is not `-D warnings` here: the nightly toolchain has lints
+        # the stable `test` job does not, and this job measures, not lints.
+        env:
+          RUSTFLAGS: ""
+        run: |
+          cd ${{ matrix.crate }}
+          cargo llvm-cov --lib --tests --lcov \
+            --ignore-filename-regex '/\.cargo/registry/|/rustc/' \
+            --output-path "$RUNNER_TEMP/lcov.info"
+      - name: Gate
+        run: |
+          python3 scripts/check-coverage.py \
+            --workspace ${{ matrix.crate }} --lcov "$RUNNER_TEMP/lcov.info"
+
   mutants:
     name: changed lines are mutation-tested
     runs-on: ubuntu-latest

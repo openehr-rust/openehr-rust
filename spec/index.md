@@ -402,6 +402,20 @@ is genuinely worse. The rules below keep the copies and make them mechanical.
   enforce the same command contributors run locally, and the list of workspaces
   MUST be derived from the tree and checked for completeness.
 
+- **W0.41a** *(added 2026-11-24)* Until a workspace reaches the 100% of `W0.41`,
+  CI MUST hold it to a **ratchet**: [`coverage-floor.tsv`](../coverage-floor.tsv)
+  records the number of uncovered production lines and functions it may have,
+  `scripts/check-coverage.py` MUST fail when a workspace has more, and MUST
+  also fail when it has fewer, so that the floor is lowered in the same change
+  and a gain is not silently given back by the next one. A workspace absent
+  from the file owes the full `W0.41`. The ratchet is a transition, not a
+  weaker standard: `W-23` stays open until the file is empty, and a floor is
+  never raised to admit a regression without an audit entry naming it. Only
+  the workspace's own `src/` is counted. Engine-error paths that a healthy
+  database never reaches MUST be covered by injecting the fault (a dropped
+  table, a dropped column, a stored value of the wrong shape, a refused
+  write), not excluded; `openehr-sqlite/tests/faults.rs` is the model.
+
   Coverage is a floor, not a correctness claim. `db:T11.10` still requires a
   regression test to be shown capable of failing, and mutation testing still
   asks whether an executed assertion distinguishes right from wrong.

@@ -1644,6 +1644,19 @@ mod tests {
     use crate::rm::data_structures::{Element, ItemSingle};
     use crate::rm::data_types::{DataValue, DvCount};
 
+    #[test]
+    fn excluding_a_record_from_queries_is_reported_and_leaves_it_writable() {
+        let status = EhrStatus::new(
+            attrs("EHR Status", "openEHR-EHR-EHR_STATUS.generic.v1"),
+            PartySelf::anonymous(),
+            true,
+            true,
+        );
+        let opted_out = status.set_queryable(false);
+        assert!(!opted_out.is_queryable());
+        assert!(opted_out.is_active());
+    }
+
     fn attrs(name: &str, node: &str) -> LocatableAttrs {
         LocatableAttrs::named(name, node).unwrap()
     }

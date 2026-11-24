@@ -1379,6 +1379,245 @@ mod tests {
     use crate::rm::ehr::{EntryAttrs, Evaluation, Observation};
     use crate::terminology;
 
+    fn entry_json(kind: &str, extra: &str) -> String {
+        format!(
+            r#"{{"_type":"{kind}","name":{{"value":"n"}},
+              "archetype_node_id":"openEHR-EHR-{kind}.x.v1",
+              "language":{{"terminology_id":{{"value":"ISO_639-1"}},"code_string":"en"}},
+              "encoding":{{"terminology_id":{{"value":"IANA_character-sets"}},"code_string":"UTF-8"}},
+              "subject":{{"_type":"PARTY_SELF"}}{extra}}}"#
+        )
+    }
+
+    #[test]
+    fn an_action_with_a_foreign_state_and_transition_is_reported() {
+        let coded = |code: &str| {
+            format!(
+                r#"{{"value":"x","defining_code":{{"terminology_id":{{"value":"openehr"}},"code_string":"{code}"}}}}"#
+            )
+        };
+        let action: Entry = serde_json::from_str(&entry_json(
+            "ACTION",
+            &format!(
+                r#","time":{{"value":"2026-08-01T09:00:00Z"}},
+                   "description":{{"_type":"ITEM_TREE","name":{{"value":"d"}},
+                                   "archetype_node_id":"at0001","items":[]}},
+                   "ism_transition":{{"current_state":{},"transition":{}}}"#,
+                coded("999999"),
+                coded("999999")
+            ),
+        ))
+        .unwrap();
+        let names = broken(&action);
+        assert!(names.contains(&"Current_state_valid"), "{names:?}");
+        assert!(names.contains(&"Transition_valid"), "{names:?}");
+    }
+
+    fn tree(items: &str) -> String {
+        format!(
+            r#"{{"_type":"ITEM_TREE","name":{{"value":"d"}},"archetype_node_id":"at0001","items":[{items}]}}"#
+        )
+    }
+
+    #[test]
+    fn histories_and_interval_events_report_their_own_invariants() {
+        use crate::rm::data_structures::History;
+        let history = |period: &str, events: &str| -> History {
+            serde_json::from_str(&format!(
+                r#"{{"name":{{"value":"h"}},"archetype_node_id":"at0001",
+                    "origin":{{"value":"2026-08-01T09:00:00Z"}}{period}{events}}}"#
+            ))
+            .unwrap()
+        };
+        assert!(broken(&history("", "")).contains(&"Events_valid"));
+        assert!(
+            broken(&history(r#","period":{"value":"PT0S"}"#, "")).contains(&"Periodic_validity")
+        );
+
+        let interval = format!(
+            r#","events":[{{"_type":"INTERVAL_EVENT","name":{{"value":"e"}},
+                "archetype_node_id":"at0002","time":{{"value":"2026-08-01T09:00:00Z"}},
+                "data":{},"width":{{"value":"-PT5M"}},
+                "math_function":{{"value":"x","defining_code":
+                    {{"terminology_id":{{"value":"openehr"}},"code_string":"999999"}}}}}}]"#,
+            tree("")
+        );
+        let names = broken(&history("", &interval));
+        assert!(names.contains(&"Width_non_negative"), "{names:?}");
+        assert!(names.contains(&"Math_function_validity"), "{names:?}");
+    }
+
+    #[test]
+    fn a_table_cell_that_is_a_cluster_is_reported() {
+        let cluster = r#"{"_type":"CLUSTER","name":{"value":"c"},"archetype_node_id":"at0003",
+                          "items":[{"_type":"ELEMENT","name":{"value":"e"},
+                          "archetype_node_id":"at0004","value":{"_type":"DV_COUNT","magnitude":1}}]}"#;
+        let table: ItemStructure = serde_json::from_str(&format!(
+            r#"{{"_type":"ITEM_TABLE","name":{{"value":"t"}},"archetype_node_id":"at0001","rows":[
+                {{"name":{{"value":"r"}},"archetype_node_id":"at0002","items":[{cluster}]}}]}}"#
+        ))
+        .unwrap();
+        assert!(broken(&table).contains(&"Valid_structure"));
+    }
+
+    #[test]
+    fn an_observation_validates_its_state_provider_and_blank_parties() {
+        let history = r#"{"name":{"value":"h"},"archetype_node_id":"at0001",
+            "origin":{"value":"2026-08-01T09:00:00Z"}}"#;
+        let observation: Entry = serde_json::from_str(&entry_json(
+            "OBSERVATION",
+            &format!(
+                r#","data":{history},"state":{history},
+                    "provider":{{"_type":"PARTY_IDENTIFIED"}}"#
+            ),
+        ))
+        .unwrap();
+        let report = observation.validate();
+        let paths: Vec<_> = report
+            .violations()
+            .iter()
+            .map(|v| v.path.as_str())
+            .collect();
+        // Each nested history was visited, not skipped, and the provider with
+        // no name, identifier, or reference was refused.
+        assert!(paths.iter().any(|p| p.starts_with("/data")), "{paths:?}");
+        assert!(paths.iter().any(|p| p.starts_with("/state")), "{paths:?}");
+        assert!(
+            report
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Provider_valid"),
+            "{paths:?}"
+        );
+    }
+
+    #[test]
+    fn blank_archetype_details_are_reported() {
+        let blank = edited(&composition(), |j| {
+            j["archetype_details"]["rm_version"] = "".into();
+        });
+        assert!(broken(&blank).contains(&"Rm_version_valid"));
+    }
+
+    #[test]
+    fn instruction_and_action_entries_report_their_own_invariants() {
+        let instruction: Entry = serde_json::from_str(&entry_json(
+            "INSTRUCTION",
+            r#","narrative":{"value":""},"activities":[]"#,
+        ))
+        .unwrap();
+        let names = broken(&instruction);
+        assert!(names.contains(&"Activities_valid"), "{names:?}");
+        assert!(names.contains(&"Narrative_valid"), "{names:?}");
+    }
+
+    /// The names of the invariants a value breaks, in report order.
+    fn broken<T: Validate>(value: &T) -> Vec<&'static str> {
+        value
+            .validate()
+            .violations()
+            .iter()
+            .map(|v| v.invariant)
+            .collect()
+    }
+
+    /// Serialises `value`, lets `edit` break it as JSON, and reads it back:
+    /// the path a document takes when it arrives over the wire rather than
+    /// through a constructor.
+    fn edited<T: serde::Serialize + serde::de::DeserializeOwned>(
+        value: &T,
+        edit: impl FnOnce(&mut serde_json::Value),
+    ) -> T {
+        let mut json = serde_json::to_value(value).unwrap();
+        edit(&mut json);
+        serde_json::from_value(json).unwrap()
+    }
+
+    #[test]
+    fn an_event_context_that_contradicts_itself_is_reported_by_name() {
+        use crate::rm::ehr::EventContext;
+        let context = EventContext::new(
+            DvDateTime::new("2026-08-01T09:00:00Z").unwrap(),
+            terminology::setting::PRIMARY_MEDICAL_CARE,
+        )
+        .unwrap()
+        .with_end_time(DvDateTime::new("2026-08-01T09:45:00Z").unwrap())
+        .unwrap();
+        assert!(broken(&context).is_empty());
+
+        let reversed = edited(&context, |j| {
+            j["end_time"] = serde_json::json!({"value": "2026-08-01T08:00:00Z"});
+        });
+        assert_eq!(broken(&reversed), ["End_time_valid"]);
+
+        let unplaced = edited(&context, |j| j["location"] = "".into());
+        assert_eq!(broken(&unplaced), ["location_valid"]);
+
+        let foreign = edited(&context, |j| {
+            j["setting"]["defining_code"]["code_string"] = "999999".into();
+        });
+        assert!(broken(&foreign).contains(&"Setting_valid"));
+    }
+
+    /// A value serialised, edited as JSON, and read back keeps whatever the
+    /// edit broke: the only way past the constructors, and so the only way
+    /// to reach these arms.
+    #[test]
+    fn json_edits_that_break_invariants_are_reported_by_name() {
+        let mut v = serde_json::to_value(composition()).unwrap();
+        v["category"]["defining_code"]["code_string"] = "999".into();
+        let broken: Composition = serde_json::from_value(v).unwrap();
+        assert!(
+            broken
+                .validate()
+                .violations()
+                .iter()
+                .any(|x| x.invariant == "Category_validity")
+        );
+
+        let element: Element = serde_json::from_str(
+            r#"{"name":{"value":"x"},"archetype_node_id":"at0001",
+                "value":{"_type":"DV_COUNT","magnitude":1},
+                "null_reason":{"value":"why"}}"#,
+        )
+        .unwrap();
+        assert!(
+            element
+                .validate()
+                .violations()
+                .iter()
+                .any(|x| x.invariant == "Inv_null_reason_valid")
+        );
+    }
+
+    /// Constructors refuse these, so only `Deserialize` can produce them;
+    /// `validate()` is then the only thing standing between the value and
+    /// the store (`lib:A-23`).
+    #[test]
+    fn deserialized_structures_that_constructors_refuse_are_reported() {
+        let cluster: Cluster = serde_json::from_str(
+            r#"{"name":{"value":"c"},"archetype_node_id":"at0001","items":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            cluster.validate().violations()[0].invariant,
+            "Items_non_empty"
+        );
+
+        let history: crate::rm::data_structures::History = serde_json::from_str(
+            r#"{"name":{"value":"h"},"archetype_node_id":"at0001",
+                "origin":{"value":"2024-01-01T00:00:00Z"}}"#,
+        )
+        .unwrap();
+        assert!(
+            history
+                .validate()
+                .violations()
+                .iter()
+                .any(|v| v.invariant == "Events_valid")
+        );
+    }
+
     fn attrs(name: &str, node: &str) -> LocatableAttrs {
         LocatableAttrs::named(name, node).unwrap()
     }
