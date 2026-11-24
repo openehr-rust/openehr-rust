@@ -940,12 +940,12 @@ mod tests {
         .unwrap();
 
         let nodes = [
-            (element.as_node(), "ELEMENT", "el"),
-            (cluster.as_node(), "CLUSTER", "cl"),
-            (section.as_node(), "SECTION", "se"),
-            (history.as_node(), "HISTORY", "hi"),
+            ("el", element.as_node(), "ELEMENT"),
+            ("cl", cluster.as_node(), "CLUSTER"),
+            ("se", section.as_node(), "SECTION"),
+            ("hi", history.as_node(), "HISTORY"),
         ];
-        for (node, class, name) in nodes {
+        for (name, node, class) in nodes {
             assert_eq!(node.type_name(), class);
             assert_eq!(node.name(), Some(name), "{class}");
             assert!(node.archetype_node_id().is_some(), "{class}");
