@@ -1836,6 +1836,9 @@ mod tests {
     fn check_sees_an_unbound_alias_inside_every_shape_of_condition() {
         for condition in [
             "o/value = 1",
+            // The unbound alias on the right of a comparison is as unbound.
+            "1 = o/value",
+            "c/uid = o/value",
             "NOT o/value = 1",
             "c/uid = 1 AND o/value = 1",
             "c/uid = 1 OR o/value = 1",
@@ -1986,5 +1989,29 @@ mod tests {
             "SELECT c/uid FROM COMPOSITION c[archetype_node_id = 'openEHR-EHR-COMPOSITION.encounter.v1']"
         )
         .is_empty());
+    }
+
+    /// A count that is negative, and a number that is not one, are refused by
+    /// name. Negative numbers are legal in a value set (`Q12.9b`), so the lexer
+    /// does reach `LIMIT -1`; the parser, not the lexer, has to say no.
+    #[test]
+    fn a_negative_count_and_a_malformed_number_are_refused_by_name() {
+        for (text, expected) in [
+            (
+                "SELECT c/uid FROM COMPOSITION c LIMIT -1",
+                "must not be negative",
+            ),
+            (
+                "SELECT c/uid FROM COMPOSITION c LIMIT 1 OFFSET -1",
+                "must not be negative",
+            ),
+            (
+                "SELECT c/uid FROM COMPOSITION c WHERE c/a > 1.2.3",
+                "malformed number",
+            ),
+        ] {
+            let err = text.parse::<AqlQuery>().expect_err(text).to_string();
+            assert!(err.contains(expected), "{text}: {err}");
+        }
     }
 }
