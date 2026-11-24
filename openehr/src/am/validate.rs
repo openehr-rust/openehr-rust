@@ -1701,6 +1701,57 @@ mod tests {
         assert!(!format!("{:?}", report.violations()[0]).contains("200"));
     }
 
+    /// A primitive constraint of one kind reached through an attribute that
+    /// holds another is a violation, not a pass.
+    ///
+    /// A `C_INTEGER` on `DV_TEXT.value` is an archetype that cannot be
+    /// satisfied by any text; treating "the kinds differ" as "nothing to
+    /// check" would let every such value through.
+    #[test]
+    fn a_primitive_constraint_of_the_wrong_kind_is_a_violation() {
+        let constraint = element_with_value_constraint(
+            "at0004",
+            "value",
+            CPrimitive::Integer {
+                list: Vec::new(),
+                range: Some(Interval::closed(60, 100).unwrap()),
+            },
+            "DV_TEXT",
+        );
+        let archetype = evaluation_archetype(constraint);
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Free text", "at0004"),
+            DataValue::Text(crate::rm::data_types::DvText::new("72").unwrap()),
+        )]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert_eq!(report.violations().len(), 1, "{report:?}");
+        assert_eq!(report.violations()[0].constraint(), "Primitive_kind_mismatch");
+    }
+
+    /// A constraint kind the crate only carries (`C_UNSUPPORTED`) is reported
+    /// unchecked, never conformant: it was read and kept, not evaluated.
+    #[test]
+    fn an_unsupported_primitive_constraint_is_unchecked_not_passing() {
+        let constraint = element_with_value_constraint(
+            "at0004",
+            "value",
+            CPrimitive::Unsupported {
+                rm_type_name: "C_SOMETHING".to_owned(),
+                source: "<unparsed>".to_owned(),
+            },
+            "DV_TEXT",
+        );
+        let archetype = evaluation_archetype(constraint);
+        let entry = build_evaluation(vec![Element::new(
+            attrs("Free text", "at0004"),
+            DataValue::Text(crate::rm::data_types::DvText::new("anything").unwrap()),
+        )]);
+        let report = validate_against_archetype(&archetype, entry.as_node());
+        assert!(report.violations().is_empty(), "{report:?}");
+        assert_eq!(report.unchecked().len(), 1, "{report:?}");
+        assert!(report.unchecked()[0].reason().starts_with("C_UNSUPPORTED"));
+    }
+
     #[test]
     fn a_c_string_pattern_is_unchecked_even_with_no_literals_to_check() {
         let constraint = element_with_value_constraint(
