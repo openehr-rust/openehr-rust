@@ -113,15 +113,8 @@ pub fn app_version() -> String {
 #[must_use]
 pub fn test_context() -> AppContext {
     let environment = Environment::Test;
-    let config = Config::from_lookup(
-        &environment,
-        &Defaults {
-            database: "",
-            ..Defaults::default()
-        },
-        |_| None,
-    )
-    .expect("the test environment's defaults are valid");
+    let config = Config::from_lookup(&environment, &defaults(), |_| None)
+        .expect("the test environment's defaults are valid");
     AppContext::new(environment, (), config)
 }
 
@@ -365,8 +358,8 @@ fn install(ctx: &AppContext, verifier: PasetoVerifier, access_log: AccessLog, st
 #[cfg(test)]
 mod tests {
     use super::{
-        SharedAccessLog, SharedOpenehrStore, SharedVerifier, app_name, app_version, install,
-        test_context, with_rate_limit,
+        SharedAccessLog, SharedOpenehrStore, SharedVerifier, app_name, app_version, defaults,
+        install, prepare, router, routes, service_routes, test_context, with_rate_limit,
     };
     use crate::access::AccessLog;
     use crate::auth::PasetoVerifier;
@@ -479,6 +472,100 @@ mod tests {
             response.status(),
             StatusCode::TOO_MANY_REQUESTS,
             "the request past the burst was not limited"
+        );
+    }
+
+    /// The defaults are the ones the Loco configuration carried, stated once in
+    /// code: the port a proxy already points at, the 8 MB body limit, and no
+    /// database of Axa's.
+    #[test]
+    fn the_defaults_are_the_ports_and_limits_the_service_always_had() {
+        let d = defaults();
+        assert_eq!(d.database, "");
+        assert_eq!(d.port, 5150);
+        assert_eq!(d.body_limit, 8 * axa::config::MB);
+    }
+
+    /// A test context is in the `test` environment and has an empty shared
+    /// store, so nothing a test finds there was put there by the helper.
+    #[test]
+    fn a_test_context_is_a_test_environment_with_nothing_installed() {
+        let ctx = test_context();
+        assert_eq!(ctx.environment, axa::Environment::Test);
+        assert!(ctx.shared_store.get::<SharedVerifier>().is_none());
+        assert_eq!(
+            ctx.config.server.port, 5150,
+            "the context carries the service's defaults"
+        );
+    }
+
+    /// The clinical routes are mounted without the health endpoints, and the
+    /// service's routes add them: a status-code test must not also be a test
+    /// of `/_health`.
+    #[test]
+    fn the_service_adds_health_routes_to_the_clinical_ones() {
+        let clinical = routes().mounted();
+        let served = service_routes().mounted();
+        assert!(clinical.iter().all(|(_, path)| !path.contains("_health")));
+        assert!(served.iter().any(|(_, path)| path.contains("_health")));
+        for route in &clinical {
+            assert!(served.contains(route), "{route:?} is not served");
+        }
+        assert!(clinical.len() >= 10, "the clinical routes were not mounted");
+    }
+
+    /// With no verification key configured, startup is refused — the
+    /// fail-closed path (`db:PR12.16`) — and nothing is installed.
+    #[test]
+    fn startup_is_refused_when_no_verification_key_is_configured() {
+        if std::env::var(crate::auth::KEYS_VAR).is_ok() {
+            return; // the operator's own environment names a key; not this test's to unset
+        }
+        let ctx = test_context();
+        assert!(prepare(&ctx).is_err());
+        assert!(ctx.shared_store.get::<SharedOpenehrStore>().is_none());
+    }
+
+    /// The finished router answers its health check, and a limiter refusal
+    /// carries the request id — which only holds if the limiter is layered
+    /// *inside* Axa's standard middleware (the order `router` documents).
+    #[tokio::test]
+    async fn the_limiters_refusal_carries_the_standard_middlewares_request_id() {
+        use axum::{
+            body::Body,
+            http::{Request, StatusCode},
+        };
+        use tower::ServiceExt as _;
+
+        let app = router(&test_context()).expect("router");
+        let get = |uri: &str| {
+            Request::builder()
+                .uri(uri)
+                .body(Body::empty())
+                .expect("request")
+        };
+
+        let live = app
+            .clone()
+            .oneshot(get("/_health/live"))
+            .await
+            .expect("infallible");
+        assert_eq!(live.status(), StatusCode::OK);
+
+        let mut last = None;
+        for _ in 0..=super::RATE_LIMIT_BURST {
+            last = Some(
+                app.clone()
+                    .oneshot(get("/_health/live"))
+                    .await
+                    .expect("infallible"),
+            );
+        }
+        let refused = last.expect("requests were sent");
+        assert_eq!(refused.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(
+            refused.headers().contains_key("x-request-id"),
+            "the 429 has no request id: the limiter sits outside the standard middleware"
         );
     }
 }
