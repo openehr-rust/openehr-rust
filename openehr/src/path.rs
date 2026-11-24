@@ -950,8 +950,28 @@ mod tests {
             assert_eq!(node.name(), Some(name), "{class}");
             assert!(node.archetype_node_id().is_some(), "{class}");
             assert!(node.archetype_details().is_some(), "{class}");
+            // A wrong attribute is "no match", never an error (`lib:A-28`),
+            // and a right one that every locatable has — its name — answers.
+            assert!(node.children("no_such_attribute").is_empty(), "{class}");
+            assert_eq!(node.children("name").len(), 1, "{class}");
         }
         assert_eq!(element.archetype_node_id(), "at0004");
+
+        // A segment with no conditions renders as its attribute alone, and
+        // a primitive has no attributes to follow.
+        let bare = Segment {
+            attribute: "items".to_owned(),
+            conditions: Vec::new(),
+        };
+        assert_eq!(bare.to_string(), "items");
+        assert!(Node::Scalar(Scalar::Integer(1)).children("x").is_empty());
+        let plain = crate::rm::data_types::DvText::new("t").unwrap();
+        assert!(
+            Node::PlainText(&plain)
+                .children("no_such_attribute")
+                .is_empty()
+        );
+        assert_eq!(Node::PlainText(&plain).children("value").len(), 1);
     }
 
     #[test]

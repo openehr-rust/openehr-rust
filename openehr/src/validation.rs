@@ -2399,6 +2399,56 @@ mod tests {
         );
     }
 
+    /// Every kind of `PARTY` is held to `Is_archetype_root`, reported against
+    /// `PARTY` and not against the subtype in hand.
+    ///
+    /// Re-tagging a person's JSON is how the other kinds are reached: they
+    /// share the party fields, and a `ROLE` adds only a performer.
+    #[test]
+    fn every_kind_of_party_must_be_an_archetype_root() {
+        use crate::rm::demographic::{Party, PartyAttrs, PartyIdentity, Person};
+
+        let identity = PartyIdentity::new(
+            attrs("legal name", "at0001"),
+            crate::rm::data_structures::ItemStructure::Single(
+                crate::rm::data_structures::ItemSingle::new(
+                    attrs("name", "at0002"),
+                    Element::new(
+                        attrs("full name", "at0003"),
+                        DataValue::Text(DvText::new("A Patient").expect("literal")),
+                    ),
+                ),
+            ),
+        );
+        let locatable = attrs("subject", "at0000").with_uid(crate::base::UidBasedId::HierObjectId(
+            crate::base::HierObjectId::from_uid_str("6BA7B810-9DAD-11D1-80B4-00C04FD430C8")
+                .expect("literal"),
+        ));
+        let person = Party::Person(Person::new(
+            PartyAttrs::new(locatable, vec![identity]).expect("literal"),
+        ));
+        for class in ["ORGANISATION", "GROUP", "AGENT", "ROLE"] {
+            let party: Party = edited(&person, |json| {
+                json["_type"] = class.into();
+                if class == "ROLE" {
+                    json["performer"] = serde_json::json!({
+                        "namespace": "demographic",
+                        "type": "PERSON",
+                        "id": {"_type": "HIER_OBJECT_ID", "value": "11111111-2222-3333-4444-555555555555"}
+                    });
+                }
+            });
+            assert!(
+                party
+                    .validate()
+                    .violations()
+                    .iter()
+                    .any(|v| v.invariant == "Is_archetype_root" && v.class == "PARTY"),
+                "{class} was not held to Is_archetype_root"
+            );
+        }
+    }
+
     /// Validation descends through a `SECTION` and through a `HISTORY`'s
     /// events.
     ///
