@@ -6,7 +6,7 @@
 # have, the way `openEHR/adl-archetypes`'s own thread #9 lost an afternoon to
 # a compose override nobody needed.
 #
-#   OPENEHR_PASETO_PUBLIC_KEYS=k4.public.… docker compose up
+#   OPENEHR_PASETO_PUBLIC_KEYS=k4.public.… podman compose up
 #
 # `OPENEHR_PASETO_PUBLIC_KEYS` has no default here on purpose: this service
 # verifies tokens against a key it is given and holds no secret of its own
@@ -18,7 +18,7 @@ services:
   openehr-axa:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Containerfile
     ports:
       - "5150:5150"
     environment:

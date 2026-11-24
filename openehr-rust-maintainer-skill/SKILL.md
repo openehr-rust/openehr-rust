@@ -60,7 +60,7 @@ cd <crate> && RUSTFLAGS="-D warnings" cargo clippy --all-targets   # CI's flag; 
 # the documentation's counts, versions, levels, and shared blocks
 python3 scripts/check-docs.py               # or: --fix
 
-# verify a dialect against a real engine (needs podman or docker)
+# verify a dialect against a real engine (needs podman)
 sh openehr-store/scripts/verify-schema.sh postgresql|mysql|mariadb
 ```
 

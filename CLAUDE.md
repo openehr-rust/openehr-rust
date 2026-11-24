@@ -85,7 +85,7 @@ python3 scripts/generate-llms-files.py      # or: --write
 (cd openehr && cargo bench)
 (cd openehr-store && cargo bench -- --test)
 
-# verify a dialect against a real engine (needs podman or docker)
+# verify a dialect against a real engine (needs podman)
 sh openehr-store/scripts/verify-schema.sh postgresql|mysql|mariadb
 ```
 

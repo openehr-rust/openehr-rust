@@ -159,7 +159,7 @@ sh openehr-store/scripts/verify-schema.sh mssql        # SQL Server 2022
 sh openehr-store/scripts/verify-schema.sh oracle       # Oracle Database Free
 ```
 
-Requires `podman` (or `docker` via `$CONTAINER`), which is also what CI uses. It
+Requires `podman`, which is also what CI uses. It
 provisions the engine, runs
 the generated DDL, runs it **again** to prove idempotence, seeds a row, and then
 checks the append-only tables refuse `UPDATE` and `DELETE` **with that row

@@ -312,8 +312,8 @@ whole perimeter in one place, not assembled from several sections above.
 
 **No TLS.** This process speaks plain HTTP. A deployment terminates TLS at a
 reverse proxy and reaches this service over a network the proxy alone can
-answer to — the same posture `openehr-axa/Dockerfile` builds toward: nothing
-in the image or `docker-compose.yml` opens a TLS listener, and nothing should,
+answer to — the same posture `Containerfile` builds toward: nothing
+in the image or `compose.yaml` opens a TLS listener, and nothing should,
 because a certificate held by this process would be one more thing to rotate
 in a component that already holds no other secret (see "Public key only",
 above).

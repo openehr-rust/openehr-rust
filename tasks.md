@@ -36,7 +36,7 @@ tasks below are ordered by these gaps.
 | **Which spec generation, pinned where**: RM/BASE/LANG releases coupled as openEHR publishes them; a `stable` profile refusing surfaces the released specs do not define | #7 (Iancu, SEC), #8 | Release targets exist per requirement (`S1.16`, `K15.2`) and terminology provenance is recorded to the file and date, but there is no one table of every specification release this tree is transcribed from |
 | **Lifecycle edge cases**: `is_modifiable` toggled inside one contribution | #5, #6 | **Done at the `Store` level, 2026-09-12** (`db:H5.17`): `SqliteStore::commit_composition` refuses content while deactivated and admits it again once reactivated, even later in the same contribution. `openehr-axa`'s `GET …/ehr_status` HTTP endpoints are done the same day; `PUT` waits on the `POST /ehr` request-shape fix below |
 | **Performance**, with an outsider offering to rerun the numbers | #4, #14 | Benchmarks exist and are run-never-gated (`W0.35`); no store commit latency or HTTP round-trip has ever been published |
-| **Runs in sixty seconds**: `docker compose up`, a Codespace, a hosted sandbox with Swagger, and a *correct* quickstart | #9, #10, #11, #13, #21 | `Dockerfile`, compose file, and devcontainer exist and are verified (`curl /openehr/v1/metadata` → 200); no OpenAPI document yet, and `openehr-axa` is still `publish = false`, SQLite-only |
+| **Runs in sixty seconds**: `podman compose up`, a Codespace, a hosted sandbox with Swagger, and a *correct* quickstart | #9, #10, #11, #13, #21 | `Containerfile`, compose file, and devcontainer exist and are verified (`curl /openehr/v1/metadata` → 200); no OpenAPI document yet, and `openehr-axa` is still `publish = false`, SQLite-only |
 | **A REST surface tools can talk to**: ITS-REST 1.1.0, AQL over HTTP, templates, EHR_STATUS, an admin scheme — openEHR Explorer added FerroEHR as a server type within three days | #1, #21 | Eleven endpoints: EHR, contribution, composition commit/read/history/vread, one index search. No `/query/aql`, no template endpoints, no `EHR_STATUS`, `DELETE` answers `501` |
 | **AQL that executes** | #1 | AQL is parsed and statically checked and **not executed** — a deliberate rule (`S1.5`, reaffirmed `K15.29`) that a CDR reader will read as the headline gap |
 | **Templates**: OPT 1.4, ADL 2.4, WebTemplate, FLAT/STRUCTURED, validated at upload | #1 | AOM2 types, `am::validate` against an in-memory archetype, and a `definition`-only cADL reader (`A-40`, `A-62`–`A-69`). No OPT, no template, no flattening, no ADL 1.4 body |
@@ -930,12 +930,12 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
 
 ### P2 — operability and evidence
 
-- [x] **`Dockerfile`, `docker-compose.yml`, `.devcontainer/`.** Thread #9
+- [x] **`Containerfile`, `docker-compose.yml`, `.devcontainer/`.** Thread #9
       lost an afternoon to a compose override; #21's whole review was "one
-      `docker compose up` and it's running". Build `openehr-axa` as a
+      `podman compose up` and it's running". Build `openehr-axa` as a
       static binary in a multi-stage image, compose it with nothing but a
       volume, and add a devcontainer so a Codespace boots the published
-      image. *Evidence:* `docker compose up` answers `curl /openehr/v1/
+      image. *Evidence:* `podman compose up` answers `curl /openehr/v1/
       metadata` on a clean machine; the quickstart in `INSTALL.md` is the
       command, not a paragraph. — **M**
 
@@ -946,9 +946,9 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       "static binary" is scoped to what is actually true — `rusqlite`'s
       `bundled` feature means no `libsqlite3` at runtime, but the binary
       still links `glibc`, so the runtime stage is `debian:bookworm-slim`,
-      not `scratch` (the `Dockerfile`'s own header comment says so, rather
+      not `scratch` (the `Containerfile`'s own header comment says so, rather
       than let "static" overclaim). "Boots the published image" became
-      "the devcontainer builds from the local `Dockerfile`" —
+      "the devcontainer builds from the local `Containerfile`" —
       `.devcontainer/devcontainer.json` uses `rust:1.98-bookworm` (the
       builder stage's own base, since a Codespace needs the compiler the
       runtime stage deliberately drops), not an image nowhere exists to
@@ -968,7 +968,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       2. Loco's own default environment is `development`
          (`loco_rs::environment::DEFAULT_ENVIRONMENT`) unless `LOCO_ENV`
          says otherwise, and nothing in the first version of the
-         `Dockerfile` set it — so the container would have silently loaded
+         `Containerfile` set it — so the container would have silently loaded
          `config/development.yaml`, whose `binding: localhost` is exactly
          the mistake `config/production.yaml` (this task's own prerequisite
          fix, `development.yaml` bound to `localhost` being unreachable
@@ -993,7 +993,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       host `~/.cargo/registry`, because pulls to `docker.io` and
       `crates.io` were, independently, too slow or actively failing
       (`SSL_ERROR_SYSCALL` mid-transfer) today — neither belongs in
-      `Dockerfile` or `docker-compose.yml`, since a normal network needs
+      `Containerfile` or `docker-compose.yml`, since a normal network needs
       neither, and baking in a local cache path would silently break the
       image for anyone without this machine's exact cache.
 
@@ -1074,7 +1074,7 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       manifest into a *binary*) has no target at all yet — `openehr-axa` is
       the one crate that builds a binary, and nothing distributes it
       anywhere (no Docker image, no release artefact); that gap belongs to
-      the `Dockerfile`/`docker-compose.yml` item below, not manufactured
+      the `Containerfile`/`docker-compose.yml` item below, not manufactured
       here. `SECURITY.md` updated to match exactly this state, not more.
 - [x] **State the production perimeter.** `openehr-axa` has no TLS, no
       rate limiting, no read audit at the store (`db:D-04`, "fixed above the

@@ -1,6 +1,6 @@
-# Without this file, `docker build`/`podman build` sends every crate's
-# `target/` directory into the build context before the `Dockerfile` gets a
-# say — discovered while first verifying `Dockerfile`: the four crates it
+# Without this file, `podman build` sends every crate's
+# `target/` directory into the build context before the `Containerfile` gets a
+# say — discovered while first verifying `Containerfile`: the four crates it
 # copies (`openehr`, `openehr-store`, `openehr-sqlite`, `openehr-axa`) carry
 # a combined ~37 GB of local build artifacts on a machine that has run their
 # test suites a few times, and a `COPY openehr ./openehr` with no exclusions

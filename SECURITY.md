@@ -201,7 +201,7 @@ none (`W0.3`):
   is the one crate here that builds a binary, and it is not published or
   distributed anywhere (no Docker image, no release artefact) for
   `cargo auditable` to embed anything into. That is its own gap, tracked
-  under the `Dockerfile`/`docker-compose.yml` item in `tasks.md`, not solved
+  under the `Containerfile`/`compose.yaml` item in `tasks.md`, not solved
   here by installing a tool with nothing yet to point it at.
 - **The bus factor is one**, and every publishing identity terminates at one
   account ([`MAINTAINERS.md`](MAINTAINERS.md)). A report arriving while the

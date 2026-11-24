@@ -1179,7 +1179,7 @@ no compiler error says so. (2) Axa 0.22.0 was under the two-day minimum publish
 age, so 0.21 is pinned and nothing here has been run against 0.22. (3) Request
 timeout, CORS and HSTS now follow Axa's environment defaults; the container
 sets the timeout to the old ten seconds. (4) The container binding and
-environment are set in the `Dockerfile`, which has not been built since the
+environment are set in the `Containerfile`, which has not been built since the
 change. The three advisories `deny.toml` and CI once accepted for `loco-rs`
 (`RUSTSEC-2026-0194`, `-0195`, `-0235`, and `-2024-0449`) are gone with it:
 `cargo deny` and `cargo audit` report none.

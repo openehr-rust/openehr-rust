@@ -12,7 +12,7 @@
 #
 #   usage: sh openehr-postgresql/scripts/verify-store.sh
 #
-# Requires podman (or docker, via $CONTAINER) and the `openssl` command used to
+# Requires podman and the `openssl` command used to
 # create a short-lived private CA and server certificate. Provisions the server
 # itself and tears it down after — a server somebody else prepared is a server
 # whose state is not evidence, the same reason `verify-schema.sh` gives.

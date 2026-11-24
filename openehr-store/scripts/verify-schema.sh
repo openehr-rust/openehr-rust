@@ -8,7 +8,7 @@
 #
 #   usage: verify-schema.sh postgresql|mysql|mariadb|mssql|oracle
 #
-# Requires podman (or docker, via $CONTAINER). Provisions the engine itself and
+# Requires podman. Provisions the engine itself and
 # tears it down after; it does not use an existing database, because a database
 # somebody else prepared is a database whose state is not evidence.
 #

@@ -105,7 +105,7 @@ cargo test              # golden DDL tests: no server needed
 sh scripts/verify-store.sh   # the Store, against a real, disposable server
 ```
 
-The live script requires Podman (or Docker through `CONTAINER=docker`) and the
+The live script requires Podman and the
 `openssl` command used to generate its short-lived test CA and certificate.
 The golden tests assert the SQL this crate's dialect emits, including that it
 is *not* another engine's SQL. The `Store` tests are `#[ignore]`d — they need

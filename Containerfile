@@ -76,7 +76,7 @@ ENV BINDING=0.0.0.0
 # outside a container too.
 
 # `OPENEHR_SQLITE_PATH` names a file under this volume, not the volume path
-# itself — see `docker-compose.yml`, which is the piece that actually
+# itself — see `compose.yaml`, which is the piece that actually
 # declares the volume and sets this variable to a path inside it.
 VOLUME ["/home/openehr/data"]
 

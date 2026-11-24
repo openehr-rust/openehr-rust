@@ -11,7 +11,7 @@
   linking whatever the host ships, because the emitted DDL and the JSON1
   functions the store uses are version-dependent.
 - **A database server** only if you want a dialect other than SQLite, and
-  **podman or docker** only if you want to re-run the schema verification
+  **podman** only if you want to re-run the schema verification
   yourself.
 
 ## Add it to a project
@@ -139,9 +139,9 @@ round-trips canonical JSON bytes through the server unchanged.
 ## Run the HTTP service
 
 `openehr-axa` is the one crate here that is a service rather than a library
-(`AGENTS.md`). A `docker compose up` is the whole quickstart — the only input
+(`AGENTS.md`). A `podman compose up` is the whole quickstart — the only input
 it needs is a PASETO public key to verify bearer tokens against, and there is
-no default for that (`docker-compose.yml`'s own comment explains why: this
+no default for that (`compose.yaml`'s own comment explains why: this
 service verifies tokens against a key it is given and holds no secret of its
 own). Generate a throwaway one:
 
@@ -154,7 +154,7 @@ That prints an `OPENEHR_PASETO_PUBLIC_KEYS=k4.public…` line and an
 
 ```sh
 export OPENEHR_PASETO_PUBLIC_KEYS=k4.public...   # from the line above
-docker compose up --build
+podman compose up --build
 ```
 
 In another shell, using the `Authorization` value from the same output:
@@ -163,7 +163,7 @@ In another shell, using the `Authorization` value from the same output:
 curl -H "Authorization: Bearer ..." http://localhost:5150/openehr/v1/metadata
 ```
 
-The image is a multi-stage build (`Dockerfile`, repo root): SQLite is compiled
+The image is a multi-stage build (`Containerfile`, repo root): SQLite is compiled
 into the binary (`rusqlite`'s `bundled` feature), so the runtime stage carries
 no database server, and `rustls` throughout the dependency tree means it
 carries no TLS library either — just `ca-certificates` and the binary itself,
