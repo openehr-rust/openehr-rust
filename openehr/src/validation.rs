@@ -2601,4 +2601,39 @@ mod tests {
             );
         }
     }
+
+    /// A digest naming an algorithm outside openEHR's integrity-check set is
+    /// reported, and one naming SHA-256 is not.
+    ///
+    /// The check is `Integrity_check_algorithm_validity`: a verifier handed an
+    /// algorithm it has never heard of cannot say the data is intact, and a
+    /// record that says "checked with ZZ-9" reads as checked. The value is
+    /// built through JSON because no constructor accepts an arbitrary
+    /// algorithm, which is what a document arriving over HTTP can carry.
+    #[test]
+    fn an_unknown_integrity_algorithm_is_reported_and_sha256_is_not() {
+        use crate::rm::data_types::DvMultimedia;
+
+        let good = DvMultimedia::inline(
+            CodePhrase::new("IANA_media-types", "image/png").expect("literal"),
+            b"abc".to_vec(),
+        )
+        .with_sha256_integrity();
+        let violations = |m: &DvMultimedia| {
+            let mut ctx = Context::default();
+            check_multimedia(m, &mut ctx);
+            ctx.finish()
+        };
+        assert!(violations(&good).is_empty(), "SHA-256 was refused");
+
+        let mut json = serde_json::to_value(&good).expect("serialises");
+        json["integrity_check_algorithm"]["code_string"] = serde_json::json!("ZZ-9");
+        let bad: DvMultimedia = serde_json::from_value(json).expect("reads");
+        let report = violations(&bad);
+        assert_eq!(report.len(), 1, "{report}");
+        assert_eq!(
+            report.violations()[0].invariant,
+            "Integrity_check_algorithm_validity"
+        );
+    }
 }
