@@ -1283,6 +1283,36 @@ mod tests {
         assert!(report.is_conformant(), "{report:?}");
     }
 
+    /// A violation renders as `path: archetype does not satisfy constraint`,
+    /// naming the root as `/` when the path is empty, and a value is never part
+    /// of the text.
+    #[test]
+    fn a_violation_renders_its_path_archetype_and_constraint() {
+        let archetype =
+            evaluation_archetype(element_alt("at0004", MultiplicityInterval::MANDATORY));
+        let report = validate_against_archetype(&archetype, build_evaluation(Vec::new()).as_node());
+        let rendered = report.violations()[0].to_string();
+        assert!(rendered.starts_with("/data[id2]/items: "), "{rendered}");
+        assert!(
+            rendered.ends_with("does not satisfy Existence"),
+            "{rendered}"
+        );
+
+        // A root-level violation has an empty path and renders it as `/`.
+        let wrong_root = validate_against_archetype(
+            &archetype,
+            Entry::from(AdminEntry::new(
+                attrs("Test", "openEHR-EHR-ADMIN_ENTRY.test.v1"),
+                entry_attrs(),
+                ItemList::new(attrs("Data", "id2"), Vec::new()).into(),
+            ))
+            .as_node(),
+        );
+        let root = wrong_root.violations()[0].to_string();
+        assert!(root.starts_with("/: "), "{root}");
+        assert!(root.contains("Rm_type_name_matches"), "{root}");
+    }
+
     #[test]
     fn a_missing_mandatory_element_is_a_violation() {
         let archetype =
