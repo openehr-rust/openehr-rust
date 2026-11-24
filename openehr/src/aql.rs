@@ -1386,6 +1386,42 @@ mod tests {
         }
     }
 
+    /// More constructs, each of which has to render and re-parse to the same
+    /// query (`A-05`): `LIKE`, `MATCHES` over a path with parameters, an
+    /// archetype predicate, an aliased class with a standard predicate, a
+    /// bare alias as an operand, and a function call.
+    #[test]
+    fn further_constructs_round_trip_and_report_their_parameters_and_paths() {
+        let queries = [
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c WHERE c/name/value LIKE 'a%' LIMIT 1",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c WHERE c/name/value MATCHES {$a, $b, $a} LIMIT 1",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 1",
+            "SELECT c/uid/value FROM EHR e[ehr_id/value = $x] CONTAINS COMPOSITION c LIMIT 1",
+            "SELECT c FROM EHR e CONTAINS COMPOSITION c WHERE c/x = $p AND c/y = $p LIMIT 1",
+            "SELECT COUNT(c/uid/value) FROM EHR e CONTAINS COMPOSITION c LIMIT 1",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c WHERE c/a != c/b LIMIT 1",
+            "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c WHERE NOT (c/a < 1 OR c/b >= 2) LIMIT 1",
+        ];
+        for text in queries {
+            let q: AqlQuery = text.parse().unwrap_or_else(|e| panic!("{text}: {e}"));
+            let again: AqlQuery = q.to_string().parse().unwrap();
+            assert_eq!(again, q, "{text}");
+            let _ = q.parameters();
+            let _ = q.archetype_ids();
+        }
+        let q: AqlQuery = queries[4].parse().unwrap();
+        assert_eq!(
+            q.parameters(),
+            vec!["p"],
+            "a parameter used twice is listed once"
+        );
+        assert!(
+            "SELECT c/a FROM EHR e CONTAINS COMPOSITION c WHERE c/x = 99999999999999999999 LIMIT 1"
+                .parse::<AqlQuery>()
+                .is_err()
+        );
+    }
+
     #[test]
     fn malformed_queries_are_refused() {
         for text in [

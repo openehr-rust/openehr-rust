@@ -1409,6 +1409,24 @@ impl CComplexObjectProxy {
 mod tests {
     use super::*;
 
+    /// An empty name is refused by every constructor that takes one: a
+    /// constraint on nothing would match nothing and read as "no such node".
+    #[test]
+    fn constructors_refuse_empty_names_and_references() {
+        assert!(CAttribute::single("", MultiplicityInterval::MANDATORY, Vec::new()).is_err());
+        assert!(CComplexObject::new("", None, None, Vec::new()).is_err());
+        assert!(CArchetypeRoot::new("CLUSTER", "", None).is_err());
+        assert!(CComplexObjectProxy::new("", None, None, "/items[id2]").is_err());
+        assert!(CComplexObjectProxy::new("CLUSTER", None, None, "").is_err());
+        assert!(
+            CComplexObjectProxy::new("CLUSTER", Some("not a code".into()), None, "/items[id2]")
+                .is_err()
+        );
+        let proxy = CComplexObjectProxy::new("CLUSTER", Some("id3".into()), None, "/items[id2]")
+            .expect("well formed");
+        assert_eq!(proxy.rm_type_name(), "CLUSTER");
+    }
+
     fn element(node_id: &str) -> CObject {
         CObject::Complex(
             CComplexObject::new(
