@@ -677,4 +677,63 @@ mod tests {
         let f = DataValue::Quantity(DvQuantity::new(36.6, "Cel").unwrap());
         assert_eq!(f.display_value().as_deref(), Some("36.6 Cel"));
     }
+
+    /// `type_name` is the `_type` the value serialises with, for the kinds the
+    /// other tests here never build, and `From<Text>` keeps its two kinds.
+    ///
+    /// The table is a `match` with one arm per variant. A deleted or swapped
+    /// arm compiles when the replacement is a plain string, so the only guard
+    /// is comparing it with what the serialiser writes.
+    #[test]
+    fn type_name_agrees_with_the_serialised_type_for_every_kind_built_here() {
+        use crate::rm::data_types::{
+            DvEhrUri, DvGeneralTimeSpecification, DvParagraph, DvParsable,
+            DvPeriodicTimeSpecification, DvUri, Text,
+        };
+
+        let text = DvText::new("a").unwrap();
+        let pivl = DvParsable::new("R2/PT1H", "HL7:PIVL").unwrap();
+        let gts = DvParsable::new("[200001010800]", "HL7:GTS").unwrap();
+        let values = [
+            DataValue::Paragraph(DvParagraph::new(vec![text.clone()]).unwrap()),
+            DataValue::Multimedia(DvMultimedia::inline(
+                CodePhrase::new("IANA_media-types", "image/png").unwrap(),
+                vec![1],
+            )),
+            DataValue::Parsable(DvParsable::new("x", "y").unwrap()),
+            DataValue::Interval(Box::new(
+                Interval::point(DataValue::Count(DvCount::new(1))).unwrap(),
+            )),
+            DataValue::PeriodicTimeSpecification(DvPeriodicTimeSpecification::new(pivl).unwrap()),
+            DataValue::GeneralTimeSpecification(DvGeneralTimeSpecification::new(gts).unwrap()),
+            DataValue::Uri(DvUri::new("https://example.org/x").unwrap()),
+            DataValue::EhrUri(DvEhrUri::new("ehr://abc/def").unwrap()),
+        ];
+        for v in &values {
+            let json = serde_json::to_value(v).unwrap();
+            assert_eq!(json["_type"], v.type_name(), "{v:?}");
+        }
+
+        assert!(matches!(
+            DataValue::from(Text::Plain(text)),
+            DataValue::Text(_)
+        ));
+        let coded = DvCodedText::new("c", CodePhrase::new("local", "at0001").unwrap()).unwrap();
+        assert!(matches!(
+            DataValue::from(Text::Coded(coded)),
+            DataValue::CodedText(_)
+        ));
+    }
+
+    /// An ordinal and a scale show their symbol, not their number.
+    #[test]
+    fn an_ordinal_and_a_scale_display_their_symbol() {
+        use crate::rm::data_types::{DvOrdinal, DvScale};
+        let symbol =
+            || DvCodedText::new("severe", CodePhrase::new("local", "at0001").unwrap()).unwrap();
+        let o = DataValue::Ordinal(DvOrdinal::new(3, symbol()));
+        assert_eq!(o.display_value().as_deref(), Some("severe"));
+        let sc = DataValue::Scale(DvScale::new(2.5, symbol()).unwrap());
+        assert_eq!(sc.display_value().as_deref(), Some("severe"));
+    }
 }
