@@ -1,4 +1,4 @@
-//! A `RESTful` openEHR service, on Axum and Loco.
+//! A `RESTful` openEHR service, on Axum and Axa.
 //!
 //! # Trademarks
 //!
@@ -14,7 +14,7 @@
 //! it states what has been shown rather than borrowing the nearest-looking
 //! level (`W0.32`).
 //!
-//! **Shown.** `tests/http.rs` serves requests through Loco's own router:
+//! **Shown.** `tests/http.rs` serves requests through the service's own router:
 //! `410` for a deleted composition against `404` for one that never existed,
 //! the history readable behind that `410`, `401` on every clinical route
 //! without a token with a body that does not reveal whether the record exists,

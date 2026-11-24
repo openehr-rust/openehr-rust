@@ -29,13 +29,9 @@ use axum::{
     http::{Request, header},
 };
 use criterion::{Criterion, criterion_group, criterion_main};
-use loco_rs::{
-    app::{AppContext, Hooks as _},
-    environment::Environment,
-};
 use openehr_loco::{
     access::{AccessLog, SharedAccessLog},
-    app::{App, SharedOpenehrStore},
+    app::SharedOpenehrStore,
     auth::{PasetoVerifier, SharedVerifier},
 };
 use openehr_sqlite::SqliteStore;
@@ -79,8 +75,7 @@ fn served() -> (Router, String, String) {
         )
         .expect("commit");
 
-    let ctx =
-        AppContext::builder(Environment::Test, loco_rs::tests_cfg::config::test_config()).build();
+    let ctx = openehr_loco::app::test_context();
     let mut paserk = String::new();
     pair.public.fmt(&mut paserk).expect("PASERK");
     ctx.shared_store.insert::<SharedVerifier>(Arc::new(
@@ -91,8 +86,8 @@ fn served() -> (Router, String, String) {
     ctx.shared_store
         .insert::<SharedAccessLog>(Arc::new(AccessLog::off()));
 
-    let router = App::routes(&ctx)
-        .to_router::<App>(ctx.clone(), Router::new())
+    let router = openehr_loco::app::routes()
+        .into_app(ctx.clone())
         .expect("router");
     (router, format!("Bearer {token}"), ehr_id.to_string())
 }

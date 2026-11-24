@@ -1,17 +1,14 @@
-//! The Loco application.
+//! The application: its routes, its startup, and its tasks.
 
-use async_trait::async_trait;
-use axum::Router as AxumRouter;
-use loco_rs::{
-    Result,
-    app::{AppContext, Hooks},
-    bgworker::Queue,
-    boot::{BootResult, StartMode, create_app},
-    config::Config,
-    controller::AppRoutes,
-    environment::Environment,
+use axa::{
+    AppContext, Environment, Result,
+    cli::{Cli, Command, parse_vars},
+    config::{Config, Defaults, MB},
+    routes::AppRoutes,
+    server,
     task::Tasks,
 };
+use axum::Router as AxumRouter;
 use openehr_sqlite::SqliteStore;
 use openehr_store::Store as _;
 use std::sync::{Arc, Mutex};
@@ -42,15 +39,15 @@ pub type SharedOpenehrStore = Arc<Mutex<SqliteStore>>;
 
 /// Opens and installs the store.
 ///
-/// Shared by [`Hooks::before_run`] and by [`crate::tasks`], because **a task
-/// does not get `before_run`** — `cli::main` builds the context and calls
+/// Shared by [`prepare`] and by [`crate::tasks`], because **a task
+/// does not get `prepare`** — `cli::main` builds the context and calls
 /// `run_task` directly, so a task reading the store out of `shared_store`
 /// finds nothing. One opener rather than two means the path and the install
 /// cannot drift between the server and the tools that inspect what it wrote.
 ///
 /// # Errors
 ///
-/// Returns [`loco_rs::Error::Message`] if the file cannot be opened or the
+/// Returns [`axa::Error::Message`] if the file cannot be opened or the
 /// schema cannot be installed — including when the database was built under a
 /// different schema version, which is refused rather than half-served
 /// (`db:O10.15`).
@@ -61,7 +58,7 @@ pub fn open_store() -> Result<SqliteStore> {
         Err(std::env::VarError::NotPresent) => "openehr.sqlite3".to_owned(),
         // RCA-IN-4: a supplied but unusable setting stops startup.
         Err(std::env::VarError::NotUnicode(_)) => {
-            return Err(loco_rs::Error::Message(
+            return Err(axa::Error::Message(
                 "OPENEHR_SQLITE_PATH is not valid Unicode".to_owned(),
             ));
         }
@@ -80,138 +77,252 @@ pub fn open_store() -> Result<SqliteStore> {
 ///
 /// As [`open_store`].
 pub fn open_store_at(path: &std::path::Path) -> Result<SqliteStore> {
-    let mut store = SqliteStore::open(path).map_err(|e| loco_rs::Error::Message(e.to_string()))?;
+    let mut store = SqliteStore::open(path).map_err(|e| axa::Error::Message(e.to_string()))?;
     store
         .install()
-        .map_err(|e| loco_rs::Error::Message(e.to_string()))?;
+        .map_err(|e| axa::Error::Message(e.to_string()))?;
     Ok(store)
 }
 
-/// The application.
-pub struct App;
+/// The service name, as `--help` and the log report it.
+#[must_use]
+pub fn app_name() -> &'static str {
+    env!("CARGO_CRATE_NAME")
+}
 
-#[async_trait]
-impl Hooks for App {
-    fn app_name() -> &'static str {
-        env!("CARGO_CRATE_NAME")
-    }
+/// The version, with the build it came from.
+#[must_use]
+pub fn app_version() -> String {
+    format!(
+        "{} ({})",
+        env!("CARGO_PKG_VERSION"),
+        option_env!("BUILD_SHA")
+            .or(option_env!("GITHUB_SHA"))
+            .unwrap_or("dev")
+    )
+}
 
-    fn app_version() -> String {
-        format!(
-            "{} ({})",
-            env!("CARGO_PKG_VERSION"),
-            option_env!("BUILD_SHA")
-                .or(option_env!("GITHUB_SHA"))
-                .unwrap_or("dev")
+/// A context for tests and tools: the `test` environment, no database (this
+/// service has none of Axa's — its store is `openehr-store`), nothing in the
+/// shared store.
+///
+/// # Panics
+///
+/// Never in practice: the default configuration for the `test` environment is
+/// valid, and the lookup answers nothing, so no setting can be malformed.
+#[must_use]
+pub fn test_context() -> AppContext {
+    let environment = Environment::Test;
+    let config = Config::from_lookup(
+        &environment,
+        &Defaults {
+            database: "",
+            ..Defaults::default()
+        },
+        |_| None,
+    )
+    .expect("the test environment's defaults are valid");
+    AppContext::new(environment, (), config)
+}
+
+/// The route groups, on whatever `base` already carries.
+fn add_routes(base: AppRoutes) -> AppRoutes {
+    base.add_route(controllers_routes::metadata())
+        .add_route(controllers_routes::ehr())
+        .add_route(controllers_routes::ehr_status())
+        .add_route(controllers_routes::contribution())
+        .add_route(controllers_routes::composition())
+        .add_route(controllers_routes::query())
+}
+
+/// The clinical routes alone.
+///
+/// What the HTTP tests mount, so that a test of a status code is not also a
+/// test of the health endpoints.
+#[must_use]
+pub fn routes() -> AppRoutes {
+    add_routes(AppRoutes::empty())
+}
+
+/// The clinical routes and Axa's `/_health/*` endpoints: what the server runs.
+#[must_use]
+pub fn service_routes() -> AppRoutes {
+    add_routes(AppRoutes::with_default_routes())
+}
+
+/// Opens the store and builds the verifier, **before the server listens and
+/// not lazily**.
+///
+/// Initialising the store later left every request answering `503` while the
+/// health check stayed green — the worst combination available, because a
+/// load balancer keeps a wholly broken instance in rotation and reports it
+/// healthy.
+///
+/// The verifier is built **first**, and its failure is fatal. A service
+/// that could not read its verification key and started anyway would serve
+/// an entire EHR to anyone who asked, with a green health check and no
+/// symptom (`db:PR12.16`). Ordering it before the store means the
+/// unconfigured case cannot reach a state where it holds an open database.
+///
+/// # Errors
+///
+/// [`axa::Error::Message`] if the verification key is absent or malformed, if
+/// the access log is configured and cannot be opened, or if the store cannot
+/// be opened (see [`open_store`]).
+pub fn prepare(ctx: &AppContext) -> Result<()> {
+    let verifier = PasetoVerifier::from_env().map_err(|e| axa::Error::Message(e.to_string()))?;
+
+    // Before the store, for the same reason as the verifier: a service
+    // configured to audit reads and unable to write the log must not reach
+    // a state where it holds an open database (`db:PR12.6`).
+    let access_log = AccessLog::from_env().map_err(axa::Error::Message)?;
+
+    install(ctx, verifier, access_log, open_store()?);
+    Ok(())
+}
+
+/// Layers a request-rate limit over the whole router — the perimeter
+/// protection `PHI.md`'s deployment statement names, and the only one
+/// this crate can offer for itself: TLS, and defence against a genuinely
+/// distributed flood, are the reverse proxy's job, stated as such rather
+/// than half-built here.
+///
+/// The key is [`GlobalKeyExtractor`], not the crate's own default
+/// (peer IP), deliberately: behind the reverse proxy every deployment of
+/// this service is meant to sit behind (`PHI.md`), the peer IP this
+/// process sees is the proxy's, not the caller's, so a per-IP limiter
+/// would silently become a per-proxy one — no different from a global
+/// limit, except that it looks like more protection than it is. The
+/// honest alternative, trusting `X-Forwarded-For` to recover the real
+/// caller, is the same shape of mistake `auth.rs`'s own module doc
+/// refuses for identity — a header believed because of where it is
+/// expected to arrive from — and rate limiting is not worth reopening it
+/// for. One consequence follows from the choice: this limits the
+/// service's *total* load, not any one caller's, which is what
+/// [`SharedOpenehrStore`]'s single serialised connection can actually be
+/// overwhelmed by (`AGENTS.md`'s own reasoning for that `Mutex`, echoed
+/// here). Per-caller throttling would need identity — the verified
+/// PASETO subject — and this layer runs on every request, including the
+/// unauthenticated ones a flood is made of, so it cannot be keyed on a
+/// claim this early.
+///
+/// # Errors
+///
+/// Only if `RATE_LIMIT_BURST` or `RATE_LIMIT_PERIOD_SECS` were ever
+/// changed to zero — [`GovernorConfigBuilder::finish`]'s one failure
+/// mode, unreachable with the constants above but checked because a
+/// silently-absent rate limiter is worse than a refusal to start
+/// (`db:PR12.16`'s same reasoning, applied here).
+pub fn with_rate_limit(router: AxumRouter) -> Result<AxumRouter> {
+    let mut builder = GovernorConfigBuilder::default().key_extractor(GlobalKeyExtractor);
+    builder
+        .per_second(RATE_LIMIT_PERIOD_SECS)
+        .burst_size(RATE_LIMIT_BURST);
+    let governor_config = builder.finish().ok_or_else(|| {
+        axa::Error::Message(
+            "rate limiter: RATE_LIMIT_BURST and RATE_LIMIT_PERIOD_SECS must be non-zero".to_owned(),
         )
-    }
+    })?;
+    Ok(router.layer(GovernorLayer::new(governor_config)))
+}
 
-    async fn boot(
-        mode: StartMode,
-        environment: &Environment,
-        config: Config,
-    ) -> Result<BootResult> {
-        create_app::<Self>(mode, environment, config).await
-    }
-
-    fn routes(_ctx: &AppContext) -> AppRoutes {
-        AppRoutes::empty()
-            .add_route(controllers_routes::metadata())
-            .add_route(controllers_routes::ehr())
-            .add_route(controllers_routes::ehr_status())
-            .add_route(controllers_routes::contribution())
-            .add_route(controllers_routes::composition())
-            .add_route(controllers_routes::query())
-    }
-
-    /// Opens the store and builds the verifier, **here and not in
-    /// [`Hooks::boot`]**.
-    ///
-    /// `boot` is not on the path `start` takes. Initialising the store there
-    /// left every request answering `503` while the health check stayed green —
-    /// the worst combination available, because a load balancer keeps a
-    /// wholly broken instance in rotation and reports it healthy.
-    ///
-    /// The verifier is built **first**, and its failure is fatal. A service
-    /// that could not read its verification key and started anyway would serve
-    /// an entire EHR to anyone who asked, with a green health check and no
-    /// symptom (`db:PR12.16`). Ordering it before the store means the
-    /// unconfigured case cannot reach a state where it holds an open database.
-    async fn before_run(ctx: &AppContext) -> Result<()> {
-        let verifier =
-            PasetoVerifier::from_env().map_err(|e| loco_rs::Error::Message(e.to_string()))?;
-
-        // Before the store, for the same reason as the verifier: a service
-        // configured to audit reads and unable to write the log must not reach
-        // a state where it holds an open database (`db:PR12.6`).
-        let access_log = AccessLog::from_env().map_err(loco_rs::Error::Message)?;
-
-        install(ctx, verifier, access_log, open_store()?);
-        Ok(())
-    }
-
-    /// Layers a request-rate limit over the whole router — the perimeter
-    /// protection `PHI.md`'s deployment statement names, and the only one
-    /// this crate can offer for itself: TLS, and defence against a genuinely
-    /// distributed flood, are the reverse proxy's job, stated as such rather
-    /// than half-built here.
-    ///
-    /// The key is [`GlobalKeyExtractor`], not the crate's own default
-    /// (peer IP), deliberately: behind the reverse proxy every deployment of
-    /// this service is meant to sit behind (`PHI.md`), the peer IP this
-    /// process sees is the proxy's, not the caller's, so a per-IP limiter
-    /// would silently become a per-proxy one — no different from a global
-    /// limit, except that it looks like more protection than it is. The
-    /// honest alternative, trusting `X-Forwarded-For` to recover the real
-    /// caller, is the same shape of mistake `auth.rs`'s own module doc
-    /// refuses for identity — a header believed because of where it is
-    /// expected to arrive from — and rate limiting is not worth reopening it
-    /// for. One consequence follows from the choice: this limits the
-    /// service's *total* load, not any one caller's, which is what
-    /// [`SharedOpenehrStore`]'s single serialised connection can actually be
-    /// overwhelmed by (`AGENTS.md`'s own reasoning for that `Mutex`, echoed
-    /// here). Per-caller throttling would need identity — the verified
-    /// PASETO subject — and this layer runs on every request, including the
-    /// unauthenticated ones a flood is made of, so it cannot be keyed on a
-    /// claim this early.
-    ///
-    /// # Errors
-    ///
-    /// Only if `RATE_LIMIT_BURST` or `RATE_LIMIT_PERIOD_SECS` were ever
-    /// changed to zero — [`GovernorConfigBuilder::finish`]'s one failure
-    /// mode, unreachable with the constants above but checked because a
-    /// silently-absent rate limiter is worse than a refusal to start
-    /// (`db:PR12.16`'s same reasoning, applied here).
-    async fn after_routes(router: AxumRouter, _ctx: &AppContext) -> Result<AxumRouter> {
-        let mut builder = GovernorConfigBuilder::default().key_extractor(GlobalKeyExtractor);
-        builder
-            .per_second(RATE_LIMIT_PERIOD_SECS)
-            .burst_size(RATE_LIMIT_BURST);
-        let governor_config = builder.finish().ok_or_else(|| {
-            loco_rs::Error::Message(
-                "rate limiter: RATE_LIMIT_BURST and RATE_LIMIT_PERIOD_SECS must be non-zero"
-                    .to_owned(),
-            )
-        })?;
-        Ok(router.layer(GovernorLayer::new(governor_config)))
-    }
-
-    async fn connect_workers(_ctx: &AppContext, _queue: &Queue) -> Result<()> {
-        // No background work. openEHR commits are synchronous by design: a
-        // caller told 201 must be able to read the version back immediately.
-        Ok(())
-    }
-
-    fn register_tasks(tasks: &mut Tasks) {
-        tasks.register(crate::tasks::Checkpoint);
-        tasks.register(crate::tasks::Verify);
+/// The settings Axa reads, with this service's own defaults.
+///
+/// The port and the 8 MB body limit are the ones the Loco configuration files
+/// carried, so a proxy or health check pointed at the old service still finds
+/// this one. The service has no database of Axa's (an empty name): its store is
+/// `openehr-store`, opened by [`prepare`].
+#[must_use]
+pub fn defaults() -> Defaults {
+    Defaults {
+        database: "",
+        port: 5150,
+        body_limit: 8 * MB,
+        ..Defaults::default()
     }
 }
 
-/// Route tables, kept out of [`Hooks::routes`] so the controller modules own
-/// their own paths.
+/// The finished router: the clinical routes and the health endpoints, the
+/// rate limit, and then Axa's standard middleware.
+///
+/// In that order on purpose. A layer added *after* the standard middleware sits
+/// outside it, so the limiter's `429` would carry no request id and no
+/// security headers, and would escape the timeout and panic protection.
+///
+/// # Errors
+///
+/// As [`with_rate_limit`], or if the middleware cannot be applied.
+pub fn router(ctx: &AppContext) -> Result<AxumRouter> {
+    let router = service_routes().into_router(ctx.clone());
+    let router = with_rate_limit(router)?;
+    axa::middleware::apply(router, &ctx.config.http)
+}
+
+/// Runs one command line: serve, run a task, check the configuration, or ask a
+/// running instance whether it is healthy.
+///
+/// # Errors
+///
+/// Whatever the command fails with, so that `main` exits non-zero.
+pub async fn run(cli: Cli) -> Result<()> {
+    let environment = cli
+        .environment
+        .as_deref()
+        .map_or_else(Environment::from_env, Environment::parse);
+    // Before anything is opened, so they work with the store missing.
+    if matches!(cli.command, Command::Check) {
+        return axa::cli::check(&environment, &defaults());
+    }
+    if let Command::Health { ready, port } = cli.command {
+        return axa::cli::health(&environment, &defaults(), ready, port).await;
+    }
+    let mut config = Config::from_env(&environment, &defaults())?;
+    config.apply_cli(&cli);
+    axa::logger::init(app_name(), &config.logger);
+    let ctx = AppContext::new(environment, (), config);
+    match cli.command {
+        Command::Start { .. } => {
+            prepare(&ctx)?;
+            let server_config = ctx.config.server.clone();
+            server::serve(router(&ctx)?, &server_config).await
+        }
+        Command::Task { name, params } => {
+            // A task opens its own store: `prepare` is not on this path
+            // (see [`crate::tasks`]).
+            let tasks = tasks();
+            let Some(name) = name else {
+                for task in tasks.list() {
+                    println!("{}\t{}", task.name, task.detail);
+                }
+                return Ok(());
+            };
+            tasks.run(&name, &ctx, &parse_vars(&params)?).await
+        }
+        Command::Db { .. } => Err(axa::Error::Message(
+            "this service has no database of Axa's: its store is openehr-store, \
+             installed when it starts (db:O10.14)"
+                .to_owned(),
+        )),
+        Command::Check | Command::Health { .. } => Ok(()), // Answered above.
+    }
+}
+
+/// The operator tasks.
+///
+/// No background work exists beside them: openEHR commits are synchronous by
+/// design, so a caller told 201 can read the version back immediately.
+#[must_use]
+pub fn tasks() -> Tasks {
+    let mut tasks = Tasks::default();
+    tasks.register(crate::tasks::Checkpoint);
+    tasks.register(crate::tasks::Verify);
+    tasks
+}
+
+/// Route tables, kept out of [`routes`] so the controller modules own their
+/// own paths.
 mod controllers_routes {
-    use loco_rs::controller::Routes;
+    use axa::routes::Routes;
 
     pub fn metadata() -> Routes {
         crate::controllers::metadata::routes()
@@ -234,13 +345,13 @@ mod controllers_routes {
 }
 
 /// Puts an already-built verifier, access log, and store into the shared
-/// state `before_run` installs before any request is served.
+/// state `prepare` installs before any request is served.
 ///
-/// Split out from [`Hooks::before_run`] so the installation itself — the part
+/// Split out from [`prepare`] so the installation itself — the part
 /// with a consequence if it silently did nothing — can be tested without
-/// going through the three environment variables `before_run` reads first.
+/// going through the three environment variables `prepare` reads first.
 /// This crate forbids `unsafe_code`, and `std::env::set_var` has required
-/// `unsafe` since Rust's 2024 edition, so a test cannot drive `before_run`
+/// `unsafe` since Rust's 2024 edition, so a test cannot drive `prepare`
 /// through its real entry point at all; it can drive this.
 fn install(ctx: &AppContext, verifier: PasetoVerifier, access_log: AccessLog, store: SqliteStore) {
     ctx.shared_store
@@ -253,13 +364,12 @@ fn install(ctx: &AppContext, verifier: PasetoVerifier, access_log: AccessLog, st
 
 #[cfg(test)]
 mod tests {
-    use super::{App, SharedAccessLog, SharedOpenehrStore, SharedVerifier, install};
+    use super::{
+        SharedAccessLog, SharedOpenehrStore, SharedVerifier, app_name, app_version, install,
+        test_context, with_rate_limit,
+    };
     use crate::access::AccessLog;
     use crate::auth::PasetoVerifier;
-    use loco_rs::{
-        app::{AppContext, Hooks as _},
-        environment::Environment,
-    };
     use openehr_sqlite::SqliteStore;
     use openehr_store::Store as _;
     use pasetors::{
@@ -268,7 +378,7 @@ mod tests {
         version4::V4,
     };
 
-    /// `install` — the part of `before_run` with a consequence if it silently
+    /// `install` — the part of `prepare` with a consequence if it silently
     /// did nothing — actually puts the verifier, the access log, and the
     /// store into `ctx.shared_store`.
     ///
@@ -277,7 +387,7 @@ mod tests {
     /// entire EHR to anyone who asked, with a green health check and no
     /// symptom (`db:PR12.16`). Nothing previously exercised this — `tests/
     /// http.rs` builds its router against a `ctx` it populates by hand,
-    /// bypassing `before_run` (and now `install`) entirely — so a version
+    /// bypassing `prepare` (and now `install`) entirely — so a version
     /// that did nothing at all would fail no test in this crate (`lib:A-09`).
     #[test]
     fn install_puts_the_verifier_access_log_and_store_into_shared_state() {
@@ -289,8 +399,7 @@ mod tests {
         let mut store = SqliteStore::in_memory().expect("in-memory store");
         store.install().expect("install");
 
-        let ctx = AppContext::builder(Environment::Test, loco_rs::tests_cfg::config::test_config())
-            .build();
+        let ctx = test_context();
         assert!(ctx.shared_store.get::<SharedVerifier>().is_none());
         assert!(ctx.shared_store.get::<SharedAccessLog>().is_none());
         assert!(ctx.shared_store.get::<SharedOpenehrStore>().is_none());
@@ -315,8 +424,8 @@ mod tests {
     /// constant left over from a mutation.
     #[test]
     fn the_app_names_and_versions_itself() {
-        assert_eq!(App::app_name(), "openehr_loco", "CARGO_CRATE_NAME changed?");
-        assert!(App::app_version().contains(env!("CARGO_PKG_VERSION")));
+        assert_eq!(app_name(), "openehr_loco", "CARGO_CRATE_NAME changed?");
+        assert!(app_version().contains(env!("CARGO_PKG_VERSION")));
     }
 
     /// The rate limiter answers `429` once `RATE_LIMIT_BURST` requests have
@@ -324,7 +433,7 @@ mod tests {
     /// directly against `after_routes`, since `tests/http.rs`'s own fixture
     /// builds its router through `AppRoutes::to_router` alone and never calls
     /// this hook (the same gap `install`'s own test above exists to close
-    /// for `before_run`; a limiter wired up wrong, or not at all, would fail
+    /// for `prepare`; a limiter wired up wrong, or not at all, would fail
     /// no other test in this crate).
     #[tokio::test]
     async fn the_rate_limiter_answers_429_only_after_the_burst_is_spent() {
@@ -336,10 +445,8 @@ mod tests {
         };
         use tower::ServiceExt as _;
 
-        let ctx = AppContext::builder(Environment::Test, loco_rs::tests_cfg::config::test_config())
-            .build();
         let base = Router::new().route("/x", get(|| async { "ok" }));
-        let router = App::after_routes(base, &ctx).await.expect("after_routes");
+        let router = with_rate_limit(base).expect("with_rate_limit");
 
         for n in 0..super::RATE_LIMIT_BURST {
             let response = router

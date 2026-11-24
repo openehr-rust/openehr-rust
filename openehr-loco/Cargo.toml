@@ -10,8 +10,8 @@ version = "0.11.0"
 edition = "2024"
 rust-version = "1.98"
 license = "MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only OR OGL-UK-3.0 OR CC-BY-NC-SA-4.0"
-description = "openEHR® HTTP service built on Loco, Axum, and Tokio. openEHR® is the registered trademark of the openEHR Foundation and is used with the permission of openEHR International. Use of the trademark does not constitute endorsement of this product by openEHR International or openEHR Foundation. This project is an independent work."
-keywords = ["openehr", "ehr", "healthcare", "axum", "loco"]
+description = "openEHR® HTTP service built on Axa, Axum, and Tokio. openEHR® is the registered trademark of the openEHR Foundation and is used with the permission of openEHR International. Use of the trademark does not constitute endorsement of this product by openEHR International or openEHR Foundation. This project is an independent work."
+keywords = ["openehr", "ehr", "healthcare", "axum", "axa"]
 categories = ["web-programming::http-server"]
 repository = "https://github.com/openehr-rust/openehr-rust"
 readme = "README.md"
@@ -23,23 +23,21 @@ readme = "README.md"
 publish = false
 
 [dependencies]
-# `default-features = false` is the load-bearing line.
+# Axa is a library, not a framework: `AppContext` is plain Axum state, and the
+# service's `main` is ordinary. Its default features take no database, which is
+# the point: this repository already has a persistence layer — `openehr-store`
+# and its six dialects — built on a storage model that is deliberately *not*
+# shredded (`db:S1.5`), and a second one that does not know what a COMPOSITION
+# is would be two ideas of what a record is.
 #
-# Loco's defaults include `with-db`, which pulls SeaORM, sea-orm-migration, and
-# sqlx. This repository already has a persistence layer — `openehr-store` and
-# its six dialects — built on a storage model that is deliberately *not*
-# shredded (`db:S1.5`). Taking Loco's would mean two persistence layers with
-# two ideas of what a record is, and the one Loco brings does not know what a
-# COMPOSITION is.
+# So: no database feature, no `queue`, and no `paseto`.
 #
-# So: no `with-db`, no `worker` (no queue), and no `auth`.
-#
-# `auth` is off for a separate reason: it is `jsonwebtoken`, and this service
-# verifies PASETO v4.public instead (`db:PR12.14`). JWT negotiates its algorithm
-# in a field the attacker supplies, which is the root of `alg: none` and of
+# `paseto` is off because this crate carries its own verifier (`src/auth.rs`),
+# written for `v4.public` only (`db:PR12.14`). JWT negotiates its algorithm in
+# a field the attacker supplies, which is the root of `alg: none` and of
 # RS256-verified-as-HS256. PASETO's version *is* the algorithm, so there is
-# nothing to negotiate. See `src/auth.rs`.
-loco-rs = { version = "1.2.0", default-features = false, features = ["cli"] }
+# nothing to negotiate.
+axa = "0.21"
 # Verification only. Nothing in this crate signs, and no secret key is ever
 # loaded — a verified subject becomes an `AUDIT_DETAILS.committer` in an
 # append-only chained history, so an instance able to mint tokens would be an
@@ -53,7 +51,7 @@ serde_json = { version = "1", features = ["preserve_order", "float_roundtrip", "
 openehr = { path = "../openehr", version = "0.11.0" }
 openehr-store = { path = "../openehr-store", version = "0.11.0" }
 openehr-sqlite = { path = "../openehr-sqlite", version = "0.11.0" }
-# Loco's `Hooks` is an `#[async_trait]` trait, so implementing it needs the
+# Axa's `Task` is an `#[async_trait]` trait, so implementing it needs the
 # same macro.
 async-trait = "0.1"
 time = { version = "0.3.55", features = ["formatting"] }
@@ -69,18 +67,16 @@ pedantic = { level = "warn", priority = -1 }
 assert_is_empty = "allow"
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
-# `loco_rs::Error` is 128 bytes, so every fallible function in this crate trips
+# `axa::Error` is over 128 bytes, so every fallible function in this crate trips
 # `result_large_err`. Boxing it would make these signatures disagree with every
-# `Hooks` and `Task` method they sit beside, which is a worse readability cost
-# than the one the lint is warning about — and the error type is not ours to
-# shrink. Allowed at the crate level rather than sprinkled, so the reason is
-# recorded once instead of six times.
+# `Task` method they sit beside, which is a worse readability cost than the one
+# the lint is warning about — and the error type is not ours to shrink. Allowed
+# at the crate level rather than sprinkled, so the reason is recorded once.
 result_large_err = "allow"
 
 [workspace]
 
 [dev-dependencies]
-loco-rs = { version = "1.2.0", default-features = false, features = ["cli", "testing"] }
 tower = { version = "0.5.3", features = ["util"] }
 
 # Benchmarks (`benches/http.rs`). `default-features = false` drops the HTML

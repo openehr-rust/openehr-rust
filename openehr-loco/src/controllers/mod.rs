@@ -12,8 +12,8 @@ pub mod ehr_status;
 pub mod metadata;
 pub mod query;
 
+use axa::AppContext;
 use axum::http::StatusCode;
-use loco_rs::app::AppContext;
 use openehr::rm::common::{PartyProxy, Version};
 use openehr::rm::ehr::Composition;
 use openehr_store::StoreError;
@@ -22,9 +22,39 @@ use crate::access::{SharedAccessLog, access};
 use crate::app::SharedOpenehrStore;
 use crate::auth::Principal;
 
+/// A refusal: the status a caller is told and the sentence that says what to do
+/// about it.
+///
+/// Sent as an RFC 9457 problem, with the sentence as `detail`. Axa's standard
+/// middleware never sends a handler's plain-text body — it replaces one with a
+/// generic problem so that an error cannot quote an internal string by
+/// accident — so a message the caller needs (where a deleted record's history
+/// is, what to send instead of `DELETE`) has to travel as the problem's
+/// `detail`, which is the one field it keeps.
+#[derive(Debug)]
+pub struct Refusal(pub StatusCode, pub String);
+
+impl From<(StatusCode, String)> for Refusal {
+    fn from((status, message): (StatusCode, String)) -> Self {
+        Self(status, message)
+    }
+}
+
+impl axum::response::IntoResponse for Refusal {
+    fn into_response(self) -> axum::response::Response {
+        let Self(status, message) = self;
+        let code = status
+            .canonical_reason()
+            .unwrap_or("error")
+            .to_ascii_lowercase()
+            .replace(' ', "_");
+        axa::Error::CustomError(status, axa::error::ErrorDetail::new(code, message)).into_response()
+    }
+}
+
 /// Borrows the store from the shared state.
 ///
-/// A `503` when it is absent, because absent means [`crate::app::App::before_run`]
+/// A `503` when it is absent, because absent means [`crate::app::App::prepare`]
 /// did not run or did not finish — the service is not ready, which is a
 /// different thing from the request being wrong.
 ///
@@ -222,7 +252,7 @@ pub fn record_read(
     outcome: &str,
 ) -> Result<(), (StatusCode, String)> {
     let Some(log) = ctx.shared_store.get::<SharedAccessLog>() else {
-        // Absent means `before_run` has not finished. Reads must not be served
+        // Absent means `prepare` has not finished. Reads must not be served
         // ahead of the thing that records them.
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,

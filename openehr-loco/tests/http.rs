@@ -10,8 +10,8 @@
 //!
 //! # How the router is built
 //!
-//! Through [`AppRoutes::to_router`], the same call [`App::boot`] makes, rather
-//! than a hand-assembled router. Loco normalises a route's prefix and path when
+//! Through [`AppRoutes::into_app`](axa::routes::AppRoutes::into_app), the same call [`openehr_loco::app::router`] builds on, rather
+//! than a hand-assembled router. Axa normalises a route's prefix and path when
 //! it collects them — `"/composition"` plus `"/"` becomes `/composition`, not
 //! `/composition/` — so a test that concatenated them itself would exercise
 //! paths the server never serves and pass while production `404`s.
@@ -20,10 +20,6 @@ use axum::{
     Router,
     body::{Body, to_bytes},
     http::{HeaderMap, HeaderName, HeaderValue, Request, StatusCode, header},
-};
-use loco_rs::{
-    app::{AppContext, Hooks as _},
-    environment::Environment,
 };
 use openehr::{
     base::{HierObjectId, ObjectId, ObjectRef, ObjectVersionId},
@@ -36,7 +32,7 @@ use openehr::{
 };
 use openehr_loco::{
     access::{AccessLog, SharedAccessLog},
-    app::{App, SharedOpenehrStore},
+    app::SharedOpenehrStore,
     auth::{PasetoVerifier, SharedVerifier},
 };
 use openehr_sqlite::SqliteStore;
@@ -202,8 +198,7 @@ impl Served {
                 .expect("ehr_status v1");
         }
 
-        let ctx = AppContext::builder(Environment::Test, loco_rs::tests_cfg::config::test_config())
-            .build();
+        let ctx = openehr_loco::app::test_context();
         ctx.shared_store.insert::<SharedVerifier>(Arc::new(
             PasetoVerifier::new(&paserk, None, None, None).expect("verifier"),
         ));
@@ -213,8 +208,8 @@ impl Served {
             .insert::<SharedAccessLog>(Arc::new(access_log));
 
         Self {
-            router: App::routes(&ctx)
-                .to_router::<App>(ctx.clone(), Router::new())
+            router: openehr_loco::app::routes()
+                .into_app(ctx.clone())
                 .expect("router"),
             authorization: format!("Bearer {token}"),
             ehr_id: ehr_id.to_string(),
@@ -571,8 +566,7 @@ async fn a_service_without_its_store_reports_503_and_not_404() {
     // `before_run` failed or has not finished. The distinction matters to a
     // load balancer: 503 is "not me, not yet", and 404 is "this will never
     // work", and only one of them gets retried.
-    let ctx =
-        AppContext::builder(Environment::Test, loco_rs::tests_cfg::config::test_config()).build();
+    let ctx = openehr_loco::app::test_context();
     let pair = AsymmetricKeyPair::<V4>::generate().expect("keypair");
     let mut paserk = String::new();
     pair.public.fmt(&mut paserk).expect("PASERK");
@@ -580,8 +574,8 @@ async fn a_service_without_its_store_reports_503_and_not_404() {
         PasetoVerifier::new(&paserk, None, None, None).expect("verifier"),
     ));
 
-    let router = App::routes(&ctx)
-        .to_router::<App>(ctx.clone(), Router::new())
+    let router = openehr_loco::app::routes()
+        .into_app(ctx.clone())
         .expect("router");
     let mut claims = Claims::new().expect("claims");
     claims.subject("clinician-4417").expect("subject");
@@ -927,8 +921,7 @@ async fn a_read_that_cannot_be_recorded_is_not_served() {
     // access log was never installed, which is what a failed `before_run`
     // leaves behind.
     let served = Served::new();
-    let ctx =
-        AppContext::builder(Environment::Test, loco_rs::tests_cfg::config::test_config()).build();
+    let ctx = openehr_loco::app::test_context();
     ctx.shared_store.insert::<SharedVerifier>(Arc::new(
         PasetoVerifier::new(&served.paserk, None, None, None).expect("verifier"),
     ));
@@ -939,8 +932,8 @@ async fn a_read_that_cannot_be_recorded_is_not_served() {
             store
         })));
 
-    let router = App::routes(&ctx)
-        .to_router::<App>(ctx.clone(), Router::new())
+    let router = openehr_loco::app::routes()
+        .into_app(ctx.clone())
         .expect("router");
     let response = router
         .oneshot(

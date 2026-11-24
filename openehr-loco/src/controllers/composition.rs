@@ -1,12 +1,12 @@
 //! Composition endpoints: create, read, delete, `_history`, and vread.
 
+use axa::{AppContext, routes::Routes};
 use axum::{
     Json,
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode, header},
     routing::{delete, get, post, put},
 };
-use loco_rs::{app::AppContext, controller::Routes};
 use openehr::base::HierObjectId;
 use openehr::rm::common::Version;
 use openehr::rm::ehr::Composition;
@@ -14,10 +14,10 @@ use openehr_store::{Store as _, record::VersionRow};
 use serde::Deserialize;
 
 use crate::auth::Principal;
-use crate::controllers::{check_attribution, outcome_of, record_read, status_for, store};
+use crate::controllers::{Refusal, check_attribution, outcome_of, record_read, status_for, store};
 use crate::views::{Page, VersionView};
 
-type Reply<T> = Result<(StatusCode, HeaderMap, Json<T>), (StatusCode, String)>;
+type Reply<T> = Result<(StatusCode, HeaderMap, Json<T>), Refusal>;
 
 /// `_count` and `_offset`, with a bound.
 ///
@@ -146,13 +146,13 @@ async fn read(
     let row = found.map_err(|e| status_for(&e))?;
 
     if row.is_deleted {
-        return Err((
+        return Err(Refusal::from((
             StatusCode::GONE,
             format!(
                 "composition {} was deleted by version {}; its history remains at _history",
                 container, row.uid
             ),
-        ));
+        )));
     }
     let head = headers(&row.uid);
     Ok((StatusCode::OK, head, Json(view(&row))))
@@ -307,12 +307,12 @@ async fn create(
 ) -> Reply<VersionView> {
     check_attribution(&version, &principal)?;
     if version.preceding_version_uid().is_some() {
-        return Err((
+        return Err(Refusal::from((
             StatusCode::BAD_REQUEST,
             "this version names a predecessor, so it is an update: PUT it at its \
              container's address with If-Match"
                 .to_owned(),
-        ));
+        )));
     }
 
     let handle = store(&ctx)?;
@@ -361,13 +361,13 @@ async fn update(
         // precondition you stated is false, so re-read and decide; `409` says
         // the store refused the commit itself. A caller that conflates them
         // retries the wrong one.
-        return Err((
+        return Err(Refusal::from((
             StatusCode::PRECONDITION_FAILED,
             format!(
                 "If-Match named {expected}, and the current version is {}",
                 current.uid
             ),
-        ));
+        )));
     }
 
     let outcome = guard
@@ -450,11 +450,8 @@ fn if_match(headers: &HeaderMap) -> Result<String, (StatusCode, String)> {
 /// now by choice rather than by inability, and the caller is told what to send
 /// instead.
 #[allow(clippy::unused_async)]
-async fn remove(
-    _principal: Principal,
-    Path((_ehr_id, _uid)): Path<(String, String)>,
-) -> (StatusCode, String) {
-    (
+async fn remove(_principal: Principal, Path((_ehr_id, _uid)): Path<(String, String)>) -> Refusal {
+    Refusal(
         StatusCode::NOT_IMPLEMENTED,
         "deletion is a commit: POST a version whose lifecycle state is deleted, carrying \
          AUDIT_DETAILS with a change reason and a preceding_version_uid (openEHR H5.2). \

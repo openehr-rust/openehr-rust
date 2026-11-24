@@ -14,13 +14,16 @@
 
 #![forbid(unsafe_code)]
 
-use loco_rs::cli;
-use openehr_loco::app::App;
+use openehr_loco::app;
 
 #[tokio::main]
-async fn main() -> loco_rs::Result<()> {
-    // `cli::main::<App>()`, not the `MigratorTrait` form: that one belongs to
-    // `with-db`, which this crate does not take (`db:S1.5`). Migrations here
-    // are the store's business, and before 1.0 there are none (`db:O10.14`).
-    cli::main::<App>().await
+async fn main() -> axa::Result<()> {
+    // `axa::cli::parse`, not `Cli::parse`: it names this service in `--help`
+    // and refuses a command that destroys data outside development.
+    app::run(axa::cli::parse(
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION"),
+        env!("CARGO_PKG_DESCRIPTION"),
+    ))
+    .await
 }

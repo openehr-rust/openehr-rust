@@ -1,19 +1,19 @@
 //! EHR endpoints.
 
+use axa::{AppContext, routes::Routes};
 use axum::{
     Json,
     extract::{Path, State},
     http::StatusCode,
     routing::{get, post},
 };
-use loco_rs::{app::AppContext, controller::Routes};
 use openehr::rm::ehr::Ehr;
 use openehr_store::Store as _;
 
 use crate::auth::Principal;
-use crate::controllers::{outcome_of, record_read, status_for, store};
+use crate::controllers::{Refusal, outcome_of, record_read, status_for, store};
 
-type Reply<T> = Result<(StatusCode, Json<T>), (StatusCode, String)>;
+type Reply<T> = Result<(StatusCode, Json<T>), Refusal>;
 
 /// `POST /openehr/v1/ehr`
 ///

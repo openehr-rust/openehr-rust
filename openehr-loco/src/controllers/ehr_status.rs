@@ -24,13 +24,13 @@
 //! endpoints do, and they need no change once `PUT` is added: `GET` here is
 //! already correct for the world where an `EHR_STATUS` does exist.
 
+use axa::{AppContext, routes::Routes};
 use axum::{
     Json,
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     routing::get,
 };
-use loco_rs::{app::AppContext, controller::Routes};
 use openehr::base::{HierObjectId, ObjectId, ObjectVersionId};
 use openehr::rm::data_types::DvDateTime;
 use openehr::rm::ehr::Ehr;
@@ -39,10 +39,10 @@ use serde::Deserialize;
 
 use crate::auth::Principal;
 use crate::controllers::composition::{headers, lock, parse_id, view};
-use crate::controllers::{outcome_of, record_read, status_for, store};
+use crate::controllers::{Refusal, outcome_of, record_read, status_for, store};
 use crate::views::VersionView;
 
-type Reply<T> = Result<(StatusCode, HeaderMap, Json<T>), (StatusCode, String)>;
+type Reply<T> = Result<(StatusCode, HeaderMap, Json<T>), Refusal>;
 
 /// The `EHR_STATUS` container `ehr.ehr_status()` names, when it names one at
 /// all.
@@ -91,10 +91,10 @@ async fn read(
     let id = parse_id(&ehr_id)?;
     let ehr = guard.get_ehr(&id).map_err(|e| status_for(&e))?;
     let Some(container) = ehr_status_container(&ehr) else {
-        return Err((
+        return Err(Refusal::from((
             StatusCode::NOT_FOUND,
             format!("EHR {ehr_id} names no EHR_STATUS container"),
-        ));
+        )));
     };
 
     let found = if let Some(text) = &at.version_at_time {

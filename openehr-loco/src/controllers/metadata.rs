@@ -1,7 +1,7 @@
 //! What the service is, and what it does not do.
 
+use axa::{AppContext, routes::Routes};
 use axum::{Json, extract::State, routing::get};
-use loco_rs::{app::AppContext, controller::Routes};
 
 use crate::access::SharedAccessLog;
 use crate::views::{Absence, Metadata};

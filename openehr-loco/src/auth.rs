@@ -79,12 +79,12 @@
 
 use std::sync::Arc;
 
+use axa::AppContext;
 use axum::{
     extract::FromRequestParts,
     http::{HeaderMap, HeaderValue, StatusCode, header, request::Parts},
     response::{IntoResponse, Response},
 };
-use loco_rs::app::AppContext;
 use pasetors::{
     Public,
     claims::ClaimsValidationRules,

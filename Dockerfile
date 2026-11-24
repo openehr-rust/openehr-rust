@@ -62,15 +62,16 @@ RUN useradd --system --create-home --home-dir /home/openehr openehr
 USER openehr
 WORKDIR /home/openehr
 
-COPY --from=builder /build/openehr-loco/config ./config
 COPY --from=builder /build/openehr-loco/target/release/openehr-loco /usr/local/bin/openehr-loco
 
-# Loco's own default environment is `development` (`loco_rs::environment::
-# DEFAULT_ENVIRONMENT`) unless `LOCO_ENV` says otherwise — found while first
-# verifying this image actually answers a request: without this, the
-# container silently loads `config/development.yaml`, whose `binding:
-# localhost` is exactly the mistake `config/production.yaml` exists to avoid.
-ENV LOCO_ENV=production
+# Axa reads no configuration file: its settings are environment variables with
+# defaults in `openehr_loco::app::defaults`. A release build already answers
+# `production` when `APP_ENV` is unset; it is stated here so that the image's
+# behaviour does not depend on how it was built. `BINDING` is the one setting
+# that must differ from the default inside a container: `localhost` is the
+# container's own loopback, which a published port never reaches.
+ENV APP_ENV=production
+ENV BINDING=0.0.0.0
 
 # `OPENEHR_SQLITE_PATH` names a file under this volume, not the volume path
 # itself — see `docker-compose.yml`, which is the piece that actually

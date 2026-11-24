@@ -2,8 +2,8 @@
 //!
 //! # Tasks open their own store
 //!
-//! [`Hooks::before_run`](loco_rs::app::Hooks::before_run) is **not** on the
-//! path a task takes: `cli::main` builds the context and calls `run_task`
+//! [`prepare`](crate::app::prepare) is **not** on the
+//! path a task takes: `app::run` builds the context and calls `run_task`
 //! directly, so `shared_store` is empty. A task that read the store from the
 //! context would find nothing and report, from a command line, the `503` this
 //! crate uses to mean "not ready".
@@ -25,9 +25,8 @@
 //! arrangement that means anything.
 
 use async_trait::async_trait;
-use loco_rs::{
-    Result,
-    app::AppContext,
+use axa::{
+    AppContext, Result,
     task::{Task, TaskInfo, Vars},
 };
 use openehr::base::HierObjectId;
@@ -53,16 +52,16 @@ fn store_for(vars: &Vars) -> Result<openehr_sqlite::SqliteStore> {
 /// get wrong by accident than an argument in a position.
 fn container(vars: &Vars) -> Result<HierObjectId> {
     let raw = vars.cli.get("container").ok_or_else(|| {
-        loco_rs::Error::Message("expected container:<versioned-object-uid>".to_owned())
+        axa::Error::Message("expected container:<versioned-object-uid>".to_owned())
     })?;
     raw.parse()
-        .map_err(|_| loco_rs::Error::Message(format!("not an identifier: {raw}")))
+        .map_err(|_| axa::Error::Message(format!("not an identifier: {raw}")))
 }
 
 /// Prints a chain checkpoint for a container, for an external witness.
 ///
 /// ```sh
-/// cargo loco task checkpoint container:87284370-2D4B-4E3D-A3F3-F303D2F4F34B \
+/// cargo run -- task checkpoint container:87284370-2D4B-4E3D-A3F3-F303D2F4F34B \
 ///   path:/backups/openehr.sqlite3
 /// ```
 ///
@@ -94,18 +93,18 @@ impl Task for Checkpoint {
 ///
 /// # Errors
 ///
-/// Returns [`loco_rs::Error::Message`] if the database cannot be opened or the
+/// Returns [`axa::Error::Message`] if the database cannot be opened or the
 /// container does not exist.
 pub fn checkpoint_line(vars: &Vars) -> Result<String> {
     store_for(vars)?
         .chain_checkpoint(&container(vars)?)
-        .map_err(|e| loco_rs::Error::Message(e.to_string()))
+        .map_err(|e| axa::Error::Message(e.to_string()))
 }
 
 /// Verifies a container's stored history and **fails** if it is not intact.
 ///
 /// ```sh
-/// cargo loco task verify container:87284370-2D4B-4E3D-A3F3-F303D2F4F34B
+/// cargo run -- task verify container:87284370-2D4B-4E3D-A3F3-F303D2F4F34B
 /// ```
 ///
 /// Checks more than the chain: `openehr_store::integrity::verify_versions`
@@ -147,14 +146,14 @@ impl Task for Verify {
 ///
 /// # Errors
 ///
-/// Returns [`loco_rs::Error::Message`] if the history is not intact, naming the
+/// Returns [`axa::Error::Message`] if the history is not intact, naming the
 /// verdict — or if the database cannot be read.
 pub fn verify_line(vars: &Vars) -> Result<String> {
     let store = store_for(vars)?;
     let container = container(vars)?;
     let rows = store
         .all_versions(&container)
-        .map_err(|e| loco_rs::Error::Message(e.to_string()))?;
+        .map_err(|e| axa::Error::Message(e.to_string()))?;
 
     // No keys, and the line says what that costs. This service holds no chain
     // key and must not: a key held by the process that writes the rows attests
@@ -169,7 +168,7 @@ pub fn verify_line(vars: &Vars) -> Result<String> {
             rows.len()
         ));
     }
-    Err(loco_rs::Error::Message(format!(
+    Err(axa::Error::Message(format!(
         "{container}: history is NOT intact: {verdict:?}"
     )))
 }

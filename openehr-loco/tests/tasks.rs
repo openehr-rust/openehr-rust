@@ -9,9 +9,8 @@
 //! on a tampered history" are statements about behaviour rather than about
 //! intent.
 
-use loco_rs::{
-    app::AppContext,
-    environment::Environment,
+use axa::{
+    AppContext,
     task::{Task as _, Vars},
 };
 use openehr_loco::{
@@ -71,7 +70,7 @@ fn vars(path: &Path) -> Vars {
 /// would fail here, which is the point of building the context this way rather
 /// than the way the HTTP tests do.
 fn bare_context() -> AppContext {
-    AppContext::builder(Environment::Test, loco_rs::tests_cfg::config::test_config()).build()
+    openehr_loco::app::test_context()
 }
 
 #[tokio::test]

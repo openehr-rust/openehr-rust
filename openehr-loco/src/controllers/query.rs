@@ -9,8 +9,8 @@
 //! ([`StoreError::Unsupported`](openehr_store::StoreError::Unsupported)):
 //! the capability exists, and this specific query does not fit it.
 
+use axa::{AppContext, routes::Routes};
 use axum::{Json, extract::State, http::StatusCode, routing::post};
-use loco_rs::{app::AppContext, controller::Routes};
 use openehr::aql::{AqlQuery, Literal};
 use openehr_store::Cell;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ use std::collections::HashMap;
 
 use crate::auth::Principal;
 use crate::controllers::composition::lock;
-use crate::controllers::{status_for, store};
+use crate::controllers::{Refusal, status_for, store};
 
 /// The request body ITS-REST's own `POST /query/aql` specifies: `q` is the
 /// query text, `query_parameters` binds its `$name` references.
@@ -95,7 +95,7 @@ async fn query(
     State(ctx): State<AppContext>,
     _principal: Principal,
     Json(body): Json<AqlRequest>,
-) -> Result<(StatusCode, Json<AqlResponse>), (StatusCode, String)> {
+) -> Result<(StatusCode, Json<AqlResponse>), Refusal> {
     let parsed: AqlQuery = body
         .q
         .parse()

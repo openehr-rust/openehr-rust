@@ -13,19 +13,19 @@
 //! service must not synthesise the act. So the caller declares the act, then
 //! commits versions into it.
 
+use axa::{AppContext, routes::Routes};
 use axum::{
     Json,
     extract::{Path, State},
     http::StatusCode,
     routing::post,
 };
-use loco_rs::{app::AppContext, controller::Routes};
 use openehr::rm::common::Contribution;
 use openehr_store::Store as _;
 
 use crate::auth::Principal;
 use crate::controllers::composition::{lock, parse_id};
-use crate::controllers::{status_for, store};
+use crate::controllers::{Refusal, status_for, store};
 
 /// `POST /openehr/v1/ehr/{ehr_id}/contribution`
 ///
@@ -38,7 +38,7 @@ async fn create(
     _principal: Principal,
     Path(ehr_id): Path<String>,
     Json(contribution): Json<Contribution>,
-) -> Result<(StatusCode, Json<Contribution>), (StatusCode, String)> {
+) -> Result<(StatusCode, Json<Contribution>), Refusal> {
     let handle = store(&ctx)?;
     let mut guard = lock(&handle)?;
     guard
