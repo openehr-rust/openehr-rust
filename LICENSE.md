@@ -14,12 +14,12 @@ License is any of these or contact us for custom license options.
 
 * [UK Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/) ([SPDX: OGL-UK-3.0](https://spdx.org/licenses/OGL-UK-3.0.html))
 
-* [Creative Commons Attribution Non Commercial Share Alike 4.0 International](https://creativecommons.org/licenses/by-nc-sa/4.0/) ([SPDX: CC-BY-NC-SA-4.0](https://spdx.org/licenses/CC-BY-NC-SA-4.0.html))
+* [Creative Commons Attribution Share Alike 4.0 International](https://creativecommons.org/licenses/by-sa/4.0/) ([SPDX: CC-BY-SA-4.0](https://spdx.org/licenses/CC-BY-SA-4.0.html))
 
 The SPDX expression, as declared in every crate's `Cargo.toml`, is:
 
 ```
-MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only OR OGL-UK-3.0 OR CC-BY-NC-SA-4.0
+MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only OR OGL-UK-3.0 OR CC-BY-SA-4.0
 ```
 
 `OR` means your choice: you may use this software under **any one** of the seven,
@@ -37,7 +37,7 @@ holding the full text in `index.md`:
 | [`LICENSES/gpl-2.0-only/index.md`](LICENSES/gpl-2.0-only/index.md) | GNU GPL v2.0 only |
 | [`LICENSES/gpl-3.0-only/index.md`](LICENSES/gpl-3.0-only/index.md) | GNU GPL v3.0 only |
 | [`LICENSES/ogl-uk-3.0/index.md`](LICENSES/ogl-uk-3.0/index.md) | UK Open Government Licence v3.0 |
-| [`LICENSES/cc-by-nc-sa-4.0/index.md`](LICENSES/cc-by-nc-sa-4.0/index.md) | Creative Commons Attribution Non Commercial Share Alike 4.0 International |
+| [`LICENSES/cc-by-sa-4.0/index.md`](LICENSES/cc-by-sa-4.0/index.md) | Creative Commons Attribution Share Alike 4.0 International |
 
 Each crate directory carries its own copy of this file stating the grant; the
 full texts live once, here at the root, rather than eighteen times over.

@@ -7,6 +7,11 @@ together.
 
 ## Unreleased
 
+- **Licence option changed: `CC-BY-NC-SA-4.0` is now `CC-BY-SA-4.0`.** The SPDX
+  expression in every crate's `Cargo.toml`, `LICENSE.md`, and
+  `LICENSES/cc-by-sa-4.0/` carry the change; the NonCommercial restriction is
+  gone from that option. Versions already published (0.10.0 and 0.11.0) keep the
+  expression they were published with, which cannot be edited.
 - **Wrong-length chain tag MAC is an error** (`spec/rust-checked-arithmetic`
   RCA-IN-2, RCA-IN-6). `VersionRow::project` turned a tag MAC that was not 32
   bytes into `None`, indistinguishable from an unkeyed chain. It now returns

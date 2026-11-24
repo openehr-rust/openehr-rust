@@ -73,4 +73,4 @@ No crashes. Both targets run in CI on every push.
 ## Licence
 
 Any of these, at your option — MIT, Apache-2.0, BSD-3-Clause, GPL-2.0-only, GPL-3.0-only, OGL-UK-3.0, or
-CC-BY-NC-SA-4.0. See [`LICENSE.md`](LICENSE.md).
+CC-BY-SA-4.0. See [`LICENSE.md`](LICENSE.md).

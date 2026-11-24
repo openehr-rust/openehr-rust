@@ -252,7 +252,7 @@ that fails for unrelated reasons is one somebody silences.
 ## Licence
 
 Any of these, at your option — MIT, Apache-2.0, BSD-3-Clause, GPL-2.0-only, GPL-3.0-only, OGL-UK-3.0, or
-CC-BY-NC-SA-4.0. See [`LICENSE.md`](LICENSE.md).
+CC-BY-SA-4.0. See [`LICENSE.md`](LICENSE.md).
 
 openEHR specifications are published by the openEHR Foundation under CC-BY-SA;
 this crate is an independent implementation.

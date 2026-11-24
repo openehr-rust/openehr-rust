@@ -680,5 +680,5 @@ Any of these, at your option:
 * [GNU General Public License v2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html)
 * [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0-standalone.html)
 
-SPDX: `MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only OR OGL-UK-3.0 OR CC-BY-NC-SA-4.0`.
+SPDX: `MIT OR Apache-2.0 OR BSD-3-Clause OR GPL-2.0-only OR GPL-3.0-only OR OGL-UK-3.0 OR CC-BY-SA-4.0`.
 See [`LICENSE.md`](LICENSE.md).
