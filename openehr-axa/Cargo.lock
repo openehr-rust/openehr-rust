@@ -140,9 +140,9 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "axa"
-version = "0.21.0"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fa587d5e9e7930c656a839d99b1716dbd637060291c32b123125e60508ce7f3"
+checksum = "12310579da83bb23601693721144cd322f619dea9e52c049ef9f55f0a0f8cb95"
 dependencies = [
  "async-trait",
  "axa-environment",

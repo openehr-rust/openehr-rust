@@ -70,7 +70,7 @@ fn vars(path: &Path) -> Vars {
 /// would fail here, which is the point of building the context this way rather
 /// than the way the HTTP tests do.
 fn bare_context() -> AppContext {
-    openehr_axa::app::test_context()
+    axa::AppContext::for_test(()).expect("test context")
 }
 
 #[tokio::test]

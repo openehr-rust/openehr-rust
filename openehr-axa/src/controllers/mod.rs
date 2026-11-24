@@ -43,12 +43,7 @@ impl From<(StatusCode, String)> for Refusal {
 impl axum::response::IntoResponse for Refusal {
     fn into_response(self) -> axum::response::Response {
         let Self(status, message) = self;
-        let code = status
-            .canonical_reason()
-            .unwrap_or("error")
-            .to_ascii_lowercase()
-            .replace(' ', "_");
-        axa::Error::CustomError(status, axa::error::ErrorDetail::new(code, message)).into_response()
+        axa::Error::with_detail(status, message).into_response()
     }
 }
 

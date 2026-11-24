@@ -102,22 +102,6 @@ pub fn app_version() -> String {
     )
 }
 
-/// A context for tests and tools: the `test` environment, no database (this
-/// service has none of Axa's — its store is `openehr-store`), nothing in the
-/// shared store.
-///
-/// # Panics
-///
-/// Never in practice: the default configuration for the `test` environment is
-/// valid, and the lookup answers nothing, so no setting can be malformed.
-#[must_use]
-pub fn test_context() -> AppContext {
-    let environment = Environment::Test;
-    let config = Config::from_lookup(&environment, &defaults(), |_| None)
-        .expect("the test environment's defaults are valid");
-    AppContext::new(environment, (), config)
-}
-
 /// The route groups, on whatever `base` already carries.
 fn add_routes(base: AppRoutes) -> AppRoutes {
     base.add_route(controllers_routes::metadata())
@@ -231,6 +215,7 @@ pub fn defaults() -> Defaults {
         database: "",
         port: 5150,
         body_limit: 8 * MB,
+        request_timeout_seconds: Some(10),
         ..Defaults::default()
     }
 }
@@ -246,9 +231,7 @@ pub fn defaults() -> Defaults {
 ///
 /// As [`with_rate_limit`], or if the middleware cannot be applied.
 pub fn router(ctx: &AppContext) -> Result<AxumRouter> {
-    let router = service_routes().into_router(ctx.clone());
-    let router = with_rate_limit(router)?;
-    axa::middleware::apply(router, &ctx.config.http)
+    service_routes().into_app_with(ctx.clone(), with_rate_limit)
 }
 
 /// Runs one command line: serve, run a task, check the configuration, or ask a
@@ -269,7 +252,12 @@ pub async fn run(cli: Cli) -> Result<()> {
     if let Command::Health { ready, port } = cli.command {
         return axa::cli::health(&environment, &defaults(), ready, port).await;
     }
-    let mut config = Config::from_env(&environment, &defaults())?;
+    // A task does not listen, so a listener-only setting must not refuse it.
+    let mut config = if matches!(cli.command, Command::Task { .. }) {
+        Config::for_task(&environment, &defaults())?
+    } else {
+        Config::from_env(&environment, &defaults())?
+    };
     config.apply_cli(&cli);
     axa::logger::init(app_name(), &config.logger);
     let ctx = AppContext::new(environment, (), config);
@@ -359,7 +347,7 @@ fn install(ctx: &AppContext, verifier: PasetoVerifier, access_log: AccessLog, st
 mod tests {
     use super::{
         SharedAccessLog, SharedOpenehrStore, SharedVerifier, app_name, app_version, defaults,
-        install, prepare, router, routes, service_routes, test_context, with_rate_limit,
+        install, prepare, router, routes, service_routes, with_rate_limit,
     };
     use crate::access::AccessLog;
     use crate::auth::PasetoVerifier;
@@ -392,7 +380,7 @@ mod tests {
         let mut store = SqliteStore::in_memory().expect("in-memory store");
         store.install().expect("install");
 
-        let ctx = test_context();
+        let ctx = axa::AppContext::for_test(()).expect("test context");
         assert!(ctx.shared_store.get::<SharedVerifier>().is_none());
         assert!(ctx.shared_store.get::<SharedAccessLog>().is_none());
         assert!(ctx.shared_store.get::<SharedOpenehrStore>().is_none());
@@ -484,19 +472,7 @@ mod tests {
         assert_eq!(d.database, "");
         assert_eq!(d.port, 5150);
         assert_eq!(d.body_limit, 8 * axa::config::MB);
-    }
-
-    /// A test context is in the `test` environment and has an empty shared
-    /// store, so nothing a test finds there was put there by the helper.
-    #[test]
-    fn a_test_context_is_a_test_environment_with_nothing_installed() {
-        let ctx = test_context();
-        assert_eq!(ctx.environment, axa::Environment::Test);
-        assert!(ctx.shared_store.get::<SharedVerifier>().is_none());
-        assert_eq!(
-            ctx.config.server.port, 5150,
-            "the context carries the service's defaults"
-        );
+        assert_eq!(d.request_timeout_seconds, Some(10));
     }
 
     /// The clinical routes are mounted without the health endpoints, and the
@@ -521,7 +497,7 @@ mod tests {
         if std::env::var(crate::auth::KEYS_VAR).is_ok() {
             return; // the operator's own environment names a key; not this test's to unset
         }
-        let ctx = test_context();
+        let ctx = axa::AppContext::for_test(()).expect("test context");
         assert!(prepare(&ctx).is_err());
         assert!(ctx.shared_store.get::<SharedOpenehrStore>().is_none());
     }
@@ -537,7 +513,7 @@ mod tests {
         };
         use tower::ServiceExt as _;
 
-        let app = router(&test_context()).expect("router");
+        let app = router(&axa::AppContext::for_test(()).expect("test context")).expect("router");
         let get = |uri: &str| {
             Request::builder()
                 .uri(uri)

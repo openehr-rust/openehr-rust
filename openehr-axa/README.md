@@ -1,6 +1,6 @@
 # openehr-axa
 
-A RESTful openEHR® API server on **Axum** and **Axa 0.21**, over
+A RESTful openEHR® API server on **Axum** and **Axa 0.23**, over
 [`openehr-sqlite`](../openehr-sqlite).
 
 > openEHR® is the registered trademark of the openEHR Foundation and is used

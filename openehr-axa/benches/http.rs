@@ -75,7 +75,7 @@ fn served() -> (Router, String, String) {
         )
         .expect("commit");
 
-    let ctx = openehr_axa::app::test_context();
+    let ctx = axa::AppContext::for_test(()).expect("test context");
     let mut paserk = String::new();
     pair.public.fmt(&mut paserk).expect("PASERK");
     ctx.shared_store.insert::<SharedVerifier>(Arc::new(

@@ -1173,7 +1173,7 @@ for it in CPU.
 `openehr-axa` moved from Loco to Axa 0.21 on 2026-11-24, which changed what a
 caller sees, recorded here because the tests do not all notice. (1) Error
 bodies are RFC 9457 problems, not plain text; messages the caller needs travel
-as `detail` through `controllers::Refusal`. A handler that returns a bare
+as `detail` through `controllers::Refusal`, which since Axa 0.23 (2026-11-24) delegates to `axa::Error::with_detail`. A handler that returns a bare
 `(StatusCode, String)` now gets a generic problem with the message dropped, and
 no compiler error says so. (2) Axa 0.22.0 was under the two-day minimum publish
 age, so 0.21 is pinned and nothing here has been run against 0.22. (3) Request

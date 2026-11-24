@@ -198,7 +198,7 @@ impl Served {
                 .expect("ehr_status v1");
         }
 
-        let ctx = openehr_axa::app::test_context();
+        let ctx = axa::AppContext::for_test(()).expect("test context");
         ctx.shared_store.insert::<SharedVerifier>(Arc::new(
             PasetoVerifier::new(&paserk, None, None, None).expect("verifier"),
         ));
@@ -566,7 +566,7 @@ async fn a_service_without_its_store_reports_503_and_not_404() {
     // `before_run` failed or has not finished. The distinction matters to a
     // load balancer: 503 is "not me, not yet", and 404 is "this will never
     // work", and only one of them gets retried.
-    let ctx = openehr_axa::app::test_context();
+    let ctx = axa::AppContext::for_test(()).expect("test context");
     let pair = AsymmetricKeyPair::<V4>::generate().expect("keypair");
     let mut paserk = String::new();
     pair.public.fmt(&mut paserk).expect("PASERK");
@@ -921,7 +921,7 @@ async fn a_read_that_cannot_be_recorded_is_not_served() {
     // access log was never installed, which is what a failed `before_run`
     // leaves behind.
     let served = Served::new();
-    let ctx = openehr_axa::app::test_context();
+    let ctx = axa::AppContext::for_test(()).expect("test context");
     ctx.shared_store.insert::<SharedVerifier>(Arc::new(
         PasetoVerifier::new(&served.paserk, None, None, None).expect("verifier"),
     ));
