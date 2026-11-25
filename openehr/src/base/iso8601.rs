@@ -1008,6 +1008,21 @@ impl SemanticOrd for Duration {
 mod tests {
     use super::*;
 
+    /// The `T`-with-nothing-after-it refusal in `DateTime::from_str`. Until
+    /// this test it was reached only when a proptest generator happened to
+    /// produce a trailing `T`, so the coverage ratchet measured 172 on one
+    /// machine and 177 on the next (CI, 2026-11-25) with no code change.
+    #[test]
+    fn a_date_time_with_a_t_and_no_time_is_refused() {
+        for text in ["2024-01-01T", "2024T", "2024-05T"] {
+            let error = text.parse::<DateTime>().unwrap_err();
+            assert!(
+                error.to_string().contains("no time after"),
+                "{text}: {error}"
+            );
+        }
+    }
+
     #[test]
     fn malformed_durations_are_refused_by_designator() {
         for text in [

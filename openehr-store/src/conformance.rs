@@ -1436,11 +1436,13 @@ pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
             AuditDetails::new(
                 SYSTEM,
                 DvDateTime::new(&format!("2026-08-01T09:{:02}:00Z", 20 + n)).expect("fixture"),
-                if n == 1 {
-                    audit_change_type::CREATION
-                } else {
-                    audit_change_type::AMENDMENT
-                },
+                // Indexed, not branched on `n`: a comparison here is a mutant no
+                // assertion can kill, because nothing reads the change type back.
+                [
+                    audit_change_type::CREATION,
+                    audit_change_type::AMENDMENT,
+                    audit_change_type::AMENDMENT,
+                ][usize::try_from(n - 1).expect("one to three")],
                 PartyIdentified::named("Dr A Nurse")
                     .expect("fixture")
                     .into(),

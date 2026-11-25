@@ -21,7 +21,13 @@
 # added and its own whole-body-replacement mutant went uncaught for exactly
 # this reason; `run_is_modifiable_gate` and `run_aql` added the same day for
 # the same reason, before either ever ran once.
-exclude_re = ["replace run(_ehr_status|_is_modifiable_gate|_aql)? ->"]
+# `run_ehr_scope` (`db:H5.18`, `db:H5.19`, added 2026-11-25) joins the list for
+# the same reason, and CI proved it: its whole-body-replacement mutant survived
+# the owner crate's in-memory double, which only checks that a story returns
+# `Ok`. The real evidence is `openehr-sqlite`'s `tests/conformance.rs` (with a
+# negative control run by hand: disabling the commit ownership check made it
+# fail), and `openehr-postgresql`'s `#[ignore]`d twin.
+exclude_re = ["replace run(_ehr_status|_is_modifiable_gate|_aql|_ehr_scope)? ->"]
 
 # `src/aql.rs`: the bounded AQL executor `run_aql` above calls. Every
 # function in it is reachable *only* through `run_aql`, so it inherits the

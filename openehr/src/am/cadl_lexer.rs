@@ -680,6 +680,28 @@ mod tests {
         assert_eq!(lexer.next(), Some(Token::Symbol('}')));
     }
 
+    /// The offset-minutes arm of `is_fraction_comma`: after `,5` a numeric
+    /// offset only closes a fraction when its minutes are **two digits** and
+    /// then a boundary. `cargo mutants` found the two `&&` joining those three
+    /// conditions survived, because no test fed it minutes that are long
+    /// enough but not digits (`+02:ab`), or too short to slice (`+02:5`).
+    #[test]
+    fn a_numeric_offset_closes_a_fraction_only_with_two_digit_minutes() {
+        // `index` is the comma: "10:30:00" is eight bytes.
+        for (text, expected) in [
+            ("10:30:00,5+02:30", true),
+            ("10:30:00,5+02:30;", true),
+            ("10:30:00,5+0230", true),
+            ("10:30:00,5+02:ab", false),
+            ("10:30:00,5+02:a3", false),
+            ("10:30:00,5+02:3", false),
+            ("10:30:00,5+02:", false),
+            ("10:30:00,5+02:30x", false),
+        ] {
+            assert_eq!(is_fraction_comma(text, 8), expected, "{text}");
+        }
+    }
+
     /// `A-85`, `K15.33`: the same comma character is both cADL's list
     /// separator and ISO 8601's fractional-second decimal sign. The lexical
     /// boundary, not whitespace, decides which one the parser receives.
