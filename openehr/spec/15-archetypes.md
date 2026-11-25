@@ -20,8 +20,8 @@ and never a pass. A partial constraint engine is still prohibited. What changed
 is that the refusal now lives inside an implementation instead of standing in
 for one.
 
-**Seventeen of these requirements are implemented; sixteen are not** (`K15.32`,
-added 2026-09-03, was satisfied the same day).
+**Eighteen of these requirements are implemented; sixteen are not** (`K15.32`
+and `K15.33` were each satisfied in the change that added them).
 `K15.1`–`K15.4` — the AOM2 object model — landed as `openehr::am` on
 2026-08-26; `K15.18`–`K15.23` — validating a Reference Model instance against
 an archetype, as a separate verdict from Reference-Model validation, never a
@@ -158,6 +158,15 @@ before the code does.
   understand produces exactly the silent pass `S1.4` predicted.
 - **K15.7** The parser MUST NOT resynchronise by skipping to the next section
   after an error. Partial parses are not returned.
+- **K15.33** A comma in a temporal primitive constraint MUST be assigned to
+  exactly one grammar role: a comma between values is the cADL list delimiter,
+  while a comma between whole and fractional seconds is the ISO 8601 decimal
+  sign (`D3.10b`). `parse_definition` MUST accept both roles for `C_TIME`,
+  `C_DATE_TIME`, and `C_DURATION`, MUST accept comma-separated `C_DATE` values,
+  and MUST NOT require whitespace where the following value's syntax
+  distinguishes the two roles. The lexer MUST leave a list delimiter for the
+  primitive-list parser rather than swallowing it into the preceding temporal
+  literal (`A-85`).
 - **K15.8** The crate MUST parse **ADL 1.4** archetypes and convert them to
   AOM2, because the published corpus is largely still written in it and a
   library that cannot read the corpus cannot validate against it. A converted

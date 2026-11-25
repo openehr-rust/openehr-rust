@@ -72,7 +72,8 @@ pass — and `openehr::am::repository`, resolving a `C_ARCHETYPE_ROOT` filler
 through a repository the caller supplies (`openehr` performs no I/O). Two
 more closed on 2026-09-03 (`K15.6`–`K15.7`, the refusal discipline, once
 `openehr::am::cadl` existed to be held to it), and `K15.32` was added and
-satisfied the same day. That leaves **16 of 33**: no whole-archetype ADL
+satisfied the same day. `K15.33`, the temporal comma boundary, was added and
+satisfied with `A-85`. That leaves **16 of 34**: no whole-archetype ADL
 parser (the `definition` section and the header are read; they do not
 compose), no ADL 1.4 body, no flattening, no template expansion, no
 operational template, no evaluation of a slot's own assertions. What

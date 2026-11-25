@@ -37,13 +37,13 @@ fn public_parser_covers_supported_object_families() {
                 }
             }
         }"#,
-        r#"CLUSTER[id1] matches { items matches {
+        r"CLUSTER[id1] matches { items matches {
             use_archetype CLUSTER[id2, openEHR-EHR-CLUSTER.device.v1]
                 occurrences matches {0..1}
-        } }"#,
-        r#"CLUSTER[id1] matches { items matches {
+        } }",
+        r"CLUSTER[id1] matches { items cardinality matches {0..3} matches {
             use_node ELEMENT[id2] occurrences matches {0..3} /items[id9]
-        } }"#,
+        } }",
         r"CLUSTER[id1] matches { items matches {
             allow_archetype CLUSTER[id2] occurrences matches {0..1} matches {
                 include
@@ -105,10 +105,16 @@ fn public_parser_covers_primitive_families() {
         ("String", r#""a", "b"; "a""#),
         ("Integer", "-3, +2, 7; -3"),
         ("Real", "-3.5, +2.0; 2.0"),
-        ("Date", "2024-01-01, 2024-02-02; 2024-01-01"),
-        ("Time", "10:30:00, 11:45:00; 10:30:00"),
+        ("Date", "2024-01-01,2024-02-02; 2024-01-01"),
+        ("Time", "10:30:00,11:45:00; 10:30:00"),
+        ("Time", "10:30:00,5; 10:30:00,5"),
         ("Date_time", "2024-01-01T00:00:00Z; 2024-01-01T00:00:00Z"),
+        (
+            "Date_time",
+            "2024-01-01T00:00:00,5Z; 2024-01-01T00:00:00,5Z",
+        ),
         ("Duration", "PT0S; PT0S"),
+        ("Duration", "PT1,5S; PT1,5S"),
         ("Terminology_code", "[ac1; at2]"),
         ("Date", "yyyy-mm-??"),
         ("Time", "??:??:??; 10:30:00"),
@@ -158,7 +164,7 @@ fn public_parser_covers_primitive_families() {
 fn public_parser_names_malformed_and_unsupported_input() {
     let cases = [
         ("", "RM type name"),
-        (":", "RM type name"),
+        (":", "expected `[`"),
         ("CLUSTER", "expected `[`"),
         ("CLUSTER x", "expected `[`"),
         ("LIST<DV_TEXT>[id1]", "generic RM type parameters"),
@@ -185,7 +191,7 @@ fn public_parser_names_malformed_and_unsupported_input() {
         ),
         (
             "CLUSTER[id1] matches { items cardinality matches {3..1} }",
-            "upper bound is below lower bound",
+            "upper bound below lower bound",
         ),
         (
             "CLUSTER[id1] matches { items cardinality matches {0..*; banana} }",
@@ -196,7 +202,7 @@ fn public_parser_names_malformed_and_unsupported_input() {
             "SIBLING_ORDER",
         ),
         (
-            "CLUSTER[id1] matches { items matches { use_node ELEMENT[id2] } }",
+            "CLUSTER[id1] matches { items matches { use_node ELEMENT[id2]",
             "target ADL_PATH",
         ),
         (

@@ -63,11 +63,66 @@ const SYMBOLS: &str = "[]{}(),;|<>*=+-";
 /// digits.
 fn is_iso8601_char(c: char) -> bool {
     c.is_ascii_digit()
-        || matches!(c, '-' | ':' | '+' | '?' | ',')
+        || matches!(c, '-' | ':' | '+' | '?')
         || matches!(
             c.to_ascii_uppercase(),
             'T' | 'Z' | 'P' | 'Y' | 'W' | 'D' | 'H' | 'S' | 'M' | 'X'
         )
+}
+
+/// Whether `rest` begins at a boundary after one temporal value.
+fn starts_temporal_boundary(rest: &str) -> bool {
+    rest.is_empty()
+        || rest.starts_with(char::is_whitespace)
+        || rest.starts_with([';', '}', ']', '|', ','])
+        || rest.starts_with("..")
+}
+
+/// Whether the comma at `index` is an ISO-8601 fractional-second decimal sign.
+///
+/// A comma is also cADL's list delimiter (`K15.33`). The roles are distinguishable
+/// by the rest of the value: a duration fraction ends in `S`; a time fraction is
+/// followed only by a timezone or by the temporal value's boundary. A following
+/// `:` or a date-shaped suffix therefore belongs to the next list value instead.
+fn is_fraction_comma(text: &str, index: usize) -> bool {
+    let before = &text[..index];
+    let after = &text[index + 1..];
+    let digits = after.bytes().take_while(u8::is_ascii_digit).count();
+    if digits == 0 {
+        return false;
+    }
+    let tail = &after[digits..];
+
+    let duration = before.strip_prefix('-').unwrap_or(before).starts_with('P');
+    if duration {
+        return tail.strip_prefix('S').is_some_and(starts_temporal_boundary);
+    }
+    if !before.contains(':') {
+        return false;
+    }
+    if starts_temporal_boundary(tail) {
+        return true;
+    }
+    if let Some(rest) = tail.strip_prefix('Z') {
+        return starts_temporal_boundary(rest);
+    }
+    let Some(offset) = tail.strip_prefix(['+', '-']) else {
+        return false;
+    };
+    let offset_digits = offset.bytes().take_while(u8::is_ascii_digit).count();
+    match offset_digits {
+        2 => {
+            let rest = &offset[2..];
+            starts_temporal_boundary(rest)
+                || rest.strip_prefix(':').is_some_and(|minutes| {
+                    minutes.len() >= 2
+                        && minutes[..2].bytes().all(|byte| byte.is_ascii_digit())
+                        && starts_temporal_boundary(&minutes[2..])
+                })
+        }
+        4 => starts_temporal_boundary(&offset[4..]),
+        _ => false,
+    }
 }
 
 /// `Clone`, not `Copy`: cloning is deliberately visible at each call site
@@ -140,7 +195,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Reads a maximal run of ISO8601 date/time/date-time/duration
-    /// characters — digits, `-:+?,`, and the letters `TZPYMWDHS` in either
+    /// characters — digits, `-:+?`, and the letters `TZPYMWDHS` in either
     /// case (`base_lexer.g4`'s `YEAR`/`MONTH`/`DAY`/`HOUR`/`MINUTE`/
     /// `SECOND`/`TIMEZONE`/`ISO8601_DURATION` fragments, folded into one
     /// character class since every caller re-validates through `T::from_str`
@@ -165,7 +220,8 @@ impl<'a> Lexer<'a> {
     }
 
     /// [`Self::read_iso8601`] without consuming — the same maximal run of
-    /// [`is_iso8601_char`], left in place, so a caller can classify it (a
+    /// [`is_iso8601_char`], plus a contextually unambiguous fractional comma,
+    /// left in place, so a caller can classify it (a
     /// value, a `*_CONSTRAINT_PATTERN`, or neither) before committing to
     /// reading it (`A-75`, mirroring [`Self::peek_raw_path`]).
     pub(super) fn peek_iso8601(&mut self) -> Option<&'a str> {
@@ -175,7 +231,8 @@ impl<'a> Lexer<'a> {
         while let Some(&(i, c)) = chars.peek() {
             let is_fraction_dot =
                 c == '.' && self.rest[i + 1..].starts_with(|next: char| next.is_ascii_digit());
-            if is_iso8601_char(c) || is_fraction_dot {
+            let is_fraction_comma = c == ',' && is_fraction_comma(self.rest, i);
+            if is_iso8601_char(c) || is_fraction_dot || is_fraction_comma {
                 end = i + c.len_utf8();
                 chars.next();
             } else {
@@ -621,6 +678,38 @@ mod tests {
         assert_eq!(lexer.next(), Some(Token::Symbol(';')));
         assert_eq!(lexer.read_iso8601(), Some("2024-06-15"));
         assert_eq!(lexer.next(), Some(Token::Symbol('}')));
+    }
+
+    /// `A-85`, `K15.33`: the same comma character is both cADL's list
+    /// separator and ISO 8601's fractional-second decimal sign. The lexical
+    /// boundary, not whitespace, decides which one the parser receives.
+    #[test]
+    fn read_iso8601_distinguishes_list_commas_from_decimal_signs() {
+        for (source, first) in [
+            ("2024-01-01,2024-02-02", "2024-01-01"),
+            ("10:30:00,11:45:00", "10:30:00"),
+            (
+                "2024-01-01T10:30:00Z,2024-02-02T11:45:00Z",
+                "2024-01-01T10:30:00Z",
+            ),
+            ("PT1S,PT2S", "PT1S"),
+        ] {
+            let mut lexer = Lexer::new(source);
+            assert_eq!(lexer.read_iso8601(), Some(first), "source: {source}");
+            assert_eq!(lexer.next(), Some(Token::Symbol(',')), "source: {source}");
+        }
+
+        for literal in [
+            "10:30:00,5",
+            "10:30:00,5Z",
+            "10:30:00,5+01:30",
+            "2024-01-01T10:30:00,5-0130",
+            "PT1,5S",
+        ] {
+            let mut lexer = Lexer::new(literal);
+            assert_eq!(lexer.read_iso8601(), Some(literal), "literal: {literal}");
+            assert_eq!(lexer.next(), None, "literal: {literal}");
+        }
     }
 
     #[test]

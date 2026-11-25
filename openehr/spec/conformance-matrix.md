@@ -32,8 +32,8 @@ Doctests count as tests: they compile and run in CI (`T13.8`).
 ## Totals
 
 Counted mechanically from the tables below, with every requirement id in
-`spec/*.md` checked to appear exactly once — **345 ids, 345 covered, none
-missing** (344 before `K15.32`, 2026-09-03).
+`spec/*.md` checked to appear exactly once — **346 ids, 346 covered, none
+missing** (344 before `K15.32`, 2026-09-03; `K15.33` added with `A-85`).
 
 A hand-written total in a file like this is a number nobody rechecks, and this
 one proved the point: it said 291 of 291 while six requirements added after the
@@ -69,6 +69,7 @@ Later the same day `K15.32` was added and satisfied together (`A-71`, after
 the first external corpus run): 345 ids, 271 **•**; the two `K15.6`–`K15.7`
 test names that asserted the old refusal of an omitted `occurrences` were
 replaced by the names that now assert the parse.
+`K15.33` was added and satisfied together with `A-85`: 346 ids, 272 **•**.
 
 | Status | 2026-09-03 | 2026-08-30 | 2026-08-26 | 2026-07-31 |
 | --- | --- | --- | --- | --- |
@@ -80,7 +81,7 @@ replaced by the names that now assert the parse.
 | ? implemented, untested | 3 | 3 | 3 | 54 |
 | withdrawn | 1 | 1 | 1 | — |
 | open | 0 | 0 | 0 | 4 |
-| **total requirements** | **345** | **344** | **344** | 269 |
+| **total requirements** | **346** | **344** | **344** | 269 |
 
 The **spec** rows are §15 plus `S1.21`, added on 2026-08-26 when `S1.4` was
 withdrawn and the Archetype Model brought into scope. There were 32 of them that
@@ -96,7 +97,8 @@ partial tree — followed on 2026-09-03, once `am::cadl` existed to be held to
 it (`A-62`–`A-67`), leaving **16**. `K15.32` — an unstated `occurrences`
 stays unstated and is inferred only by AOM2's own rule — was added later
 that day and satisfied in the same commit (`A-71`), so it never joined the
-block: 33 ids in §15, 16 of them still **spec**.
+block. `K15.33` likewise arrived satisfied with `A-85`: 34 ids in §15, 16 of
+them still **spec**.
 They remain a large block of unsatisfied requirements this crate has carried
 since 2026-08-26, and they are counted here rather than described elsewhere so
 that the size of the gap is a number a reader can see.
@@ -153,7 +155,7 @@ Process requirements; they govern this specification rather than the code.
 | S1.13 | • | `canonical_json` round trip covers `DV_PARSABLE` and time specifications |
 | S1.14 | doc | `security` module header |
 | S1.15 | doc | `J9.15`; bounded by `canonical_json::reading_a_composition_stays_within_a_small_stack` |
-| S1.21 | spec | §15 in full — seventeen of the thirty-three ids it brought into scope are **•** and sixteen **spec** (2026-09-03, `K15.32` added and satisfied the same day); **A-40** |
+| S1.21 | spec | §15 in full — eighteen of the thirty-four ids it brought into scope are **•** and sixteen **spec** (`K15.32` and `K15.33` were each added already satisfied); **A-40** |
 | S1.16–S1.17 | • | `terminology::tests::the_codes_that_disagree_between_terminology_repositories_are_the_current_ones` |
 | S1.18 | — | declared departure: ISO 3166 and ISO 639 are not carried, so `COMPOSITION.Territory_valid` and `Language_valid` are not checked. Its closing requirement — that a caller can do the check instead — **is** verified: `guarantees::a_caller_can_read_every_code_the_crate_declines_to_check` (`A-19`) |
 | S1.19 | — | declared exclusion: no demographic repository, so the four `PARTY` graph invariants cannot be checked from a value in hand |
@@ -458,9 +460,9 @@ Process requirements; they govern this specification rather than the code.
 
 ## §15 Archetypes and templates — `K15`
 
-The section was added on 2026-08-26 when `S1.4` was withdrawn. **Seventeen
-ids are satisfied and sixteen are not** (thirty-three since `K15.32`,
-2026-09-03): `openehr::am` is the AOM2 object model,
+The section was added on 2026-08-26 when `S1.4` was withdrawn. **Eighteen
+ids are satisfied and sixteen are not** (thirty-four since `K15.33`):
+`openehr::am` is the AOM2 object model,
 `openehr::am::validate` (2026-08-30) checks a Reference Model instance against
 an `Archetype` already held in memory, `openehr::am::repository` plus
 `validate_with_repository` (2026-08-30, same day) resolve a `C_ARCHETYPE_ROOT`
@@ -499,3 +501,4 @@ off **spec** when the code implements it *and* a named test exercises it
 | K15.28–K15.29 | spec | the boundaries this section does **not** move: authoring, publishing, AQL execution |
 | K15.30–K15.31 | spec | the honesty gate while the rest is unbuilt — refuse, and do not describe a parser as archetype support |
 | K15.32 | • | `am::constraint::tests::effective_occurrences_follows_aom2s_rule_and_defers_only_for_a_proxy`, `…an_unstated_occurrences_is_absent_on_the_wire_and_a_stated_one_round_trips`; `am::cadl::tests::occurrences_omitted_on_a_non_root_node_is_carried_unstated_and_inferred_from_its_owner`, `…a_real_published_archetypes_definition_is_parsed_whole`; `am::validate::tests::an_unstated_occurrences_is_checked_against_the_value_aom2_infers`. **Scope:** the Reference Model multiplicity half of the rule is the one stated assumption — an attribute built without a cardinality is single-valued (`A-71`'s residual) |
+| K15.33 | • | `cadl_contract::public_parser_covers_primitive_families` parses comma-separated date/time/date-time lists without whitespace and comma-decimal time/date-time/duration values; `cadl_lexer::tests::read_iso8601_distinguishes_list_commas_from_decimal_signs` asserts the lexical boundary (`A-85`) |
