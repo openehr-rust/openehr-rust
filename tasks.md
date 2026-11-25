@@ -1613,6 +1613,246 @@ decision. Size: S (hours), M (days), L (weeks), XL (a track).
       above — a one-off manual read does not need Rust reflection, because
       a person did the field-matching; a repeatable one does.
 
+### Audit intake 2026-11-25 — three external audits, unverified until reproduced
+
+Taken from three audit reports at commit `320e1e8` (since removed from
+`docs/audits/`). Per `W0.3` none of these is a fact until reproduced here; a
+finding that does not reproduce is closed with that said. Findings that
+reproduce go to the audit register (`W0.4`) before any fix lands.
+
+**Software engineering / VS Code audit** (GPT-6.2 Astra, high):
+
+- [ ] **Nightly fuzz and coverage jobs select the stable compiler.** All eight
+      fuzz jobs failed at "Build fuzz targets": `rust-toolchain.toml` outranks
+      `rustup default nightly`, so `-Zsanitizer=address` is rejected. Set
+      `RUSTUP_TOOLCHAIN=nightly` on the fuzz and coverage invocations and
+      print `rustc -Vv` in the same environment. Done when every fuzz target
+      reaches its run step and coverage measures with nightly. Preserve the
+      floors; the store reported 96 uncovered lines against a floor of one,
+      and `cadl_contract` failed under coverage and on the MSRV job —
+      follow up each separately. — **S**
+      *Edited 2026-11-25, not yet verified:* `RUSTUP_TOOLCHAIN=nightly` set on
+      the fuzz install/build/run steps and the coverage job in `ci.yml`. Close
+      this only after a pushed run shows nightly in `rustc -Vv` and the fuzz
+      matrix reaching its run step.
+- [ ] **The documented pre-PR loop exits 0 on failure.** The `echo "FAIL $d"`
+      loop in `CLAUDE.md`/`CONTRIBUTING.md`/`INSTALL.md` takes `echo`'s status.
+      Give per-crate clippy+test one script accepting a crate directory,
+      aggregate failures as `bin/make-ci-minimum-supported-rust-version`
+      does, exit nonzero. Test with a deliberate early failure. Also align
+      with CI (`RUSTFLAGS="-D warnings"`, `--all-targets`). — **S**
+      *Done 2026-11-25 (not yet committed):* `bin/check-crates [dir…]`; a
+      missing early crate followed by `openehr-assets` exits 1 and names it,
+      all-pass exits 0. The six loops in `INSTALL.md`, `CONTRIBUTING.md`,
+      `AGENTS.md`, `CLAUDE.md`, `agents/auditing.md`, `agents/publishing.md`
+      now call it. CI's matrix has not been switched to it yet.
+- [ ] **Six fuzz lockfiles fail `cargo metadata --locked`** (`openehr-fuzz`,
+      `-store-fuzz`, `-mariadb-`, `-mssql-`, `-mysql-`, `-oracle-fuzz`; the
+      `openehr` dependency recorded at 0.10.0, manifest says 0.11.0). The
+      working tree already has uncommitted lock edits: review and commit
+      them, then add full `cargo metadata --locked --format-version 1` per
+      manifest to the version-change checks (`--no-deps` missed this). — **S**
+      *Done 2026-11-25 (not committed):* reproduced on a `git archive HEAD`
+      (exit 101); the pending lock edits are 15 lines of `0.10.0` → `0.11.0`
+      and nothing else, and with them all 18 resolve. `bin/check-locks`
+      added, a step in the CI `claims` job, and a note in
+      `agents/publishing.md`. Commit the six locks with it.
+- [ ] **VS Code setup.** Recommend `rust-lang.rust-analyzer` in
+      `.vscode/extensions.json`; document Open Folder at root vs single
+      crate; do not set `linkedProjects` without a measured need. Add a
+      CodeLLDB launch for `openehr-sqlite` example `01_store_a_record` with
+      `CARGO_PROFILE_DEV_DEBUG=full` at build time, a task for the per-crate
+      script above, and one for the SQLite conformance test. Verify problem
+      matcher paths resolve under a root-opened folder. — **S**
+      *Written 2026-11-25, not yet verified in a desktop VS Code:*
+      `.vscode/{extensions,launch,tasks}.json` (rust-analyzer + CodeLLDB; the
+      SQLite tutorial launch; tasks for `bin/check-crates`, one crate, SQLite
+      conformance, `bin/check-locks`, `check-docs`) and `!.vscode/` in
+      `.gitignore` (a global ignore otherwise hides them). The three files
+      parse. Still to observe: the debugger stopping with variables, a
+      diagnostic click opening `openehr/tests/cadl_contract.rs` from a
+      root-opened folder (the `${input:crate}` in a problem matcher's
+      `fileLocation` is the part least sure to resolve), and navigating
+      `Store`.
+- [ ] **Dev container and quickstart disagree.** Container is Rust 1.98 with
+      Docker-in-Docker; checkout wants 1.100.0 and the scripts default to
+      Podman. Document the Docker command inside the container; add one root
+      `.dockerignore` (only `.containerignore` exists). Verify on a fresh
+      Reopen in Container: toolchain, compose version, tutorial, metadata
+      route on :5150, `target/` sentinel excluded from the build context. — **M**
+      *Partly done 2026-11-25:* root `.dockerignore` added (same two patterns
+      as `.containerignore`, cross-referenced) and the Docker command noted in
+      `INSTALL.md`, marked unrun. Open: the container image is `rust:1.98`
+      while `rust-toolchain.toml` pins 1.100.0 — whether rustup fetches the
+      pin on first `cargo` (it does not on every rustup version) is
+      unverified, so `devcontainer.json` is untouched; and the Reopen in
+      Container run and the metadata curl on :5150 have not been done. The
+      `target/` sentinel *was* tested, with Docker, 2026-11-25: a file in
+      `openehr/target/` did not reach a `COPY openehr` in a throwaway
+      Dockerfile (count 0). Not tested: Podman reading `.containerignore`
+      first, as before.
+- [ ] **Coverage is not comparable local vs CI.** `make test-coverage` runs
+      Tarpaulin for `openehr` only; CI uses nightly LLVM coverage and the
+      `coverage-floor.tsv` ratchet. One command producing LCOV and calling
+      `scripts/check-coverage.py`, for the three CI workspaces; confirm a
+      lowered test fails identically in both (`W-23`, `W0.41`). — **M**
+      *Done 2026-11-25 (not committed):* `bin/test-coverage [workspace…]`
+      now runs nightly `cargo llvm-cov` then `check-coverage.py` (was
+      Tarpaulin on `openehr` only), and the CI `coverage` job calls it. Run
+      locally on `openehr-store`: passes at 1 uncovered line / floor 1 — so
+      CI's reported 96 was the stable-toolchain bug, not real; with the floor
+      temporarily set to 0 it fails naming `record.rs:166` (floor restored).
+      `openehr` and `openehr-sqlite` not yet run through it; `openehr`'s
+      `cadl_contract` failure is in the uncommitted lexer work and is a
+      separate follow-up. The CI run is the remaining evidence.
+- [ ] **First-contribution text is stale.** `CONTRIBUTING.md` asks for first
+      SQL Server and Oracle runs and says there is no script; the SQLite
+      tutorial calls SQLite the only verified store. The matrix records both
+      schema runs and a verified PostgreSQL store. Replace with links to the
+      matrix; extend `scripts/check-docs.py` so this class is caught. — **S**
+      *Text fixed 2026-11-25 (not committed):* `CONTRIBUTING.md` priority 1
+      (it said five of six dialects were below Store, two never run, no
+      script; the matrix says four are at Schema and `verify-schema.sh`
+      already takes `mssql` and `oracle`) and the tutorial header (now names
+      PostgreSQL as Verified too). Doctests and examples still build.
+      Still open: the `check-docs.py` extension — a rule that catches
+      "only … Verified"-style claims against the matrix.
+- [ ] **CI "claims" job failed on audit-summary counts** at the reviewed
+      commit. Read the last run, fix, and say what drifted. — **S**
+      *Fixed 2026-11-25 (not committed):* the failing step was "The audit
+      summary counts itself correctly" (run 45506501991): paragraph said 76
+      fixed / 7 open, table had 77 / 6. The open count was already one high at
+      `HEAD` because the prose still counted **A-19**, which is *classified*
+      (CI counts that as closed); your uncommitted A-85 then raised the total
+      without the paragraph. `openehr/spec/audit.md` now says 84 / 78 / 6 and
+      the A-19 sentence says why it is not open; the CI step's own script,
+      run locally, prints "paragraph agrees". Same red run, still open and
+      separate: `test / openehr` Clippy (two raw-string lints), the MSRV job's
+      `cadl_contract` failure, and `fuzz`/`coverage` (the toolchain item
+      above). Nothing checks the *prose* about which findings are open —
+      only the numbers — so that half of this drift can recur.
+
+**Clinical safety audit** (GPT-6.2 Astra; synthetic-data evaluation only
+recommended until the first three close):
+
+- [ ] **Bind every returned item to its chart (High, source inspection).**
+      Composition/EHR-status handlers fetch by container or version id
+      without establishing the owning EHR; the read audit can record the
+      requested EHR id for a row it does not own. Add a store lookup scoped
+      by EHR, container, and expected type; use it for current, historical,
+      vread and amendment targets. Acceptance: two synthetic charts; a
+      mismatched selection returns no content; authorized-for-both vs
+      authorized-for-one; third-party subjects (family history) still work.
+      *FIXED 2026-11-25 (not committed); see `db:D-19`'s "Fixed" paragraph: scoped
+      lookups chosen by the maintainer, breaking `Store` change accepted; also
+      closed a commit-side hole (`H5.19`). Verified on real SQLite, the owner
+      store and HTTP; **PostgreSQL's new live test not run**. Original
+      reproduction notes follow.* *Reproduced 2026-11-25 for the three composition read routes (200
+      under a nonexistent EHR id); registered as `db:D-19`. `update` and
+      `EHR_STATUS` vread also reproduced, worse (serves a composition by
+      version id: no type check); `PUT` under a nonexistent EHR is refused
+      404, under a second *real* EHR untested (needs a two-EHR fixture —
+      build that first, it is the acceptance test too). Fix not started.* — **M**
+- [ ] **AQL returns an amended composition twice (High, reproduced on
+      SQLite per the report).** One commit → one row; after a successor in
+      the same container the same query returns two rows of the *current*
+      content. Resolve each distinct container once, then match archetype on
+      current content, then filter/order/page. Do not dedupe by displayed
+      value. Add a shared conformance story: original, two amendments, a
+      second encounter with the same name, a withdrawal; SQLite and
+      PostgreSQL agree. — **M**
+      *Reproduced 2026-11-25 on SQLite (1, 2, 3 identical rows after 1, 2, 3
+      versions); registered as `db:D-20` in `spec/databases/audit.md` (the
+      persistence register's, not `spec/audit.md`). Also suspected, not
+      reproduced: a stale index row still matching after an amendment
+      changed the archetype. *Fixed 2026-11-25 (not committed) on SQLite and the
+      owner store; see `db:D-20`'s progress paragraph. Negative control run
+      (dedupe removed → the new story fails on real SQLite). PostgreSQL not
+      run — CI's `run_aql` on `openehr-postgresql` is the remaining evidence.
+      Withdrawal-of-an-amended-container and an archetype-changing amendment
+      on a real engine are untested.*
+- [ ] **`DvOrdered::is_abnormal()` loses the qualifier (High, reproduced).**
+      Against 3–5 mg/L: `< 4 mg/L` → `Some(false)`; `4 mL` →
+      `Some(true)`. Needs a tri-state (inside/outside/indeterminate + reason)
+      deciding on the whole set of possible values; the validator's
+      flag-agreement check uses it. `lib:D3.14a` prose states the opposite
+      boolean for the incomparable case — reconcile spec and code. Tests:
+      endpoints, overlap, entirely outside, incomparable units, no range. — **M**
+      *Reproduced 2026-11-25 and registered as `lib:A-86` (High):
+      `<`/`>` are ignored, so `< 4` and `> 4` both read "inside" and `< 6`
+      reads "outside". The `4 mL` → `Some(true)` row is **not** a defect:
+      `lib:D3.14a` specifies fail-closed, so the audit's claim that the prose
+      says the opposite is wrong. Fix not started.*
+- [x] **Blood-pressure tutorial emits `DV_TEXT` "Sitting" for posture**
+      (`at0008` requires `DV_CODED_TEXT`, `local::at1001`, in
+      `blood_pressure.v2` 2.0.17). Emit the coded value, record the
+      archetype revision, keep free text as a negative case. A commit alone
+      does not show template conformance — say so in the tutorial. — **S**
+      *Done 2026-11-25 (not committed):* checked against the pinned
+      archetype (CKM mirror commit `0b9fb3b`, revision 2.0.17: `at0008` is
+      `DV_CODED_TEXT`, `local::at1001` = Sitting) and fixed in
+      `openehr/examples/01_build_composition.rs`, which now emits
+      `DV_CODED_TEXT` and says why plain `validate()` could not catch it.
+      Output run: 0 violations, coded posture present. Not done: a negative
+      case — nothing in this tree checks a value against an ADL constraint
+      yet (`am::validate` expects a flat definition), so the free-text
+      version cannot be made to fail. `benches/rm.rs` and
+      `tests/canonical_json.rs` still build the free-text posture; they are
+      fixtures for speed and round-tripping, not claims about the archetype.
+- [ ] **Read accounting and write attribution gaps (High for deployments
+      relying on them).** The AQL handler returns rows without calling the
+      read-audit recorder; `every_read_route_records_who_read_what` iterates
+      a list omitting it; metadata lists AQL execution as absent while a
+      bounded executor is served. Record resolved EHR/actor/action/outcome
+      before releasing query results (no literals or values logged), cover
+      every content-returning route including log failure, derive the
+      capability statement from that coverage. For writes, retain a stable
+      committer *identifier* on the version and contribution — the stored row
+      keeps only the optional display name, so two same-named clinicians are
+      indistinguishable. — **M**
+      *Read half reproduced 2026-11-25 and registered as `db:D-21`: AQL
+      returned rows, 0 access-log lines, and metadata still says AQL is not
+      implemented. The write-attribution half (display name only) is not
+      reproduced.
+      *Read half fixed 2026-11-25 (not committed): `POST /query/aql` records
+      before releasing rows (4 new HTTP tests, store test + coverage held at
+      1485/1486), metadata no longer calls AQL absent. The guard now
+      enumerates the router (`every_mounted_route_is_either_…`, two negative
+      controls run) and `db:D-21` is closed. Left: the write half —
+      the stored committer keeps only an optional display name —
+      **reproduced 2026-11-25 and registered as `db:D-22`** (a read-back of a
+      commit made as `clinician-4417` carries no committer field and the
+      subject appears nowhere; the identifier is checked, then discarded). It
+      needs a schema change + migration (`db:O10.14`), so it waits on a design
+      decision. The two-same-named-clinicians case was inferred from
+      `party_name`, not run.*
+- [ ] **Clinical pilot evidence** (when a pilot is real): one workflow,
+      hazard log linking each failure to harm/owner/control/test, and the
+      four synthetic chart-review scenarios (corrected result, allergy
+      unknown/withheld/NKA, order without administration, family history). — **L**
+
+**Mistral Medium 3.5 onboarding/promotion list** — largely generic and partly
+stale (it claims AQL execution, archetype validation, PostgreSQL `Store` and
+UCUM handling are missing; they are not, check `agents/` and the matrices
+before acting). Items worth keeping, each to be checked against the tree first:
+
+- [ ] README "Quick Start" five-minute path, and project badges (CI,
+      crates.io, docs.rs, MSRV, licence) if absent. — **S**
+- [ ] A contributor testing guide (adding tests, mutation workflow, fuzz
+      patterns) and a "good first issue" template/label. — **S**
+- [ ] ADRs for the standing decisions (document-centric schema, N−2 MSRV,
+      byte-preserving JSON). — **M**
+- [ ] A glossary of openEHR terms for newcomers (link from `openehr-skill`). — **S**
+- [ ] Outreach: This Week in Rust, awesome lists, openEHR community
+      channels. Owner decision; not engineering. — **S**
+- [x] ~~Verify `cargo deny` covers all non-fuzz crates~~ — checked
+      2026-11-25: the CI `supply-chain` job's matrix lists **all 18** crates, fuzz
+      crates included, so the report's premise was wrong. Open: a CycloneDX SBOM
+      per release (`agents/publishing.md`). — **S**
+- [ ] Not taken: cargo-crev, OpenTelemetry, connection pooling, chaos
+      testing, a logo, a video, a survey — no requirement or finding behind
+      them yet (`W0.19`).
+
 ## Done (condensed; full evidence in `git show 4761700:tasks.md`)
 
 All verified on the dates given; none is re-asserted here without the source.

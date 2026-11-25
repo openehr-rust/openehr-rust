@@ -163,6 +163,229 @@ both integer/real directions, every same-kind family, null, and the unsupported
 operator refusal. The mixed string/integer assertion fails against the old
 implementation.
 
+### D-21 — AQL results are served without a read-audit record, and metadata says AQL is absent — **High, fixed**
+
+**Found 2026-11-25 by an external clinical-safety audit (source inspection),
+reproduced here.** With read auditing on (`records_reads: true`),
+`POST /openehr/v1/query/aql` against the `openehr-axa` test fixture answered
+**200 with the composition's rows** and the access log held **0 lines**. The
+handler binds its principal as `_principal` and never calls `record_read`; its
+own doc comment concedes "a query's *result* is content" and then excludes it
+from the record on the reasoning that the query *text* is not. The promise
+(`db:PR12.5`, `PR12.6`: an access event before clinical data is returned) is
+about what is returned.
+
+The same run's `GET /openehr/v1/metadata` still lists **"AQL execution" under
+`not_implemented`** (`db:S1.6`) while the executor is served, so the capability
+statement is wrong in the opposite direction at the same moment.
+
+`every_read_route_records_who_read_what` iterates a fixed list of five routes
+that omits the query route, so the guard that was written to catch exactly this
+omission has the same blind spot as the code (rule 3 of `CLAUDE.md`: a guard is
+only as wide as its input list).
+
+**Open until** the query handler records resolved EHR, actor, action and
+outcome *before* releasing rows, without logging literals or result values; a
+log failure refuses the query as it does for every other read; the guard test
+enumerates routes from the router rather than from a list; and the metadata
+capability list is derived from what is served.
+
+**Progress 2026-11-25 (not committed).** Three of the four conditions are met.
+`POST /query/aql` now records `query` / actor / resolved EHR / outcome before
+the rows are released, via `openehr_store::aql_scoped_ehr` (so the EHR is taken
+from the query by the owner module's own rule, not re-parsed in the service);
+it records a refused query as `refused`; it answers 503 and drops the rows when
+the log cannot be written; and neither the query text nor a row value reaches
+the record. `AQL execution` is gone from `not_implemented`. Four tests in
+`openehr-axa/tests/http.rs` cover those, and the same conditions produced 0 log
+lines before the change. **Still open:** `every_read_route_records_who_read_what`
+still iterates a hand-written list, so the next route added without a
+`record_read` is missed in the same way; it should enumerate the router. The
+finding stays open until that is done.
+
+**Closed 2026-11-25 (not committed).** The guard is now
+`every_mounted_route_is_either_a_recorded_read_or_exempt_with_a_reason`: it
+takes the set of routes from `openehr_axa::app::routes().mounted()`, requires
+every one to be classified in a table (a content-returning `GET`/`POST` with the
+action it records, or an exemption **with its reason**), fails naming any route
+that is mounted and unclassified, and then drives every `Records` route and
+asserts exactly one new access record with the right action. Two negative
+controls were run: deleting the `record_read` call from the AQL handler fails
+four tests (that guard, with "left no access record", and the three AQL tests);
+deleting the AQL entry from the table fails it with "mounted but not
+classified". It also covers `EHR_STATUS` and its vread, which the old five-route
+list did not. The old test remains, narrower. The committer-display-name half
+of the audit's finding is **not** part of this entry and is still open in
+`tasks.md`.
+
+**Related, not reproduced:** the audit also says the committer's stored row
+keeps only an optional display name, so two clinicians with the same name are
+indistinguishable later (`PHI.md` claims). Not checked here; it stays in
+`tasks.md`.
+
+### D-20 — An amended composition appears once per version in an AQL result — **High, open** (fix landed, CI pending)
+
+**Found 2026-11-25 by an external clinical-safety audit, reproduced here on
+SQLite.** One `COMPOSITION` container, committed and then amended twice,
+queried with `SELECT c/name/value … CONTAINS COMPOSITION
+c[openEHR-EHR-COMPOSITION.encounter.v1] ORDER BY c/name/value LIMIT 10`
+(the same shape as `conformance::run_aql`):
+
+| after | rows returned |
+| --- | --- |
+| version 1 | `Encounter 1` |
+| version 2 | `Encounter 2`, `Encounter 2` |
+| version 3 | `Encounter 3`, `Encounter 3`, `Encounter 3` |
+
+**Cause.** `openehr_composition_index` is keyed by `version_uid` and gains a row
+per content-bearing version. `aql::execute` takes every candidate from
+`find_compositions_by_archetype`, resolves each to its *container's current
+version*, and emits a row each time. The comment at that site says the
+container "still has exactly that one row"; that is false once a second
+content-bearing version exists. `run_aql` commits three single-version
+containers and one deleted one, so the shared suite never saw it.
+
+**Consequence.** A worklist counts one encounter several times, and repeated
+rows displace other records from a `LIMIT` page. A second, separate defect
+follows from the same shape and is **not yet reproduced**: a candidate whose
+*current* content no longer has the queried archetype (an amendment that
+changed it) still matches through its old index row, because the archetype is
+checked against the index, not the current version.
+
+**Progress 2026-11-25 (not committed): fixed on SQLite and the in-memory owner
+store; PostgreSQL not run.** `aql::execute` now answers once per container (a
+`HashSet` of container ids, **not** a value comparison) and checks the requested
+archetype against the container's *current* content. The shared suite
+(`conformance::run_aql`, appended last so earlier row counts are untouched) gains
+the story below. It fails on real SQLite with the dedupe removed (`SQLite: a
+container amended twice must answer once, as its current content`) and passes
+with it. Three owner-crate unit tests cover a container amended twice, two
+containers with one display name, and a stale index row. An existing test that
+"proved" a two-row sort by pushing a clone of the *same* container twice was
+itself the duplicate and was rewritten to use two containers. The coverage
+exclusion pins in `coverage-exclusions.tsv` moved one line (hashes re-checked).
+
+**Story, as it runs:** a container amended twice (`Amended 1/2/3`) → `WHERE =
+'Amended 3'` is 1 row; `'Amended 1'` and `'Amended 2'` are 0; two containers
+both named `Twin` → 2 rows. **Not verified:** PostgreSQL (needs a server;
+`openehr-postgresql/tests/store.rs` runs `run_aql` and so will exercise it in
+CI); the amendment that *changes archetype* against a real engine (only the
+double covers it); a withdrawal of an amended container.
+
+**Open until** each distinct container is resolved once, its *current* content
+is checked against the requested archetype, and only then are filter, order and
+paging applied — **not** by deduplicating on displayed value, which would
+merge two real encounters with the same name. The shared suite gets a story
+with an original, two amendments, a second encounter with the same display
+name, and a withdrawal, and SQLite and PostgreSQL both pass it.
+
+### D-22 — The verified committer's identity is checked and then not stored — **High, open**
+
+**Found 2026-11-25 by an external clinical-safety audit (source inspection),
+reproduced here.** `openehr-axa` refuses a commit whose `AUDIT_DETAILS`
+committer does not match the verified token subject (`PR12.19`,
+`check_attribution`). That check is the only place the committer's *identifier*
+is used. What is persisted is `VersionRow::audit_committer_name`, filled by
+`party_name(...)`: the party's optional display name, `NULL` for an anonymous
+`PARTY_SELF`. No column holds the identifier, and `data_json` is the composition
+alone.
+
+**Reproduction.** A commit made as `clinician-4417` was answered 201; the read
+of it returned keys `uid, versioned_object_uid, lifecycle_state_code,
+is_deleted, time_committed, chain_digest, data` and no committer field of any
+kind; the subject appeared nowhere in the body. In the store the only trace is
+the display name. Two clinicians called "Dr A Nurse" with different identifiers
+leave identical rows (inferred from `party_name`; the two-clinician case was not
+run).
+
+**Why High.** The log of reads names the actor (`PR12.22`); the record of
+*writes* — the one an investigation of a wrong entry starts from — does not,
+and a record that was never stored cannot be reconstructed later. The
+`CONTRIBUTION` and the version chain are append-only and tamper-evident, which
+makes the omission permanent for every commit made before a fix.
+
+**Open until** a stable committer identifier is persisted with each version and
+contribution (separately from the display name, with the verified actor and the
+*declared* author kept distinct, since they can legitimately differ — a service
+acting on a clinician's behalf), is returned by the version views, and a test
+commits as two clinicians with the same display name and reads both back after a
+restart. Treat the identifiers as sensitive in the audit store. Needs a schema
+change and a migration story (`db:O10.14`), so it is a design decision, not a
+patch; it also changes `SCHEMA_VERSION`.
+
+### D-19 — A read route serves content under an EHR that does not own it — **High, fixed** (PostgreSQL run pending)
+
+**Found 2026-11-25 by an external clinical-safety audit (source inspection),
+then reproduced here.** `openehr-axa`'s composition read routes take
+`{ehr_id}` in the path and use it only to write the access record. The lookup is
+by container or version identifier alone (`latest_version(&container)`,
+`all_versions(&container)`, the vread version id). Nothing establishes that the
+returned row belongs to `{ehr_id}`.
+
+**Reproduction (`openehr-axa/tests/http.rs` fixture, one EHR holding one live
+composition).** `GET /openehr/v1/ehr/6BA7B810-9DAD-11D1-80B4-00C04FD430C8/…`,
+an EHR id that exists nowhere, answered **200 with the composition** for all
+three of `…/composition/{uid}`, `…/composition/{uid}/_history` and
+`…/composition/{uid}/version/{version_uid}`. A scratch test printed the status
+and the first bytes of each body, and was removed rather than committed
+because it passes by asserting the defect.
+
+**Why it matters.** A clinician authorised for one chart who opens a
+composition id under it sees another chart's content, and the read audit
+records the *requested* EHR, so the log says the wrong thing. Chart ownership
+and the clinical subject of an entry are different (a mother's condition in
+her child's chart is correct); this is about the former.
+
+**The other routes, checked 2026-11-25 the same way** (scratch tests,
+removed):
+
+- `GET …/ehr/{nonexistent}/ehr_status/{version_uid}` with a **composition**
+  version id answered **200 with the composition**: the `EHR_STATUS` vread does
+  `get_version(&id)` with no EHR scope and **no resource-type check**, so it is
+  also a type confusion, and the same request under the *real* EHR's
+  `ehr_status` also served the composition. The `GET …/ehr_status` current
+  read is different: it resolves the EHR's own status container first.
+- `PUT …/ehr/{nonexistent}/composition/{uid}` with a correct `If-Match` was
+  refused `404 no such ehr`, because `commit_composition` checks the EHR
+  exists. **Not established:** whether it refuses a *second real EHR* that
+  does not own the container — that needs a two-EHR fixture, which does not
+  exist yet. The `If-Match` precheck itself reads the container unscoped.
+
+**Fixed 2026-11-25 (not committed), design chosen by the maintainer:** scoped
+lookups (`latest_version_in`, `all_versions_in`, `get_version_in`), built on one
+new required primitive `Store::versioned_object_owner`, specified as `H5.18` and
+`H5.19`. **A breaking change to the `Store` trait**, accepted for the staged
+0.11.0. A mismatch of EHR or of `rm_type` is the same `NotFound` an absent
+container gets (compared in the shared suite, and over HTTP).
+
+**A worse hole than the audit reported, found while fixing it.**
+`commit_composition` read its `ehr_id` argument *only when it created a
+container*; for an existing one it was ignored. A commit addressed to the wrong
+EHR was therefore appended to the right container. `H5.19` now refuses it before
+anything is written. Negative control: with the commit check disabled the shared
+suite fails on real SQLite with "a commit to a container another EHR owns must
+be NotFound, got Ok(())".
+
+**Service.** `openehr-axa` now uses the scoped lookups for composition read,
+`_history`, vread and the `PUT` precondition, and for the `EHR_STATUS` vread
+(which also had no type check). Composition vread additionally requires the
+version to belong to the container the *path* names. Five new HTTP tests, one
+negative control (reverting `read` to the unscoped lookup fails two).
+
+**What was verified:** SQLite (real), the owner-crate store, and the HTTP layer.
+**Not verified:** PostgreSQL (`run_ehr_scope`, `#[ignore]`d, needs a server;
+the code compiles and lints); `openehr-mysql` and the other dialects have no
+`Store`. **Not done:** a second *real* EHR over HTTP (the HTTP fixture has one;
+the shared suite covers two). **Not addressed:** authorisation, meaning whether
+a verified caller may read *this* EHR at all, which is still the deployment's
+(`db:PR12.18`); this closes the case where the path names the wrong chart.
+
+**Original open condition, kept for the record:** the store offers a lookup scoped by EHR, container and expected
+type; every read and the amendment target use it; and a two-chart test shows a
+mismatched selection returns no content (and the same `404` an absent record
+gets), with a clinician authorised for both still served. See `tasks.md`,
+"Audit intake 2026-11-25".
+
 ### D-01 — No engine crate has a dialect annex — **Medium, fixed**
 
 **Required.** `X15.6` requires every engine crate to carry

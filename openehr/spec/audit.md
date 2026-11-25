@@ -15,15 +15,17 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**83 findings, 83 in the table below: 7 High, 46 Medium, 30 Low. 76 fixed or
+**85 findings, 85 in the table below: 8 High, 47 Medium, 30 Low. 78 fixed or
 classified, 7 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
 verified), and the check should have failed. Every one of the 7 open findings
 is open by a stated reason rather than by omission — **A-40** is the largest,
-an entire specification section in force with no code behind it — and the
-rest: **A-02**, **A-08** and
-**A-19** are declared departures the crate does not intend to close; **A-05**, **A-10**,
+an entire specification section in force with no code behind it — **A-86**
+is a reproduced clinical defect with no fix yet (open for that reason, not by
+decision) — and the rest: **A-02** and **A-08**
+are declared departures the crate does not intend to close (**A-19** is the same
+kind of departure, and is *classified*, which the count above treats as closed); **A-05**, **A-10**,
 **A-30** are recorded limitations or residuals with the reasoning
 for leaving them written beside them — **A-38** is a defect in `serde_json`
 that this repository could not repair — a conclusion that turned out to be
@@ -170,6 +172,8 @@ in the documentation, which is the class this register most exists to catch.
 | A-82 | Low | `am::cadl` refused two real constructs *correctly* but *unhelpfully* — an ADL 1.5-form `use_archetype` with no id code named the archetype's own first word (`` `CIMI` is not a valid id-, at-, or ac-code ``), and ADL 1.4's `matches {*}` wildcard named the token, not the construct (`` expected an attribute name, found `*` ``, 38 files) — both stated as open since corpus run 1's own candidate 3, neither reproduced against the real grammars this parser targets (`openEHR/openEHR-antlr4`'s `Cadl2Parser.g4`/`Cadl14Parser.g4`) until this pass | **fixed** — message only, nothing reparsed; `expect_use_archetype_node_id` clones the lexer to look ahead for the comma ADL 2's grammar requires before choosing which message applies, so a genuinely malformed id code (a comma *does* follow) keeps the original message; `c_complex_object` and its own duplicated tail (`A-40`'s residual) both name the `*` wildcard specifically, confirmed against `Cadl14Parser.g4`'s `cComplexObjectDef` production (one or more `cAttribute`, or a bare `'*'`) having no ADL 2 counterpart at all |
 | A-83 | Medium | `DateTime::semantic_cmp` ordered local calendar dates before applying their UTC offsets, and `Time::semantic_cmp` truncated chronology after three fractional digits. Equal instants across midnight could compare unequal, while distinct sub-millisecond instants could compare equal (`D3.18`). | **fixed** — compare the offset-adjusted calendar minute, second, and every significant fractional digit. |
 | A-84 | Medium | `Real::from_f64` accepted `NaN` and infinities, whose authoritative text is not a JSON number; converting that `Real` into `serde_json::Number` silently substituted `0` after both parses failed (`base/real.rs:148-155`). Reference Model constructors rejected such a `Real` before it reached a document, but the public primitive conversion itself turned an invalid value into a plausible clinical number. Found by the production-only coverage pass: the fallback was the file's only uncovered function. | **fixed** — `D3.18g` chooses construction-time refusal: `from_f64` and `TryFrom<f64>` return a PHI-safe error for all three non-finite classes, infallible `From<f64>` is removed, and serialization reconstructs only from authoritative number text with no substitute. A syntactically valid out-of-range JSON number still round-trips by that text. |
+| A-85 | Medium | `am::cadl`'s ISO-8601 scanner included every comma in a temporal token, so the comma separating two `C_DATE` values was handed to `Date::from_str` as part of the first value and every temporal primitive list was effectively unreadable. Removing comma wholesale would instead reject the ISO-8601 comma decimal sign required by `D3.10b`. Found by the production-only external `parse_definition` coverage suite. | **fixed** (`K15.33`) — the scanner consumes a comma only when the surrounding text makes it a fractional-second decimal sign; otherwise it remains the cADL list token. Tests cover no-whitespace lists and comma-decimal time, date-time, and duration values. |
+| A-86 | High | `DvOrdered::is_abnormal` compares a quantity's magnitude as if it were exact: `magnitude_status` (`<`, `>`, `~`…) is ignored, so against a 3–5 mg/L range `< 4 mg/L` and `> 4 mg/L` both answer "inside" (`Some(false)`), and `< 6 mg/L` answers "outside" although the value could be 4. The validator's flag-agreement check (`D3.24b`) uses the same answer. Found by an external clinical-safety audit; reproduced. | open — no tri-state (inside / outside / indeterminate) exists. |
 
 
 ---
@@ -4844,3 +4848,68 @@ zeros, and handles leap second `60` separately from the following minute.
 the original comparator, then passed on the correction. It covers equality
 after a leap-day rollover, reversed calendar order, fractional seconds,
 mixed precision, a missing offset, and a leap second, in both directions.
+
+## A-85 — the temporal scanner swallowed cADL list commas
+
+**Severity: Medium. Status: fixed.**
+
+**Found by the production-only coverage pass.** The first external contract
+suite for `am::cadl::parse_definition` supplied two `C_DATE` values exactly as
+`cadl2_primitives.g4` permits: `2024-01-01, 2024-02-02`. The lexer handed
+`2024-01-01,` to `Date::from_str`, so the parser refused the first value before
+its list loop could consume the comma. `is_iso8601_char` admitted every comma
+unconditionally because `D3.10b` also permits comma as the fractional-second
+decimal sign. Those are two grammar roles, not one token class.
+
+**Fixed under `K15.33`.** `peek_iso8601` now consumes comma only when the text
+around it makes a fractional second: a time or date-time fraction followed by
+the value boundary or a complete timezone, or a duration fraction followed by
+`S`. Otherwise scanning stops and the ordinary tokenizer returns the comma to
+the primitive-list loop. This distinguishes no-whitespace date, full-time,
+date-time, and duration lists while retaining `10:30:00,5`, an offset-bearing
+date-time fraction, and `PT1,5S`. The inherently ambiguous
+`10:30:00,11` remains the single time value whose fraction is `.11`, following
+the temporal token's maximal valid spelling; a full second list value is
+structurally distinguishable by its following colon.
+
+**Tests.** `tests/cadl_contract.rs` drives the public parser from outside the
+crate over both roles, so the production lexer and parser lines count toward
+`W0.41`. The colocated lexer boundary test enumerates the exact token split,
+including compact lists and comma-decimal values with `Z`, colon and compact
+offsets. The two tests have different jobs: the former proves public behavior;
+the latter makes a future boundary regression local to the scanner.
+
+## A-86 — a qualified lab result is judged against its range as if exact
+
+**Severity: High. Status: open.**
+
+**Found 2026-11-25 by an external clinical-safety audit; reproduced the same
+day** with `DvQuantity::new(4.0, "mg/L").with_magnitude_status(…)
+.with_normal_range(Interval::closed(3 mg/L, 5 mg/L))` and `is_abnormal()`:
+
+| value | `is_abnormal()` | what the value establishes |
+| --- | --- | --- |
+| exactly 4 mg/L | `Some(false)` | inside |
+| `< 4 mg/L` | `Some(false)` | could be below 3 — **indeterminate** |
+| `> 4 mg/L` | `Some(false)` | could be above 5 — **indeterminate** |
+| `< 2 mg/L` | `Some(true)` | wholly below 3 — outside (correct, by luck) |
+| `< 6 mg/L` | `Some(true)` | could be 4 — **indeterminate** |
+
+`DvQuantity` preserves the qualifier (`D3.22`) but `is_abnormal` negates
+`Interval::contains` of the bare magnitude. A result below a detection limit is
+a real result (`D3.22`'s own rationale), and this reports it as normal.
+
+**Checked and not a defect.** The audit also listed `4 mL` against a mg/L range
+answering `Some(true)` and said `D3.14a` prose describes the opposite. It does
+not: `D3.14a` states "not comparable ⇒ not contained", so "abnormal" there is
+the specified fail-closed answer. Whether *abnormal* is the right thing to
+show for an incomparable unit is a design question the tri-state below would
+settle, not an error against the text.
+
+**Open until** a range assessment can say inside / outside / indeterminate, with
+a reason, decided over the whole set of values the qualifier allows; the
+original comparator, units, range and supplied flag stay recorded
+independently; the validator's `D3.24b` check and any display use the same
+answer; and tests cover exact endpoints, qualified bounds that overlap, wholly
+outside, incomparable units, and no range. Unit *conversion* stays outside the
+RM library (`01-scope.md`).

@@ -7,6 +7,39 @@ together.
 
 ## Unreleased
 
+- **BREAKING: `Store` gains `versioned_object_owner` and three scoped lookups;
+  a container now belongs to one `EHR`** (`db:D-19`, `db:H5.18`, `db:H5.19`).
+  `openehr-axa` served any chart's composition under any `EHR` id in the path
+  (including one that exists nowhere), and its `EHR_STATUS` version read returned
+  a composition by version id. Separately, `commit_composition` and
+  `commit_ehr_status` ignored their `ehr_id` argument for an existing container,
+  so a commit addressed to the wrong `EHR` was appended to the right container.
+  Now: `latest_version_in`, `all_versions_in` and `get_version_in` take the
+  owning `EHR` and the expected `rm_type` and answer a mismatch with the same
+  `NotFound` an absent container gets; both commits refuse a container owned by
+  another `EHR` or of another `rm_type`, writing nothing. **Implementors of
+  `Store` must add `versioned_object_owner`**; the scoped methods have default
+  bodies. Callers reading through a request path should switch to the `_in`
+  forms. PostgreSQL is implemented and compiled but its new live test has not
+  been run.
+- **AQL no longer returns an amended composition once per version** (`db:D-20`).
+  `openehr_store::execute_aql` answered once per *index row*, and the index has
+  a row per content-bearing version, so a composition amended twice came back
+  three times and repeated rows displaced others from a `LIMIT` page. It now
+  answers once per container, judged on its **current** content: an amendment
+  that changes the composition's archetype stops matching the old one. Rows are
+  de-duplicated by container, never by displayed value. Behaviour change for
+  any caller that was (unknowingly) relying on the duplicates.
+- **`POST /openehr/v1/query/aql` records the read** (`db:D-21`). It wrote no
+  access record while serving clinical rows with read auditing on; it now
+  records `query`, actor, resolved EHR and outcome before the rows are released,
+  and answers 503 if the record cannot be written. New
+  `openehr_store::aql_scoped_ehr`. `GET /metadata` no longer lists "AQL
+  execution" under `not_implemented`.
+- **`openehr/examples/01_build_composition` codes the blood-pressure
+  position** as `DV_CODED_TEXT` (`local::at1001`), as `blood_pressure.v2`
+  (revision 2.0.17) requires.
+
 - **Licence option changed: `CC-BY-NC-SA-4.0` is now `CC-BY-SA-4.0`.** The SPDX
   expression in every crate's `Cargo.toml`, `LICENSE.md`, and
   `LICENSES/cc-by-sa-4.0/` carry the change; the NonCommercial restriction is

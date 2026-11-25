@@ -5,6 +5,16 @@ sit above either domain specification. Domain-local findings belong in
 [`openehr/spec/audit.md`](../openehr/spec/audit.md) and
 [`databases/audit.md`](databases/audit.md).
 
+Two external audits at commit `320e1e8485cc` (25 November 2026: software
+engineering / Visual Studio Code, and clinical safety) are being worked from
+`tasks.md`, section "Audit intake 2026-11-25". A finding there is not a fact
+until reproduced (`W0.3`); one that reproduces is entered in the register that
+owns it, the first three being `db:D-19` (a read served under an EHR that does not
+own the record), `db:D-20` (an amended composition returned once per
+version by AQL) and `db:D-21` (AQL rows served with no read-audit record, fixed) and `db:D-22`
+(the verified committer's identifier is checked, then not stored). The reports themselves were removed from the tree after being
+transcribed into that section.
+
 A finding stays here until it is fixed or a specification is amended to match
 reality. Deleting one because it is inconvenient, or because the text that stated
 it was rewritten, is the failure mode this file exists to prevent (`W0.4`).

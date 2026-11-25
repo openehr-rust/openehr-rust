@@ -202,6 +202,32 @@ Added 2026-08-02, when `openehr-axa` gained an update endpoint. These bind a
   a client written against openEHR could not talk to the service. Accepting
   both costs one `strip_prefix`.
 
+- **H5.18** *(added 2026-11-25, `D-19`)* A read that names an `EHR` and a
+  container (or a version of one) MUST return content only if that `EHR` owns
+  the container **and** the container holds the expected kind of content. A
+  mismatch of either MUST be answered exactly as an absent container is —
+  `NotFound`, the same kind and the same shape — so a caller learns nothing
+  about records it is not entitled to name.
+
+  The store exposes this as scoped lookups (`latest_version_in`,
+  `all_versions_in`, `get_version_in`), each taking the owning `EHR` and the
+  expected `rm_type`. A service reading under an `EHR` path MUST use them: the
+  unscoped lookups remain for callers that have already resolved the owner by
+  other means (the AQL executor, whose candidates come from an `EHR`-scoped
+  index), and are not for a request path. Ownership and clinical subject are
+  different things: a mother's condition recorded as family history in her
+  child's chart is correctly in the child's `EHR`, and this requirement says
+  nothing about it.
+
+- **H5.19** *(added 2026-11-25, `D-19`)* A commit naming an `EHR` MUST be
+  refused when the container it adds to already exists under a different `EHR`,
+  or under a different `rm_type`. The refusal MUST NOT write a row.
+
+  Found alongside `H5.18`: `commit_composition` consulted its `ehr_id`
+  argument only when it created a container, so an amendment addressed to the
+  wrong `EHR` was appended to the right container. The `EHR` argument was
+  decoration for every commit but the first.
+
 ## Withdrawn
 
 Withdrawn 2026-08-01. Numbers are retained and MUST NOT be reused (`C0.5`).
