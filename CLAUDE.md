@@ -64,13 +64,7 @@ cd <crate> && cargo test
 cd <crate> && RUSTFLAGS="-D warnings" cargo clippy --all-targets
 
 # everything
-for d in openehr openehr-store openehr-sqlite openehr-postgresql \
-         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
-         openehr-axa openehr-assets; do
-  (cd "$d" && cargo test --quiet \
-     && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) \
-    || echo "FAIL $d"
-done
+bin/check-crates   # exits nonzero, naming the crates, if any fails
 
 # regenerate the committed assets, or fail if what is committed is stale
 (cd openehr-assets && cargo run -- write)   # or: -- check

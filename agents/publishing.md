@@ -231,12 +231,13 @@ Allow a minute between publishes for the index to update.
 
 ## Before publishing anything
 
+A version change touches every crate's `Cargo.lock` (the path dependencies
+record the new version). Run `bin/check-locks` first: `cargo metadata
+--no-deps` passes over a stale lock, and six fuzz locks were stale at 0.11.0.
+
 ```sh
-for d in openehr openehr-store openehr-postgresql openehr-mysql \
-         openehr-mariadb openehr-mssql openehr-oracle openehr-sqlite; do
-  (cd "$d" && cargo test --quiet && cargo clippy --all-targets --quiet) \
-    || echo "FAIL $d"
-done
+bin/check-crates openehr openehr-store openehr-postgresql openehr-mysql \
+  openehr-mariadb openehr-mssql openehr-oracle openehr-sqlite
 ```
 
 Then, per crate:

@@ -109,13 +109,7 @@ To check the whole tree the way CI does — note `RUSTFLAGS`, without which a li
 that only fires under `-D warnings` passes locally and fails in CI:
 
 ```sh
-for d in openehr openehr-store openehr-sqlite openehr-postgresql \
-         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
-         openehr-axa openehr-assets; do
-  (cd "$d" && cargo test --quiet \
-     && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) \
-    || echo "FAIL $d"
-done
+bin/check-crates   # exits nonzero, naming the crates, if any fails
 
 python3 scripts/check-docs.py     # the documentation's counts, versions, levels
 ```
@@ -156,6 +150,11 @@ That prints an `OPENEHR_PASETO_PUBLIC_KEYS=k4.public…` line and an
 export OPENEHR_PASETO_PUBLIC_KEYS=k4.public...   # from the line above
 podman compose up --build
 ```
+
+Inside the dev container (Docker-in-Docker, no Podman) the same thing is
+`docker compose up --build`. The host command above is the one that has been
+run; the Docker one inside the container has not (`tasks.md`, audit intake
+2026-11-25).
 
 In another shell, using the `Authorization` value from the same output:
 

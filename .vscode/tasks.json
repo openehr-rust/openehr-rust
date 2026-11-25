@@ -1,0 +1,63 @@
+{
+  // Each crate is its own Cargo workspace; there is no root manifest, so
+  // every task names the crate directory. `bin/check-crates` is the one entry
+  // point shared with the contributor guide: tests plus clippy with
+  // RUSTFLAGS="-D warnings" --all-targets, and a nonzero exit if any crate
+  // fails.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "check: all crates",
+      "type": "shell",
+      "command": "bin/check-crates",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "check: one crate",
+      "type": "shell",
+      "command": "bin/check-crates ${input:crate}",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": {
+        "base": "$rustc",
+        "fileLocation": ["relative", "${workspaceFolder}/${input:crate}"]
+      }
+    },
+    {
+      "label": "test: SQLite conformance",
+      "type": "shell",
+      "command": "cargo test --locked --test conformance",
+      "options": { "cwd": "${workspaceFolder}/openehr-sqlite" },
+      "group": "test",
+      "problemMatcher": {
+        "base": "$rustc",
+        "fileLocation": ["relative", "${workspaceFolder}/openehr-sqlite"]
+      }
+    },
+    {
+      "label": "check: lockfiles resolve",
+      "type": "shell",
+      "command": "bin/check-locks",
+      "problemMatcher": []
+    },
+    {
+      "label": "check: documentation claims",
+      "type": "shell",
+      "command": "python3 scripts/check-docs.py",
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "crate",
+      "type": "pickString",
+      "description": "Crate directory",
+      "default": "openehr",
+      "options": [
+        "openehr", "openehr-store", "openehr-sqlite", "openehr-postgresql",
+        "openehr-mysql", "openehr-mariadb", "openehr-mssql", "openehr-oracle",
+        "openehr-axa", "openehr-assets"
+      ]
+    }
+  ]
+}

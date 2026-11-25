@@ -87,12 +87,7 @@ cd openehr && RUSTFLAGS="-D warnings" cargo clippy --all-targets
 # `openehr-assets` build and test like the rest, and `openehr-assets` spent its
 # whole life outside every matrix with nine tests nobody ran (`spec/audit.md`
 # W-12).
-for d in openehr openehr-store openehr-sqlite openehr-postgresql \
-         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
-         openehr-axa openehr-assets; do
-  (cd "$d" && cargo test --quiet \
-     && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) || echo "FAIL $d"
-done
+bin/check-crates   # exits nonzero, naming the crates, if any fails
 
 # The committed assets are what the code renders
 (cd openehr-assets && cargo run -- check)

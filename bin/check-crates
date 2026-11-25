@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Test and lint crates the way CI does; exit nonzero if ANY crate fails.
+#
+#   bin/check-crates                  every non-fuzz crate
+#   bin/check-crates openehr-sqlite   named crate directories (or a path to
+#                                     a crate's Cargo.toml)
+#
+# This replaces a `for d in ...; do (...) || echo "FAIL $d"; done` loop that
+# was pasted into six documents. That loop exits 0 after every crate has
+# failed: the `echo` is the last command of each iteration, so its status is
+# the loop's. A script or editor task that trusted the status reported
+# success over ten failures. Here failures are collected, named, and turned
+# into the exit status.
+#
+# CI sets RUSTFLAGS="-D warnings" and lints --all-targets; so does this.
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+crates=()
+if [[ $# -gt 0 ]]; then
+  for arg in "$@"; do
+    arg="${arg%/Cargo.toml}"
+    crates+=("${arg%/}")
+  done
+else
+  # Each top-level manifest is its own workspace; fuzz crates need nightly.
+  for manifest in */Cargo.toml; do
+    root="${manifest%/Cargo.toml}"
+    [[ "${root}" == *-fuzz ]] || crates+=("${root}")
+  done
+fi
+
+failed=()
+for d in "${crates[@]}"; do
+  if [[ ! -f "${d}/Cargo.toml" ]]; then
+    echo "FAIL ${d} (no Cargo.toml)" >&2
+    failed+=("${d}")
+    continue
+  fi
+  echo "== ${d}"
+  if ! ( cd "${d}" \
+      && cargo test --quiet \
+      && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet ); then
+    echo "FAIL ${d}" >&2
+    failed+=("${d}")
+  fi
+done
+
+if [[ ${#failed[@]} -gt 0 ]]; then
+  echo "failed (${#failed[@]}/${#crates[@]}): ${failed[*]}" >&2
+  exit 1
+fi
+echo "ok (${#crates[@]} crates)"

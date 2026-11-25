@@ -1,0 +1,23 @@
+{
+  // Needs the CodeLLDB extension (vadimcn.vscode-lldb). CodeLLDB asks Cargo
+  // for the executable, so a custom CARGO_TARGET_DIR works.
+  //
+  // CARGO_PROFILE_DEV_DEBUG=full applies at build time and only to this
+  // launch: the SQLite dev profile keeps line tables but drops variable
+  // information, and turning full symbols on for every dependency would
+  // slow ordinary test runs for everyone.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug the SQLite record tutorial",
+      "type": "lldb",
+      "request": "launch",
+      "cargo": {
+        "cwd": "${workspaceFolder}/openehr-sqlite",
+        "args": ["build", "--locked", "--example", "01_store_a_record"],
+        "env": { "CARGO_PROFILE_DEV_DEBUG": "full" }
+      },
+      "cwd": "${workspaceFolder}/openehr-sqlite"
+    }
+  ]
+}

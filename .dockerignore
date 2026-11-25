@@ -1,0 +1,6 @@
+# Docker reads `.dockerignore`; Podman reads `.containerignore` first and
+# falls back to this file. Both exclude the same two things, for the reason
+# recorded in `.containerignore`: a host `target/` is gigabytes of transfer
+# the image cannot reuse. Keep the two in step.
+**/target/
+.git/

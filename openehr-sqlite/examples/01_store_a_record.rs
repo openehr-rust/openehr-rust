@@ -10,11 +10,13 @@
 //! whole loop rather than one call.
 //!
 //! It runs against a real SQLite database, in process, with no setup. That is
-//! the reason `openehr-sqlite` is the crate this tutorial lives in: it is the
-//! only one at conformance level **Verified**, and the only one with a `Store`.
-//! The five other engine crates supply a `Dialect` and no more, so there is
+//! the reason `openehr-sqlite` is the crate this tutorial lives in: it needs
+//! no server. It is at conformance level **Verified** and has a `Store`;
+//! `openehr-postgresql` is also **Verified** but needs a running PostgreSQL.
+//! The four other engine crates supply a `Dialect` and no more, so there is
 //! nothing to demonstrate here that would not be a claim about code that does
-//! not exist (`C0.11`).
+//! not exist (`C0.11`). The owning table is
+//! `spec/databases/conformance-matrix.md`.
 
 use openehr::base::{HierObjectId, ObjectVersionId};
 use openehr::rm::common::Version;

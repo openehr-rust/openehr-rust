@@ -523,10 +523,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # `rustup default nightly` is NOT enough: the checked-in
+      # `rust-toolchain.toml` (1.100.0) outranks the default, so every cargo
+      # call here ran on stable and rejected `-Zsanitizer=address`. The
+      # `RUSTUP_TOOLCHAIN` environment variable outranks the file and reaches
+      # child cargo processes. The `rustc -Vv` line is printed under the same
+      # environment as the commands it identifies, so a log shows what ran.
       - name: Install nightly Rust
+        env:
+          RUSTUP_TOOLCHAIN: nightly
         run: |
           rustup toolchain install nightly --profile minimal
-          rustup default nightly
+          rustc -Vv
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -539,10 +547,14 @@ jobs:
       # crash the fuzzer found. They are different failures with different fixes.
       - name: Build fuzz targets
         working-directory: ${{ matrix.crate }}
+        env:
+          RUSTUP_TOOLCHAIN: nightly
         run: cargo fuzz build --fuzz-dir ../${{ matrix.crate }}-fuzz
 
       - name: Fuzz
         working-directory: ${{ matrix.crate }}
+        env:
+          RUSTUP_TOOLCHAIN: nightly
         run: |
           set -eu
           for t in ${{ matrix.targets }}; do
@@ -660,6 +672,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      # A lockfile that no longer matches its manifest. `cargo metadata
+      # --no-deps` cannot see this; six fuzz locks were stale at 0.11.0.
+      - name: Every Cargo.lock resolves unchanged
+        run: bin/check-locks
 
       # `openehr-oracle` left this loop 2026-09-06 (`schema / oracle`,
       # `M14.7`), `openehr-mssql` the same day (`schema / mssql`, `M14.6`,
@@ -984,10 +1001,13 @@ jobs:
         crate: [openehr, openehr-store, openehr-sqlite]
     steps:
       - uses: actions/checkout@v7
+      # See the fuzz job: `rustup default` loses to `rust-toolchain.toml`.
       - name: Install Rust
+        env:
+          RUSTUP_TOOLCHAIN: nightly
         run: |
           rustup toolchain install nightly --profile minimal --component llvm-tools-preview
-          rustup default nightly
+          rustc -Vv
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ${{ matrix.crate }}
@@ -995,20 +1015,12 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
-      - name: Measure
-        # RUSTFLAGS is not `-D warnings` here: the nightly toolchain has lints
-        # the stable `test` job does not, and this job measures, not lints.
-        env:
-          RUSTFLAGS: ""
-        run: |
-          cd ${{ matrix.crate }}
-          cargo llvm-cov --lib --tests --lcov \
-            --ignore-filename-regex '/\.cargo/registry/|/rustc/' \
-            --output-path "$RUNNER_TEMP/lcov.info"
-      - name: Gate
-        run: |
-          python3 scripts/check-coverage.py \
-            --workspace ${{ matrix.crate }} --lcov "$RUNNER_TEMP/lcov.info"
+      # One script for CI and a contributor's machine (`bin/test-coverage`):
+      # nightly llvm-cov, then the exclusion register and the floor in
+      # `coverage-floor.tsv`. It sets RUSTUP_TOOLCHAIN=nightly itself and
+      # leaves RUSTFLAGS empty -- this job measures, it does not lint.
+      - name: Measure and gate
+        run: bin/test-coverage ${{ matrix.crate }}
 
   mutants:
     name: changed lines are mutation-tested

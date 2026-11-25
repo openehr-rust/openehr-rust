@@ -38,13 +38,7 @@ A worked pass, in the order that has actually found things here:
 
 ```sh
 # 1. Does it build and test clean?
-for d in openehr openehr-store openehr-sqlite openehr-postgresql \
-         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
-         openehr-axa openehr-assets; do
-  (cd "$d" && cargo test --quiet \
-     && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) \
-    || echo "FAIL $d"
-done
+bin/check-crates   # exits nonzero, naming the crates, if any fails
 
 # 2. Does every cited file exist?
 grep -rn 'spec/[a-z0-9-]*\.md' --include='*.rs' --include='*.md' . | grep -v target/

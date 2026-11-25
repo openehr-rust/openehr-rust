@@ -8,14 +8,16 @@ in review.
 
 ## What would help most, in order
 
-1. **Run a dialect against your engine.** Five of the six SQL dialects are below
-   **Store** level, and two — SQL Server and Oracle — have never had their DDL
-   parsed by a server. `sh openehr-store/scripts/verify-schema.sh postgresql`
-   (or `mysql`, `mariadb`) is one command; for SQL Server and Oracle there is no
-   script yet, and a transcript of what the server said to
-   `cargo run --example ddl` output would be a genuine contribution. The
-   conformance ladder is the point of this project, and only evidence moves a
-   crate up it.
+1. **Take a dialect up the ladder.** SQLite and PostgreSQL are at Verified;
+   MySQL, MariaDB, SQL Server and Oracle are at **Schema** — their DDL is
+   executed against a real server in CI, and none has a `Store`. The level of
+   each is owned by
+   [`spec/databases/conformance-matrix.md`](spec/databases/conformance-matrix.md);
+   start there for what is missing. `sh openehr-store/scripts/verify-schema.sh
+   <engine>` (`postgresql`, `mysql`, `mariadb`, `mssql`, `oracle`) reproduces
+   the schema run locally with Podman, and a `Store` for one of the four is the
+   next rung. The conformance ladder is the point of this project, and only
+   evidence moves a crate up it.
 2. **Review the DDL for the engine you administer.** Not the Rust — the SQL. A
    DBA who says "that index will not be used" or "that type does not preserve
    bytes on this version" is worth more here than a feature. `db:D-08` — MySQL
@@ -60,13 +62,7 @@ cd openehr-rust/openehr && cargo test
 RUSTFLAGS="-D warnings" cargo clippy --all-targets
 
 # Before opening a pull request, from the repository root:
-for d in openehr openehr-store openehr-sqlite openehr-postgresql \
-         openehr-mysql openehr-mariadb openehr-mssql openehr-oracle \
-         openehr-axa openehr-assets; do
-  (cd "$d" && cargo test --quiet \
-     && RUSTFLAGS="-D warnings" cargo clippy --all-targets --quiet) \
-    || echo "FAIL $d"
-done
+bin/check-crates   # exits nonzero, naming the crates, if any fails
 python3 scripts/check-docs.py          # counts, versions, levels, shared blocks
 (cd openehr-assets && cargo run -- check)   # the committed DDL and coverage assets
 python3 scripts/generate-llms-files.py # llms.txt / llms.json, current with the tree

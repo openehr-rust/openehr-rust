@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Every committed Cargo.lock must resolve, unchanged, for its manifest.
+#
+# `cargo metadata --no-deps` does NOT read the lockfile, so an inventory of
+# manifests passes while a lock is stale. At 0.11.0 six fuzz crates failed
+# `cargo metadata --locked` (their lock recorded `openehr` 0.10.0, the path
+# dependency's manifest said 0.11.0) and the --no-deps inventory was green
+# for all eighteen. Run this on every version change.
+#
+#   bin/check-locks            all 18 manifests (needs the registry cache or network)
+#   bin/check-locks --offline  only what is already cached
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+extra=("$@")
+failed=()
+n=0
+for manifest in */Cargo.toml; do
+  n=$((n + 1))
+  if ! cargo metadata --locked --format-version 1 "${extra[@]}" \
+      --manifest-path "${manifest}" >/dev/null 2>"${TMPDIR:-/tmp}/check-locks.err"; then
+    echo "FAIL ${manifest}: $(head -1 "${TMPDIR:-/tmp}/check-locks.err")" >&2
+    failed+=("${manifest%/Cargo.toml}")
+  fi
+done
+if [[ ${#failed[@]} -gt 0 ]]; then
+  echo "stale or unresolvable lockfiles (${#failed[@]}/${n}): ${failed[*]}" >&2
+  exit 1
+fi
+echo "ok (${n} lockfiles resolve unchanged)"
