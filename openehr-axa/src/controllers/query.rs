@@ -18,7 +18,7 @@ use std::collections::HashMap;
 
 use crate::auth::Principal;
 use crate::controllers::composition::lock;
-use crate::controllers::{Refusal, status_for, store};
+use crate::controllers::{Refusal, outcome_of, record_read, status_for, store};
 
 /// The request body ITS-REST's own `POST /query/aql` specifies: `q` is the
 /// query text, `query_parameters` binds its `$name` references.
@@ -85,15 +85,16 @@ fn cell_to_json(cell: &Cell) -> serde_json::Value {
 
 /// `POST /openehr/v1/query/aql`
 ///
-/// Verified, then discarded, the same as every other route here — this
-/// layer records commits and reads of clinical content, not which queries
-/// were asked (`db:PR12.5`'s own reasoning one level up: a query's *result*
-/// is content, but the query text is not, since `query_parameters` values
-/// are exactly the archetype-agnostic scalars `db:P6.10` already permits
-/// this layer to see without reading a composition).
+/// Records the read **before** the rows are released (`db:PR12.5`, `PR12.6`),
+/// like every other route that returns clinical content. The first version of
+/// this handler discarded its principal on the reasoning that the query text is
+/// not content; that is true of the text and beside the point, because it is
+/// the *result* that is content (`db:D-21`). What is recorded is the resolved
+/// EHR, the actor, the action and the outcome — never the query text, its
+/// parameters, or any value in a row.
 async fn query(
     State(ctx): State<AppContext>,
-    _principal: Principal,
+    principal: Principal,
     Json(body): Json<AqlRequest>,
 ) -> Result<(StatusCode, Json<AqlResponse>), Refusal> {
     let parsed: AqlQuery = body
@@ -106,10 +107,26 @@ async fn query(
         params.insert(name.clone(), json_to_literal(name, value)?);
     }
 
+    // A query that names no resolvable EHR returns nothing, so there is no
+    // record to name; it is still accounted for, under a placeholder that no
+    // real EHR id can equal.
+    let ehr =
+        openehr_store::aql_scoped_ehr(&parsed, &params).unwrap_or_else(|_| "(unscoped)".to_owned());
+
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
-    let result =
-        openehr_store::execute_aql(&*guard, &parsed, &params).map_err(|e| status_for(&e))?;
+    let executed = openehr_store::execute_aql(&*guard, &parsed, &params);
+    // Before the rows leave this function. A log that cannot be written turns
+    // the answer into a 503 and the rows are dropped, as for every other read.
+    record_read(
+        &ctx,
+        &principal,
+        "query",
+        &ehr,
+        "aql",
+        outcome_of(&executed),
+    )?;
+    let result = executed.map_err(|e| status_for(&e))?;
 
     Ok((
         StatusCode::OK,

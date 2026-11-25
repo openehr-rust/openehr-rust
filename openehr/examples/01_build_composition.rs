@@ -13,7 +13,7 @@
 
 use openehr::rm::common::{Archetyped, LocatableAttrs, PartyIdentified};
 use openehr::rm::data_structures::{Element, History, ItemTree, PointEvent};
-use openehr::rm::data_types::{CodePhrase, DataValue, DvDateTime, DvQuantity, DvText};
+use openehr::rm::data_types::{CodePhrase, DataValue, DvCodedText, DvDateTime, DvQuantity};
 use openehr::rm::ehr::{Composition, EntryAttrs, EventContext, Observation};
 use openehr::terminology::{composition_category, setting};
 use openehr::validation::Validate;
@@ -45,12 +45,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // `state` is not decoration. A blood pressure of 184/96 standing and the
     // same value lying down are different findings, and openEHR keeps `state`
     // separate from `data` so the distinction survives into every consumer.
+    //
+    // The position is **coded**, not free text. In the published archetype
+    // (CKM `openEHR-EHR-OBSERVATION.blood_pressure.v2`, revision 2.0.17, the
+    // `local` terminology) `at0008` constrains its value to `DV_CODED_TEXT`
+    // with a defining code from `at1000`-`at1003` and `at1014`; sitting is
+    // `at1001`. A `DV_TEXT` reading "Sitting" looks identical to a person and
+    // is invisible to any system searching for the coded posture. Note that
+    // `validate()` below would accept either: it checks the Reference Model's
+    // invariants, not the archetype's constraints, so a successful commit is
+    // not evidence of archetype conformance.
     let position = ItemTree::new(
         at("state structure", "at0007"),
         vec![
             Element::new(
                 at("Position", "at0008"),
-                DataValue::Text(DvText::new("Sitting")?),
+                DataValue::CodedText(DvCodedText::new(
+                    "Sitting",
+                    CodePhrase::new("local", "at1001")?,
+                )?),
             )
             .into(),
         ],

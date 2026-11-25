@@ -138,7 +138,9 @@ async fn vread(
     let id: ObjectVersionId = version_uid
         .parse()
         .map_err(|_| (StatusCode::BAD_REQUEST, "malformed version uid".to_owned()))?;
-    let found = guard.get_version(&id);
+    // Scoped to this EHR and to `EHR_STATUS` (`db:H5.18`, `db:D-19`): it used to
+    // return *any* version, composition included, under any EHR id.
+    let found = guard.get_version_in(&parse_id(&ehr_id)?, &id, "EHR_STATUS");
     record_read(
         &ctx,
         &principal,

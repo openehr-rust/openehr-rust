@@ -27,6 +27,32 @@ use openehr::rm::common::{CommitError, Contribution, Version};
 use openehr::rm::data_types::DvDateTime;
 use openehr::rm::ehr::{Composition, Ehr, EhrStatus};
 
+/// `Ok` only when `ehr` owns the container and it holds `rm_type`; otherwise
+/// the **same** `NotFound` an absent container gets, carrying `kind` and `id`
+/// (`db:H5.18`). A different `EHR`, a different `rm_type` and no such
+/// container are deliberately one outcome.
+///
+/// # Errors
+///
+/// `NotFound` as above, or any engine failure from the owner lookup.
+pub fn require_owned<S: Store + ?Sized>(
+    store: &S,
+    ehr: &HierObjectId,
+    container: &HierObjectId,
+    rm_type: &str,
+    kind: &'static str,
+    id: &str,
+) -> Result<()> {
+    match store.versioned_object_owner(container) {
+        Ok((owner, actual)) if owner.to_string() == ehr.to_string() && actual == rm_type => Ok(()),
+        Ok(_) | Err(StoreError::NotFound { .. }) => Err(StoreError::NotFound {
+            kind,
+            id: id.to_owned(),
+        }),
+        Err(other) => Err(other),
+    }
+}
+
 /// Selects the metadata needed to resolve a historical read (`db:H5.13`).
 ///
 /// Bind the container UID and whole UTC second twice, in that order. Only the
@@ -258,6 +284,101 @@ pub trait Store {
     /// Returns [`crate::StoreError::NotFound`] if the container has no
     /// versions.
     fn latest_version(&self, versioned_object_uid: &HierObjectId) -> Result<VersionRow>;
+
+    /// The `EHR` that owns a container, and the kind of content it holds
+    /// (`COMPOSITION`, `EHR_STATUS`, …). The one primitive the scoped lookups
+    /// and the commit-time ownership check are built on (`db:H5.18`,
+    /// `db:H5.19`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::StoreError::NotFound`] (`versioned_object`) if there is
+    /// no such container, or [`crate::StoreError::Engine`] on an engine failure.
+    fn versioned_object_owner(
+        &self,
+        versioned_object_uid: &HierObjectId,
+    ) -> Result<(HierObjectId, String)>;
+
+    /// The latest version of a container **that `ehr` owns and that holds
+    /// `rm_type`** (`db:H5.18`).
+    ///
+    /// A container owned by another `EHR`, or holding another kind of content,
+    /// is answered with the same [`crate::StoreError::NotFound`] an absent one
+    /// gets, so the answer reveals nothing about records the caller did not
+    /// name correctly. Use this, not [`Store::latest_version`], for anything
+    /// reached through an `EHR` path.
+    ///
+    /// # Errors
+    ///
+    /// [`crate::StoreError::NotFound`] as above, or an engine failure.
+    fn latest_version_in(
+        &self,
+        ehr: &HierObjectId,
+        versioned_object_uid: &HierObjectId,
+        rm_type: &str,
+    ) -> Result<VersionRow> {
+        require_owned(
+            self,
+            ehr,
+            versioned_object_uid,
+            rm_type,
+            "versioned_object",
+            &versioned_object_uid.to_string(),
+        )?;
+        self.latest_version(versioned_object_uid)
+    }
+
+    /// Every version of a container `ehr` owns and that holds `rm_type`,
+    /// oldest first (`db:H5.18`). Same refusal shape as
+    /// [`Store::latest_version_in`].
+    ///
+    /// # Errors
+    ///
+    /// [`crate::StoreError::NotFound`] when not owned or not of that type, or
+    /// an engine failure.
+    fn all_versions_in(
+        &self,
+        ehr: &HierObjectId,
+        versioned_object_uid: &HierObjectId,
+        rm_type: &str,
+    ) -> Result<Vec<VersionRow>> {
+        require_owned(
+            self,
+            ehr,
+            versioned_object_uid,
+            rm_type,
+            "versioned_object",
+            &versioned_object_uid.to_string(),
+        )?;
+        self.all_versions(versioned_object_uid)
+    }
+
+    /// One version, by identifier, **only if `ehr` owns its container and the
+    /// container holds `rm_type`** (`db:H5.18`). A mismatch is
+    /// [`crate::StoreError::NotFound`] of kind `version`, exactly what an
+    /// absent version gets.
+    ///
+    /// # Errors
+    ///
+    /// [`crate::StoreError::NotFound`] as above, or an engine failure.
+    ///
+    /// # Panics
+    ///
+    /// Never: an `OBJECT_VERSION_ID` parses only if its object part is a `UID`,
+    /// and a bare `UID` is always a valid `HIER_OBJECT_ID`.
+    fn get_version_in(
+        &self,
+        ehr: &HierObjectId,
+        uid: &ObjectVersionId,
+        rm_type: &str,
+    ) -> Result<VersionRow> {
+        // A version identifier names its container, so the container is not
+        // an extra input a caller could get wrong.
+        let container = HierObjectId::new(uid.object_id().clone(), None)
+            .expect("an OBJECT_VERSION_ID's object part is always a valid HIER_OBJECT_ID");
+        require_owned(self, ehr, &container, rm_type, "version", &uid.to_string())?;
+        self.get_version(uid)
+    }
 
     /// The version current at a given time.
     ///

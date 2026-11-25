@@ -505,6 +505,23 @@ impl Store for SqliteStore {
             .optional()
             .map_err(|e| engine(&e))?;
 
+        // `db:H5.19`: the `EHR` named here must own the container this version
+        // joins. Until this check the argument was consulted only when the
+        // container was *created* (the `INSERT` below), so a commit addressed
+        // to the wrong `EHR` was appended to the right container (`db:D-19`).
+        // Refused as an absent container is, and before anything is written.
+        if head.is_some() {
+            let container = HierObjectId::new(version.uid().object_id().clone(), None)?;
+            openehr_store::require_owned(
+                self,
+                ehr_id,
+                &container,
+                "COMPOSITION",
+                "versioned_object",
+                &container_uid,
+            )?;
+        }
+
         // Gate two: the same commit rules the library enforces, in the same
         // order, so a caller sees the same refusal whether the history is in
         // memory or in a database (V8.1–V8.5). Shared with `commit_ehr_status`
@@ -675,6 +692,23 @@ impl Store for SqliteStore {
             .optional()
             .map_err(|e| engine(&e))?;
 
+        // `db:H5.19`: the `EHR` named here must own the container this version
+        // joins. Until this check the argument was consulted only when the
+        // container was *created* (the `INSERT` below), so a commit addressed
+        // to the wrong `EHR` was appended to the right container (`db:D-19`).
+        // Refused as an absent container is, and before anything is written.
+        if head.is_some() {
+            let container = HierObjectId::new(version.uid().object_id().clone(), None)?;
+            openehr_store::require_owned(
+                self,
+                ehr_id,
+                &container,
+                "EHR_STATUS",
+                "versioned_object",
+                &container_uid,
+            )?;
+        }
+
         // Gate two: the same shared rule `commit_composition` calls.
         let uid = version.uid().to_string();
         let already: Option<String> = self
@@ -809,6 +843,27 @@ impl Store for SqliteStore {
                 kind: "versioned_object",
                 id,
             })
+    }
+
+    fn versioned_object_owner(
+        &self,
+        versioned_object_uid: &HierObjectId,
+    ) -> Result<(HierObjectId, String)> {
+        let id = versioned_object_uid.to_string();
+        let (ehr, rm_type): (String, String) = self
+            .connection
+            .query_row(
+                "SELECT ehr_id, rm_type FROM openehr_versioned_object WHERE uid = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(|e| engine(&e))?
+            .ok_or(StoreError::NotFound {
+                kind: "versioned_object",
+                id,
+            })?;
+        Ok((ehr.parse()?, rm_type))
     }
 
     fn version_at_time(

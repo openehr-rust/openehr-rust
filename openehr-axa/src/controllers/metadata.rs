@@ -29,10 +29,10 @@ async fn metadata(State(ctx): State<AppContext>) -> Json<Metadata> {
         // Named, because a caller should not have to find these out by trying
         // them. Each cites the requirement that records the exclusion.
         not_implemented: vec![
-            Absence {
-                capability: "AQL execution",
-                spec_ref: "db:S1.6",
-            },
+            // AQL is **not** listed. It was, for as long as the executor was
+            // served (`db:D-21`): the capability statement said "absent" about
+            // a route that answered. `db:S1.6` bounds what the executor does
+            // (`P6.20`-`P6.24`); it is not an absence.
             Absence {
                 capability: "archetype and template validation",
                 spec_ref: "lib:S1.4",

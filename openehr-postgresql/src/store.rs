@@ -566,6 +566,21 @@ impl Store for PostgresqlStore {
             .map_err(|e| engine(&e))?
             .map(|row| (row.get(0), row.get(1)));
 
+        // `db:H5.19`: the `EHR` named here must own the container this version
+        // joins; refused as an absent container is, before anything is written
+        // (`db:D-19`). Same rule, same placement, as `SqliteStore`.
+        if head.is_some() {
+            let container = HierObjectId::new(version.uid().object_id().clone(), None)?;
+            openehr_store::require_owned(
+                self,
+                ehr_id,
+                &container,
+                "COMPOSITION",
+                "versioned_object",
+                &container_uid,
+            )?;
+        }
+
         let uid = version.uid().to_string();
         let already = self
             .client
@@ -648,6 +663,21 @@ impl Store for PostgresqlStore {
             )
             .map_err(|e| engine(&e))?
             .map(|row| (row.get(0), row.get(1)));
+
+        // `db:H5.19`: the `EHR` named here must own the container this version
+        // joins; refused as an absent container is, before anything is written
+        // (`db:D-19`). Same rule, same placement, as `SqliteStore`.
+        if head.is_some() {
+            let container = HierObjectId::new(version.uid().object_id().clone(), None)?;
+            openehr_store::require_owned(
+                self,
+                ehr_id,
+                &container,
+                "EHR_STATUS",
+                "versioned_object",
+                &container_uid,
+            )?;
+        }
 
         let uid = version.uid().to_string();
         let already = self
@@ -739,6 +769,27 @@ impl Store for PostgresqlStore {
             id,
         })
         .and_then(|r| Self::read_version(&r))
+    }
+
+    fn versioned_object_owner(
+        &self,
+        versioned_object_uid: &HierObjectId,
+    ) -> Result<(HierObjectId, String)> {
+        let id = versioned_object_uid.to_string();
+        let row = self
+            .client
+            .borrow_mut()
+            .query_opt(
+                "SELECT ehr_id, rm_type FROM openehr_versioned_object WHERE uid = $1",
+                &[&id],
+            )
+            .map_err(|e| engine(&e))?
+            .ok_or(StoreError::NotFound {
+                kind: "versioned_object",
+                id,
+            })?;
+        let ehr: String = row.get(0);
+        Ok((ehr.parse()?, row.get(1)))
     }
 
     fn version_at_time(

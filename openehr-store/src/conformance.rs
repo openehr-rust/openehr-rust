@@ -956,6 +956,193 @@ pub fn run_is_modifiable_gate<S: Store>(store: &mut S) -> Result<()> {
     Ok(())
 }
 
+/// A second, unrelated `EHR`, for the cases that need two charts (`db:H5.18`,
+/// `db:H5.19`).
+///
+/// # Panics
+///
+/// Never: every input is a literal known to parse.
+#[must_use]
+pub fn second_ehr() -> Ehr {
+    let uid = HierObjectId::from_uid_str("20000000-0000-0000-0000-00000000000b").expect("literal");
+    let status = ObjectRef::new(
+        "local",
+        "VERSIONED_EHR_STATUS",
+        ObjectId::HierObjectId(
+            HierObjectId::from_uid_str("20000000-0000-0000-0000-00000000000c").expect("literal"),
+        ),
+    )
+    .expect("literal");
+    let access = ObjectRef::new(
+        "local",
+        "VERSIONED_EHR_ACCESS",
+        ObjectId::HierObjectId(uid.clone()),
+    )
+    .expect("literal");
+    Ehr::new(
+        HierObjectId::from_uid_str("11111111-2222-3333-4444-555555555555").expect("literal"),
+        uid,
+        status,
+        access,
+        DvDateTime::new("2026-08-01T09:00:00Z").expect("literal"),
+    )
+    .expect("literal")
+}
+
+/// Chart ownership (`db:H5.18`, `db:H5.19`; `db:D-19`): two `EHR`s, one
+/// composition in the first.
+///
+/// What it proves, each a separate way for the fix to be wrong:
+///
+/// 1. the owner reads it through all three scoped lookups;
+/// 2. **another `EHR`** gets `NotFound` from each, of the same kind an absent
+///    container gets, so a mismatch is indistinguishable from nothing there;
+/// 3. the right `EHR` with the **wrong `rm_type`** is refused the same way;
+/// 4. a commit addressed to the **wrong `EHR`** is refused and **writes no
+///    row** -- before this, the `EHR` argument was read only when a container
+///    was created, so the amendment went into the right container anyway;
+/// 5. the owner's own amendment still goes through, so the refusal is not a
+///    store that refuses everything.
+///
+/// # Errors
+///
+/// Returns the first unexpected engine error. A conformance failure panics.
+///
+/// # Panics
+///
+/// Panics when the engine fails a conformance assertion.
+// Long on purpose, like `run_aql` above: five numbered cases in the order a
+// reader checks them, each a separate way for the fix to be wrong.
+#[allow(clippy::too_many_lines)]
+pub fn run_ehr_scope<S: Store>(store: &mut S) -> Result<()> {
+    let engine = store.engine();
+    store.install()?;
+
+    let owner = sample_ehr();
+    let owner_id = owner.ehr_id().clone();
+    store.create_ehr(&owner)?;
+    let other = second_ehr();
+    let other_id = other.ehr_id().clone();
+    store.create_ehr(&other)?;
+
+    let contribution = "66666666-7777-8888-9999-000000000001";
+    store.create_contribution(&owner_id, &sample_contribution(contribution, &[1, 2]))?;
+    let other_contribution = "66666666-7777-8888-9999-000000000002";
+    store.create_contribution(&other_id, &sample_contribution(other_contribution, &[1, 2]))?;
+
+    store.commit_composition(&owner_id, &sample_version(1, None, 10), contribution)?;
+    let container = HierObjectId::from_uid_str(RECORD).expect("literal");
+    let v1: ObjectVersionId = format!("{RECORD}::{SYSTEM}::1").parse().expect("literal");
+
+    // 1. The owner reads it.
+    assert_eq!(
+        store
+            .latest_version_in(&owner_id, &container, "COMPOSITION")?
+            .uid,
+        v1.to_string(),
+        "{engine}: the owning EHR must read its own composition"
+    );
+    assert_eq!(
+        store
+            .all_versions_in(&owner_id, &container, "COMPOSITION")?
+            .len(),
+        1
+    );
+    assert_eq!(
+        store.get_version_in(&owner_id, &v1, "COMPOSITION")?.uid,
+        v1.to_string()
+    );
+
+    // What "absent" looks like, for comparison. Compared as the rendered error
+    // (`no such <kind>: <id>`), which is also what a caller is shown; the part
+    // before the colon is the kind.
+    let absent =
+        HierObjectId::from_uid_str("30000000-0000-0000-0000-000000000099").expect("literal");
+    let shown = |result: Result<()>| result.err().map_or_else(String::new, |e| e.to_string());
+    let kind_of = |text: &str| text.split(':').next().unwrap_or_default().to_owned();
+    let absent_text = shown(
+        store
+            .latest_version_in(&owner_id, &absent, "COMPOSITION")
+            .map(|_| ()),
+    );
+    assert!(
+        absent_text.starts_with("no such versioned_object:"),
+        "{engine}: an absent container must be NotFound, got {absent_text:?}"
+    );
+
+    // 2. Another EHR: NotFound, of the absent kind, from each lookup.
+    let wrong_ehr = shown(
+        store
+            .latest_version_in(&other_id, &container, "COMPOSITION")
+            .map(|_| ()),
+    );
+    assert_eq!(
+        kind_of(&wrong_ehr),
+        kind_of(&absent_text),
+        "{engine}: a mismatch must look exactly like an absent container, got {wrong_ehr:?}"
+    );
+    let wrong_all = shown(
+        store
+            .all_versions_in(&other_id, &container, "COMPOSITION")
+            .map(|_| ()),
+    );
+    assert!(
+        wrong_all.starts_with("no such versioned_object:"),
+        "{engine}: all_versions_in under another EHR must be NotFound, got {wrong_all:?}"
+    );
+    let wrong_version = shown(
+        store
+            .get_version_in(&other_id, &v1, "COMPOSITION")
+            .map(|_| ()),
+    );
+    assert!(
+        wrong_version.starts_with("no such version:"),
+        "{engine}: an unreadable version is the kind an absent version is, got {wrong_version:?}"
+    );
+
+    // 3. The right EHR, the wrong kind of content.
+    let wrong_type = shown(
+        store
+            .latest_version_in(&owner_id, &container, "EHR_STATUS")
+            .map(|_| ()),
+    );
+    assert!(
+        wrong_type.starts_with("no such versioned_object:"),
+        "{engine}: the wrong rm_type must be NotFound, got {wrong_type:?}"
+    );
+
+    // 4. A commit to the wrong EHR is refused and writes nothing.
+    let amendment = sample_version(2, Some(1), 11);
+    let wrong_commit = shown(
+        store
+            .commit_composition(&other_id, &amendment, other_contribution)
+            .map(|_| ()),
+    );
+    assert!(
+        wrong_commit.starts_with("no such versioned_object:"),
+        "{engine}: a commit to a container another EHR owns must be NotFound, got {wrong_commit:?}"
+    );
+    assert_eq!(
+        store
+            .all_versions_in(&owner_id, &container, "COMPOSITION")?
+            .len(),
+        1,
+        "{engine}: the refused commit must not have written a version"
+    );
+
+    // 5. The owner's own amendment still goes through.
+    store.commit_composition(&owner_id, &amendment, contribution)?;
+    assert_eq!(
+        store
+            .all_versions_in(&owner_id, &container, "COMPOSITION")?
+            .len(),
+        2,
+        "{engine}: the owner's amendment must be admitted"
+    );
+
+    Ok(())
+}
+
 /// The bounded AQL executor (`db:P6.20`–`P6.24`, `crate::aql`): one `EHR`
 /// scope, one archetype-predicated containment, `WHERE`/`SELECT`/
 /// `ORDER BY`/`LIMIT` over scalar leaves, and refusal by name for every
@@ -1217,6 +1404,114 @@ pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
             Err(crate::StoreError::AqlUnsupported(_))
         ),
         "{engine}: a two-level CONTAINS tree was executed rather than refused"
+    );
+
+    // ---- amendment: one row per container, judged on its *current* content --
+    //
+    // `openehr_composition_index` gains a row per content-bearing version, so a
+    // container amended twice has three index rows. `db:D-20`: the executor
+    // answered once per row, so one encounter was counted three times. Added
+    // last so the assertions above, which count rows, are untouched.
+    //
+    // Three cases in one place, because each guards against a different wrong
+    // fix: (1) the amended container appears once, and as its latest content;
+    // (2) its *earlier* content no longer matches; (3) two different containers
+    // with the same display name stay two rows -- deduplicating on the value
+    // would pass (1) and fail here.
+    let amended = "10000000-0000-0000-0000-000000000005";
+    for (n, name) in [(1_u32, "Amended 1"), (2, "Amended 2"), (3, "Amended 3")] {
+        let id: ObjectVersionId = format!("{amended}::{SYSTEM}::{n}")
+            .parse()
+            .expect("fixture");
+        let preceding: Option<ObjectVersionId> = (n > 1).then(|| {
+            format!("{amended}::{SYSTEM}::{}", n - 1)
+                .parse()
+                .expect("fixture")
+        });
+        let version: Version<Composition> = OriginalVersion::new(
+            id,
+            preceding,
+            version_lifecycle_state::COMPLETE,
+            Some(sample_composition(name)),
+            AuditDetails::new(
+                SYSTEM,
+                DvDateTime::new(&format!("2026-08-01T09:{:02}:00Z", 20 + n)).expect("fixture"),
+                if n == 1 {
+                    audit_change_type::CREATION
+                } else {
+                    audit_change_type::AMENDMENT
+                },
+                PartyIdentified::named("Dr A Nurse")
+                    .expect("fixture")
+                    .into(),
+            )
+            .expect("fixture"),
+            ObjectRef::new("local", "EHR", ObjectId::HierObjectId(ehr_id.clone()))
+                .expect("fixture"),
+        )
+        .expect("fixture")
+        .into();
+        store.commit_composition(&ehr_id, &version, contribution_uid)?;
+    }
+    for twin in [
+        "10000000-0000-0000-0000-000000000006",
+        "10000000-0000-0000-0000-000000000007",
+    ] {
+        let id: ObjectVersionId = format!("{twin}::{SYSTEM}::1").parse().expect("fixture");
+        let version: Version<Composition> = OriginalVersion::new(
+            id,
+            None,
+            version_lifecycle_state::COMPLETE,
+            Some(sample_composition("Twin")),
+            AuditDetails::new(
+                SYSTEM,
+                DvDateTime::new("2026-08-01T09:30:00Z").expect("fixture"),
+                audit_change_type::CREATION,
+                PartyIdentified::named("Dr A Nurse")
+                    .expect("fixture")
+                    .into(),
+            )
+            .expect("fixture"),
+            ObjectRef::new("local", "EHR", ObjectId::HierObjectId(ehr_id.clone()))
+                .expect("fixture"),
+        )
+        .expect("fixture")
+        .into();
+        store.commit_composition(&ehr_id, &version, contribution_uid)?;
+    }
+
+    let rows_where = |name: &str| -> Result<usize> {
+        let q: AqlQuery = format!(
+            "SELECT c/name/value AS name FROM EHR e[ehr_id/value=$ehrUid] \
+             CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] \
+             WHERE c/name/value = '{name}' LIMIT 10"
+        )
+        .parse()?;
+        Ok(
+            crate::aql::execute(store, &q, &params(&ehr_id.to_string()))?
+                .rows
+                .len(),
+        )
+    };
+    assert_eq!(
+        rows_where("Amended 3")?,
+        1,
+        "{engine}: a container amended twice must answer once, as its current content"
+    );
+    assert_eq!(
+        rows_where("Amended 1")?,
+        0,
+        "{engine}: an amended-away version's content must not match"
+    );
+    assert_eq!(
+        rows_where("Amended 2")?,
+        0,
+        "{engine}: an amended-away version's content must not match"
+    );
+    assert_eq!(
+        rows_where("Twin")?,
+        2,
+        "{engine}: two different containers sharing a display name are two rows"
     );
 
     Ok(())
@@ -1694,7 +1989,7 @@ mod store_tests {
     //! `openehr-sqlite`.
 
     use super::{
-        EHR_STATUS_RECORD, run, run_aql, run_ehr_status, run_fractional_history,
+        EHR_STATUS_RECORD, run, run_aql, run_ehr_scope, run_ehr_status, run_fractional_history,
         run_is_modifiable_gate, run_language_validation,
     };
     use crate::record::{CompositionIndexRow, VersionRow};
@@ -1710,12 +2005,17 @@ mod store_tests {
     use std::cmp::Ordering;
     use std::collections::HashMap;
 
+    // The bools are independent fault-injection switches, one per failure
+    // path the owner suite must observe; a state machine would only hide that.
+    #[allow(clippy::struct_excessive_bools)]
     #[derive(Default)]
     struct MemoryStore {
         ehrs: HashMap<String, Ehr>,
         versions: Vec<VersionRow>,
         indexes: Vec<CompositionIndexRow>,
         omit_indexed_content: bool,
+        owners: HashMap<String, (String, String)>,
+        fail_owner_lookup: bool,
         version_reads: Cell<usize>,
         fail_history_read: bool,
         refuse_reactivated_content: bool,
@@ -1742,11 +2042,18 @@ mod store_tests {
 
         fn prepare<T: Serialize>(
             &self,
+            ehr_id: &HierObjectId,
+            rm_type: &str,
             version: &Version<T>,
             contribution_uid: &str,
         ) -> Result<(VersionRow, bool)> {
             let container = version.uid().object_id().to_string();
             let head = self.rows(&container).last().cloned();
+            // `db:H5.19`: an existing container belongs to one `EHR`.
+            if head.is_some() {
+                let id = HierObjectId::new(version.uid().object_id().clone(), None)?;
+                crate::require_owned(self, ehr_id, &id, rm_type, "versioned_object", &container)?;
+            }
             let head_rule = head
                 .as_ref()
                 .map(|row| (row.uid.clone(), row.trunk_version));
@@ -1832,7 +2139,11 @@ mod store_tests {
                     message: "injected refusal after reactivation".to_owned(),
                 });
             }
-            let (row, created_container) = self.prepare(version, contribution_uid)?;
+            let (row, created_container) =
+                self.prepare(ehr_id, "COMPOSITION", version, contribution_uid)?;
+            self.owners
+                .entry(version.uid().object_id().to_string())
+                .or_insert_with(|| (ehr_id.to_string(), "COMPOSITION".to_owned()));
             if let Some(composition) = version.data() {
                 self.indexes.push(CompositionIndexRow::project(
                     &row.uid,
@@ -1855,7 +2166,11 @@ mod store_tests {
         ) -> Result<CommitOutcome> {
             version.validate_ok()?;
             self.get_ehr(ehr_id)?;
-            let (row, created_container) = self.prepare(version, contribution_uid)?;
+            let (row, created_container) =
+                self.prepare(ehr_id, "EHR_STATUS", version, contribution_uid)?;
+            self.owners
+                .entry(version.uid().object_id().to_string())
+                .or_insert_with(|| (ehr_id.to_string(), "EHR_STATUS".to_owned()));
             self.versions.push(row);
             Ok(CommitOutcome {
                 version_uid: version.uid().clone(),
@@ -1877,6 +2192,24 @@ mod store_tests {
                 row.data_json = None;
             }
             Ok(row)
+        }
+
+        fn versioned_object_owner(
+            &self,
+            versioned_object_uid: &HierObjectId,
+        ) -> Result<(HierObjectId, String)> {
+            if self.fail_owner_lookup {
+                return Err(StoreError::Engine {
+                    engine: "owner-memory",
+                    message: "injected owner lookup failure".to_owned(),
+                });
+            }
+            let id = versioned_object_uid.to_string();
+            let (ehr, rm_type) = self
+                .owners
+                .get(&id)
+                .ok_or_else(|| Self::missing("versioned_object", &id))?;
+            Ok((ehr.parse()?, rm_type.clone()))
         }
 
         fn latest_version(&self, versioned_object_uid: &HierObjectId) -> Result<VersionRow> {
@@ -1963,6 +2296,7 @@ mod store_tests {
             run_ehr_status,
             run_is_modifiable_gate,
             run_aql,
+            run_ehr_scope,
         ] {
             story(&mut MemoryStore::default()).expect("owner conformance story");
         }
@@ -1972,6 +2306,26 @@ mod store_tests {
         assert_eq!(
             super::sample_ehr().ehr_status().id().to_string(),
             EHR_STATUS_RECORD
+        );
+    }
+
+    #[test]
+    fn an_engine_failure_in_the_owner_lookup_is_not_disguised_as_not_found() {
+        // `require_owned` turns "another EHR" and "no such container" into one
+        // `NotFound`. A *broken* lookup is neither, and answering it with
+        // `NotFound` would tell a caller a record is absent when the store
+        // simply could not look.
+        let mut store = MemoryStore::default();
+        super::run_ehr_scope(&mut store).expect("owner scope story");
+        store.fail_owner_lookup = true;
+        let ehr = super::sample_ehr();
+        let container = HierObjectId::from_uid_str(super::RECORD).expect("literal");
+        let error = store
+            .latest_version_in(ehr.ehr_id(), &container, "COMPOSITION")
+            .unwrap_err();
+        assert!(
+            matches!(error, StoreError::Engine { .. }),
+            "an engine failure must stay an engine failure: {error:?}"
         );
     }
 

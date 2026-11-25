@@ -134,7 +134,11 @@ async fn read(
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
     let container = parse_id(&uid)?;
-    let found = guard.latest_version(&container);
+    // Scoped to the EHR in the path (`db:H5.18`, `db:D-19`): a container the
+    // EHR does not own, or that is not a composition, is `404`, exactly as an
+    // absent one is. Reading by container alone served any chart's content
+    // under any EHR id, including one that exists nowhere.
+    let found = guard.latest_version_in(&parse_id(&ehr_id)?, &container, "COMPOSITION");
     // Deleted is its own outcome. An investigation asking who looked at a
     // withdrawn record is asking a sharper question than who looked at a live
     // one, and `not_found` would not distinguish the two.
@@ -166,14 +170,24 @@ async fn read(
 async fn vread(
     State(ctx): State<AppContext>,
     principal: Principal,
-    Path((ehr_id, _uid, version_uid)): Path<(String, String, String)>,
+    Path((ehr_id, uid, version_uid)): Path<(String, String, String)>,
 ) -> Reply<VersionView> {
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
-    let id = version_uid
+    let id: openehr::base::ObjectVersionId = version_uid
         .parse()
         .map_err(|_| (StatusCode::BAD_REQUEST, "malformed version uid".to_owned()))?;
-    let found = guard.get_version(&id);
+    let container = parse_id(&uid)?;
+    // The version must belong to the container the path names, as well as to
+    // the EHR: `/composition/A/version/<a version of B>` is not a read of A.
+    let found = if id.object_id().to_string() == container.to_string() {
+        guard.get_version_in(&parse_id(&ehr_id)?, &id, "COMPOSITION")
+    } else {
+        Err(openehr_store::StoreError::NotFound {
+            kind: "version",
+            id: version_uid.clone(),
+        })
+    };
     record_read(
         &ctx,
         &principal,
@@ -200,7 +214,7 @@ async fn history(
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
     let container = parse_id(&uid)?;
-    let found = guard.all_versions(&container);
+    let found = guard.all_versions_in(&parse_id(&ehr_id)?, &container, "COMPOSITION");
     record_read(
         &ctx,
         &principal,
@@ -352,8 +366,11 @@ async fn update(
     let handle = store(&ctx)?;
     let mut guard = lock(&handle)?;
     let container = parse_id(&uid)?;
+    // Scoped, as in `read`: the precondition is compared against the container
+    // *this EHR* owns, so a caller cannot probe another chart's current version
+    // through a `412` that names it (`db:D-19`).
     let current = guard
-        .latest_version(&container)
+        .latest_version_in(&parse_id(&ehr_id)?, &container, "COMPOSITION")
         .map_err(|e| status_for(&e))?;
 
     if current.uid != expected {

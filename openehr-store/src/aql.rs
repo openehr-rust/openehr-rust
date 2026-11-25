@@ -33,6 +33,7 @@ use openehr::aql::{
 };
 use openehr::base::{HierObjectId, ObjectVersionId};
 use openehr::path::{Pathable as _, Scalar};
+use openehr::rm::common::Locatable as _;
 use openehr::rm::ehr::Composition;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -104,6 +105,26 @@ where
             "{clause} {n} does not fit a row count on this platform"
         ))
     })
+}
+
+/// The EHR a query is scoped to, resolved from its `EHR e[ehr_id/value=…]`
+/// predicate and the supplied parameters, without touching a store.
+///
+/// A caller that must account for a read (`db:PR12.5`) needs to name the record
+/// it read, and the only place that EHR is stated is inside the query. Making
+/// each caller re-derive it from the parsed text would put a second copy of
+/// this module's own scoping rule outside it, where the two would drift.
+///
+/// # Errors
+///
+/// [`StoreError::AqlUnsupported`] when the query has no single-`EHR`
+/// containment or its `EHR` predicate is not `ehr_id/value = <string>`, which
+/// are the same refusals [`execute`] makes first.
+// Same reason as `execute` below: a caller's own map.
+#[allow(clippy::implicit_hasher)]
+pub fn scoped_ehr(query: &AqlQuery, params: &HashMap<String, Literal>) -> Result<String> {
+    let (ehr_class, _) = single_containment(&query.from)?;
+    ehr_id_from_predicate(ehr_class, params)
 }
 
 /// Executes `query` against `store`, binding `$name` parameters from `params`.
@@ -216,13 +237,22 @@ pub fn execute(
     let candidates = store.find_compositions_by_archetype(&ehr_id, archetype_id)?;
 
     let mut matched: Vec<(Vec<Cell>, Vec<Cell>)> = Vec::new();
+    // Containers already answered. The index has one row per content-bearing
+    // *version* (its primary key is `version_uid`), so an amended container
+    // appears once per version it has had; each row resolves, below, to the
+    // same current version, and without this a composition amended twice came
+    // back three times (`db:D-20`). Keyed by container, **not** by anything
+    // read from the content: two real encounters that happen to share a
+    // display name are two rows, and deduplicating on the value would merge
+    // them.
+    let mut answered: std::collections::HashSet<String> = std::collections::HashSet::new();
     for candidate in &candidates {
         // The index row names the version it was *built from* — not
         // necessarily the container's current one. A container amended, or
         // logically deleted (`db:H5.2`), since the row was written still has
-        // exactly that one row (`openehr_composition_index`'s own primary
-        // key is `version_uid`, and nothing here rewrites or removes an
-        // older row when a newer version is committed). Reading
+        // a row for every version it has had (`openehr_composition_index`'s
+        // own primary key is `version_uid`, and nothing here rewrites or
+        // removes an older row when a newer version is committed). Reading
         // `candidate.version_uid` directly would answer with stale or
         // withdrawn content; `latest_version` on its *container* is what
         // AQL means by "the composition in this record" — its current
@@ -242,6 +272,9 @@ pub fn execute(
         // a UID. A bare HIER_OBJECT_ID adds no fallible extension of its own.
         let container = HierObjectId::new(indexed.object_id().clone(), None)
             .expect("a bare UID is always a valid HIER_OBJECT_ID");
+        if !answered.insert(container.to_string()) {
+            continue;
+        }
         let version = store.latest_version(&container)?;
         // A logical deletion carries no content (`db:H5.2`) — not a row any
         // query can match, the same as if it had never been committed.
@@ -249,6 +282,20 @@ pub fn execute(
             continue;
         };
         let composition: Composition = serde_json::from_str(json)?;
+
+        // The index row said this container *was* of the requested archetype
+        // when that version was written. What AQL answers about is the current
+        // content, and an amendment can change the archetype, so ask it of the
+        // content (`db:D-20`). Compared as text, the same way the index
+        // column was filled (`CompositionIndexRow::project`).
+        if composition
+            .archetype_details()
+            .map(|d| d.archetype_id().to_string())
+            .as_deref()
+            != Some(archetype_id.as_str())
+        {
+            continue;
+        }
 
         if let Some(w) = &query.where_clause
             && !eval_expr(w, &composition, params, &version.uid)?
@@ -632,7 +679,8 @@ fn compare_cells(a: &Cell, b: &Cell) -> Ordering {
 mod tests {
     use super::{
         Cell, compare, compare_cells, compare_integer_with_number, eval_expr, eval_operand,
-        execute, literal_to_cell, resolve_scalar, row_count, scalar_to_cell, single_containment,
+        execute, literal_to_cell, resolve_scalar, row_count, scalar_to_cell, scoped_ehr,
+        single_containment,
     };
     #[test]
     fn a_count_that_does_not_fit_usize_is_refused_naming_its_clause() {
@@ -645,7 +693,7 @@ mod tests {
 
     use crate::conformance::{self, RECORD};
     use crate::record::{CompositionIndexRow, VersionRow};
-    use crate::{CommitOutcome, Result, Store};
+    use crate::{CommitOutcome, Result, Store, StoreError};
     use openehr::aql::{
         AqlQuery, CompareOp, Expr, From as AqlFrom, IdentifiedPath, Literal, Operand,
     };
@@ -726,6 +774,10 @@ mod tests {
             Ok(self.version.clone())
         }
 
+        fn versioned_object_owner(&self, _: &HierObjectId) -> Result<(HierObjectId, String)> {
+            unreachable!("the AQL executor resolves ownership through the EHR-scoped index")
+        }
+
         fn version_at_time(&self, _: &HierObjectId, _: &DvDateTime) -> Result<VersionRow> {
             unreachable!("the AQL executor does not perform historical reads")
         }
@@ -749,6 +801,126 @@ mod tests {
 
     fn params() -> HashMap<String, Literal> {
         HashMap::from([("ehrUid".to_owned(), Literal::String(RECORD.to_owned()))])
+    }
+
+    /// The one-row-per-version shape of the real index (`db:D-20`): `rows` are
+    /// the index rows the double hands back, whatever archetype was asked for.
+    fn with_index(rows: Vec<CompositionIndexRow>) -> ReadStore {
+        let mut store = ReadStore::one();
+        store.index = rows;
+        store
+    }
+
+    fn name_query(archetype: &str) -> AqlQuery {
+        format!(
+            "SELECT c/name/value AS name FROM EHR e[ehr_id/value=$ehrUid] \
+             CONTAINS COMPOSITION c[{archetype}] LIMIT 10"
+        )
+        .parse()
+        .expect("query")
+    }
+
+    #[test]
+    fn a_container_amended_twice_is_one_row_not_three() {
+        let first = ReadStore::one().index.remove(0);
+        let versions = |n: u32| {
+            let mut row = first.clone();
+            row.version_uid = row.version_uid.replace("::1", &format!("::{n}"));
+            row
+        };
+        // Three index rows, one per content-bearing version, all one container.
+        let store = with_index(vec![versions(1), versions(2), versions(3)]);
+        let result = execute(
+            &store,
+            &name_query("openEHR-EHR-COMPOSITION.encounter.v1"),
+            &params(),
+        )
+        .expect("execute");
+        assert_eq!(result.rows.len(), 1, "{:?}", result.rows);
+    }
+
+    #[test]
+    fn two_containers_with_the_same_name_are_two_rows() {
+        // The double resolves every container to the same current version, so
+        // both rows read "the same name". They are different encounters, and
+        // deduplicating on the displayed value would merge them -- which is the
+        // wrong fix for `db:D-20`, and the reason it is keyed by container.
+        let first = ReadStore::one().index.remove(0);
+        let mut other = first.clone();
+        other.version_uid = other
+            .version_uid
+            .replace(RECORD, "10000000-0000-0000-0000-000000000009");
+        assert_ne!(
+            first.version_uid, other.version_uid,
+            "the fixture must differ"
+        );
+        let store = with_index(vec![first, other]);
+        let result = execute(
+            &store,
+            &name_query("openEHR-EHR-COMPOSITION.encounter.v1"),
+            &params(),
+        )
+        .expect("execute");
+        assert_eq!(result.rows.len(), 2, "{:?}", result.rows);
+        assert_eq!(result.rows[0], result.rows[1]);
+    }
+
+    #[test]
+    fn a_stale_index_row_does_not_match_an_archetype_the_content_no_longer_has() {
+        // An index row that says "other.v1", pointing at a container whose
+        // *current* content is encounter.v1: the content decides.
+        let mut stale = ReadStore::one().index.remove(0);
+        stale.archetype_id = "openEHR-EHR-COMPOSITION.other.v1".to_owned();
+        let store = with_index(vec![stale]);
+        let result = execute(
+            &store,
+            &name_query("openEHR-EHR-COMPOSITION.other.v1"),
+            &params(),
+        )
+        .expect("execute");
+        assert!(result.rows.is_empty(), "{:?}", result.rows);
+    }
+
+    #[test]
+    fn the_scoped_ehr_is_the_one_the_executor_would_read() {
+        let query: AqlQuery = "
+            SELECT c/name/value
+            FROM EHR e[ehr_id/value=$ehrUid]
+                CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+            LIMIT 1
+        "
+        .parse()
+        .expect("query");
+        assert_eq!(scoped_ehr(&query, &params()).expect("scoped"), RECORD);
+
+        // A literal says the same thing as a parameter.
+        let literal: AqlQuery = format!(
+            "SELECT c/name/value FROM EHR e[ehr_id/value='{RECORD}'] \
+             CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 1"
+        )
+        .parse()
+        .expect("query");
+        assert_eq!(
+            scoped_ehr(&literal, &HashMap::new()).expect("scoped"),
+            RECORD
+        );
+
+        // And an unscoped one is refused by name, as `execute` would refuse it.
+        let unscoped: AqlQuery = "
+            SELECT c/name/value
+            FROM EHR e CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]
+            LIMIT 1
+        "
+        .parse()
+        .expect("query");
+        assert!(matches!(
+            scoped_ehr(&unscoped, &params()),
+            Err(StoreError::AqlUnsupported(_))
+        ));
+        let flat: AqlQuery = "SELECT e/ehr_id/value FROM EHR e LIMIT 1"
+            .parse()
+            .expect("query");
+        assert!(scoped_ehr(&flat, &params()).is_err());
     }
 
     #[test]
@@ -1193,8 +1365,15 @@ mod tests {
                 .contains("matched 2 nodes")
         );
 
+        // Two *containers*. This once pushed a clone of the same row, i.e. the
+        // same container twice, and asserted two result rows -- which is the
+        // `db:D-20` duplicate itself, passing as a sort test.
         let mut two = ReadStore::one();
-        two.index.push(two.index[0].clone());
+        let mut second = two.index[0].clone();
+        second.version_uid = second
+            .version_uid
+            .replace(RECORD, "10000000-0000-0000-0000-000000000009");
+        two.index.push(second);
         let descending: AqlQuery = "
             SELECT c/name/value
             FROM EHR e[ehr_id/value=$ehrUid]

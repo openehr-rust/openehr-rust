@@ -101,6 +101,16 @@ fn the_bounded_aql_executor_passes_against_a_real_database() {
     conformance::run_aql(&mut store).expect("AQL conformance suite");
 }
 
+/// `db:H5.18`, `db:H5.19`, `db:D-19`: the same chart-ownership suite
+/// `openehr-sqlite` runs, against a real PostgreSQL server.
+#[test]
+#[ignore = "needs a real PostgreSQL server, see this file's own module doc"]
+fn a_record_reads_and_commits_only_its_own_containers() {
+    let mut store = connect();
+    reset(&mut store);
+    conformance::run_ehr_scope(&mut store).expect("EHR scope conformance suite");
+}
+
 /// Installing twice must be safe: a deployment runs migrations on every
 /// boot. `SqliteStore`'s own suite checks this inline (`conformance::run`);
 /// checked again here because `install`'s idempotence rests on

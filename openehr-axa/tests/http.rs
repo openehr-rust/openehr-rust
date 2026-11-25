@@ -1348,3 +1348,426 @@ fn every_store_error_maps_to_a_distinct_status() {
         assert!(!message.is_empty(), "a caller needs to be told why");
     }
 }
+
+// --- AQL is a read, and is accounted for like one (`db:D-21`) --------------
+
+impl Served {
+    async fn post_aql(&self, ehr: &str) -> (StatusCode, String, Option<String>) {
+        let body = serde_json::json!({
+            "q": "SELECT c/name/value AS name \
+                  FROM EHR e[ehr_id/value=$ehrUid] \
+                  CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 10",
+            "query_parameters": { "ehrUid": ehr }
+        });
+        self.send(
+            Request::builder()
+                .method("POST")
+                .uri("/openehr/v1/query/aql")
+                .header(header::AUTHORIZATION, &self.authorization)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+    }
+}
+
+#[tokio::test]
+async fn an_aql_result_is_recorded_before_it_is_served_and_never_quoted() {
+    let path = temp_log("aql");
+    let served = Served::with_log(AccessLog::at(&path).expect("log"));
+
+    let (status, body, _) = served.post_aql(served.ehr_id()).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(
+        body.contains("Encounter 1"),
+        "the query must return rows: {body}"
+    );
+
+    let recorded = lines(&path);
+    assert_eq!(recorded.len(), 1, "one read, one record: {recorded:?}");
+    let record = &recorded[0];
+    assert_eq!(record["action"], "query");
+    assert_eq!(record["subject"], "clinician-4417");
+    assert_eq!(record["outcome"], "ok");
+    // The record names the EHR that was read, taken from the query itself.
+    assert!(
+        record.to_string().contains(served.ehr_id()),
+        "the record must name the EHR: {record}"
+    );
+    // And never quotes the query or a row.
+    let text = record.to_string();
+    assert!(!text.contains("SELECT"), "{text}");
+    assert!(!text.contains("Encounter 1"), "{text}");
+
+    let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
+async fn a_refused_aql_query_is_recorded_as_refused() {
+    let path = temp_log("aqlrefused");
+    let served = Served::with_log(AccessLog::at(&path).expect("log"));
+
+    // No LIMIT: the executor refuses it by name, and it is still an access
+    // attempt that somebody should be able to find afterwards.
+    let (status, _, _) = served
+        .send(
+            Request::builder()
+                .method("POST")
+                .uri("/openehr/v1/query/aql")
+                .header(header::AUTHORIZATION, &served.authorization)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "q": "SELECT c/name/value FROM EHR e[ehr_id/value=$ehrUid] \
+                              CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1]",
+                        "query_parameters": { "ehrUid": served.ehr_id() }
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let recorded = lines(&path);
+    assert_eq!(recorded.len(), 1, "{recorded:?}");
+    assert_eq!(recorded[0]["action"], "query");
+    assert_eq!(recorded[0]["outcome"], "refused");
+
+    let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
+async fn an_aql_result_is_not_served_when_it_cannot_be_recorded() {
+    // Same shape as `a_read_that_cannot_be_recorded_is_not_served`: an app
+    // whose access log was never installed.
+    let served = Served::new();
+    let ctx = axa::AppContext::for_test(()).expect("test context");
+    ctx.shared_store.insert::<SharedVerifier>(Arc::new(
+        PasetoVerifier::new(&served.paserk, None, None, None).expect("verifier"),
+    ));
+    ctx.shared_store
+        .insert::<SharedOpenehrStore>(Arc::new(Mutex::new({
+            let mut store = SqliteStore::in_memory().expect("store");
+            store.install().expect("install");
+            store
+        })));
+    let router = openehr_axa::app::routes().into_app(ctx).expect("router");
+    let body = serde_json::json!({
+        "q": "SELECT c/name/value FROM EHR e[ehr_id/value=$ehrUid] \
+              CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 1",
+        "query_parameters": { "ehrUid": served.ehr_id() }
+    });
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/openehr/v1/query/aql")
+                .header(header::AUTHORIZATION, &served.authorization)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("infallible");
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn metadata_does_not_call_a_served_aql_executor_absent() {
+    let served = Served::new();
+    let (_, body, _) = served.get_anonymous("/openehr/v1/metadata").await;
+    let meta: serde_json::Value = serde_json::from_str(&body).expect("json");
+    assert!(
+        !serde_json::to_string(&meta["not_implemented"])
+            .expect("json")
+            .contains("AQL"),
+        "AQL answers at /query/aql, so it is not a missing capability: {body}"
+    );
+}
+
+// --- the guard is derived from the router, not from a list (`db:D-21`) -----
+
+enum Kind {
+    /// GET, returns clinical content: path template -> action recorded.
+    Records(&'static str),
+    /// Does not return clinical content to a reader.
+    Exempt(&'static str),
+}
+
+fn route_classification() -> Vec<(&'static str, &'static str, Kind)> {
+    use Kind::{Exempt, Records};
+    vec![
+        (
+            "GET",
+            "/openehr/v1/metadata",
+            Exempt("capability statement; no clinical content"),
+        ),
+        (
+            "POST",
+            "/openehr/v1/ehr",
+            Exempt("a write: the commit is its own record, and it returns what the caller sent"),
+        ),
+        ("GET", "/openehr/v1/ehr/{ehr_id}", Records("read_ehr")),
+        (
+            "GET",
+            "/openehr/v1/ehr/{ehr_id}/ehr_status",
+            Records("read_ehr_status"),
+        ),
+        (
+            "GET",
+            "/openehr/v1/ehr/{ehr_id}/ehr_status/{version_uid}",
+            Records("vread_ehr_status"),
+        ),
+        (
+            "POST",
+            "/openehr/v1/ehr/{ehr_id}/contribution",
+            Exempt("a write: the commit is its own record"),
+        ),
+        (
+            "GET",
+            "/openehr/v1/ehr/{ehr_id}/composition",
+            Records("search"),
+        ),
+        (
+            "POST",
+            "/openehr/v1/ehr/{ehr_id}/composition",
+            Exempt("a write: the commit is its own record"),
+        ),
+        (
+            "GET",
+            "/openehr/v1/ehr/{ehr_id}/composition/{uid}",
+            Records("read"),
+        ),
+        (
+            "PUT",
+            "/openehr/v1/ehr/{ehr_id}/composition/{uid}",
+            Exempt("a write: the commit is its own record"),
+        ),
+        (
+            "DELETE",
+            "/openehr/v1/ehr/{ehr_id}/composition/{uid}",
+            Exempt("always refused 501; nothing is read"),
+        ),
+        (
+            "GET",
+            "/openehr/v1/ehr/{ehr_id}/composition/{uid}/_history",
+            Records("history"),
+        ),
+        (
+            "GET",
+            "/openehr/v1/ehr/{ehr_id}/composition/{uid}/version/{version_uid}",
+            Records("vread"),
+        ),
+        ("POST", "/openehr/v1/query/aql", Records("query")),
+    ]
+}
+
+/// Every route this service mounts, classified. `every_read_route_records_who_
+/// read_what` used to iterate a hand-written list of five routes, so a route
+/// added with no `record_read` -- the AQL query was exactly that -- was never
+/// in it. This table is checked **against the router**: a route mounted but
+/// not listed here fails, with a message saying which and what to decide.
+///
+/// Each entry is either a route that returns clinical content and must record
+/// the read (with the concrete request that exercises it and the action it
+/// records), or one that is exempt, **with the reason**. The reason is the part
+/// a reviewer reads; an unexplained exemption is the failure this prevents.
+#[tokio::test]
+async fn every_mounted_route_is_either_a_recorded_read_or_exempt_with_a_reason() {
+    use Kind::{Exempt, Records};
+    let classified = route_classification();
+
+    // 1. The table and the router must be the same set.
+    for (method, template, kind) in &classified {
+        if let Exempt(reason) = kind {
+            assert!(
+                !reason.is_empty(),
+                "{method} {template}: an exemption needs a reason"
+            );
+        }
+    }
+    let mut mounted: Vec<String> = openehr_axa::app::routes()
+        .mounted()
+        .into_iter()
+        .map(|(m, p)| format!("{m} {p}"))
+        .collect();
+    let mut listed: Vec<String> = classified
+        .iter()
+        .map(|(m, p, _)| format!("{m} {p}"))
+        .collect();
+    mounted.sort();
+    listed.sort();
+    let unlisted: Vec<_> = mounted.iter().filter(|r| !listed.contains(r)).collect();
+    let stale: Vec<_> = listed.iter().filter(|r| !mounted.contains(r)).collect();
+    assert!(
+        unlisted.is_empty(),
+        "mounted but not classified -- decide whether it returns clinical content \
+         (then it must call record_read and be listed as Records) or why it is \
+         exempt: {unlisted:?}"
+    );
+    assert!(
+        stale.is_empty(),
+        "classified but no longer mounted: {stale:?}"
+    );
+
+    // 2. Every Records route really records, with the action named.
+    let path = temp_log("router");
+    let served = Served::build(AccessLog::at(&path).expect("log"), Some(true));
+    let ehr = served.ehr_id().to_owned();
+    let (_, _, etag) = served.get(&served.ehr_status()).await;
+    let status_version = etag
+        .expect("a status ETag")
+        .trim_start_matches("W/")
+        .trim_matches('"')
+        .to_owned();
+    // The setup read above is itself a recorded read; start counting after it.
+    let baseline = lines(&path).len();
+
+    let mut expected = 0;
+    for (method, template, kind) in &classified {
+        let Records(action) = kind else { continue };
+        let concrete = template
+            .replace("{ehr_id}", &ehr)
+            .replace("{uid}", LIVE)
+            .replace(
+                "{version_uid}",
+                if template.contains("ehr_status") {
+                    &status_version
+                } else {
+                    "87284370-2D4B-4E3D-A3F3-F303D2F4F34B::ehr1.example.org::1"
+                },
+            );
+        let concrete = if *template == "/openehr/v1/ehr/{ehr_id}/composition" {
+            format!("{concrete}?archetype_id=openEHR-EHR-COMPOSITION.encounter.v1")
+        } else {
+            concrete
+        };
+        let (status, body, _) = if *method == "POST" {
+            served.post_aql(&ehr).await
+        } else {
+            served.get(&concrete).await
+        };
+        assert_eq!(status, StatusCode::OK, "{method} {concrete}: {body}");
+        expected += 1;
+        let recorded = lines(&path);
+        assert_eq!(
+            recorded.len(),
+            baseline + expected,
+            "{method} {template} returned clinical content and left no access record"
+        );
+        assert_eq!(
+            recorded.last().expect("a record")["action"],
+            *action,
+            "{method} {template}"
+        );
+    }
+    assert!(
+        expected >= 8,
+        "the table lost its Records entries: {expected}"
+    );
+
+    let _ = std::fs::remove_file(&path);
+}
+
+// --- a chart serves only its own containers (`db:H5.18`, `db:D-19`) --------
+
+/// An EHR id that exists nowhere. `db:D-19` was reproduced with exactly this:
+/// all three composition read routes answered 200 with the composition.
+const NO_SUCH_EHR: &str = "/openehr/v1/ehr/6BA7B810-9DAD-11D1-80B4-00C04FD430C8";
+
+#[tokio::test]
+async fn a_composition_is_not_served_under_an_ehr_that_does_not_own_it() {
+    let served = Served::new();
+    let version = format!("{LIVE}::{SYSTEM}::1");
+    for tail in [
+        format!("/composition/{LIVE}"),
+        format!("/composition/{LIVE}/_history"),
+        format!("/composition/{LIVE}/version/{version}"),
+    ] {
+        let (status, body, _) = served.get(&format!("{NO_SUCH_EHR}{tail}")).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{tail}: {body}");
+        assert!(
+            !body.contains("Encounter"),
+            "{tail}: a refusal must carry no clinical content: {body}"
+        );
+        // And the right EHR still gets it, so this is not a route that refuses
+        // everything.
+        let (ok, _, _) = served
+            .get(&format!("/openehr/v1/ehr/{}{tail}", served.ehr_id()))
+            .await;
+        assert_eq!(ok, StatusCode::OK, "{tail} under the owning EHR");
+    }
+}
+
+#[tokio::test]
+async fn a_refused_cross_chart_read_looks_like_an_absent_record() {
+    // The two answers must be the same, or the difference is an oracle for
+    // which container ids exist in some other chart.
+    let served = Served::new();
+    let (wrong_ehr, wrong_body, _) = served
+        .get(&format!("{NO_SUCH_EHR}/composition/{LIVE}"))
+        .await;
+    let (absent, absent_body, _) = served.get(&served.composition(ABSENT)).await;
+    assert_eq!(wrong_ehr, absent);
+    // Same shape: only the identifier named differs.
+    let shape = |body: &str| {
+        let v: serde_json::Value = serde_json::from_str(body).expect("json");
+        (v["status"].clone(), v["title"].clone())
+    };
+    assert_eq!(shape(&wrong_body), shape(&absent_body));
+}
+
+#[tokio::test]
+async fn the_ehr_status_vread_serves_only_an_ehr_status() {
+    // It used to return *any* version by id -- a composition included --
+    // under any EHR id. Ask the real EHR's `ehr_status` route for a
+    // composition's version.
+    let served = Served::with_ehr_status(true);
+    let composition_version = format!("{LIVE}::{SYSTEM}::1");
+    let (status, body, _) = served
+        .get(&format!("{}/{composition_version}", served.ehr_status()))
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert!(!body.contains("Encounter"), "{body}");
+
+    // And the status's own version is still readable there.
+    let (_, _, etag) = served.get(&served.ehr_status()).await;
+    let uid = etag
+        .expect("an ETag")
+        .trim_start_matches("W/")
+        .trim_matches('"')
+        .to_owned();
+    let (ok, _, _) = served.get(&format!("{}/{uid}", served.ehr_status())).await;
+    assert_eq!(ok, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn a_version_read_must_belong_to_the_container_the_path_names() {
+    // `/composition/GONE/version/<a version of LIVE>` is not a read of GONE.
+    let served = Served::new();
+    let (status, body, _) = served
+        .get(&format!(
+            "{}/version/{LIVE}::{SYSTEM}::1",
+            served.composition(GONE)
+        ))
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+}
+
+#[tokio::test]
+async fn an_update_names_the_current_version_of_its_own_chart_only() {
+    // The `If-Match` precheck read the container unscoped, so a `412` named
+    // another chart's current version.
+    let served = Served::new();
+    let (status, body, _) = served
+        .send_json(
+            "PUT",
+            &format!("{NO_SUCH_EHR}/composition/{LIVE}?contribution={CONTRIBUTION}"),
+            &version(LIVE, 2, Some(1), false),
+            Some(("if-match", "W/\"stale\"")),
+        )
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert!(!body.contains(SYSTEM), "{body}");
+}

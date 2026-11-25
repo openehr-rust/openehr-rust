@@ -45,6 +45,13 @@ fn the_bounded_aql_executor_passes_against_a_real_database() {
 }
 
 #[test]
+fn a_record_reads_and_commits_only_its_own_containers() {
+    // `db:H5.18`, `db:H5.19`, `db:D-19`.
+    let mut store = SqliteStore::in_memory().expect("open");
+    conformance::run_ehr_scope(&mut store).expect("EHR scope conformance suite");
+}
+
+#[test]
 fn the_dialect_is_self_consistent() {
     conformance::check_dialect(&SqliteDialect);
 }

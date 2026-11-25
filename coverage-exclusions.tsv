@@ -1,6 +1,6 @@
 # workspace	source	line	sha256	reason
-openehr-store	openehr-store/src/aql.rs	70	e6e4b0bb30155a66c793d322ddbd96b7f7b0097f9427c3aab07d72be49aeba0e	external non_exhaustive Scalar fallback refuses an unknown future scalar kind
-openehr-store	openehr-store/src/aql.rs	71	32b7297e6e486bf9c802b1518355b4afb4edda1567e0bd4c81fbe78c7f585cf8	external non_exhaustive Scalar fallback diagnostic continuation
-openehr-store	openehr-store/src/aql.rs	72	7df1d9b8bfd924e984c456be1c9aee34c01efce3a3c83738e27ebc5e097dafb9	external non_exhaustive Scalar fallback diagnostic continuation
-openehr-store	openehr-store/src/aql.rs	73	01135df3c3081feb3d59756dcb036616c2c2bc5733b9838fd14694c0adf90e8a	external non_exhaustive Scalar fallback diagnostic continuation
+openehr-store	openehr-store/src/aql.rs	71	e6e4b0bb30155a66c793d322ddbd96b7f7b0097f9427c3aab07d72be49aeba0e	external non_exhaustive Scalar fallback refuses an unknown future scalar kind
+openehr-store	openehr-store/src/aql.rs	72	32b7297e6e486bf9c802b1518355b4afb4edda1567e0bd4c81fbe78c7f585cf8	external non_exhaustive Scalar fallback diagnostic continuation
+openehr-store	openehr-store/src/aql.rs	73	7df1d9b8bfd924e984c456be1c9aee34c01efce3a3c83738e27ebc5e097dafb9	external non_exhaustive Scalar fallback diagnostic continuation
+openehr-store	openehr-store/src/aql.rs	74	01135df3c3081feb3d59756dcb036616c2c2bc5733b9838fd14694c0adf90e8a	external non_exhaustive Scalar fallback diagnostic continuation
 openehr-store	openehr-store/src/integrity.rs	255	2d6a1cff9924c25c20ce2340e219dcb8fb1ab81cf1dfdecc5b5a4c057b15682b	external non_exhaustive ChainStatus fallback reports Unrecognised rather than success
