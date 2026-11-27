@@ -1677,6 +1677,11 @@ fn route_classification() -> Vec<(&'static str, &'static str, Kind)> {
             Records("vread_ehr_status"),
         ),
         (
+            "GET",
+            "/openehr/v1/ehr/{ehr_id}/versioned_ehr_status/revision_history",
+            Records("ehr_status_history"),
+        ),
+        (
             "POST",
             "/openehr/v1/ehr/{ehr_id}/contribution",
             Exempt("a write: the commit is its own record"),
@@ -2344,7 +2349,7 @@ async fn every_clinical_route_refuses_what_the_grants_do_not_cover() {
         }
     }
     assert_eq!(
-        checked, 13,
+        checked, 14,
         "every clinical route in route_classification is checked"
     );
 }
@@ -2646,4 +2651,109 @@ async fn a_commit_answers_with_the_composition_it_committed() {
         etag.as_deref(),
         Some(format!("W/\"{FRESH}::{SYSTEM}::1\"").as_str())
     );
+}
+
+// --- db:S1.24: the status's revision history carries its audit ------------
+
+#[tokio::test]
+async fn the_status_revision_history_names_who_committed_each_version() {
+    let served = Served::new();
+    let (status, body, _) = served
+        .send(
+            Request::builder()
+                .method("POST")
+                .uri("/openehr/v1/ehr")
+                .header(header::AUTHORIZATION, &served.authorization)
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let ehr_id = serde_json::from_str::<serde_json::Value>(&body).expect("json")["ehr_id"]["value"]
+        .as_str()
+        .expect("an ehr_id")
+        .to_owned();
+
+    let (status, body, _) = served
+        .get(&format!(
+            "/openehr/v1/ehr/{ehr_id}/versioned_ehr_status/revision_history"
+        ))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let history: serde_json::Value = serde_json::from_str(&body).expect("json");
+    let items = history["items"].as_array().expect("items");
+    assert_eq!(items.len(), 1, "{history}");
+    let audit = &items[0]["audits"][0];
+    assert!(
+        audit["committer"].to_string().contains("clinician-4417"),
+        "the verified caller committed it: {audit}"
+    );
+    assert_eq!(
+        audit["change_type"]["defining_code"]["code_string"], "249",
+        "creation: {audit}"
+    );
+    assert!(
+        items[0]["version_id"]["value"]
+            .as_str()
+            .is_some_and(|v| v.ends_with("::openehr-axa.local::1")),
+        "{history}"
+    );
+}
+
+#[tokio::test]
+async fn the_status_revision_history_is_oldest_first_and_scoped() {
+    // Two versions committed directly, as `Served::with_ehr_status` does one.
+    let served = Served::with_ehr_status(true);
+    {
+        let store = served
+            .ctx
+            .shared_store
+            .get::<SharedOpenehrStore>()
+            .expect("store");
+        let mut guard = store.lock().expect("lock");
+        let ehr = conformance::sample_ehr();
+        guard
+            .commit_ehr_status(
+                ehr.ehr_id(),
+                &conformance::sample_ehr_status_version(2, Some(1), 40, false),
+                CONTRIBUTION,
+            )
+            .expect("status v2");
+    }
+    let path = format!(
+        "/openehr/v1/ehr/{}/versioned_ehr_status/revision_history",
+        served.ehr_id()
+    );
+    let (status, body, _) = served.get(&path).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let history: serde_json::Value = serde_json::from_str(&body).expect("json");
+    let ids: Vec<String> = history["items"]
+        .as_array()
+        .expect("items")
+        .iter()
+        .map(|i| {
+            i["version_id"]["value"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(
+        ids,
+        vec![
+            conformance::status_version_uid(1),
+            conformance::status_version_uid(2)
+        ],
+        "oldest first (db:H5.12)"
+    );
+
+    // A record naming another chart's status container reads none (db:H5.20).
+    served.add_ehr_naming_status(SECOND_EHR, conformance::EHR_STATUS_RECORD);
+    let (status, body, _) = served
+        .get(&format!(
+            "/openehr/v1/ehr/{SECOND_EHR}/versioned_ehr_status/revision_history"
+        ))
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert!(!body.contains("Dr A Nurse"), "{body}");
 }

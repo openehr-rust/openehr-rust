@@ -32,8 +32,11 @@ use axum::{
     routing::get,
 };
 use openehr::base::ObjectVersionId;
+use openehr::rm::common::{AuditDetails, PartyProxy, RevisionHistory, RevisionHistoryItem};
 use openehr::rm::data_types::DvDateTime;
+use openehr::rm::data_types::Text;
 use openehr_store::Store as _;
+use openehr_store::record::VersionRow;
 use serde::Deserialize;
 
 use crate::auth::Principal;
@@ -162,6 +165,101 @@ async fn vread(
         &version_uid,
         reply,
     )
+}
+
+/// `GET /openehr/v1/ehr/{ehr_id}/versioned_ehr_status/revision_history`
+/// (`db:S1.24`): every status version, oldest first, each with its commit
+/// `AUDIT_DETAILS`, the committer included (`db:PR12.25`).
+async fn revision_history(
+    State(ctx): State<AppContext>,
+    principal: Principal,
+    Path(ehr_id): Path<String>,
+) -> Reply<serde_json::Value> {
+    let handle = store(&ctx)?;
+    let guard = lock(&handle)?;
+    let reply = (|| -> Reply<serde_json::Value> {
+        // `db:PR12.18`: the token's grants, before the store is asked anything.
+        authorize(&principal, &ehr_id, Action::Read)?;
+        let id = parse_id(&ehr_id)?;
+        let ehr = guard.get_ehr(&id).map_err(|e| status_for(&e))?;
+        let Some(container) = openehr_store::ehr_status_container(&ehr) else {
+            return Err(Refusal::from((
+                StatusCode::NOT_FOUND,
+                format!("EHR {ehr_id} names no EHR_STATUS container"),
+            )));
+        };
+        // Scoped as every status read is (`db:H5.20`).
+        let rows = guard
+            .all_versions_in(&id, &container, "EHR_STATUS")
+            .map_err(|e| status_for(&e))?;
+        let items = rows
+            .iter()
+            .map(revision_item)
+            .collect::<Result<Vec<_>, _>>()?;
+        let history = RevisionHistory::new(items).map_err(|_| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("EHR {ehr_id} has no EHR_STATUS version"),
+            )
+        })?;
+        let body = serde_json::to_value(history).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("the revision history does not serialize: {e}"),
+            )
+        })?;
+        Ok((StatusCode::OK, HeaderMap::new(), Json(body)))
+    })();
+    recorded(
+        &ctx,
+        &principal,
+        "ehr_status_history",
+        &ehr_id,
+        "ehr_status",
+        reply,
+    )
+}
+
+/// One stored status version as a `REVISION_HISTORY_ITEM` (`db:S1.24`).
+///
+/// Every field is rebuilt from what the store holds, and one that does not
+/// decode is `500`, naming the version and quoting nothing (`db:D-28`). The
+/// description comes back as plain text: the store keeps a description's
+/// text, not a coded description's code.
+fn revision_item(row: &VersionRow) -> Result<RevisionHistoryItem, (StatusCode, String)> {
+    let unreadable = |what: &str| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("the stored {what} of version {} could not be read", row.uid),
+        )
+    };
+    let committer: PartyProxy =
+        serde_json::from_str(&row.audit_committer_json).map_err(|_| unreadable("committer"))?;
+    let time =
+        DvDateTime::new(&row.audit_time_committed.text).map_err(|_| unreadable("commit time"))?;
+    let mut audit = AuditDetails::new(
+        &row.audit_system_id,
+        time,
+        &row.audit_change_type_code,
+        committer,
+    )
+    .map_err(|_| unreadable("audit"))?;
+    if let Some(description) = &row.audit_description {
+        audit = audit.with_description(
+            Text::plain(description.clone()).map_err(|_| unreadable("description"))?,
+        );
+    }
+    let version = row.uid.parse().map_err(|_| unreadable("version id"))?;
+    RevisionHistoryItem::new(version, vec![audit]).map_err(|_| unreadable("audit"))
+}
+
+/// The `versioned_ehr_status` routes (`db:S1.24`), under their own ITS-REST
+/// prefix.
+#[must_use]
+pub fn versioned_routes() -> Routes {
+    Routes::new()
+        .prefix("/openehr/v1/ehr/{ehr_id}/versioned_ehr_status")
+        .add("/revision_history", get(revision_history))
 }
 
 /// The routes this controller owns.

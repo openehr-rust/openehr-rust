@@ -126,6 +126,16 @@ if [ -n "$new_id" ]; then
     verdict "read_default_status" "$ok" "GET .../ehr_status -> $got, is_modifiable ${modifiable:-absent}, is_queryable ${queryable:-absent}"
 fi
 
+# 2b. Its revision history: one item, a creation, with a committer (db:S1.24).
+if [ -n "$new_id" ]; then
+    got=$(send GET "$BASE/ehr/$new_id/versioned_ehr_status/revision_history" "")
+    count=$(jq -r '.items | length' "$TMP/b" 2>/dev/null || true)
+    change=$(jq -r '.items[0].audits[0].change_type.defining_code.code_string // empty' "$TMP/b" 2>/dev/null || true)
+    committer=$(jq -r '.items[0].audits[0].committer._type // empty' "$TMP/b" 2>/dev/null || true)
+    [ "$got" = 200 ] && [ "$count" = 1 ] && [ "$change" = 249 ] && [ -n "$committer" ] && ok=0 || ok=1
+    verdict "status_revision_history" "$ok" "GET .../versioned_ehr_status/revision_history -> $got, items ${count:-none}, change ${change:-none}, committer ${committer:-absent}"
+fi
+
 # 3. A supplied status is the one committed. It carries archetype_details: an
 #    EHR_STATUS is an archetype root (RM EHR_STATUS.Is_archetype_root), and this
 #    service refuses one without it by decision (db:S1.23, db:D-32), where

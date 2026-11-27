@@ -7,6 +7,12 @@ together.
 
 ## Unreleased
 
+- **`GET /ehr/{ehr_id}/versioned_ehr_status/revision_history`** (`db:S1.24`): ITS-REST's
+  revision history for the status, with each version's commit audit and
+  committer. It is where a status version's committer is readable, now that
+  the status read answers with the resource. It is scoped, needs `read`, and
+  is recorded. Run 4 against EHRbase 2.38.0: 10/10 on both.
+
 - **BREAKING (`openehr-axa`): ITS-REST routes answer with the resource**
   (`db:S1.23`, `db:D-31`).
   - **Resource, not wrapper.** `GET …/ehr_status`, `…/ehr_status/{version_uid}`

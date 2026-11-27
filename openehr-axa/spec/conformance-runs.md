@@ -207,6 +207,22 @@ shape, refusing a malformed body, and creating with a chosen id once.
 blocked on templates, candidate 2 below), and the minimal status body
 `D-32` refuses by decision.
 
+## Run 4 — 2026-11-27: the status revision history (`db:S1.24`)
+
+The runner gained `status_revision_history`. Right after the default create,
+`GET …/versioned_ehr_status/revision_history` must answer `200` with one
+item, a creation (`249`), with a committer. Both targets were started afresh,
+as in Run 3.
+
+```
+openehr-axa:     10 passed, 0 failed
+EHRbase 2.38.0:  10 passed, 0 failed
+
+PASS  status_revision_history  -> 200, items 1, change 249, committer PARTY_IDENTIFIED   (both)
+```
+
+The other nine cases are unchanged from Run 3, and pass on both.
+
 ## Candidates for the next run
 
 In the order a fix would unblock them:

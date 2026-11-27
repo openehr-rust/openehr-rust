@@ -165,6 +165,22 @@ reader deciding whether to use these crates needs the reason more than the fact.
   and a status without it is refused (`422`) naming that invariant. EHRbase
   accepts one. This service does not, deliberately.
 
+- **S1.24** *(added 2026-11-27)* `GET /ehr/{ehr_id}/versioned_ehr_status/revision_history`
+  MUST answer with the `REVISION_HISTORY` ITS-REST 1.1.0 defines: one item
+  per `EHR_STATUS` version, oldest first (`H5.12`). Each item has the
+  version id and its commit `AUDIT_DETAILS`: system, time as committed,
+  change type, committer whole (`PR12.25`), and description.
+
+  It is where a status version's committer is readable, now that the status
+  read answers with the resource (`S1.23`). It is scoped as `H5.20` scopes
+  every status read, needs `read` (`PR12.18`), and is recorded
+  (`PR12.23`). An audit field that does not decode is `500`, never
+  omitted (`D-28`).
+
+  **What it does not carry:** attestations, which are stored separately and
+  not yet put into the history. The description comes back as plain text,
+  because the store keeps its text and not a coded description's code.
+
 - **S1.21** Sections 7 and 8 remain **retired** (`C0.6`). The requirements
   withdrawn there described a FHIR REST surface and are not restored by a
   service existing; reinstating text nobody wrote, and mapping it to regulatory

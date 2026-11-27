@@ -137,6 +137,7 @@ fn add_routes(base: AppRoutes) -> AppRoutes {
     base.add_route(controllers_routes::metadata())
         .add_route(controllers_routes::ehr())
         .add_route(controllers_routes::ehr_status())
+        .add_route(controllers_routes::versioned_ehr_status())
         .add_route(controllers_routes::contribution())
         .add_route(controllers_routes::composition())
         .add_route(controllers_routes::query())
@@ -331,6 +332,9 @@ mod controllers_routes {
     }
     pub fn ehr_status() -> Routes {
         crate::controllers::ehr_status::routes()
+    }
+    pub fn versioned_ehr_status() -> Routes {
+        crate::controllers::ehr_status::versioned_routes()
     }
     pub fn composition() -> Routes {
         crate::controllers::composition::routes()
