@@ -37,7 +37,7 @@ publish = false
 # a field the attacker supplies, which is the root of `alg: none` and of
 # RS256-verified-as-HS256. PASETO's version *is* the algorithm, so there is
 # nothing to negotiate.
-axa = "0.23"
+axa = "0.24"
 # Verification only. Nothing in this crate signs, and no secret key is ever
 # loaded — a verified subject becomes an `AUDIT_DETAILS.committer` in an
 # append-only chained history, so an instance able to mint tokens would be an
@@ -55,6 +55,9 @@ openehr-sqlite = { path = "../openehr-sqlite", version = "0.11.0" }
 # same macro.
 async-trait = "0.1"
 time = { version = "0.3.55", features = ["formatting"] }
+# Server-minted record ids (`db:S1.22`): `POST /ehr` names the new `EHR`, its
+# status container and the contribution that commits the first status.
+uuid = { version = "1", features = ["v4"] }
 tower_governor = { version = "0.8.0", default-features = false, features = ["axum"] }
 
 [lints.rust]

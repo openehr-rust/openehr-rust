@@ -106,12 +106,14 @@ postgresql)
       psql -h 127.0.0.1 -U postgres -d openehr -q >/dev/null 2>&1 <<'SEED'
 INSERT INTO openehr_ehr VALUES ('e1','sys','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','st1','ac1');
 INSERT INTO openehr_versioned_object VALUES ('vo1','e1','VERSIONED_COMPOSITION','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
-INSERT INTO openehr_contribution VALUES ('c1','e1','249','sys','Committer','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
+INSERT INTO openehr_contribution (uid, ehr_id, audit_change_type_code, audit_system_id,
+  audit_committer_name, audit_committer_json, audit_time_committed_text, audit_time_committed_utc, versions_json)
+VALUES ('c1','e1','249','sys','Committer','{"_type":"PARTY_SELF"}','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','["vo1::sys::1"]');
 INSERT INTO openehr_version (uid, versioned_object_uid, creating_system_id, trunk_version, branch_number, branch_version,
   lifecycle_state_code, is_deleted, contribution_uid, audit_system_id,
-  audit_change_type_code, audit_time_committed_text, data_json,
+  audit_change_type_code, audit_committer_json, audit_time_committed_text, data_json,
   chain_previous, chain_content, chain_digest)
-VALUES ('vo1::sys::1','vo1','sys',1,0,0,'532',false,'c1','sys','249','2026-01-01T00:00:00Z',
+VALUES ('vo1::sys::1','vo1','sys',1,0,0,'532',false,'c1','sys','249','{"_type":"PARTY_SELF"}','2026-01-01T00:00:00Z',
   '{"z":1,"a":2,"magnitude":1.10,"dup":"first"}',
   decode(repeat('00',32),'hex'), decode(repeat('11',32),'hex'), decode(repeat('22',32),'hex'));
 SEED
@@ -145,12 +147,14 @@ mysql)
     my >/dev/null 2>&1 <<'SEED'
 INSERT INTO openehr_ehr VALUES ('e1','sys','2026-01-01T00:00:00Z','2026-01-01 00:00:00','st1','ac1');
 INSERT INTO openehr_versioned_object VALUES ('vo1','e1','VERSIONED_COMPOSITION','2026-01-01T00:00:00Z','2026-01-01 00:00:00');
-INSERT INTO openehr_contribution VALUES ('c1','e1','249','sys','Committer','2026-01-01T00:00:00Z','2026-01-01 00:00:00');
+INSERT INTO openehr_contribution (uid, ehr_id, audit_change_type_code, audit_system_id,
+  audit_committer_name, audit_committer_json, audit_time_committed_text, audit_time_committed_utc, versions_json)
+VALUES ('c1','e1','249','sys','Committer','{"_type":"PARTY_SELF"}','2026-01-01T00:00:00Z','2026-01-01 00:00:00','["vo1::sys::1"]');
 INSERT INTO openehr_version (uid, versioned_object_uid, creating_system_id, trunk_version, branch_number, branch_version,
   lifecycle_state_code, is_deleted, contribution_uid, audit_system_id,
-  audit_change_type_code, audit_time_committed_text, data_json,
+  audit_change_type_code, audit_committer_json, audit_time_committed_text, data_json,
   chain_previous, chain_content, chain_digest)
-VALUES ('vo1::sys::1','vo1','sys',1,0,0,'532',0,'c1','sys','249','2026-01-01T00:00:00Z',
+VALUES ('vo1::sys::1','vo1','sys',1,0,0,'532',0,'c1','sys','249','{"_type":"PARTY_SELF"}','2026-01-01T00:00:00Z',
   '{"z":1,"a":2,"magnitude":1.10,"dup":"first"}',
   UNHEX(REPEAT('00',32)), UNHEX(REPEAT('11',32)), UNHEX(REPEAT('22',32)));
 SEED
@@ -183,12 +187,14 @@ mariadb)
     my >/dev/null 2>&1 <<'SEED'
 INSERT INTO openehr_ehr VALUES ('e1','sys','2026-01-01T00:00:00Z','2026-01-01 00:00:00','st1','ac1');
 INSERT INTO openehr_versioned_object VALUES ('vo1','e1','VERSIONED_COMPOSITION','2026-01-01T00:00:00Z','2026-01-01 00:00:00');
-INSERT INTO openehr_contribution VALUES ('c1','e1','249','sys','Committer','2026-01-01T00:00:00Z','2026-01-01 00:00:00');
+INSERT INTO openehr_contribution (uid, ehr_id, audit_change_type_code, audit_system_id,
+  audit_committer_name, audit_committer_json, audit_time_committed_text, audit_time_committed_utc, versions_json)
+VALUES ('c1','e1','249','sys','Committer','{"_type":"PARTY_SELF"}','2026-01-01T00:00:00Z','2026-01-01 00:00:00','["vo1::sys::1"]');
 INSERT INTO openehr_version (uid, versioned_object_uid, creating_system_id, trunk_version, branch_number, branch_version,
   lifecycle_state_code, is_deleted, contribution_uid, audit_system_id,
-  audit_change_type_code, audit_time_committed_text, data_json,
+  audit_change_type_code, audit_committer_json, audit_time_committed_text, data_json,
   chain_previous, chain_content, chain_digest)
-VALUES ('vo1::sys::1','vo1','sys',1,0,0,'532',0,'c1','sys','249','2026-01-01T00:00:00Z',
+VALUES ('vo1::sys::1','vo1','sys',1,0,0,'532',0,'c1','sys','249','{"_type":"PARTY_SELF"}','2026-01-01T00:00:00Z',
   '{"z":1,"a":2,"magnitude":1.10,"dup":"first"}',
   UNHEX(REPEAT('00',32)), UNHEX(REPEAT('11',32)), UNHEX(REPEAT('22',32)));
 SEED
@@ -279,14 +285,14 @@ INSERT INTO [openehr_ehr] ([ehr_id],[system_id],[time_created_text],[ehr_status_
 VALUES ('e1','sys','2026-01-01T00:00:00Z','st1','ac1');
 INSERT INTO [openehr_versioned_object] ([uid],[ehr_id],[rm_type],[time_created_text])
 VALUES ('vo1','e1','VERSIONED_COMPOSITION','2026-01-01T00:00:00Z');
-INSERT INTO [openehr_contribution] ([uid],[ehr_id],[audit_change_type_code],[audit_system_id],[audit_committer_name],[audit_time_committed_text])
-VALUES ('c1','e1','249','sys','Committer','2026-01-01T00:00:00Z');
+INSERT INTO [openehr_contribution] ([uid],[ehr_id],[audit_change_type_code],[audit_system_id],[audit_committer_name],[audit_committer_json],[audit_time_committed_text],[versions_json])
+VALUES ('c1','e1','249','sys','Committer','{"_type":"PARTY_SELF"}','2026-01-01T00:00:00Z','["vo1::sys::1"]');
 INSERT INTO [openehr_version]
   ([uid],[versioned_object_uid],[creating_system_id],[trunk_version],[branch_number],[branch_version],
    [lifecycle_state_code],[is_deleted],[contribution_uid],[audit_system_id],
-   [audit_change_type_code],[audit_time_committed_text],[data_json],
+   [audit_change_type_code],[audit_committer_json],[audit_time_committed_text],[data_json],
    [chain_previous],[chain_content],[chain_digest])
-VALUES ('vo1::sys::1','vo1','sys',1,0,0,'532',0,'c1','sys','249','2026-01-01T00:00:00Z',
+VALUES ('vo1::sys::1','vo1','sys',1,0,0,'532',0,'c1','sys','249','{"_type":"PARTY_SELF"}','2026-01-01T00:00:00Z',
   '{"z":1,"a":2,"magnitude":1.10,"dup":"first"}',
   0x0000000000000000000000000000000000000000000000000000000000000000,
   0x1111111111111111111111111111111111111111111111111111111111111111,
@@ -370,14 +376,14 @@ INSERT INTO "openehr_ehr" ("ehr_id","system_id","time_created_text","ehr_status_
 VALUES ('e1','sys','2026-01-01T00:00:00Z','st1','ac1');
 INSERT INTO "openehr_versioned_object" ("uid","ehr_id","rm_type","time_created_text")
 VALUES ('vo1','e1','VERSIONED_COMPOSITION','2026-01-01T00:00:00Z');
-INSERT INTO "openehr_contribution" ("uid","ehr_id","audit_change_type_code","audit_system_id","audit_committer_name","audit_time_committed_text")
-VALUES ('c1','e1','249','sys','Committer','2026-01-01T00:00:00Z');
+INSERT INTO "openehr_contribution" ("uid","ehr_id","audit_change_type_code","audit_system_id","audit_committer_name","audit_committer_json","audit_time_committed_text","versions_json")
+VALUES ('c1','e1','249','sys','Committer','{"_type":"PARTY_SELF"}','2026-01-01T00:00:00Z','["vo1::sys::1"]');
 INSERT INTO "openehr_version"
   ("uid","versioned_object_uid","creating_system_id","trunk_version","branch_number","branch_version",
    "lifecycle_state_code","is_deleted","contribution_uid","audit_system_id",
-   "audit_change_type_code","audit_time_committed_text","data_json",
+   "audit_change_type_code","audit_committer_json","audit_time_committed_text","data_json",
    "chain_previous","chain_content","chain_digest")
-VALUES ('vo1::sys::1','vo1','sys',1,0,0,'532',0,'c1','sys','249','2026-01-01T00:00:00Z',
+VALUES ('vo1::sys::1','vo1','sys',1,0,0,'532',0,'c1','sys','249','{"_type":"PARTY_SELF"}','2026-01-01T00:00:00Z',
   '{"z":1,"a":2,"magnitude":1.10,"dup":"first"}',
   HEXTORAW(RPAD('00',64,'00')), HEXTORAW(RPAD('11',64,'11')), HEXTORAW(RPAD('22',64,'22')));
 COMMIT;

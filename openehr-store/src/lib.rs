@@ -64,10 +64,18 @@ pub mod record;
 pub mod schema;
 pub mod store;
 
-pub use aql::{Cell, QueryResult, execute as execute_aql, scoped_ehr as aql_scoped_ehr};
+pub use aql::{
+    Cell, QueryResult, execute as execute_aql, execute_with_budget as execute_aql_with_budget,
+    scoped_ehr as aql_scoped_ehr,
+};
 pub use dialect::{Dialect, Idempotence, ObjectKind, Placeholder, ddl_script};
 pub use error::{Result, StoreError};
 pub use integrity::{Breach, Integrity, verify_versions};
-pub use record::{CompositionIndexRow, StoredInstant, VersionRow};
+pub use record::{
+    CompositionIndexRow, ContributionRow, StoredInstant, VersionRow, check_membership,
+};
 pub use schema::{ColTy, Column, Index, SCHEMA_VERSION, SCHEMA_VERSION_TABLE, TABLES, Table};
-pub use store::{CommitOutcome, Store, check_commit_rules, require_owned};
+pub use store::{
+    CommitOutcome, RowPage, Store, check_commit_rules, ehr_is_modifiable, ehr_status_container,
+    require_owned,
+};

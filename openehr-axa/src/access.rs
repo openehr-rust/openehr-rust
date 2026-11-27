@@ -114,9 +114,25 @@ impl AccessLog {
     /// Returns the reason the log could not be opened. Fatal at startup: a
     /// service configured to audit reads and unable to must not serve them.
     pub fn from_env() -> Result<Self, String> {
-        match std::env::var(LOG_VAR) {
-            Err(_) => Ok(Self { file: None }),
-            Ok(path) => Self::at(Path::new(&path)),
+        Self::from_lookup(&|name| std::env::var_os(name))
+    }
+
+    /// [`AccessLog::from_env`], reading through `lookup` (`db:PR12.24`).
+    ///
+    /// Absent turns auditing off. Empty is refused, and so is a path that cannot
+    /// be appended to. Any operating-system path is accepted, Unicode or not.
+    /// Every read error used to mean "auditing off", invalid Unicode
+    /// included, so a configured log could silently become none (`db:D-30`).
+    ///
+    /// # Errors
+    ///
+    /// As [`AccessLog::from_env`], and for an empty value.
+    pub fn from_lookup(
+        lookup: &impl Fn(&str) -> Option<std::ffi::OsString>,
+    ) -> Result<Self, String> {
+        match crate::settings::path(LOG_VAR, lookup)? {
+            None => Ok(Self { file: None }),
+            Some(path) => Self::at(&path),
         }
     }
 
@@ -204,9 +220,7 @@ pub fn access<'a>(
     outcome: &'a str,
 ) -> Access<'a> {
     Access {
-        at: OffsetDateTime::now_utc()
-            .format(&Rfc3339)
-            .unwrap_or_default(),
+        at: now_rfc3339(),
         subject: &principal.subject,
         issuer: principal.issuer.as_deref(),
         token_id: principal.token_id.as_deref(),
@@ -215,4 +229,14 @@ pub fn access<'a>(
         target,
         outcome,
     }
+}
+
+/// The current instant, RFC 3339 in UTC: an access record's `at`, and the
+/// commit time of a record the service creates (`db:S1.22`). Empty only if
+/// formatting a well-formed `OffsetDateTime` failed, which it cannot.
+#[must_use]
+pub fn now_rfc3339() -> String {
+    OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_default()
 }

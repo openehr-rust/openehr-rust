@@ -203,6 +203,7 @@ impl PostgresqlStore {
             audit_system_id: column(row, "audit_system_id")?,
             audit_change_type_code: column(row, "audit_change_type_code")?,
             audit_committer_name: column(row, "audit_committer_name")?,
+            audit_committer_json: column(row, "audit_committer_json")?,
             audit_time_committed: StoredInstant {
                 text: column(row, "audit_time_committed_text")?,
                 utc_seconds: Self::timestamptz_to_utc_seconds(audit_time_committed_utc),
@@ -227,8 +228,8 @@ impl PostgresqlStore {
     const VERSION_COLUMNS: &'static str = "uid, versioned_object_uid, creating_system_id, \
         trunk_version, branch_number, branch_version, preceding_version_uid, \
         lifecycle_state_code, is_deleted, contribution_uid, audit_system_id, \
-        audit_change_type_code, audit_committer_name, audit_time_committed_text, \
-        audit_time_committed_utc, data_json, audit_description, signature, \
+        audit_change_type_code, audit_committer_name, audit_committer_json, \
+        audit_time_committed_text, audit_time_committed_utc, data_json, audit_description, signature, \
         attestations_json, other_input_version_uids_json, chain_previous, \
         chain_content, chain_digest, chain_tag_key_id, chain_tag_mac";
 
@@ -301,27 +302,6 @@ impl PostgresqlStore {
             )
             .map_err(|e| engine(&e))?;
         Self::digest_column(&row, "chain_digest")
-    }
-
-    /// Whether `ehr` currently accepts new content (`EHR_STATUS.is_modifiable`,
-    /// `db:H5.17`), read fresh from the store rather than from any value a
-    /// caller might have cached — see `SqliteStore::ehr_is_modifiable`, which
-    /// this mirrors exactly and for the identical reason.
-    fn ehr_is_modifiable(&self, ehr: &Ehr) -> Result<bool> {
-        let ObjectId::HierObjectId(container_uid) = ehr.ehr_status().id().clone() else {
-            return Ok(true);
-        };
-        match self.latest_version(&container_uid) {
-            Ok(row) => {
-                let Some(json) = row.data_json else {
-                    return Ok(false);
-                };
-                let status: EhrStatus = serde_json::from_str(&json)?;
-                Ok(status.is_modifiable())
-            }
-            Err(StoreError::NotFound { .. }) => Ok(true),
-            Err(e) => Err(e),
-        }
     }
 }
 
@@ -498,25 +478,28 @@ impl Store for PostgresqlStore {
         ehr_id: &HierObjectId,
         contribution: &Contribution,
     ) -> Result<()> {
-        let uid = contribution.uid().to_string();
-        let audit = contribution.audit();
-        let committed = StoredInstant::from_date_time(audit.time_committed().value());
-        let committed_utc = Self::utc_seconds_to_timestamptz(committed.utc_seconds)?;
+        // The same projection `SqliteStore` uses (`db:PR12.25`, `db:H5.22`).
+        let row = openehr_store::ContributionRow::project(&ehr_id.to_string(), contribution)?;
+        let uid = row.uid.clone();
+        let committed_utc = Self::utc_seconds_to_timestamptz(row.audit_time_committed.utc_seconds)?;
         self.client
             .borrow_mut()
             .execute(
                 "INSERT INTO openehr_contribution \
                  (uid, ehr_id, audit_change_type_code, audit_system_id, audit_committer_name, \
-                  audit_time_committed_text, audit_time_committed_utc) \
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                  audit_committer_json, audit_time_committed_text, audit_time_committed_utc, \
+                  versions_json) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
                 &[
-                    &uid,
-                    &ehr_id.to_string(),
-                    &audit.change_type_code(),
-                    &audit.system_id(),
-                    &audit.committer().name(),
-                    &committed.text,
+                    &row.uid,
+                    &row.ehr_id,
+                    &row.audit_change_type_code,
+                    &row.audit_system_id,
+                    &row.audit_committer_name,
+                    &row.audit_committer_json,
+                    &row.audit_time_committed.text,
                     &committed_utc,
+                    &row.versions_json,
                 ],
             )
             .map_err(|e| {
@@ -547,7 +530,8 @@ impl Store for PostgresqlStore {
         let ehr = self.get_ehr(ehr_id)?;
 
         // `db:H5.17`, read fresh every call — see `SqliteStore`'s own gate.
-        if !self.ehr_is_modifiable(&ehr)? {
+        // `db:H5.20`: one gate for every engine, scoped to the owner.
+        if !openehr_store::ehr_is_modifiable(self, &ehr)? {
             return Err(StoreError::NotModifiable {
                 ehr_id: ehr_id.to_string(),
             });
@@ -592,6 +576,20 @@ impl Store for PostgresqlStore {
             already.is_some(),
             version.preceding_version_uid(),
         )?;
+        // `db:H5.22`, as `SqliteStore` checks it: after the commit rules.
+        let declared = self
+            .client
+            .borrow_mut()
+            .query_opt(
+                "SELECT ehr_id, versions_json FROM openehr_contribution WHERE uid = $1",
+                &[&contribution_uid],
+            )
+            .map_err(|e| engine(&e))?
+            .map(|row| -> Result<(String, String)> {
+                Ok((column(&row, "ehr_id")?, column(&row, "versions_json")?))
+            })
+            .transpose()?;
+        openehr_store::check_membership(declared, &ehr_id.to_string(), contribution_uid, &uid)?;
 
         let previous_digest = head
             .as_ref()
@@ -690,6 +688,20 @@ impl Store for PostgresqlStore {
             already.is_some(),
             version.preceding_version_uid(),
         )?;
+        // `db:H5.22`, as `SqliteStore` checks it: after the commit rules.
+        let declared = self
+            .client
+            .borrow_mut()
+            .query_opt(
+                "SELECT ehr_id, versions_json FROM openehr_contribution WHERE uid = $1",
+                &[&contribution_uid],
+            )
+            .map_err(|e| engine(&e))?
+            .map(|row| -> Result<(String, String)> {
+                Ok((column(&row, "ehr_id")?, column(&row, "versions_json")?))
+            })
+            .transpose()?;
+        openehr_store::check_membership(declared, &ehr_id.to_string(), contribution_uid, &uid)?;
 
         let previous_digest = head
             .as_ref()
@@ -924,7 +936,7 @@ fn insert_version(transaction: &mut postgres::Transaction<'_>, row: &VersionRow)
     // array literal whose element type is already known — an `as` cast
     // applied *after* the literal is built is too late; every element has
     // already been unified to one concrete type by then, and it fails to
-    // compile with the other twenty-four.
+    // compile with the other twenty-five.
     let params: &[&(dyn ToSql + Sync)] = &[
         &row.uid,
         &row.versioned_object_uid,
@@ -939,6 +951,7 @@ fn insert_version(transaction: &mut postgres::Transaction<'_>, row: &VersionRow)
         &row.audit_system_id,
         &row.audit_change_type_code,
         &row.audit_committer_name,
+        &row.audit_committer_json,
         &row.audit_time_committed.text,
         &committed_utc,
         &row.data_json,
@@ -958,12 +971,12 @@ fn insert_version(transaction: &mut postgres::Transaction<'_>, row: &VersionRow)
              (uid, versioned_object_uid, creating_system_id, trunk_version, branch_number, \
               branch_version, preceding_version_uid, lifecycle_state_code, is_deleted, \
               contribution_uid, audit_system_id, audit_change_type_code, \
-              audit_committer_name, audit_time_committed_text, audit_time_committed_utc, \
-              data_json, audit_description, signature, attestations_json, \
-              other_input_version_uids_json, chain_previous, chain_content, chain_digest, \
-              chain_tag_key_id, chain_tag_mac) \
+              audit_committer_name, audit_committer_json, audit_time_committed_text, \
+              audit_time_committed_utc, data_json, audit_description, signature, \
+              attestations_json, other_input_version_uids_json, chain_previous, \
+              chain_content, chain_digest, chain_tag_key_id, chain_tag_mac) \
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, \
-                     $17, $18, $19, $20, $21, $22, $23, $24, $25)",
+                     $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)",
             params,
         )
         .map_err(|e| engine(&e))?;

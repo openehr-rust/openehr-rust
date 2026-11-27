@@ -57,9 +57,13 @@ async fn metadata(State(ctx): State<AppContext>) -> Json<Metadata> {
                              an issuer signs the assertion)",
                 spec_ref: "db:PR12.13",
             },
+            // Authorization itself is enforced: every clinical route checks the
+            // token's `openehr_grants` (`db:PR12.18`, amended 2026-11-26). What
+            // is absent is the policy behind the grants. That is the issuer's.
             Absence {
-                capability: "authorization (a verified caller is not checked \
-                             against the records it asks for)",
+                capability: "care-relationship policy (access is exactly the \
+                             issuer's openehr_grants; no care team, consent or \
+                             break-glass model is held here)",
                 spec_ref: "db:PR12.18",
             },
         ]

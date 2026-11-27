@@ -205,6 +205,7 @@ Process requirements; they govern this specification rather than the code.
 | D3.13a | doc | recorded as a limitation, **A-02** |
 | D3.14 | • | `guarantees::every_undecidable_comparison_answers_none`; `rm::data_types::tests::every_comparable_variant_of_a_data_value_compares`, which covers the **decidable** half — six arms of `semantic_cmp` were deletable in silence until **A-39** |
 | D3.14a | • | `guarantees::a_reference_range_is_unmoved_by_how_an_instant_is_spelled`, which asserts an incomparable value is excluded rather than admitted (**A-39**) |
+| D3.14b | • | `tests/range_position.rs`: the `A-86` audit table row for row, ray-meets-bound inclusion on closed and open bounds, half-open ranges, `~`, incomparable at one bound only, no range, `DV_COUNT`, a two-state fallback for an implementation outside the crate, and the `D3.24b` flag check on decided and undecided positions. Every `position_in` mutant caught (15/15, one unviable) |
 | D3.15 | • | `quantity::tests::different_units_are_not_comparable_in_either_direction` |
 | D3.16 | • | `quantity::tests::ordinals_from_different_terminologies_do_not_compare` |
 | D3.17 | • | `invariants::proportions_of_different_kinds_do_not_compare` |
@@ -226,7 +227,7 @@ Process requirements; they govern this specification rather than the code.
 | D3.23a | • | `quantity::tests::proportion_precision_asserts_integrality_rather_than_forbidding_it` |
 | D3.24 | • | `quantity::tests::is_abnormal_distinguishes_unknown_from_normal` |
 | D3.24a | • | `validation::tests::a_normal_status_outside_the_code_set_is_reported` |
-| D3.24b | • | `validation::tests::a_normal_flag_beside_an_abnormal_number_is_reported` |
+| D3.24b | • | `validation::tests::a_normal_flag_beside_an_abnormal_number_is_reported`; since 2026-11-26 decided by `range_position` (`D3.14b`), so an undecided qualified value contradicts neither `N` nor another flag (`tests/range_position.rs`) |
 | D3.25 | • | `encapsulated::tests::debug_does_not_print_the_bytes`; `guarantees::display_never_reveals_an_identifier_or_a_media_blob` |
 | D3.26 | • | `encapsulated::tests::integrity_outcomes_are_distinguished` |
 | D3.27 | • | `encapsulated::tests::sha1_is_readable_but_not_writable` |

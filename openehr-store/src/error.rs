@@ -125,6 +125,35 @@ pub enum StoreError {
     /// neither can be known from the query text alone.
     #[error("AQL: {0}")]
     AqlUnsupported(String),
+
+    /// A version commit naming a contribution it does not belong to
+    /// (`db:H5.22`, `db:D-26`): the contribution does not exist or is another
+    /// record's (both reported as "no such contribution", `db:H5.18`), or it
+    /// did not declare this version. Nothing is written.
+    #[error("version {version} is not part of contribution {contribution}: {reason}")]
+    NotInContribution {
+        /// The version being committed.
+        version: String,
+        /// The contribution it named.
+        contribution: String,
+        /// Which of the three conditions failed.
+        reason: &'static str,
+    },
+
+    /// An AQL query whose candidate set is larger than the executor's work
+    /// budget (`db:P6.26`). Refused before any content is read, and never
+    /// answered from a subset (`db:P6.15`): a result built from the first
+    /// `budget` candidates would read as complete and might not be.
+    #[error(
+        "AQL: {candidates} candidate compositions exceed this executor's budget of {budget}; \
+         narrow the query (a more specific archetype, or a record with fewer versions)"
+    )]
+    AqlBudgetExceeded {
+        /// How many archetype-index rows the query would have examined.
+        candidates: usize,
+        /// The most it may examine.
+        budget: usize,
+    },
 }
 
 /// A query that does not even parse is, from a caller's point of view, the

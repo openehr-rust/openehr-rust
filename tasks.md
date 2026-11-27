@@ -1771,7 +1771,12 @@ recommended until the first three close):
       run — CI's `run_aql` on `openehr-postgresql` is the remaining evidence.
       Withdrawal-of-an-amended-container and an archetype-changing amendment
       on a real engine are untested.*
-- [ ] **`DvOrdered::is_abnormal()` loses the qualifier (High, reproduced).**
+- [x] **`DvOrdered::is_abnormal()` loses the qualifier (High, reproduced).**
+      *Fixed 2026-11-26 (not committed): `lib:D3.14b`,
+      `DvOrdered::range_position` with three states, and a validator using the
+      same answer; all 15 `position_in` mutants caught, and the 4 pre-existing
+      `Range_is_simple` survivors closed too. `~` values are always
+      `Indeterminate`: confirmed by the maintainer, 2026-11-26.*
       Against 3–5 mg/L: `< 4 mg/L` → `Some(false)`; `4 mL` →
       `Some(true)`. Needs a tri-state (inside/outside/indeterminate + reason)
       deciding on the whole set of possible values; the validator's
@@ -1852,6 +1857,146 @@ before acting). Items worth keeping, each to be checked against the tree first:
 - [ ] Not taken: cargo-crev, OpenTelemetry, connection pooling, chaos
       testing, a logo, a video, a survey — no requirement or finding behind
       them yet (`W0.19`).
+
+### Audit intake 2026-11-26 — production-readiness review at `ec029cf`
+
+Taken from an external production-readiness review (GPT-6.2 Astra, high)
+of revision `ec029cf`: a one-page summary in `docs/audits/` (since removed)
+and its full queue, `audits/2026-11-25-production-readiness.md`. The review
+already registered `db:D-23`–`db:D-30` in `spec/databases/audit.md` and
+corrected six rows of the database matrix; those register entries own the
+evidence and acceptance cases, and nothing here restates them. **Decision it
+reaches:** integration with synthetic records, yes; a multi-user clinical
+deployment of `openehr-axa`, hold. That matches this file's own reading.
+
+**Assessment.** Its verified claims (993 tests passed / 27 ignored; locks,
+assets, docs, RustSec snapshot clean) are consistent with this tree. Its two
+directly observed defects were re-run here on 2026-11-26 and **reproduce**:
+a mistyped `OPENEHR_SQLITE_PATH` creates an 86 KB six-table database even when
+`task checkpoint` then refuses its arguments (`db:D-27`), and
+`openehr-fuzz/fuzz_targets/{object_id,path}.rs` had `rustfmt` diffs. The
+HTTP and persistence findings (`D-23`–`D-26`, `D-28`–`D-30`) came from
+source inspection and **have not been reproduced here**; each item below
+starts with that. `lib:A-86` is the existing P3 item above, not a new task.
+Its sequence is the right one: identity of the record operated on before
+attribution, attribution before uncertainty, then failure honesty, recovery,
+authorization, cost, interoperability.
+
+- [x] **1 · Bind every read and update to its record** (`db:D-23`,
+      `db:D-24`, High). *Done 2026-11-26 (not committed):* both reproduced
+      over HTTP first (`200` with another chart's status; a `PUT` to one
+      composition committed another), then fixed against new `db:H5.20` and
+      `db:H5.21`; shared story `run_ehr_status_binding` on the owner store
+      and SQLite. **PostgreSQL wired but not run** (needs a live server). Current and as-of `EHR_STATUS` reads follow the
+      stored `ehr_status` reference without checking its owner or type; a
+      composition `PUT` checks the URL's preceding version, then commits the
+      object named by the body. Start in `controllers/ehr_status.rs`,
+      `controllers/composition.rs` and the scoped `Store` `_in` methods
+      (`db:H5.18`). Reproduce first with two charts and two compositions
+      in one chart; done when every owner/type/target disagreement leaves
+      both histories intact, on SQLite and PostgreSQL, with router tests. — **M**
+- [x] **2 · Make writes attributable after restart** (`db:D-25`,
+      `db:D-26`, with `db:D-22`; High). Contribution creation skips the
+      committer comparison; a version commit does not prove membership in its
+      declared contribution. Specify verified actor, declared committer and
+      contribution linkage (`W0.19`) before the schema change
+      (`db:O10.14` migration). Done when two same-named clinicians read back
+      distinct after restart, a contribution links several versions in its
+      EHR, a refused declaration leaves nothing, and `PHI.md`'s identity
+      claim is corrected. — **L**
+      *Done 2026-11-26 (not committed) as schema 6: `db:PR12.25` and
+      `db:H5.22` specified; the committer stored whole on versions and
+      contributions; contributions declare their versions; and every commit
+      is checked against them. Two same-named clinicians are distinct after a
+      restart; `PHI.md` corrected. PostgreSQL passed live on 2026-11-27
+      (`verify-store.sh`, 28/28), and the schema-6 DDL passed `verify-schema.sh`
+      on four engines. SQL Server's image stalls under arm64 emulation here;
+      CI's x86 job is its evidence.*
+- [x] **3 · Qualified lab results keep their uncertainty** (done 2026-11-26) — tracked as the
+      `DvOrdered::is_abnormal()` item above (`lib:A-86`); the review
+      reproduced it independently (`<4` against 3–5 → normal, `<6` →
+      abnormal). Add its five cases (exact, wholly outside, overlapping,
+      open bound, no range) to that item's tests. — **(M, above)**
+- [x] **4 · Read failures and audit outcomes agree** (`db:D-28`,
+      `db:D-29`, `db:D-30`). *Done 2026-11-26 (not committed):
+      `PR12.23` amended and `PR12.24` added; a negative control was run for
+      each. Not run: the Compose stack with a protected route (needs
+      podman).* Undecodable stored JSON is served as
+      `data: null` (looks like a withdrawal); some outcomes are recorded
+      before they are known; an invalid optional environment value disables
+      a configured protection instead of refusing to start. Check response
+      and access record together for valid, withdrawn, missing, unreadable,
+      invalid-page, and recorder-down; test unset and malformed settings in
+      subprocesses. For `D-30`, `axa::Settings::refuse` (Axa 0.23.1) is the
+      shape a refusal should take. — **M**
+- [ ] **5 · Backup inspection is read-only** (`db:D-27`, High,
+      **reproduced 2026-11-26**). *Inspection half done 2026-11-26 (not
+      committed):* `db:O10.20` specified; `SqliteStore::open_read_only` and
+      `openehr-axa`'s `open_store_read_only` neither create nor install; a
+      missing path fails and stays absent, an absent container is refused,
+      bytes are unchanged (tests named in `db:D-27`, now fixed). *Restore
+      drill done 2026-11-26 for SQLite (`openehr-sqlite/tests/restore_drill.rs`):
+      a `VACUUM INTO` backup taken under a live store restores read-only, its
+      chain re-verifies, its checkpoint equals the witness, and a later commit
+      is absent. Measured: about 1 ms each way, on a tiny fixture. Left:
+      PostgreSQL (`pg_dump`/PITR) and a realistically sized store.* The drill
+      as specified: restore a populated backup, read
+      a historical version, recompute content and chain, compare count and
+      head with a witness kept outside the database; record recovery time
+      and last recoverable commit; document SQLite's online-backup API for
+      a live writer. — **M**
+- [x] **6 · Prove the deployment's authorization boundary** (`db:PR12.18`).
+      *Decided 2026-11-26: inside the service. Done (not committed):
+      `PR12.18` amended; `openehr_axa::authz` enforces the token's
+      `openehr_grants` on every clinical route; tests are derived from the
+      route list, with a negative control. Through the real ingress, done
+      2026-11-27: `tests/ingress.rs` drives the Compose-built container with
+      auditing on (`compose.yaml` now audits reads by default).*
+      The repository assigns access decisions to the deployment; name the
+      component and policy owner for the delivered one, then cover allowed
+      and denied EHR/action pairs through the real ingress for reads,
+      writes, history and AQL, with read auditing on. Owner decision first. — **M**
+- [ ] **7 · Bound query work and measure contention** (`db:P6.7`).
+      *History and search paging done 2026-11-26 (not committed):
+      `db:P6.25`; `Store::versions_page_in` and
+      `find_compositions_by_archetype_page`, cut in SQL by SQLite; shared story
+      `run_paging`; `openehr-axa` uses them. AQL work budget done the same day
+      (`db:P6.26`, a refusal with zero content read, mutation-checked). In
+      passing, `openehr-store`'s `mutants.toml` stopped excluding `aql.rs`, whose
+      reason for exclusion was stale. Left: PostgreSQL overrides, the contention
+      measurements, and `spawn_blocking`.* History
+      and search collect every match before paging; AQL gathers, reads
+      current versions and sorts before its `LIMIT`; synchronous store and
+      audit work runs in async handlers under one mutex. Push paging into
+      SQL with stable order and totals; specify an explicit refusal for an
+      AQL work budget; measure rows read, peak memory, latency and health
+      responsiveness by chart size (benchmarks run, never gated — `W0.35`);
+      benchmark `spawn_blocking` before a larger change. — **L**
+- [x] **8 · One independently tested workflow** — *Done 2026-11-27 (Run 3:
+      9/9 on both after `db:D-31` was fixed and `db:D-32` decided).* *2026-11-27: `POST`/`PUT
+      /ehr` follow ITS-REST (`db:S1.22`), and the runner was run against this
+      service and EHRbase 2.38.0: 6/8 here, 9/9 there. The two failures are
+      registered as `db:D-31` (status read shape) and `db:D-32`
+      (archetype-root strictness), each awaiting a decision. Transcript in
+      `conformance-runs.md`, Run 2.* EHR creation plus
+      immediate `EHR_STATUS` read, per ITS-REST 1.1.0 (which requires
+      creating the initial status; the handler persists only the reference).
+      Settle server-generated identifiers in the service spec; run default
+      status, supplied status, readback and an invalid request against this
+      service and EHRbase through one runner, bodies and headers included;
+      publish the transcript in `openehr-axa/spec/conformance-runs.md`. — **M**
+- [ ] **Release evidence after remediation.** Complete `db:D-20`'s
+      amendment, withdrawal and changed-archetype fixtures on SQLite and live
+      PostgreSQL at the candidate revision; install and restart the packaged
+      service on a disposable volume; extend the coverage ratchet (`W-23`)
+      to `openehr-axa` and live PostgreSQL, where these findings arose. Keep
+      a failed checkpoint, a refused update and an indeterminate measurement
+      as release fixtures. — **M**
+- [x] **`rustfmt` in every workspace.** *Done 2026-11-26:* the two diffs in
+      `openehr-fuzz/fuzz_targets/` reproduced and are formatted; `cargo fmt
+      --check` passes in all 18 workspaces. CI's new `format` job runs it on a
+      crate list derived from the tree; not yet seen running on a pushed
+      commit. — **S**
 
 ## Done (condensed; full evidence in `git show 4761700:tasks.md`)
 

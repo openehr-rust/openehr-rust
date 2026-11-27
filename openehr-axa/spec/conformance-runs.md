@@ -92,12 +92,127 @@ sidesteps the whole question by encoding internally. Neither crate nor
 EHRbase caused this — pure local tooling, and the reason to read a server's
 own log before trusting what a client library's error implies.
 
+## Run 2 — 2026-11-27: creating an EHR (`db:S1.22`)
+
+The runner gained the creation cases `S1.22` makes shared, now that this
+service's `POST /ehr` follows ITS-REST: create with the default status and read
+it straight back; create with a supplied `EHR_STATUS` and read it back; a
+malformed body; and create with a chosen id, then again. Each checks status,
+headers and body. Where ITS-REST states a response shape, the runner accepts
+only that shape.
+
+**Target A: `openehr-axa`** at this revision (uncommitted working tree), started
+with `cargo run -- start`, a throwaway key from `generate_test_token` (grant
+`"*"` read and write), and a fresh SQLite file. The existing record was
+created with `PUT /ehr/{id}`.
+
+```
+PASS  read_existing_ehr            (wanted 200, got 200)
+PASS  read_missing_ehr             (wanted 404, got 404)
+PASS  create_default_status        POST /ehr -> 201, Location present, ehr_id ad8d3836-…
+FAIL  read_default_status          GET .../ehr_status -> 200, is_modifiable null, is_queryable null
+      body: {"uid":"b9d8b328-…::openehr-axa.local::1",…,"data":{"_type":"EHR_STATUS",…
+FAIL  create_supplied_status       POST /ehr (EHR_STATUS body) -> 422, ehr_id none
+      body: …"EHR_STATUS.Is_archetype_root — an EHR_STATUS has no archetype_details…"
+PASS  create_invalid_body          POST /ehr (malformed body) -> 400, wanted 400
+PASS  create_named                 PUT /ehr/{id} -> 201, wanted 201
+PASS  create_named_twice           PUT /ehr/{id} again -> 409, wanted 409
+
+6 passed, 2 failed
+```
+
+**Target B: EHRbase 2.38.0** (`docker.io/ehrbase/ehrbase:latest` on this date,
+`/ehrbase/rest/status` reporting `ehrbase_version 2.38.0`, openEHR SDK 2.36.0,
+Archie 3.13.0, PostgreSQL 16.2), started as in Run 1, with Basic auth.
+
+```
+PASS  read_existing_ehr            (wanted 200, got 200)
+PASS  read_missing_ehr             (wanted 404, got 404)
+PASS  create_default_status        POST /ehr -> 201, Location present, ehr_id 7476a17f-…
+PASS  read_default_status          GET .../ehr_status -> 200, is_modifiable true, is_queryable true
+PASS  create_supplied_status       POST /ehr (EHR_STATUS body) -> 201, ehr_id b7fa4706-…
+PASS  read_supplied_status         GET .../ehr_status -> 200, is_modifiable false
+PASS  create_invalid_body          POST /ehr (malformed body) -> 400, wanted 400
+PASS  create_named                 PUT /ehr/{id} -> 201, wanted 201
+PASS  create_named_twice           PUT /ehr/{id} again -> 409, wanted 409
+
+9 passed, 0 failed
+```
+
+**What the two failures are.** Both are this service's, registered in
+`spec/databases/audit.md`:
+- `D-31`: the status read answers in this service's own version view, where
+  ITS-REST answers with the resource.
+- `D-32`: the RM's `Is_archetype_root` invariant refuses a status with no
+  `archetype_details`, which EHRbase accepts. Because that create failed,
+  `read_supplied_status` did not run here.
+
+**What now agrees.** The two implementations agree on these points: creation
+with no body and the immediate existence of a status; the `Location` header
+and the minted id in the body; `400` for a malformed body; `PUT` with a named
+id; and `409` on a second `PUT`.
+
+## Run 3 — 2026-11-27: after `S1.23`
+
+The same day, after `D-31` was fixed (the ITS-REST routes answer with the
+resource) and `D-32` decided (a supplied `EHR_STATUS` must carry
+`archetype_details`, so the runner's supplied-status body now does). Same
+two targets, with a fresh throwaway token. The first attempt against this
+service used Run 2's token, an hour past its expiry, and got `401` on every
+case.
+
+That attempt also exposed a runner defect, now fixed. Under `set -e`, a lone
+failing `[ … ]` ended the script before its verdict, so it stopped after four
+cases with no summary. Every condition is now `cond && ok=0 || ok=1`. Checked
+with a bad token: all cases run, `0 passed, 7 failed`, and the two reads that
+need a created id are skipped.
+
+**Target A: `openehr-axa`**
+
+```
+PASS  read_existing_ehr            (wanted 200, got 200)
+PASS  read_missing_ehr             (wanted 404, got 404)
+PASS  create_default_status        POST /ehr -> 201, Location present, ehr_id 6850214b-…
+PASS  read_default_status          GET .../ehr_status -> 200, is_modifiable true, is_queryable true
+PASS  create_supplied_status       POST /ehr (EHR_STATUS body) -> 201, ehr_id bc24597b-…
+PASS  read_supplied_status         GET .../ehr_status -> 200, is_modifiable false
+PASS  create_invalid_body          POST /ehr (malformed body) -> 400, wanted 400
+PASS  create_named                 PUT /ehr/{id} -> 201, wanted 201
+PASS  create_named_twice           PUT /ehr/{id} again -> 409, wanted 409
+
+9 passed, 0 failed
+```
+
+**Target B: EHRbase 2.38.0**
+
+```
+PASS  read_existing_ehr            (wanted 200, got 200)
+PASS  read_missing_ehr             (wanted 404, got 404)
+PASS  create_default_status        POST /ehr -> 201, Location present, ehr_id dd5c5561-…
+PASS  read_default_status          GET .../ehr_status -> 200, is_modifiable true, is_queryable true
+PASS  create_supplied_status       POST /ehr (EHR_STATUS body) -> 201, ehr_id 493b114c-…
+PASS  read_supplied_status         GET .../ehr_status -> 200, is_modifiable false
+PASS  create_invalid_body          POST /ehr (malformed body) -> 400, wanted 400
+PASS  create_named                 PUT /ehr/{id} -> 201, wanted 201
+PASS  create_named_twice           PUT /ehr/{id} again -> 409, wanted 409
+
+9 passed, 0 failed
+```
+
+**What the run establishes.** The two implementations agree on all 9
+cases: reading an existing and a missing record, creating one with and
+without a supplied status, reading the status straight back in ITS-REST's
+shape, refusing a malformed body, and creating with a chosen id once.
+**What it does not cover:** the composition and contribution routes (still
+blocked on templates, candidate 2 below), and the minimal status body
+`D-32` refuses by decision.
+
 ## Candidates for the next run
 
 In the order a fix would unblock them:
 
-1. **Decide `POST /ehr`'s real contract** (`tasks.md` "ITS-REST completeness")
-   — once decided, this run gains its second shared case.
+1. ~~Decide `POST /ehr`'s real contract~~. Done 2026-11-27 (`db:S1.22`, Run 2).
+   `D-31` fixed and `D-32` decided the same day (Run 3: 9/9 on both).
 2. **OPT 1.4 ingestion**, then a template uploaded for real — unblocks every
    composition and contribution case at once, six of the remaining nine.
 3. **`versioned_composition/...`** as this crate's own path for history and

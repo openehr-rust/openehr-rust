@@ -164,6 +164,7 @@ exists. It runs, on every push and pull request:
 | `claims` | that no engine crate claims Schema or above without a `schema` job backing it (the check list emptied 2026-09-06, once `openehr-oracle` and then `openehr-mssql` each got one); that the **library** matrix covers every requirement exactly once, and that both conformance matrices do not contradict themselves — the databases matrix has no exactly-once check: it is five topic tables in which one requirement can legitimately appear more than once; that every one of the databases matrix's 221 requirements is mentioned at least once (`scripts/check-databases-matrix-coverage.py`, wired in 2026-09-10 once `db:D-11`'s own ten-batch assessment closed it — a mention is not a mark, so this floor does not replace reading the matrix); that this file's summary paragraph counts itself correctly; that the licence expression is harmonized across every crate (`W0.22`); that no requirement marked satisfied calls itself unverified (**W-17**); that the documentation's countable claims match the tree (`scripts/check-docs.py`); and that `openehr/spec/corpus-index.md` — a reverse index from a requirement or finding id to where a corpus run cites it — is current (`scripts/generate-corpus-index.py`) |
 | `trademarks` | `scripts/check-trademarks.py`: every root document and every published crate's rustdoc that uses the openEHR mark in prose carries the professionalization rule 5 notice verbatim (added 2026-08-26, once the changes it was deferred behind had landed) |
 | `coverage` | Production-source line and function coverage of `openehr`, `openehr-store` and `openehr-sqlite`, each in its own workspace under nightly `cargo llvm-cov` (`W0.41`). A crate in `coverage-floor.tsv` may not fall below its floor and must lower it when it improves (`W0.41a`, a ratchet toward 100%); a crate not listed owes 100%. Only the crate's own `src/` counts. Does not yet cover the other crates (`W-23`) |
+| `format` | `cargo fmt --check` in all eighteen workspaces against a crate list derived from the tree; added 2026-11-26, after two fuzz targets were found unformatted by an external review although `test` installed rustfmt |
 | `mutants` | `cargo-mutants --in-diff` over the lines a push or a pull request changed, scoped to the diff because a full run is hours per crate. Pull-request-only until **W-18**. `openehr-sqlite` uses `--in-place`, not the isolated copy every other crate in the matrix gets, since its sibling dev-dependencies do not resolve inside one (**W-20**) |
 
 The `schema` jobs **fail rather than skip** when no container runtime is present
@@ -1169,8 +1170,12 @@ the `?` on `tag_mac_bytes`. `Chain::append` only produces 32-byte MACs, so no
 safe input reaches that arm without a seam; it stays under a floor of 1 rather
 than being excluded, because `W0.41` allows exclusion only for arms over
 external `#[non_exhaustive]` enums. Floors at this date: `openehr` 172 lines /
-37 functions, `openehr-sqlite` 16 / 19, `openehr-store` 1 / 0. Seven further workspaces
-are not yet measured. Found while covering `cadl.rs` (2026-11-24): the refusal tables
+37 functions, `openehr-sqlite` 16 / 19, `openehr-store` 1 / 0. **Since
+2026-11-26:** `openehr` 168 / 37, `openehr-sqlite` 3 / 1, `openehr-store` 1 / 0.
+SQLite went from 19 uncovered functions to 1 partly through tests
+(`uncovered_paths.rs`, `read_only.rs`) and partly by removing 34 identical
+error closures in favour of one adapter, which shrank the function count.
+Seven further workspaces are not yet measured. Found while covering `cadl.rs` (2026-11-24): the refusal tables
 in its tests assert only `is_err()`, and their `allow_archetype` entries begin at the
 top level, where a slot is not legal, so they failed at offset 15 and never reached the
 slot parser; the new test `refusals_under_an_attribute_name_the_defect` asserts the
@@ -1190,7 +1195,13 @@ bodies are RFC 9457 problems, not plain text; messages the caller needs travel
 as `detail` through `controllers::Refusal`, which since Axa 0.23 (2026-11-24) delegates to `axa::Error::with_detail`. A handler that returns a bare
 `(StatusCode, String)` now gets a generic problem with the message dropped, and
 no compiler error says so. (2) Axa 0.22.0 was under the two-day minimum publish
-age, so 0.21 is pinned and nothing here has been run against 0.22. (3) Request
+age, so 0.21 was pinned at the time. Axa 0.24.0 (published 2026-11-24T23:09Z)
+was taken on 2026-11-26, still inside that age, with the check waived for
+`axa` alone by the maintainer (`CARGO_REGISTRY_GLOBAL_MIN_PUBLISH_AGE=0` for
+the one `cargo update -p axa`; the lockfile diff is that crate only). Its
+`Cli::environment`, `cli::answer`, `Cli::config` and `Tasks::run_or_list`
+replace the hand-written dispatch in `app::run`; `cargo run -- task` and
+`-- check` were run after the change. (3) Request
 timeout, CORS and HSTS now follow Axa's environment defaults; `app::defaults()`
 sets the timeout to the old ten seconds (since Axa 0.23; unobserved in the
 running container). (4) The container binding and

@@ -22,7 +22,7 @@
 
 use crate::error::{Result, StoreError};
 use crate::record::{CompositionIndexRow, VersionRow};
-use openehr::base::{HierObjectId, ObjectVersionId};
+use openehr::base::{HierObjectId, ObjectId, ObjectVersionId};
 use openehr::rm::common::{CommitError, Contribution, Version};
 use openehr::rm::data_types::DvDateTime;
 use openehr::rm::ehr::{Composition, Ehr, EhrStatus};
@@ -50,6 +50,97 @@ pub fn require_owned<S: Store + ?Sized>(
             id: id.to_owned(),
         }),
         Err(other) => Err(other),
+    }
+}
+
+/// One page of an ordered result, with the size of the whole (`db:P6.15`,
+/// `db:P6.25`): a caller can always tell a short page from a short result.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RowPage<T> {
+    /// The rows on this page, in the result's order.
+    pub rows: Vec<T>,
+    /// How many rows the whole result has, before `offset` and `count`.
+    pub total: usize,
+}
+
+impl<T> RowPage<T> {
+    /// The page `offset..offset + count` of a result already read in full.
+    ///
+    /// What the default paged lookups use. Correct for any engine, and
+    /// **unbounded**: the whole result is read to produce one page
+    /// (`db:P6.25`).
+    #[must_use]
+    pub fn of(all: Vec<T>, offset: usize, count: usize) -> Self {
+        let total = all.len();
+        Self {
+            rows: all.into_iter().skip(offset).take(count).collect(),
+            total,
+        }
+    }
+}
+
+/// The `EHR_STATUS` container `ehr.ehr_status()` *names*, when it names one
+/// at all (`None` when the reference holds no [`HierObjectId`]:
+/// [`Ehr::new`] checks the reference's declared type, not the identifier kind
+/// inside it — `lib:A-21`'s residual).
+///
+/// Naming is not owning (`db:H5.20`). The reference is whatever the caller
+/// submitted when the `EHR` was created, so a read through it must still be
+/// scoped ([`Store::latest_version_in`], [`Store::version_at_time_in`]) and
+/// the write gate must go through [`ehr_is_modifiable`].
+#[must_use]
+pub fn ehr_status_container(ehr: &Ehr) -> Option<HierObjectId> {
+    match ehr.ehr_status().id() {
+        ObjectId::HierObjectId(uid) => Some(uid.clone()),
+        _ => None,
+    }
+}
+
+/// Whether `ehr` currently accepts new content (`EHR_STATUS.is_modifiable`,
+/// `db:H5.17`), read fresh from the store, never from a cached value.
+///
+/// The three states of `db:H5.20`:
+///
+/// - **No such container** (or a reference naming no `HierObjectId`): no
+///   status has ever been committed, and a freshly created record is
+///   modifiable by default.
+/// - **This `EHR`'s own `EHR_STATUS` container**: its latest version
+///   decides. A logically deleted status (`data_json` absent) is **not**
+///   modifiable — not a shape openEHR gives a status version any reason to
+///   take, and not evidence that the record is open.
+/// - **Another `EHR`'s container, or one holding other content**: an
+///   inconsistent reference, refused as [`StoreError::Conflict`]. Reading it
+///   as "never committed" would let any record escape its own deactivation —
+///   or be locked by another chart's — just by naming a container (`db:D-23`).
+///
+/// One function for every engine. `openehr-sqlite` and `openehr-postgresql`
+/// each carried an identical private copy that read the reference unscoped.
+///
+/// # Errors
+///
+/// [`StoreError::Conflict`] for an inconsistent reference; an engine or JSON
+/// error from reading the status.
+pub fn ehr_is_modifiable<S: Store + ?Sized>(store: &S, ehr: &Ehr) -> Result<bool> {
+    let Some(container) = ehr_status_container(ehr) else {
+        return Ok(true);
+    };
+    match store.versioned_object_owner(&container) {
+        Err(StoreError::NotFound { .. }) => Ok(true),
+        Err(other) => Err(other),
+        Ok((owner, rm_type))
+            if owner.to_string() == ehr.ehr_id().to_string() && rm_type == "EHR_STATUS" =>
+        {
+            let row = store.latest_version(&container)?;
+            let Some(json) = row.data_json else {
+                return Ok(false);
+            };
+            let status: EhrStatus = serde_json::from_str(&json)?;
+            Ok(status.is_modifiable())
+        }
+        Ok(_) => Err(StoreError::Conflict {
+            kind: "ehr_status",
+            id: container.to_string(),
+        }),
     }
 }
 
@@ -396,6 +487,76 @@ pub trait Store {
         versioned_object_uid: &HierObjectId,
         at: &DvDateTime,
     ) -> Result<VersionRow>;
+
+    /// One page of [`Store::all_versions_in`], oldest first, with the total
+    /// (`db:P6.25`). Same refusal shape as [`Store::latest_version_in`].
+    ///
+    /// The default reads every version and slices. An engine overrides it to
+    /// page in the engine; `openehr-sqlite` does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::all_versions_in`].
+    fn versions_page_in(
+        &self,
+        ehr: &HierObjectId,
+        versioned_object_uid: &HierObjectId,
+        rm_type: &str,
+        offset: usize,
+        count: usize,
+    ) -> Result<RowPage<VersionRow>> {
+        Ok(RowPage::of(
+            self.all_versions_in(ehr, versioned_object_uid, rm_type)?,
+            offset,
+            count,
+        ))
+    }
+
+    /// One page of [`Store::find_compositions_by_archetype`], in its order,
+    /// with the total (`db:P6.25`). The default reads every match and slices.
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::find_compositions_by_archetype`].
+    fn find_compositions_by_archetype_page(
+        &self,
+        ehr_id: &HierObjectId,
+        archetype_id: &str,
+        offset: usize,
+        count: usize,
+    ) -> Result<RowPage<CompositionIndexRow>> {
+        Ok(RowPage::of(
+            self.find_compositions_by_archetype(ehr_id, archetype_id)?,
+            offset,
+            count,
+        ))
+    }
+
+    /// The version current at `at` of a container **that `ehr` owns and that
+    /// holds `rm_type`** (`db:H5.18`, `db:H5.20`). Same refusal shape as
+    /// [`Store::latest_version_in`].
+    ///
+    /// # Errors
+    ///
+    /// [`crate::StoreError::NotFound`] as above, or as
+    /// [`Store::version_at_time`].
+    fn version_at_time_in(
+        &self,
+        ehr: &HierObjectId,
+        versioned_object_uid: &HierObjectId,
+        rm_type: &str,
+        at: &DvDateTime,
+    ) -> Result<VersionRow> {
+        require_owned(
+            self,
+            ehr,
+            versioned_object_uid,
+            rm_type,
+            "versioned_object",
+            &versioned_object_uid.to_string(),
+        )?;
+        self.version_at_time(versioned_object_uid, at)
+    }
 
     /// Every version of a container, **oldest first**.
     ///

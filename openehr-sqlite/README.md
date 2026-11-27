@@ -162,6 +162,28 @@ tests for the trigger, the validation gate, lexical fidelity, and DDL
 idempotence — and `tests/dialects.rs`, which compares all six engines' DDL and
 fails if any two agree.
 
+## Backup and restore
+
+Use SQLite's own mechanism (`db:O10.6`). There is no format of this crate's to
+learn. `VACUUM INTO '/backups/openehr.sqlite3'` writes a consistent copy while
+the store stays open for writes. So does the [online backup
+API](https://www.sqlite.org/backup.html). Copying the file with `cp` while a
+writer is active does not give a consistent copy.
+
+To check a restored copy, open it the way an inspector must
+(`SqliteStore::open_read_only`, `db:O10.20`): read-only, never installed into.
+Then compare its `chain_checkpoint` with a witness you kept somewhere else.
+`tests/restore_drill.rs` is the drill, run by `cargo test`. It backs up a live
+store, keeps a witness, commits again, restores the backup in isolation, and
+checks four things:
+- the restored chain re-verifies;
+- its checkpoint matches the witness byte for byte;
+- an as-of read returns the right version;
+- the later commit is absent.
+
+The backup is a prefix of the history (`db:O10.19`), and its last recoverable
+commit is the witness's `last_version`.
+
 ## Licence
 
 Any of these, at your option — MIT, Apache-2.0, BSD-3-Clause, GPL-2.0-only, GPL-3.0-only, OGL-UK-3.0, or

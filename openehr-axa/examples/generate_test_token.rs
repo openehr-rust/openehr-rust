@@ -27,6 +27,16 @@ fn main() {
 
     let mut claims = Claims::new().expect("claims");
     claims.subject("clinician-4417").expect("subject");
+    // Every record, read and write (`db:PR12.18`): without a grant the service
+    // refuses every clinical request, and a test token that could open only
+    // `/metadata` would test nothing. A real issuer grants per record. This
+    // keypair is throwaway, and so is the scope.
+    claims
+        .add_additional(
+            "openehr_grants",
+            serde_json::json!([{"ehr": "*", "actions": ["read", "write"]}]),
+        )
+        .expect("grants claim");
     let token = public::sign(&pair.secret, &claims, None, None).expect("signs");
 
     println!("OPENEHR_PASETO_PUBLIC_KEYS={paserk}");

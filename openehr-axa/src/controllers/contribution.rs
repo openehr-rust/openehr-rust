@@ -24,21 +24,27 @@ use openehr::rm::common::Contribution;
 use openehr_store::Store as _;
 
 use crate::auth::Principal;
+use crate::authz::{Action, authorize};
 use crate::controllers::composition::{lock, parse_id};
-use crate::controllers::{Refusal, status_for, store};
+use crate::controllers::{Refusal, check_committer, status_for, store};
 
 /// `POST /openehr/v1/ehr/{ehr_id}/contribution`
 ///
-/// The [`Principal`] gates the route and is not read: a `CONTRIBUTION` carries
-/// its own committer in its own audit, and `db:PR12.19` is checked where the
-/// versions are committed. Checking it twice from two places would be two
-/// rules that agree until one of them is edited.
+/// The contribution's own committer is checked against the verified caller
+/// before anything is written (`db:PR12.19`, `db:D-25`): `403` for someone
+/// else, `422` for no identifier, by the same rule a version commit uses
+/// (`controllers::check_committer`). This route used to discard the
+/// principal. Checking only each version's committer later could not
+/// establish who declared the change set, which has its own audit
+/// (`db:PR12.10`). That committer is stored whole (`db:PR12.25`).
 async fn create(
     State(ctx): State<AppContext>,
-    _principal: Principal,
+    principal: Principal,
     Path(ehr_id): Path<String>,
     Json(contribution): Json<Contribution>,
 ) -> Result<(StatusCode, Json<Contribution>), Refusal> {
+    authorize(&principal, &ehr_id, Action::Write)?;
+    check_committer(contribution.audit().committer(), &principal)?;
     let handle = store(&ctx)?;
     let mut guard = lock(&handle)?;
     guard

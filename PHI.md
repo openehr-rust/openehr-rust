@@ -23,7 +23,7 @@ it.
 | Does it embed or call an AI model? | **No.** AI was used to *write* it, never to run it — [`AI_STATEMENT.md`](AI_STATEMENT.md) §1. |
 | Does it hold PHI? | Only in the database *you* run, in tables *you* created. The libraries hold data in memory for the duration of a call. |
 | Does it write PHI to logs? | No `Display` renders PHI, no error may echo a submitted value, and a wrapper hides values from `Debug` on the way through logging code (`lib:X11.6`–`X11.8`). |
-| Does it record who *changed* a record? | **Yes**, on every version, by design (`lib:X11.2`) — and that record contains user identifiers. See below. |
+| Does it record who *changed* a record? | **Yes**, on every version and every contribution, by design (`lib:X11.2`). That record contains user identifiers. See below. In the stores this is true since schema 6 (2026-11-26, `db:PR12.25`): the whole committer party is kept, identifiers included. Before that only its display name was stored (`db:D-22`), so a database written under schema 5 or earlier cannot say which of two same-named clinicians made a change. |
 | Does it record who *read* a record? | **No, not at the persistence layer** (`db:PR12.5`, not implemented). An access investigation asks about reads; this layer cannot answer it yet. |
 | Can I erase a patient? | **Not with anything shipped here.** Deletion is a recorded logical version (`lib:V8.10`); no physical-erasure operation exists at the persistence layer (`db:M3.18` row: Not implemented). |
 | Is the database connection encrypted? | SQLite runs in process. PostgreSQL requires verified TLS, using platform roots or an explicit private CA; live tests refuse a wrong server name, untrusted issuer, and plaintext-only server (`db:O10.7`, `db:D-15`). |
@@ -49,7 +49,9 @@ every one of these: **authentication**, group membership, **authorization**
 `lib:X11.3`; every decision the reference scheme does make defaults to deny,
 `lib:X11.4`), transport security, key storage, consent capture, and log
 retention. Terminology validation is likewise out of scope: external codes are
-carried opaquely.
+carried opaquely. (The HTTP service now *enforces* per-record grants from the
+token, `db:PR12.18`. Deciding those grants, the access policy itself, is still
+yours.)
 
 ## What it does do, that a reviewer needs to know about
 
@@ -140,14 +142,14 @@ Stated here so you find them from this page rather than from an audit:
   TLS at a reverse proxy and this process holds no certificate — one fewer
   secret in a component that already holds no other. Not a gap awaiting a fix:
   a service that never receives a key cannot leak one.
-- **One PASETO key set is the whole authorization model, not an
-  authentication *and* authorization model.** Every caller a token verifies
-  for is trusted with every record that token's scope reaches — there is no
-  role, no per-record grant, no care-team check. See `openehr-axa/README.md`
-  §What it still does not do and §The deployment perimeter for the full
-  statement; a questionnaire asking "how is access to a specific patient's
-  record restricted" has no answer in this crate, and needs one from whatever
-  issues the tokens or from a layer this service cannot see.
+- **Access is restricted per record and per action, by grants the token
+  issuer writes** (`db:PR12.18`, since 2026-11-26). `openehr-axa` refuses any
+  clinical request its token's `openehr_grants` do not cover. It checks
+  before touching the store, records denied reads, and grants nothing by
+  default. A questionnaire asking "how is access to a specific patient's
+  record restricted" therefore has a mechanism to point to here. The *policy*
+  (care team, consent, break-glass) lives at the issuer: this crate enforces
+  the grant list and does not compute it. See `openehr-axa/README.md`.
 - **Rate limiting is global, not per-caller.** `openehr-axa` layers a single,
   fixed request budget over the whole service — every caller draws from the
   same quota, deliberately, because behind the reverse proxy this service is

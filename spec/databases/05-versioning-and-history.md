@@ -228,6 +228,52 @@ Added 2026-08-02, when `openehr-axa` gained an update endpoint. These bind a
   wrong `EHR` was appended to the right container. The `EHR` argument was
   decoration for every commit but the first.
 
+- **H5.20** *(added 2026-11-26, `D-23`)* An `EHR`'s status is the
+  `EHR_STATUS` container its `ehr_status` reference names **only if that
+  `EHR` owns the container and the container holds `EHR_STATUS`**
+  (`H5.18`). The reference is caller-supplied when the `EHR` is created,
+  so naming a container proves nothing about it.
+
+  - A **read** of the current or as-of status MUST be scoped exactly as
+    `H5.18` requires, and a mismatch answered as an absent status.
+  - The **write gate** of `H5.17` MUST distinguish three states. No such
+    container means the status was never committed, and the record is
+    modifiable. A container this `EHR` owns holding `EHR_STATUS` is read
+    fresh. A container that exists but belongs to another `EHR` or holds
+    other content is an **inconsistent reference**, and the commit MUST be
+    refused as a conflict, writing nothing. It MUST NOT be read as "never
+    committed": that would let one chart's deactivation be bypassed, and
+    another chart's be imposed, by naming its container.
+
+  Found reproduced over HTTP: an `EHR` created naming another chart's status
+  container was served that chart's `EHR_STATUS` with `200`.
+
+- **H5.22** *(added 2026-11-26, `D-26`)* A version commit names the
+  `CONTRIBUTION` it belongs to, and the store MUST refuse it, writing
+  nothing, unless:
+  - that contribution exists;
+  - it belongs to the same `EHR`;
+  - it declared this version among its `versions`.
+
+  A contribution's declared version list is stored with it, and a version
+  row carries a foreign key to its contribution, so the change set is
+  reconstructible from the database alone (`H5.14`, `PR12.10`). Before
+  this, `contribution_uid` was copied from an argument nothing checked. A
+  version could name a contribution that did not exist, one in another
+  chart, or one that never mentioned it.
+
+- **H5.21** *(added 2026-11-26, `D-24`)* An update addressed to a
+  container MUST commit to that container. The submitted version's container
+  MUST be the one the request names, and its `preceding_version_uid` MUST be
+  the version the precondition (`H5.15`) names. A disagreement is the
+  caller's error (`400`), checked before anything is written. Ownership
+  checks alone cannot catch it, because both containers may belong to the
+  same `EHR`.
+
+  Found reproduced over HTTP: a `PUT` to one composition, with that
+  composition's current version as `If-Match`, committed a new version of a
+  different composition in the same chart.
+
 ## Withdrawn
 
 Withdrawn 2026-08-01. Numbers are retained and MUST NOT be reused (`C0.5`).

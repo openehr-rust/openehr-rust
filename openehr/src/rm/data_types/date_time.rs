@@ -110,8 +110,19 @@ macro_rules! temporal {
             }
 
             fn is_abnormal(&self) -> Option<bool> {
+                self.range_position()
+                    .map(|position| position != super::quantity::RangePosition::Inside)
+            }
+
+            /// `~2019` against a range is undecided, and `< 2019-03` is
+            /// decided over every date it admits (`D3.14b`).
+            fn range_position(&self) -> Option<super::quantity::RangePosition> {
                 let range = self.ordered.normal_range()?;
-                Some(!range.contains(&DataValue::$variant(self.clone())))
+                Some(super::quantity::position_in(
+                    range,
+                    &DataValue::$variant(self.clone()),
+                    self.magnitude_status,
+                ))
             }
         }
     };
@@ -221,6 +232,29 @@ mod tests {
         let mut json = serde_json::to_value(date).unwrap();
         json["normal_range"] = serde_json::to_value(Interval::closed(low, high).unwrap()).unwrap();
         let ranged: DvDate = serde_json::from_value(json).unwrap();
-        assert_eq!(ranged.is_abnormal(), Some(false));
+        // `~` states no width, so even a mid-year date against the whole year
+        // is undecided (`D3.14b`). The boolean fails closed; the three-state
+        // answer says why. This asserted `Some(false)` until `A-86`.
+        assert_eq!(
+            ranged.range_position(),
+            Some(crate::rm::data_types::RangePosition::Indeterminate(
+                crate::rm::data_types::Indeterminate::Approximate
+            ))
+        );
+        assert_eq!(ranged.is_abnormal(), Some(true));
+        let exact: DvDate = serde_json::from_value({
+            let mut json = serde_json::to_value(DvDate::new("2026-07-31").unwrap()).unwrap();
+            json["normal_range"] = serde_json::to_value(
+                Interval::closed(
+                    DataValue::Date(DvDate::new("2026-01-01").unwrap()),
+                    DataValue::Date(DvDate::new("2026-12-31").unwrap()),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            json
+        })
+        .unwrap();
+        assert_eq!(exact.is_abnormal(), Some(false));
     }
 }

@@ -83,4 +83,9 @@ pub struct VersionView {
     pub chain_digest: String,
     /// The version's content, or `null` for a deletion.
     pub data: Option<serde_json::Value>,
+    /// Who committed it: the whole `AUDIT_DETAILS.committer` as stored, with
+    /// its identifiers (`db:PR12.25`, `db:D-22`). The display name alone could
+    /// not tell two clinicians called the same thing apart. This service stores
+    /// only a committer it verified as the caller (`db:PR12.19`).
+    pub committer: serde_json::Value,
 }

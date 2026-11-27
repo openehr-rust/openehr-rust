@@ -1193,3 +1193,38 @@ jobs:
           else
             echo "$tested mutants tested, all caught"
           fi
+
+  # `rustfmt` over every workspace, fuzz crates included. The `test` job
+  # installed the rustfmt component and never ran it, so two fuzz targets
+  # drifted unnoticed until an external review found them (2026-11-25). The
+  # crate list is DERIVED from the tree, as `layering`'s is: a guard is only as
+  # wide as its input list (`W-01`, `W-13`).
+  format:
+    name: rustfmt in every workspace
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt
+          rustup default stable
+
+      - name: cargo fmt --check, each crate
+        run: |
+          set -eu
+          crates=$(ls -d */Cargo.toml | sed 's|/Cargo.toml$||')
+          n=$(echo "$crates" | wc -l | tr -d ' ')
+          [ "$n" -eq 18 ] || {
+            echo "::error::derived $n crates, expected 18 — the guard is looking at the wrong tree"
+            exit 1
+          }
+          failed=""
+          for crate in $crates; do
+            (cd "$crate" && cargo fmt --check) || failed="$failed $crate"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::rustfmt differs in:$failed"
+            exit 1
+          fi
+          echo "all $n workspaces formatted"

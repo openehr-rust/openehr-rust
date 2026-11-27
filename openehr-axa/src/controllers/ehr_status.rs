@@ -31,35 +31,17 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::get,
 };
-use openehr::base::{HierObjectId, ObjectId, ObjectVersionId};
+use openehr::base::ObjectVersionId;
 use openehr::rm::data_types::DvDateTime;
-use openehr::rm::ehr::Ehr;
 use openehr_store::Store as _;
 use serde::Deserialize;
 
 use crate::auth::Principal;
-use crate::controllers::composition::{headers, lock, parse_id, view};
-use crate::controllers::{Refusal, outcome_of, record_read, status_for, store};
-use crate::views::VersionView;
+use crate::authz::{Action, authorize};
+use crate::controllers::composition::{lock, parse_id, resource, resource_headers};
+use crate::controllers::{Refusal, recorded, status_for, store};
 
 type Reply<T> = Result<(StatusCode, HeaderMap, Json<T>), Refusal>;
-
-/// The `EHR_STATUS` container `ehr.ehr_status()` names, when it names one at
-/// all.
-///
-/// `None` when the reference does not hold a [`HierObjectId`] — [`Ehr::new`]
-/// checks the reference's declared *type* (`VERSIONED_EHR_STATUS`) but not
-/// the identifier *kind* inside it (`lib:A-21`'s own residual). Mirrors
-/// `SqliteStore::ehr_is_modifiable`'s identical extraction (`db:H5.17`);
-/// duplicated rather than shared because that one is private to
-/// `openehr-sqlite` and this service reaches the store only through the
-/// [`Store`](openehr_store::Store) trait, which has no method for it.
-fn ehr_status_container(ehr: &Ehr) -> Option<HierObjectId> {
-    match ehr.ehr_status().id() {
-        ObjectId::HierObjectId(uid) => Some(uid.clone()),
-        _ => None,
-    }
-}
 
 /// `?version_at_time=<ISO 8601>`, the one query parameter ITS-REST defines
 /// for this resource.
@@ -85,40 +67,58 @@ async fn read(
     principal: Principal,
     Path(ehr_id): Path<String>,
     Query(at): Query<AtTime>,
-) -> Reply<VersionView> {
+) -> Reply<serde_json::Value> {
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
-    let id = parse_id(&ehr_id)?;
-    let ehr = guard.get_ehr(&id).map_err(|e| status_for(&e))?;
-    let Some(container) = ehr_status_container(&ehr) else {
-        return Err(Refusal::from((
-            StatusCode::NOT_FOUND,
-            format!("EHR {ehr_id} names no EHR_STATUS container"),
-        )));
-    };
-
-    let found = if let Some(text) = &at.version_at_time {
-        let time = DvDateTime::new(text).map_err(|_| {
-            (
-                StatusCode::BAD_REQUEST,
-                "malformed version_at_time".to_owned(),
-            )
-        })?;
-        guard.version_at_time(&container, &time)
-    } else {
-        guard.latest_version(&container)
-    };
-    record_read(
+    // Every refusal below is recorded, a missing parent `EHR` included: it used
+    // to return before the record was written (`db:D-29`).
+    let reply = (|| -> Reply<serde_json::Value> {
+        // `db:PR12.18`: the token's grants, before the store is asked anything.
+        authorize(&principal, &ehr_id, Action::Read)?;
+        let id = parse_id(&ehr_id)?;
+        let ehr = guard.get_ehr(&id).map_err(|e| status_for(&e))?;
+        // The container the record *names* (`openehr_store::ehr_status_container`);
+        // whether it owns it is the scoped read's question below (`db:H5.20`).
+        let Some(container) = openehr_store::ehr_status_container(&ehr) else {
+            return Err(Refusal::from((
+                StatusCode::NOT_FOUND,
+                format!("EHR {ehr_id} names no EHR_STATUS container"),
+            )));
+        };
+        let row = if let Some(text) = &at.version_at_time {
+            let time = DvDateTime::new(text).map_err(|_| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "malformed version_at_time".to_owned(),
+                )
+            })?;
+            guard.version_at_time_in(&id, &container, "EHR_STATUS", &time)
+        } else {
+            // Scoped, never `latest_version`: the reference was submitted with
+            // the EHR, so an unscoped read served another chart's status to
+            // anyone whose record named its container (`db:D-23`).
+            guard.latest_version_in(&id, &container, "EHR_STATUS")
+        }
+        .map_err(|e| status_for(&e))?;
+        // The EHR_STATUS itself, the version in headers (`db:S1.23`).
+        let location = format!("/openehr/v1/ehr/{ehr_id}/ehr_status/{}", row.uid);
+        Ok((
+            StatusCode::OK,
+            resource_headers(&row.uid, &location),
+            Json(resource(&row)?),
+        ))
+    })();
+    // The target is the status the path asks for. The container id is not
+    // used: a refused read must not record a container the caller could not
+    // see.
+    recorded(
         &ctx,
         &principal,
         "read_ehr_status",
         &ehr_id,
-        &container.to_string(),
-        outcome_of(&found),
-    )?;
-    let row = found.map_err(|e| status_for(&e))?;
-    let head = headers(&row.uid);
-    Ok((StatusCode::OK, head, Json(view(&row))))
+        "ehr_status",
+        reply,
+    )
 }
 
 /// `GET /openehr/v1/ehr/{ehr_id}/ehr_status/{version_uid}` — vread.
@@ -132,26 +132,36 @@ async fn vread(
     State(ctx): State<AppContext>,
     principal: Principal,
     Path((ehr_id, version_uid)): Path<(String, String)>,
-) -> Reply<VersionView> {
+) -> Reply<serde_json::Value> {
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
-    let id: ObjectVersionId = version_uid
-        .parse()
-        .map_err(|_| (StatusCode::BAD_REQUEST, "malformed version uid".to_owned()))?;
-    // Scoped to this EHR and to `EHR_STATUS` (`db:H5.18`, `db:D-19`): it used to
-    // return *any* version, composition included, under any EHR id.
-    let found = guard.get_version_in(&parse_id(&ehr_id)?, &id, "EHR_STATUS");
-    record_read(
+    let reply = (|| -> Reply<serde_json::Value> {
+        // `db:PR12.18`: the token's grants, before the store is asked anything.
+        authorize(&principal, &ehr_id, Action::Read)?;
+        let id: ObjectVersionId = version_uid
+            .parse()
+            .map_err(|_| (StatusCode::BAD_REQUEST, "malformed version uid".to_owned()))?;
+        // Scoped to this EHR and to `EHR_STATUS` (`db:H5.18`, `db:D-19`): it used
+        // to return *any* version, composition included, under any EHR id.
+        let row = guard
+            .get_version_in(&parse_id(&ehr_id)?, &id, "EHR_STATUS")
+            .map_err(|e| status_for(&e))?;
+        // The EHR_STATUS itself, the version in headers (`db:S1.23`).
+        let location = format!("/openehr/v1/ehr/{ehr_id}/ehr_status/{}", row.uid);
+        Ok((
+            StatusCode::OK,
+            resource_headers(&row.uid, &location),
+            Json(resource(&row)?),
+        ))
+    })();
+    recorded(
         &ctx,
         &principal,
         "vread_ehr_status",
         &ehr_id,
         &version_uid,
-        outcome_of(&found),
-    )?;
-    let row = found.map_err(|e| status_for(&e))?;
-    let head = headers(&row.uid);
-    Ok((StatusCode::OK, head, Json(view(&row))))
+        reply,
+    )
 }
 
 /// The routes this controller owns.

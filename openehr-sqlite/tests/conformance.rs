@@ -52,6 +52,28 @@ fn a_record_reads_and_commits_only_its_own_containers() {
 }
 
 #[test]
+fn a_record_reads_and_gates_on_only_a_status_it_owns() {
+    // `db:H5.20`, `db:D-23`.
+    let mut store = SqliteStore::in_memory().expect("open");
+    conformance::run_ehr_status_binding(&mut store).expect("EHR status binding suite");
+}
+
+#[test]
+fn a_version_is_committed_only_into_its_declared_contribution() {
+    // `db:H5.22`, `db:D-26`.
+    let mut store = SqliteStore::in_memory().expect("open");
+    conformance::run_contribution_membership(&mut store).expect("membership suite");
+}
+
+#[test]
+fn a_page_is_cut_by_the_engine_and_matches_the_whole() {
+    // `db:P6.25`: `SqliteStore` overrides both paged lookups with
+    // `LIMIT`/`OFFSET`, and the story holds them to the unpaged answer.
+    let mut store = SqliteStore::in_memory().expect("open");
+    conformance::run_paging(&mut store).expect("paging suite");
+}
+
+#[test]
 fn the_dialect_is_self_consistent() {
     conformance::check_dialect(&SqliteDialect);
 }

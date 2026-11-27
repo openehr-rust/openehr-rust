@@ -140,9 +140,9 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "axa"
-version = "0.23.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12310579da83bb23601693721144cd322f619dea9e52c049ef9f55f0a0f8cb95"
+checksum = "2ae0a826fa2f412b309591b644d00988a62b6289ad424a10f4295dbd8db5e785"
 dependencies = [
  "async-trait",
  "axa-environment",
@@ -1135,6 +1135,7 @@ dependencies = [
  "tokio",
  "tower",
  "tower_governor",
+ "uuid",
 ]
 
 [[package]]

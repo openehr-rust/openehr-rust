@@ -83,6 +83,8 @@
 pub mod access;
 pub mod app;
 pub mod auth;
+pub mod authz;
 pub mod controllers;
+pub mod settings;
 pub mod tasks;
 pub mod views;

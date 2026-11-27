@@ -129,8 +129,35 @@ fn version_by(
     .into()
 }
 
+/// A token for `clinician-4417` carrying `grants` as its `openehr_grants`
+/// claim, or none at all for `Value::Null`.
+fn sign_with_grants(pair: &AsymmetricKeyPair<V4>, grants: &serde_json::Value) -> String {
+    let mut claims = Claims::new().expect("claims");
+    claims.subject("clinician-4417").expect("subject");
+    if !grants.is_null() {
+        claims
+            .add_additional(openehr_axa::authz::GRANTS_CLAIM, grants.clone())
+            .expect("claim");
+    }
+    public::sign(&pair.secret, &claims, None, None).expect("signs")
+}
+
+/// Every version the tests below commit through `CONTRIBUTION`, declared up
+/// front (`db:H5.22`): versions 1 to 3 of each fixture container, and the
+/// status versions. A few are declared and never committed, which `H5.22`
+/// allows.
+fn declared() -> Vec<String> {
+    [LIVE, GONE, FRESH]
+        .iter()
+        .flat_map(|c| (1..=3).map(move |v| format!("{c}::{SYSTEM}::{v}")))
+        .chain((1..=2).map(conformance::status_version_uid))
+        .collect()
+}
+
 /// A service with one live composition, one deleted one, and nothing else.
 struct Served {
+    ctx: axa::AppContext,
+    pair: AsymmetricKeyPair<V4>,
     router: Router,
     authorization: String,
     ehr_id: String,
@@ -161,9 +188,13 @@ impl Served {
         let mut paserk = String::new();
         pair.public.fmt(&mut paserk).expect("PASERK");
 
-        let mut claims = Claims::new().expect("claims");
-        claims.subject("clinician-4417").expect("subject");
-        let token = public::sign(&pair.secret, &claims, None, None).expect("signs");
+        // Every record, both actions: this fixture tests what the routes do with
+        // a permitted request. What the grants permit is tested by tokens from
+        // `Served::token_granting` (`db:PR12.18`).
+        let token = sign_with_grants(
+            &pair,
+            &serde_json::json!([{"ehr": "*", "actions": ["read", "write"]}]),
+        );
 
         let mut store = SqliteStore::in_memory().expect("store");
         store.install().expect("install");
@@ -173,7 +204,7 @@ impl Served {
         store
             .create_contribution(
                 &ehr_id,
-                &conformance::sample_contribution(CONTRIBUTION, &[1, 2]),
+                &conformance::sample_contribution_declaring(CONTRIBUTION, &declared()),
             )
             .expect("contribution");
 
@@ -208,6 +239,8 @@ impl Served {
             .insert::<SharedAccessLog>(Arc::new(access_log));
 
         Self {
+            pair,
+            ctx: ctx.clone(),
             router: openehr_axa::app::routes()
                 .into_app(ctx.clone())
                 .expect("router"),
@@ -433,7 +466,7 @@ async fn metadata_is_the_one_route_served_without_a_token() {
     // And the absences must be named. Requiring a token is routinely read as
     // covering authorization too, so both are listed.
     let absences = serde_json::to_string(&metadata["not_implemented"]).expect("json");
-    for expected in ["authorization", "read auditing", "GDPR"] {
+    for expected in ["care-relationship policy", "read auditing", "GDPR"] {
         assert!(
             absences.contains(expected),
             "{expected} unnamed in {absences}"
@@ -625,6 +658,10 @@ impl Served {
                 .expect("request"),
         )
         .await
+    }
+
+    fn compositions_path(&self) -> String {
+        format!("/openehr/v1/ehr/{}/composition", self.ehr_id)
     }
 
     fn compositions(&self) -> String {
@@ -1036,45 +1073,137 @@ async fn a_contribution_can_be_declared_and_is_required_before_a_commit() {
     // testing (`lib:A-09`).
     let served = Served::new();
     let declared = "5B8C3A21-9E4D-4F70-B2C1-7A6E5D4C3B2A";
-    let body = serde_json::to_vec(&conformance::sample_contribution(declared, &[1])).expect("json");
+    let body = contribution_body(declared, committer("clinician-4417"));
 
-    let (status, text, _) = served
-        .send(
-            Request::builder()
-                .method("POST")
-                .uri(format!("/openehr/v1/ehr/{}/contribution", served.ehr_id()))
-                .header(header::AUTHORIZATION, &served.authorization)
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(body.clone()))
-                .expect("request"),
-        )
-        .await;
+    let (status, text, _) = served.post_contribution(body.clone()).await;
     assert_eq!(status, StatusCode::CREATED, "{text}");
 
     // Declaring it twice conflicts rather than overwriting: a change set is a
     // record of one act, and a second act is a second contribution.
-    let (again, _, _) = served
-        .send(
+    let (again, _, _) = served.post_contribution(body).await;
+    assert_eq!(again, StatusCode::CONFLICT);
+}
+
+/// A contribution declaring `LIVE` version 2, committed by `party`.
+fn contribution_body(uid: &str, party: openehr::rm::common::PartyProxy) -> Vec<u8> {
+    let contribution = openehr::rm::common::Contribution::new(
+        HierObjectId::from_uid_str(uid).expect("literal"),
+        vec![format!("{LIVE}::{SYSTEM}::2").parse().expect("literal")],
+        AuditDetails::new(
+            SYSTEM,
+            DvDateTime::new("2026-08-01T09:05:00Z").expect("literal"),
+            audit_change_type::CREATION,
+            party,
+        )
+        .expect("literal"),
+    )
+    .expect("literal");
+    serde_json::to_vec(&contribution).expect("json")
+}
+
+impl Served {
+    async fn post_contribution(&self, body: Vec<u8>) -> (StatusCode, String, Option<String>) {
+        self.send(
             Request::builder()
                 .method("POST")
-                .uri(format!("/openehr/v1/ehr/{}/contribution", served.ehr_id()))
-                .header(header::AUTHORIZATION, &served.authorization)
+                .uri(format!("/openehr/v1/ehr/{}/contribution", self.ehr_id()))
+                .header(header::AUTHORIZATION, &self.authorization)
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(body))
                 .expect("request"),
         )
-        .await;
-    assert_eq!(again, StatusCode::CONFLICT);
+        .await
+    }
 }
 
+#[tokio::test]
+async fn a_contribution_is_declared_only_by_the_verified_caller() {
+    // `db:D-25`, `db:PR12.19`: the contribution's own committer, checked by the
+    // same rule as a version's, before anything is written. This route used to
+    // discard the principal.
+    let served = Served::new();
+    let uid = "6C9D4B32-0F5E-4081-C3D2-8B7F6E5D4C3B";
+    let (other, text, _) = served
+        .post_contribution(contribution_body(uid, committer("clinician-9999")))
+        .await;
+    assert_eq!(other, StatusCode::FORBIDDEN, "{text}");
+    let anonymous: openehr::rm::common::PartyProxy = PartyIdentified::named("Dr A Nurse")
+        .expect("literal")
+        .into();
+    let (unidentified, text, _) = served
+        .post_contribution(contribution_body(uid, anonymous))
+        .await;
+    assert_eq!(unidentified, StatusCode::UNPROCESSABLE_ENTITY, "{text}");
+    // Neither refusal wrote anything: the same uid is still free.
+    let (created, text, _) = served
+        .post_contribution(contribution_body(uid, committer("clinician-4417")))
+        .await;
+    assert_eq!(created, StatusCode::CREATED, "{text}");
+}
+
+#[tokio::test]
+async fn a_version_is_committed_only_into_a_contribution_that_declared_it() {
+    // `db:D-26`, `db:H5.22`. The declared contribution names `LIVE` version 2.
+    let served = Served::new();
+    let uid = "7DAE5C43-1A6F-4192-D4E3-9C8A7F6E5D4C";
+    let (created, text, _) = served
+        .post_contribution(contribution_body(uid, committer("clinician-4417")))
+        .await;
+    assert_eq!(created, StatusCode::CREATED, "{text}");
+    let (_, _, before) = served.get(&served.composition(LIVE)).await;
+
+    // A version the contribution did not declare (`FRESH` version 1), and a
+    // contribution that does not exist: both refused, nothing written.
+    for (path, version) in [
+        (
+            format!("{}?contribution={uid}", served.compositions_path()),
+            version(FRESH, 1, None, false),
+        ),
+        (
+            format!(
+                "{}?contribution=8EBF6D54-2B70-42A3-E5F4-AD9B8A7F6E5D",
+                served.compositions_path()
+            ),
+            version(FRESH, 1, None, false),
+        ),
+    ] {
+        let (status, body, _) = served.send_json("POST", &path, &version, None).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{path}: {body}");
+        assert!(body.contains("not part of contribution"), "{body}");
+    }
+    let (absent, _, _) = served.get(&served.composition(FRESH)).await;
+    assert_eq!(
+        absent,
+        StatusCode::NOT_FOUND,
+        "a refused commit wrote a version"
+    );
+
+    // The declared one commits.
+    let (status, body, _) = served
+        .send_json(
+            "PUT",
+            &format!("{}?contribution={uid}", served.composition(LIVE)),
+            &version(LIVE, 2, Some(1), false),
+            Some(("if-match", before.as_deref().expect("etag"))),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
 #[tokio::test]
 async fn a_version_view_carries_a_full_chain_digest() {
     // `hex` could render every digest as an empty string and nothing noticed.
     // A response claiming a chain digest of "" is the same failure as a
     // checkpoint printing none: a reader compares it against a witness and
     // finds them equal.
+    // The version view, this crate's own route (`db:S1.23`): the ITS-REST read
+    // answers with the COMPOSITION itself, which carries no chain.
     let served = Served::new();
-    let (status, body, _) = served.get(&served.composition(LIVE)).await;
+    let (status, body, _) = served
+        .get(&format!(
+            "{}/version/{LIVE}::{SYSTEM}::1",
+            served.composition(LIVE)
+        ))
+        .await;
     assert_eq!(status, StatusCode::OK);
 
     let digest = serde_json::from_str::<serde_json::Value>(&body).expect("json")["chain_digest"]
@@ -1110,8 +1239,11 @@ async fn ehr_status_can_be_read_back_after_a_direct_store_commit() {
     assert_eq!(status, StatusCode::OK);
     assert!(etag.is_some(), "an EHR_STATUS read carried no ETag");
 
-    let data = &serde_json::from_str::<serde_json::Value>(&body).expect("json")["data"];
-    assert_eq!(data["is_modifiable"], serde_json::json!(true));
+    // The EHR_STATUS itself, not a wrapper (`db:S1.23`, `db:D-31`).
+    let status = serde_json::from_str::<serde_json::Value>(&body).expect("json");
+    assert_eq!(status["_type"], "EHR_STATUS");
+    assert_eq!(status["is_modifiable"], serde_json::json!(true));
+    assert!(status.get("data").is_none(), "{status}");
 }
 
 #[tokio::test]
@@ -1124,11 +1256,16 @@ async fn ehr_status_vread_reads_the_version_the_etag_named() {
         .trim_matches('"')
         .to_owned();
 
-    let (status, body, _) = served.get(&format!("{}/{uid}", served.ehr_status())).await;
+    let (status, body, read_etag) = served.get(&format!("{}/{uid}", served.ehr_status())).await;
     assert_eq!(status, StatusCode::OK);
-    let read_uid = serde_json::from_str::<serde_json::Value>(&body).expect("json")["uid"]
-        .as_str()
-        .expect("a uid")
+    // The resource, and the version it is in the headers (`db:S1.23`).
+    let resource = serde_json::from_str::<serde_json::Value>(&body).expect("json");
+    assert_eq!(resource["_type"], "EHR_STATUS");
+    assert_eq!(resource["is_modifiable"], serde_json::json!(false));
+    let read_uid = read_etag
+        .expect("an ETag")
+        .trim_start_matches("W/")
+        .trim_matches('"')
         .to_owned();
     assert_eq!(
         read_uid, uid,
@@ -1341,6 +1478,21 @@ fn every_store_error_maps_to_a_distinct_status() {
             StoreError::AqlUnsupported("DISTINCT".to_owned()),
             StatusCode::BAD_REQUEST,
         ),
+        (
+            StoreError::AqlBudgetExceeded {
+                candidates: 20_000,
+                budget: 10_000,
+            },
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            StoreError::NotInContribution {
+                version: "v".to_owned(),
+                contribution: "c".to_owned(),
+                reason: "the contribution does not declare this version",
+            },
+            StatusCode::CONFLICT,
+        ),
     ];
     for (error, expected) in cases {
         let (status, message) = status_for(&error);
@@ -1507,6 +1659,11 @@ fn route_classification() -> Vec<(&'static str, &'static str, Kind)> {
             "POST",
             "/openehr/v1/ehr",
             Exempt("a write: the commit is its own record, and it returns what the caller sent"),
+        ),
+        (
+            "PUT",
+            "/openehr/v1/ehr/{ehr_id}",
+            Exempt("a write: creates the record and commits its first status (S1.22)"),
         ),
         ("GET", "/openehr/v1/ehr/{ehr_id}", Records("read_ehr")),
         (
@@ -1770,4 +1927,723 @@ async fn an_update_names_the_current_version_of_its_own_chart_only() {
         .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
     assert!(!body.contains(SYSTEM), "{body}");
+}
+
+// --- db:D-23, db:D-24: the record operated on is the one the path names ----
+
+/// An EHR id no fixture uses.
+const SECOND_EHR: &str = "99999999-3333-4444-5555-666666666666";
+const THIRD_EHR: &str = "88888888-3333-4444-5555-666666666666";
+
+impl Served {
+    /// Creates another EHR whose `ehr_status` reference names `container`.
+    ///
+    /// `POST /ehr` and `Store::create_ehr` both accept the reference as
+    /// submitted, so a record can name a container it does not own: another
+    /// chart's status, or a composition.
+    fn add_ehr_naming_status(&self, ehr_id: &str, container: &str) {
+        let json = serde_json::to_string(&conformance::sample_ehr())
+            .expect("serialise")
+            .replace(conformance::RECORD, ehr_id)
+            .replace(conformance::EHR_STATUS_RECORD, container);
+        let ehr: openehr::rm::ehr::Ehr = serde_json::from_str(&json).expect("deserialise");
+        let store = self
+            .ctx
+            .shared_store
+            .get::<SharedOpenehrStore>()
+            .expect("store");
+        store.lock().expect("lock").create_ehr(&ehr).expect("ehr");
+    }
+}
+
+#[tokio::test]
+async fn an_ehr_status_is_not_served_under_an_ehr_that_does_not_own_it() {
+    let served = Served::with_ehr_status(true);
+    // One record naming the first chart's status container, one naming a
+    // composition container of the first chart.
+    served.add_ehr_naming_status(SECOND_EHR, conformance::EHR_STATUS_RECORD);
+    served.add_ehr_naming_status(THIRD_EHR, LIVE);
+    for ehr in [SECOND_EHR, THIRD_EHR] {
+        for query in ["", "?version_at_time=2026-08-01T10:00:00Z"] {
+            let path = format!("/openehr/v1/ehr/{ehr}/ehr_status{query}");
+            let (status, body, _) = served.get(&path).await;
+            assert_eq!(status, StatusCode::NOT_FOUND, "{path}: {body}");
+            assert!(!body.contains("Encounter"), "{path}: {body}");
+            assert!(!body.contains(SYSTEM), "{path} names a version: {body}");
+        }
+    }
+    // The owner still reads it, so this is not a route that refuses everything.
+    let (ok, _, _) = served.get(&served.ehr_status()).await;
+    assert_eq!(ok, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn an_update_cannot_commit_to_a_container_other_than_the_one_its_path_names() {
+    // Both containers are in the same chart, so ownership checks alone pass.
+    // The precondition is checked against LIVE; the body is a version of GONE.
+    let served = Served::new();
+    let (_, before_gone, _) = served
+        .get(&format!("{}/_history", served.composition(GONE)))
+        .await;
+    let (_, _, before_live) = served.get(&served.composition(LIVE)).await;
+
+    let (status, body, _) = served
+        .send_json(
+            "PUT",
+            &format!("{}?contribution={CONTRIBUTION}", served.composition(LIVE)),
+            &version(GONE, 3, Some(2), false),
+            Some(("if-match", &format!("{LIVE}::{SYSTEM}::1"))),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+
+    let (_, after_gone, _) = served
+        .get(&format!("{}/_history", served.composition(GONE)))
+        .await;
+    let (_, _, after_live) = served.get(&served.composition(LIVE)).await;
+    assert_eq!(before_gone, after_gone, "GONE's history changed");
+    assert_eq!(before_live, after_live, "LIVE's head changed");
+}
+
+#[tokio::test]
+async fn an_update_must_replace_the_version_its_precondition_names() {
+    // Right container, current If-Match (version 1), but the body replaces
+    // version 2: the two statements disagree (`db:H5.21`). Refused as the
+    // caller's error before the store is asked, not as the store's `409`.
+    let served = Served::new();
+    let (_, _, before) = served.get(&served.composition(LIVE)).await;
+    let (status, body, _) = served
+        .send_json(
+            "PUT",
+            &format!("{}?contribution={CONTRIBUTION}", served.composition(LIVE)),
+            &version(LIVE, 3, Some(2), false),
+            Some(("if-match", &format!("{LIVE}::{SYSTEM}::1"))),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(body.contains("preceding_version_uid"), "{body}");
+    let (_, _, after) = served.get(&served.composition(LIVE)).await;
+    assert_eq!(before, after, "LIVE's head changed");
+}
+
+#[tokio::test]
+async fn a_refused_cross_chart_status_read_is_recorded_as_not_found() {
+    // `db:D-23`'s acceptance: the access record as well as the response. A
+    // probe through a borrowed status reference is what an investigation
+    // looks for, so it is recorded, and recorded as what the caller got.
+    let path = temp_log("status-probe");
+    let served = Served::build(AccessLog::at(&path).expect("log"), Some(true));
+    served.add_ehr_naming_status(SECOND_EHR, conformance::EHR_STATUS_RECORD);
+    let (status, _, _) = served
+        .get(&format!("/openehr/v1/ehr/{SECOND_EHR}/ehr_status"))
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let recorded = lines(&path);
+    assert_eq!(recorded.len(), 1, "{recorded:?}");
+    assert_eq!(recorded[0]["action"], "read_ehr_status");
+    assert_eq!(recorded[0]["outcome"], "not_found");
+    let _ = std::fs::remove_file(&path);
+}
+
+// --- db:D-28, db:D-29: an answer, and its record, say what happened ---------
+
+impl Served {
+    /// Runs SQL on the store's own connection: a fault, as `openehr-sqlite`'s
+    /// `faults.rs` injects one, under a running service.
+    fn on_database(&self, sql: &str) {
+        let store = self
+            .ctx
+            .shared_store
+            .get::<SharedOpenehrStore>()
+            .expect("store");
+        store
+            .lock()
+            .expect("lock")
+            .connection()
+            .execute_batch(sql)
+            .expect("fault");
+    }
+}
+
+/// A stored document that is not JSON, in a content-bearing row. Models file
+/// access, as the tamper tests do: the append-only trigger goes first.
+const UNREADABLE_LIVE: &str = "DROP TRIGGER IF EXISTS trg_openehr_version_no_update;
+    UPDATE openehr_version SET data_json = '{not json' WHERE uid LIKE '87284370-%::1';";
+
+#[tokio::test]
+async fn an_unreadable_document_is_a_server_error_on_every_read_route_and_never_null() {
+    let path = temp_log("unreadable");
+    let served = Served::with_log(AccessLog::at(&path).expect("log"));
+    served.on_database(UNREADABLE_LIVE);
+    for route in [
+        served.composition(LIVE),
+        format!("{}/version/{LIVE}::{SYSTEM}::1", served.composition(LIVE)),
+        // One unreadable row fails the whole page; it is not a version with
+        // no content.
+        format!("{}/_history", served.composition(LIVE)),
+    ] {
+        let (status, body, _) = served.get(&route).await;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{route}: {body}");
+        assert!(
+            !body.contains("not json"),
+            "{route} quoted the stored bytes: {body}"
+        );
+        assert!(
+            !body.contains("\"data\""),
+            "{route} answered with a view: {body}"
+        );
+    }
+    let recorded = lines(&path);
+    assert_eq!(recorded.len(), 3, "{recorded:?}");
+    for record in &recorded {
+        assert_eq!(record["outcome"], "error", "{record}");
+    }
+    let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
+async fn a_tombstone_is_still_served_as_a_version_with_no_content() {
+    // The other half of `db:D-28`: `data: null` remains the answer for a
+    // deletion, and only for one.
+    let served = Served::new();
+    let (status, body, _) = served
+        .get(&format!("{}/_history", served.composition(GONE)))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let page: serde_json::Value = serde_json::from_str(&body).expect("json");
+    assert_eq!(page["items"][0]["is_deleted"], false);
+    assert!(page["items"][0]["data"].is_object(), "{page}");
+    assert_eq!(page["items"][1]["is_deleted"], true);
+    assert!(page["items"][1]["data"].is_null(), "{page}");
+}
+
+#[tokio::test]
+async fn a_commit_whose_readback_fails_says_the_commit_succeeded() {
+    // Corrupts each version as it is inserted, so the write commits and the
+    // readback that follows cannot decode it. A caller told only "500" would
+    // retry, and be refused as a duplicate of what it already wrote.
+    let served = Served::new();
+    served.on_database(
+        "DROP TRIGGER IF EXISTS trg_openehr_version_no_update;
+         CREATE TEMP TRIGGER fault_corrupt AFTER INSERT ON main.openehr_version
+         BEGIN UPDATE openehr_version SET data_json = '{' WHERE uid = NEW.uid; END;",
+    );
+    let (status, body, _) = served
+        .send_json(
+            "POST",
+            &served.compositions(),
+            &version(FRESH, 1, None, false),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{body}");
+    assert!(body.contains("the commit itself succeeded"), "{body}");
+    assert!(body.contains(&format!("{FRESH}::{SYSTEM}::1")), "{body}");
+}
+
+#[tokio::test]
+async fn a_refused_page_is_recorded_as_refused_not_as_a_read() {
+    // `db:D-29`: the lookup succeeded and the page did not. It was recorded `ok`.
+    let path = temp_log("refused-page");
+    let served = Served::with_log(AccessLog::at(&path).expect("log"));
+    for route in [
+        format!("{}/_history?_count=0", served.composition(LIVE)),
+        format!(
+            "/openehr/v1/ehr/{}/composition?archetype_id=openEHR-EHR-COMPOSITION.encounter.v1&_count=101",
+            served.ehr_id()
+        ),
+    ] {
+        let (status, body, _) = served.get(&route).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{route}: {body}");
+    }
+    let recorded = lines(&path);
+    assert_eq!(recorded.len(), 2, "{recorded:?}");
+    assert_eq!(recorded[0]["action"], "history");
+    assert_eq!(recorded[1]["action"], "search");
+    for record in &recorded {
+        assert_eq!(record["outcome"], "refused", "{record}");
+    }
+    let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
+async fn a_status_lookup_under_a_missing_ehr_is_recorded() {
+    // `db:D-29`: it returned `404` before the record was written, so an
+    // authenticated probe for a record that does not exist left no trace.
+    let path = temp_log("missing-parent");
+    let served = Served::with_log(AccessLog::at(&path).expect("log"));
+    let (status, _, _) = served.get(&format!("{NO_SUCH_EHR}/ehr_status")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let recorded = lines(&path);
+    assert_eq!(recorded.len(), 1, "{recorded:?}");
+    assert_eq!(recorded[0]["action"], "read_ehr_status");
+    assert_eq!(recorded[0]["outcome"], "not_found");
+    let _ = std::fs::remove_file(&path);
+}
+
+// --- db:PR12.18 (amended): access is what the issuer granted -----------------
+
+impl Served {
+    /// A token whose `openehr_grants` claim is `grants` (`Value::Null`: none).
+    fn token_granting(&self, grants: &serde_json::Value) -> String {
+        format!("Bearer {}", sign_with_grants(&self.pair, grants))
+    }
+
+    /// One request to `route` (a `route_classification` template), made
+    /// concrete against this fixture, with a body the route accepts. The JSON
+    /// extractor answers before the handler, so an empty body would test the
+    /// extractor and not the grant check.
+    async fn call(
+        &self,
+        method: &str,
+        template: &str,
+        authorization: &str,
+    ) -> (StatusCode, String) {
+        let ehr = self.ehr_id().to_owned();
+        let path = template
+            .replace("{ehr_id}", &ehr)
+            .replace("{uid}", LIVE)
+            .replace("{version_uid}", &format!("{LIVE}::{SYSTEM}::1"));
+        let (uri, body, if_match): (String, Option<Vec<u8>>, Option<String>) =
+            match (method, template) {
+                ("POST", "/openehr/v1/ehr/{ehr_id}/contribution") => (
+                    path,
+                    Some(contribution_body(
+                        "9F00A1B2-C3D4-4E5F-8091-A2B3C4D5E6F7",
+                        committer("clinician-4417"),
+                    )),
+                    None,
+                ),
+                ("POST", "/openehr/v1/ehr/{ehr_id}/composition") => (
+                    format!("{path}?contribution={CONTRIBUTION}"),
+                    Some(serde_json::to_vec(&version(FRESH, 1, None, false)).expect("json")),
+                    None,
+                ),
+                ("PUT", "/openehr/v1/ehr/{ehr_id}/composition/{uid}") => (
+                    format!("{path}?contribution={CONTRIBUTION}"),
+                    Some(serde_json::to_vec(&version(LIVE, 2, Some(1), false)).expect("json")),
+                    Some(format!("{LIVE}::{SYSTEM}::1")),
+                ),
+                ("GET", "/openehr/v1/ehr/{ehr_id}/composition") => (
+                    format!("{path}?archetype_id=openEHR-EHR-COMPOSITION.encounter.v1"),
+                    None,
+                    None,
+                ),
+                ("POST", "/openehr/v1/query/aql") => (
+                    path,
+                    Some(
+                        serde_json::to_vec(&serde_json::json!({
+                            "q": "SELECT c/name/value FROM EHR e[ehr_id/value=$ehrUid] \
+                                  CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 10",
+                            "query_parameters": {"ehrUid": ehr},
+                        }))
+                        .expect("json"),
+                    ),
+                    None,
+                ),
+                // Everything else takes no body. For `POST /ehr` that means the
+                // server commits the default EHR_STATUS (S1.22).
+                _ => (path, None, None),
+            };
+        let mut builder = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header(header::AUTHORIZATION, authorization);
+        if body.is_some() {
+            builder = builder.header(header::CONTENT_TYPE, "application/json");
+        }
+        if let Some(tag) = if_match {
+            builder = builder.header("if-match", tag);
+        }
+        let (status, text, _) = self
+            .send(
+                builder
+                    .body(Body::from(body.unwrap_or_default()))
+                    .expect("request"),
+            )
+            .await;
+        (status, text)
+    }
+}
+
+/// Which action each route needs. Derived from `route_classification`, the
+/// mounted-route list, so a route added there and not here fails this test
+/// rather than going unchecked.
+fn required_action(method: &str, template: &str) -> Option<&'static str> {
+    match (method, template) {
+        // Metadata carries no clinical content; DELETE is always 501 and reads
+        // and writes nothing.
+        ("GET", "/openehr/v1/metadata") | ("DELETE", _) => None,
+        ("GET", _) | ("POST", "/openehr/v1/query/aql") => Some("read"),
+        // Mints an id no per-record grant can name (S1.22): "*" only.
+        ("POST", "/openehr/v1/ehr") => Some("write-any"),
+        ("POST" | "PUT", _) => Some("write"),
+        other => panic!("no action decided for {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn every_clinical_route_refuses_what_the_grants_do_not_cover() {
+    let served = Served::new();
+    let ehr = served.ehr_id().to_owned();
+    let none = served.token_granting(&serde_json::Value::Null);
+    let elsewhere = served.token_granting(
+        &serde_json::json!([{"ehr": "6BA7B810-9DAD-11D1-80B4-00C04FD430C8", "actions": ["read", "write"]}]),
+    );
+    let read_only = served.token_granting(&serde_json::json!([{"ehr": ehr, "actions": ["read"]}]));
+    let write_only =
+        served.token_granting(&serde_json::json!([{"ehr": ehr, "actions": ["write"]}]));
+    let both =
+        served.token_granting(&serde_json::json!([{"ehr": ehr, "actions": ["read", "write"]}]));
+
+    let mut checked = 0;
+    for (method, template, _) in route_classification() {
+        let Some(action) = required_action(method, template) else {
+            continue;
+        };
+        checked += 1;
+        let any_writer =
+            served.token_granting(&serde_json::json!([{"ehr": "*", "actions": ["write"]}]));
+        let (wrong, other) = match action {
+            "read" => (&write_only, &read_only),
+            "write" => (&read_only, &write_only),
+            // A per-record write grant, even on this record, does not cover
+            // creating one whose id does not exist yet.
+            _ => (&both, &any_writer),
+        };
+        for (label, token) in [
+            ("no grants", &none),
+            ("another EHR", &elsewhere),
+            ("the other action", wrong),
+        ] {
+            let (status, body) = served.call(method, template, token).await;
+            assert_eq!(
+                status,
+                StatusCode::FORBIDDEN,
+                "{method} {template} with {label}: {body}"
+            );
+            assert!(!body.contains("Encounter"), "{method} {template}: {body}");
+        }
+        // The right grant gets past the check: whatever the route then says,
+        // it is not the grant refusal.
+        let passing: Vec<&String> = if action == "write-any" {
+            vec![other]
+        } else {
+            vec![other, &both]
+        };
+        for token in passing {
+            let (status, body) = served.call(method, template, token).await;
+            if token == other {
+                continue;
+            }
+            assert_ne!(
+                status,
+                StatusCode::FORBIDDEN,
+                "{method} {template} with its grant: {body}"
+            );
+        }
+    }
+    assert_eq!(
+        checked, 13,
+        "every clinical route in route_classification is checked"
+    );
+}
+
+#[tokio::test]
+async fn a_denial_is_the_same_for_a_record_that_exists_and_one_that_does_not() {
+    // Checked before the store, so a 403 is not an oracle for which records
+    // exist (`db:PR12.18`, the same concern as `db:H5.18`'s 404).
+    let served = Served::new();
+    let granted_elsewhere = served.token_granting(
+        &serde_json::json!([{"ehr": "6BA7B810-9DAD-11D1-80B4-00C04FD430C8", "actions": ["read"]}]),
+    );
+    let existing = served
+        .call(
+            "GET",
+            "/openehr/v1/ehr/{ehr_id}/composition/{uid}",
+            &granted_elsewhere,
+        )
+        .await;
+    let shape = |body: &str| {
+        let v: serde_json::Value = serde_json::from_str(body).expect("problem json");
+        (v["status"].clone(), v["title"].clone())
+    };
+    let (absent_status, absent_body, _) = served
+        .send(
+            Request::builder()
+                .uri(format!(
+                    "/openehr/v1/ehr/{}/composition/{ABSENT}",
+                    served.ehr_id()
+                ))
+                .header(header::AUTHORIZATION, &granted_elsewhere)
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+    assert_eq!(existing.0, StatusCode::FORBIDDEN);
+    assert_eq!(absent_status, StatusCode::FORBIDDEN);
+    assert_eq!(shape(&existing.1), shape(&absent_body));
+}
+
+#[tokio::test]
+async fn a_denied_read_is_recorded_as_denied() {
+    let path = temp_log("denied");
+    let served = Served::with_log(AccessLog::at(&path).expect("log"));
+    let none = served.token_granting(&serde_json::Value::Null);
+    for (method, template) in [
+        ("GET", "/openehr/v1/ehr/{ehr_id}"),
+        ("GET", "/openehr/v1/ehr/{ehr_id}/composition/{uid}"),
+        ("POST", "/openehr/v1/query/aql"),
+    ] {
+        let (status, _) = served.call(method, template, &none).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{template}");
+    }
+    let recorded = lines(&path);
+    assert_eq!(recorded.len(), 3, "{recorded:?}");
+    for record in &recorded {
+        assert_eq!(record["outcome"], "denied", "{record}");
+    }
+    let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
+async fn a_malformed_grants_claim_invalidates_the_token() {
+    // Not "no grants": a grant the service cannot read is not one it may
+    // guess at, in either direction.
+    let served = Served::new();
+    let bad = served.token_granting(&serde_json::json!([{"ehr": "*", "actions": ["admin"]}]));
+    let (status, body) = served.call("GET", "/openehr/v1/ehr/{ehr_id}", &bad).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
+}
+
+#[tokio::test]
+async fn nothing_is_inferred_from_other_claims() {
+    // A `roles` claim and a matching subject grant nothing (`db:PR12.18`).
+    let served = Served::new();
+    let mut claims = Claims::new().expect("claims");
+    claims.subject(served.ehr_id()).expect("subject");
+    claims
+        .add_additional("roles", serde_json::json!(["admin", "clinician"]))
+        .expect("claim");
+    let token = format!(
+        "Bearer {}",
+        public::sign(&served.pair.secret, &claims, None, None).expect("signs")
+    );
+    let (status, body) = served.call("GET", "/openehr/v1/ehr/{ehr_id}", &token).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+}
+
+// --- db:S1.22: the server creates the EHR and commits its first status -----
+
+#[tokio::test]
+async fn post_ehr_mints_the_record_and_commits_a_default_status_by_the_caller() {
+    let served = Served::new();
+    let (status, body, _) = served
+        .send(
+            Request::builder()
+                .method("POST")
+                .uri("/openehr/v1/ehr")
+                .header(header::AUTHORIZATION, &served.authorization)
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let ehr: serde_json::Value = serde_json::from_str(&body).expect("json");
+    let ehr_id = ehr["ehr_id"]["value"]
+        .as_str()
+        .expect("an ehr_id")
+        .to_owned();
+
+    // The status exists at once, committed by the verified caller.
+    let (status, body, _) = served
+        .get(&format!("/openehr/v1/ehr/{ehr_id}/ehr_status"))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let status: serde_json::Value = serde_json::from_str(&body).expect("json");
+    assert_eq!(status["is_modifiable"], true);
+    assert_eq!(status["is_queryable"], true);
+    // The resource carries no audit (`db:S1.23`), so the committer is read
+    // where it is stored (`db:PR12.25`).
+    let store = served
+        .ctx
+        .shared_store
+        .get::<SharedOpenehrStore>()
+        .expect("store");
+    let guard = store.lock().expect("lock");
+    let ehr = guard
+        .get_ehr(&ehr_id.parse().expect("id"))
+        .expect("the record");
+    let container = openehr_store::ehr_status_container(&ehr).expect("a status container");
+    let row = guard.latest_version(&container).expect("its first version");
+    assert!(
+        row.audit_committer_json.contains("clinician-4417"),
+        "the committer is the token subject: {}",
+        row.audit_committer_json
+    );
+}
+
+#[tokio::test]
+async fn put_ehr_creates_the_named_record_once_with_the_status_supplied() {
+    let served = Served::new();
+    let id = "4B1D2C3E-5F60-4718-8293-A4B5C6D7E8F9";
+    let supplied = serde_json::to_string(&conformance::sample_ehr_status(false)).expect("json");
+    let put = |body: String| {
+        Request::builder()
+            .method("PUT")
+            .uri(format!("/openehr/v1/ehr/{id}"))
+            .header(header::AUTHORIZATION, &served.authorization)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .expect("request")
+    };
+    let response = served
+        .router
+        .clone()
+        .oneshot(put(supplied.clone()))
+        .await
+        .expect("infallible");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let location = response
+        .headers()
+        .get(header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+    assert_eq!(location, format!("/openehr/v1/ehr/{id}"));
+
+    let (_, body, _) = served
+        .get(&format!("/openehr/v1/ehr/{id}/ehr_status"))
+        .await;
+    let status: serde_json::Value = serde_json::from_str(&body).expect("json");
+    assert_eq!(
+        status["is_modifiable"], false,
+        "the supplied status, not the default: {status}"
+    );
+
+    // A second create of the same record conflicts.
+    let (again, _, _) = served.send(put(supplied)).await;
+    assert_eq!(again, StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn an_unusable_status_is_refused_before_any_record_exists() {
+    let served = Served::new();
+    let id = "5C2E3D4F-6071-4829-93A4-B5C6D7E8F901";
+    // Not an EHR_STATUS at all: 400. An EHR_STATUS the RM rejects: 422.
+    let mut invalid = serde_json::to_value(conformance::sample_ehr_status(true)).expect("json");
+    invalid["archetype_node_id"] = serde_json::json!("");
+    for (body, want) in [
+        ("{not json".to_owned(), StatusCode::BAD_REQUEST),
+        (invalid.to_string(), StatusCode::UNPROCESSABLE_ENTITY),
+    ] {
+        let (status, text, _) = served
+            .send(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/openehr/v1/ehr/{id}"))
+                    .header(header::AUTHORIZATION, &served.authorization)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(body))
+                    .expect("request"),
+            )
+            .await;
+        assert_eq!(status, want, "{text}");
+        let (absent, _, _) = served.get(&format!("/openehr/v1/ehr/{id}")).await;
+        assert_eq!(
+            absent,
+            StatusCode::NOT_FOUND,
+            "a refused create left a record"
+        );
+    }
+}
+
+// --- db:S1.23: ITS-REST routes answer with the resource -------------------
+
+#[tokio::test]
+async fn a_composition_read_answers_with_the_composition_and_names_its_version() {
+    let served = Served::new();
+    let response = served
+        .router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(served.composition(LIVE))
+                .header(header::AUTHORIZATION, &served.authorization)
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("infallible");
+    assert_eq!(response.status(), StatusCode::OK);
+    let header_of = |name| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let version = format!("{LIVE}::{SYSTEM}::1");
+    assert_eq!(header_of(header::ETAG), format!("W/\"{version}\""));
+    let location = header_of(header::LOCATION);
+    assert_eq!(
+        location,
+        format!("/openehr/v1/ehr/{}/composition/{version}", served.ehr_id())
+    );
+    let body = to_bytes(response.into_body(), 1 << 20).await.expect("body");
+    let composition: serde_json::Value = serde_json::from_slice(&body).expect("json");
+    assert_eq!(composition["_type"], "COMPOSITION", "{composition}");
+    assert!(
+        composition.get("chain_digest").is_none(),
+        "no wrapper: {composition}"
+    );
+
+    // The Location it named can be read: a version id is a uid_based_id.
+    let (status, again, _) = served.get(&location).await;
+    assert_eq!(status, StatusCode::OK, "{again}");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&again).expect("json"),
+        composition
+    );
+}
+
+#[tokio::test]
+async fn a_deletion_read_by_its_version_id_is_gone() {
+    let served = Served::new();
+    let (status, body, _) = served
+        .get(&format!(
+            "/openehr/v1/ehr/{}/composition/{GONE}::{SYSTEM}::2",
+            served.ehr_id()
+        ))
+        .await;
+    assert_eq!(status, StatusCode::GONE, "{body}");
+    // The version before the deletion is still readable by its id.
+    let (status, body, _) = served
+        .get(&format!(
+            "/openehr/v1/ehr/{}/composition/{GONE}::{SYSTEM}::1",
+            served.ehr_id()
+        ))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+#[tokio::test]
+async fn a_commit_answers_with_the_composition_it_committed() {
+    let served = Served::new();
+    let (status, body, etag) = served
+        .send_json(
+            "POST",
+            &served.compositions(),
+            &version(FRESH, 1, None, false),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let composition: serde_json::Value = serde_json::from_str(&body).expect("json");
+    assert_eq!(composition["_type"], "COMPOSITION", "{composition}");
+    assert_eq!(
+        etag.as_deref(),
+        Some(format!("W/\"{FRESH}::{SYSTEM}::1\"").as_str())
+    );
 }

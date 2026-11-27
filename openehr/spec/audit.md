@@ -173,7 +173,7 @@ in the documentation, which is the class this register most exists to catch.
 | A-83 | Medium | `DateTime::semantic_cmp` ordered local calendar dates before applying their UTC offsets, and `Time::semantic_cmp` truncated chronology after three fractional digits. Equal instants across midnight could compare unequal, while distinct sub-millisecond instants could compare equal (`D3.18`). | **fixed** — compare the offset-adjusted calendar minute, second, and every significant fractional digit. |
 | A-84 | Medium | `Real::from_f64` accepted `NaN` and infinities, whose authoritative text is not a JSON number; converting that `Real` into `serde_json::Number` silently substituted `0` after both parses failed (`base/real.rs:148-155`). Reference Model constructors rejected such a `Real` before it reached a document, but the public primitive conversion itself turned an invalid value into a plausible clinical number. Found by the production-only coverage pass: the fallback was the file's only uncovered function. | **fixed** — `D3.18g` chooses construction-time refusal: `from_f64` and `TryFrom<f64>` return a PHI-safe error for all three non-finite classes, infallible `From<f64>` is removed, and serialization reconstructs only from authoritative number text with no substitute. A syntactically valid out-of-range JSON number still round-trips by that text. |
 | A-85 | Medium | `am::cadl`'s ISO-8601 scanner included every comma in a temporal token, so the comma separating two `C_DATE` values was handed to `Date::from_str` as part of the first value and every temporal primitive list was effectively unreadable. Removing comma wholesale would instead reject the ISO-8601 comma decimal sign required by `D3.10b`. Found by the production-only external `parse_definition` coverage suite. | **fixed** (`K15.33`) — the scanner consumes a comma only when the surrounding text makes it a fractional-second decimal sign; otherwise it remains the cADL list token. Tests cover no-whitespace lists and comma-decimal time, date-time, and duration values. |
-| A-86 | High | `DvOrdered::is_abnormal` compares a quantity's magnitude as if it were exact: `magnitude_status` (`<`, `>`, `~`…) is ignored, so against a 3–5 mg/L range `< 4 mg/L` and `> 4 mg/L` both answer "inside" (`Some(false)`), and `< 6 mg/L` answers "outside" although the value could be 4. The validator's flag-agreement check (`D3.24b`) uses the same answer. Found by an external clinical-safety audit; reproduced. | open — no tri-state (inside / outside / indeterminate) exists. |
+| A-86 | High | `DvOrdered::is_abnormal` compares a quantity's magnitude as if it were exact: `magnitude_status` (`<`, `>`, `~`…) is ignored, so against a 3–5 mg/L range `< 4 mg/L` and `> 4 mg/L` both answer "inside" (`Some(false)`), and `< 6 mg/L` answers "outside" although the value could be 4. The validator's flag-agreement check (`D3.24b`) uses the same answer. Found by an external clinical-safety audit; reproduced. | **fixed 2026-11-26** (not committed): `D3.14b`, `DvOrdered::range_position`, `RangePosition`/`Indeterminate`; `is_abnormal` is now "not established inside" |
 
 
 ---
@@ -4906,7 +4906,36 @@ the specified fail-closed answer. Whether *abnormal* is the right thing to
 show for an incomparable unit is a design question the tri-state below would
 settle, not an error against the text.
 
-**Open until** a range assessment can say inside / outside / indeterminate, with
+**Fixed 2026-11-26** against the new `D3.14b`.
+
+- **The assessment.** `DvOrdered::range_position` answers `Inside`,
+  `Outside`, or `Indeterminate(Qualified | Approximate | Incomparable)`. It is
+  decided over every value the qualifier admits, by `quantity::position_in`:
+  `<`, `<=`, `>` and `>=` are rays, `~` is `Approximate`, and a bound that
+  cannot be ordered against the value is `Incomparable`.
+- **The boolean.** `is_abnormal` is `!= Inside`, so it fails closed:
+  `< 4` against 3–5 now answers `Some(true)` (it was `Some(false)`).
+- **The validator.** The `D3.24b` check uses the same answer and is
+  contradicted only by a decided position.
+- **What is kept.** The qualifier, units, range and flag are untouched.
+  `DvQuantity`, `DvCount` and the four temporal types consult their qualifier.
+  Ordinal, scale and proportion have none.
+- **Behaviour changes.** Every `~` value with a range is now `Indeterminate`
+  (the maintainer's decision, 2026-11-26),
+  so its `is_abnormal` is `Some(true)`. A unit-test that asserted `~2026-07-31`
+  inside the year 2026 was changed to say so. An incomparable value beside an
+  `N` flag is no longer a `D3.24b` violation.
+- **Evidence.** `tests/range_position.rs`, seven tests. Mutation of
+  `position_in`: 15 mutants, 14 caught, 1 unviable. It found two missing cases,
+  which were added.
+- **Found in passing, fixed the same day.** Deleting any of the `Count`,
+  `Ordinal`, `Scale` or `Proportion` arms in `check_ordered`'s
+  `Range_is_simple` endpoint match survived mutation. No test gave a reference
+  range one of those endpoint types (4 mutants, pre-existing).
+  `validation::tests::range_is_simple_names_every_ordered_kind_an_endpoint_can_be`
+  covers them, and all 13 `check_ordered` mutants are caught.
+
+**Was open until** a range assessment can say inside / outside / indeterminate, with
 a reason, decided over the whole set of values the qualifier allows; the
 original comparator, units, range and supplied flag stay recorded
 independently; the validator's `D3.24b` check and any display use the same

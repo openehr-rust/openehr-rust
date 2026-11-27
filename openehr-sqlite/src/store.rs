@@ -36,7 +36,7 @@ impl SqliteStore {
     ///
     /// Returns [`StoreError::Engine`] if `SQLite` cannot be opened or configured.
     pub fn in_memory() -> Result<Self> {
-        Self::from_connection(Connection::open_in_memory().map_err(|e| engine(&e))?)
+        Self::from_connection(Connection::open_in_memory().map_err(engine)?)
     }
 
     /// Opens a database file, creating it if absent.
@@ -45,7 +45,53 @@ impl SqliteStore {
     ///
     /// Returns [`StoreError::Engine`] if the file cannot be opened.
     pub fn open(path: &std::path::Path) -> Result<Self> {
-        Self::from_connection(Connection::open(path).map_err(|e| engine(&e))?)
+        Self::from_connection(Connection::open(path).map_err(engine)?)
+    }
+
+    /// Opens an **existing** database read-only, for inspection (`db:O10.20`).
+    ///
+    /// Never creates the file and never installs or migrates the schema: a
+    /// path that names no database is an error, not a new empty store, and a
+    /// database whose recorded schema version is not this build's — or that
+    /// records none at all — is refused. Every write through the returned
+    /// store fails as an engine error, since the connection itself is
+    /// read-only.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Engine`] if the file does not exist or cannot be
+    /// opened, and [`StoreError::SchemaVersionMismatch`] if it holds no
+    /// installed schema of this version (`found: 0` when none is recorded).
+    pub fn open_read_only(path: &std::path::Path) -> Result<Self> {
+        use rusqlite::OpenFlags;
+        // READ_ONLY without CREATE: SQLite refuses a missing file instead of
+        // making one, which is the whole difference from `open`.
+        let connection = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(engine)?;
+        let store = Self::from_connection(connection)?;
+        store.check_schema_version()?;
+        // `check_schema_version` accepts a database recording no version as
+        // *fresh*, because `install` is about to make it one. An inspector
+        // installs nothing, so here "no version" is "not a store".
+        let recorded: Option<i64> = store
+            .connection
+            .query_row(
+                "SELECT version FROM openehr_schema_version LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .or_else(absent_if_no_such_table)?;
+        if recorded.is_none() {
+            return Err(StoreError::SchemaVersionMismatch {
+                found: 0,
+                expected: openehr_store::SCHEMA_VERSION,
+            });
+        }
+        Ok(store)
     }
 
     /// Wraps an existing connection.
@@ -56,7 +102,7 @@ impl SqliteStore {
     pub fn from_connection(connection: Connection) -> Result<Self> {
         connection
             .execute_batch("PRAGMA foreign_keys = ON;")
-            .map_err(|e| engine(&e))?;
+            .map_err(engine)?;
         Ok(Self { connection })
     }
 
@@ -65,6 +111,33 @@ impl SqliteStore {
     #[must_use]
     pub fn connection(&self) -> &Connection {
         &self.connection
+    }
+
+    /// One composition-index row, as both the search and its paged form read
+    /// it.
+    fn read_index_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CompositionIndexRow> {
+        let instant = |text: Option<String>, utc: Option<i64>| {
+            text.map(|text| StoredInstant {
+                text,
+                utc_seconds: utc,
+            })
+        };
+        Ok(CompositionIndexRow {
+            version_uid: row.get("version_uid")?,
+            ehr_id: row.get("ehr_id")?,
+            archetype_id: row.get("archetype_id")?,
+            template_id: row.get("template_id")?,
+            category_code: row.get("category_code")?,
+            composer_name: row.get("composer_name")?,
+            language_code: row.get("language_code")?,
+            territory_code: row.get("territory_code")?,
+            setting_code: row.get("setting_code")?,
+            context_start: instant(
+                row.get("context_start_text")?,
+                row.get("context_start_utc")?,
+            ),
+            context_end: instant(row.get("context_end_text")?, row.get("context_end_utc")?),
+        })
     }
 
     /// Reads a 32-byte digest column.
@@ -102,6 +175,7 @@ impl SqliteStore {
             audit_system_id: row.get("audit_system_id")?,
             audit_change_type_code: row.get("audit_change_type_code")?,
             audit_committer_name: row.get("audit_committer_name")?,
+            audit_committer_json: row.get("audit_committer_json")?,
             audit_time_committed: StoredInstant {
                 text: row.get("audit_time_committed_text")?,
                 utc_seconds: row.get("audit_time_committed_utc")?,
@@ -136,8 +210,8 @@ impl SqliteStore {
     const VERSION_COLUMNS: &'static str = "uid, versioned_object_uid, creating_system_id, \
         trunk_version, branch_number, branch_version, preceding_version_uid, \
         lifecycle_state_code, is_deleted, contribution_uid, audit_system_id, \
-        audit_change_type_code, audit_committer_name, audit_time_committed_text, \
-        audit_time_committed_utc, data_json, audit_description, signature, \
+        audit_change_type_code, audit_committer_name, audit_committer_json, \
+        audit_time_committed_text, audit_time_committed_utc, data_json, audit_description, signature, \
         attestations_json, other_input_version_uids_json, chain_previous, \
         chain_content, chain_digest, chain_tag_key_id, chain_tag_mac";
 
@@ -159,7 +233,7 @@ impl SqliteStore {
                 |row| row.get(0),
             )
             .optional()
-            .or_else(|e| absent_if_no_such_table(&e))?;
+            .or_else(absent_if_no_such_table)?;
 
         if let Some(found) = recorded {
             if found != openehr_store::SCHEMA_VERSION {
@@ -176,7 +250,7 @@ impl SqliteStore {
             .connection
             .query_row("SELECT count(*) FROM openehr_ehr", [], |row| row.get(0))
             .optional()
-            .or_else(|e| absent_if_no_such_table(&e))?;
+            .or_else(absent_if_no_such_table)?;
         if legacy.is_some_and(|n| n > 0) {
             return Err(StoreError::SchemaVersionMismatch {
                 found: 0,
@@ -196,7 +270,7 @@ impl SqliteStore {
                 params![openehr_store::SCHEMA_VERSION, now.text, now.utc_seconds],
             )
             .map(|_| ())
-            .map_err(|e| engine(&e))
+            .map_err(engine)
     }
 
     /// The chain digest of one version, for linking the next.
@@ -208,43 +282,11 @@ impl SqliteStore {
                 params![uid],
                 |row| row.get(0),
             )
-            .map_err(|e| engine(&e))?;
+            .map_err(engine)?;
         <[u8; 32]>::try_from(raw.as_slice()).map_err(|_| StoreError::Engine {
             engine: ENGINE,
             message: "chain_digest is not 32 bytes".to_owned(),
         })
-    }
-
-    /// Whether `ehr` currently accepts new content (`EHR_STATUS.is_modifiable`,
-    /// `db:H5.17`), read fresh from the store rather than from any value a
-    /// caller might have cached — that caching is the sequencing bug the
-    /// requirement exists to close.
-    ///
-    /// `true` when no `EHR_STATUS` has ever been committed for this EHR: a
-    /// freshly created record is modifiable by default, and nothing has said
-    /// otherwise yet. `true` too when `ehr.ehr_status()` does not name a
-    /// `HierObjectId` — `Ehr::new` checks the reference's declared *type*
-    /// (`VERSIONED_EHR_STATUS`) but not the identifier *kind* inside it
-    /// (`lib:A-21`'s own residual), so there is nothing to look up rather than
-    /// something malformed to refuse on. A logical deletion of the status
-    /// itself (`data_json` absent) is treated as **not** modifiable — not a
-    /// shape openEHR's own model gives a status version any reason to take,
-    /// and not evidence the record is open.
-    fn ehr_is_modifiable(&self, ehr: &Ehr) -> Result<bool> {
-        let ObjectId::HierObjectId(container_uid) = ehr.ehr_status().id() else {
-            return Ok(true);
-        };
-        match self.latest_version(container_uid) {
-            Ok(row) => {
-                let Some(json) = row.data_json else {
-                    return Ok(false);
-                };
-                let status: EhrStatus = serde_json::from_str(&json)?;
-                Ok(status.is_modifiable())
-            }
-            Err(StoreError::NotFound { .. }) => Ok(true),
-            Err(e) => Err(e),
-        }
     }
 }
 
@@ -306,8 +348,8 @@ fn hex32(bytes: &[u8; 32]) -> String {
 /// propagates every other error (RCA-IN-6: a failed read is an error, never
 /// silently a missing value). `SQLite` reports a missing table as the generic
 /// `SQLITE_ERROR` code, so the message is the only discriminator.
-fn absent_if_no_such_table<T>(error: &rusqlite::Error) -> Result<Option<T>> {
-    match error {
+fn absent_if_no_such_table<T>(error: rusqlite::Error) -> Result<Option<T>> {
+    match &error {
         rusqlite::Error::SqliteFailure(_, Some(message))
             if message.starts_with("no such table") =>
         {
@@ -317,8 +359,16 @@ fn absent_if_no_such_table<T>(error: &rusqlite::Error) -> Result<Option<T>> {
     }
 }
 
-fn engine(error: &rusqlite::Error) -> StoreError {
-    if let Some(conflict) = commit_conflict(error) {
+// By value, so every call site is `.map_err(engine)` rather than its own
+// `|e| engine(&e)` closure: thirty-four identical adapters, each a separate
+// function to the compiler and to coverage, where one named function is the
+// whole of the logic.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "taken by value to be the `map_err` adapter itself"
+)]
+fn engine(error: rusqlite::Error) -> StoreError {
+    if let Some(conflict) = commit_conflict(&error) {
         return conflict;
     }
     StoreError::Engine {
@@ -343,7 +393,7 @@ impl Store for SqliteStore {
         self.check_schema_version()?;
         self.connection
             .execute_batch(&ddl_script(&SqliteDialect))
-            .map_err(|e| engine(&e))?;
+            .map_err(engine)?;
         self.record_schema_version()
     }
 
@@ -362,7 +412,7 @@ impl Store for SqliteStore {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| engine(&e))?;
+            .map_err(engine)?;
         if existing.is_some() {
             return Err(StoreError::Conflict { kind: "ehr", id });
         }
@@ -381,7 +431,7 @@ impl Store for SqliteStore {
                     ehr.ehr_access().id().to_string(),
                 ],
             )
-            .map_err(|e| engine(&e))?;
+            .map_err(engine)?;
         Ok(())
     }
 
@@ -396,7 +446,7 @@ impl Store for SqliteStore {
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .optional()
-            .map_err(|e| engine(&e))?;
+            .map_err(engine)?;
         let Some((system_id, created, status_uid, access_uid)) = row else {
             return Err(StoreError::NotFound { kind: "ehr", id });
         };
@@ -421,23 +471,27 @@ impl Store for SqliteStore {
         ehr_id: &HierObjectId,
         contribution: &Contribution,
     ) -> Result<()> {
-        let uid = contribution.uid().to_string();
-        let audit = contribution.audit();
-        let committed = StoredInstant::from_date_time(audit.time_committed().value());
+        // One projection for every engine: the committer whole (`db:PR12.25`) and
+        // the declared versions (`db:H5.22`).
+        let row = openehr_store::ContributionRow::project(&ehr_id.to_string(), contribution)?;
+        let uid = row.uid.clone();
         self.connection
             .execute(
                 "INSERT INTO openehr_contribution \
                  (uid, ehr_id, audit_change_type_code, audit_system_id, audit_committer_name, \
-                  audit_time_committed_text, audit_time_committed_utc) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                  audit_committer_json, audit_time_committed_text, audit_time_committed_utc, \
+                  versions_json) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
-                    uid,
-                    ehr_id.to_string(),
-                    audit.change_type_code(),
-                    audit.system_id(),
-                    audit.committer().name(),
-                    committed.text,
-                    committed.utc_seconds,
+                    row.uid,
+                    row.ehr_id,
+                    row.audit_change_type_code,
+                    row.audit_system_id,
+                    row.audit_committer_name,
+                    row.audit_committer_json,
+                    row.audit_time_committed.text,
+                    row.audit_time_committed.utc_seconds,
+                    row.versions_json,
                 ],
             )
             .map_err(|e| match e {
@@ -449,7 +503,7 @@ impl Store for SqliteStore {
                         id: uid.clone(),
                     }
                 }
-                ref other => engine(other),
+                other => engine(other),
             })?;
         Ok(())
     }
@@ -486,7 +540,8 @@ impl Store for SqliteStore {
         // contribution is seen by the very next content commit, whichever
         // order a caller made the two calls in. This is the sequencing bug
         // an implementation that checks once, up front, reproduces.
-        if !self.ehr_is_modifiable(&ehr)? {
+        // `db:H5.20`: one gate for every engine, scoped to the owner.
+        if !openehr_store::ehr_is_modifiable(self, &ehr)? {
             return Err(StoreError::NotModifiable {
                 ehr_id: ehr_id.to_string(),
             });
@@ -503,7 +558,7 @@ impl Store for SqliteStore {
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()
-            .map_err(|e| engine(&e))?;
+            .map_err(engine)?;
 
         // `db:H5.19`: the `EHR` named here must own the container this version
         // joins. Until this check the argument was consulted only when the
@@ -535,12 +590,25 @@ impl Store for SqliteStore {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| engine(&e))?;
+            .map_err(engine)?;
         check_commit_rules(
             head.as_ref(),
             already.is_some(),
             version.preceding_version_uid(),
         )?;
+        // `db:H5.22`: the named contribution exists, is this EHR's, and declared
+        // this version. After the commit rules, so a duplicate or stale commit
+        // is still reported as one.
+        let declared: Option<(String, String)> = self
+            .connection
+            .query_row(
+                "SELECT ehr_id, versions_json FROM openehr_contribution WHERE uid = ?1",
+                params![contribution_uid],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(engine)?;
+        openehr_store::check_membership(declared, &ehr_id.to_string(), contribution_uid, &uid)?;
 
         // The chain links to the previous version *in this container*, which is
         // the head we already resolved for the commit rules. Reading it here
@@ -552,10 +620,7 @@ impl Store for SqliteStore {
             .transpose()?;
         let row = VersionRow::project(version, contribution_uid, previous_digest, None)?;
         let created_container = head.is_none();
-        let transaction = self
-            .connection
-            .unchecked_transaction()
-            .map_err(|e| engine(&e))?;
+        let transaction = self.connection.unchecked_transaction().map_err(engine)?;
 
         if created_container {
             let created =
@@ -573,7 +638,7 @@ impl Store for SqliteStore {
                         created.utc_seconds
                     ],
                 )
-                .map_err(|e| engine(&e))?;
+                .map_err(engine)?;
         }
 
         transaction
@@ -582,12 +647,12 @@ impl Store for SqliteStore {
                  (uid, versioned_object_uid, creating_system_id, trunk_version, branch_number, \
                   branch_version, preceding_version_uid, lifecycle_state_code, is_deleted, \
                   contribution_uid, audit_system_id, audit_change_type_code, \
-                  audit_committer_name, audit_time_committed_text, audit_time_committed_utc, \
-                  data_json, audit_description, signature, attestations_json, \
+                  audit_committer_name, audit_committer_json, audit_time_committed_text, \
+                  audit_time_committed_utc, data_json, audit_description, signature, attestations_json, \
                   other_input_version_uids_json, chain_previous, chain_content, chain_digest, \
                   chain_tag_key_id, chain_tag_mac) \
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, \
-                         ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
+                         ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
                 params![
                     row.uid,
                     row.versioned_object_uid,
@@ -603,6 +668,7 @@ impl Store for SqliteStore {
                     row.audit_system_id,
                     row.audit_change_type_code,
                     row.audit_committer_name,
+                    row.audit_committer_json,
                     row.audit_time_committed.text,
                     row.audit_time_committed.utc_seconds,
                     row.data_json,
@@ -614,10 +680,10 @@ impl Store for SqliteStore {
                     row.chain.content.as_slice(),
                     row.chain.digest.as_slice(),
                     row.chain.tag_key_id,
-                    row.chain.tag_mac.map(|m| m.to_vec()),
+                    row.chain.tag_mac,
                 ],
             )
-            .map_err(|e| engine(&e))?;
+            .map_err(engine)?;
 
         if let Some(composition) = version.data() {
             let index = CompositionIndexRow::project(&row.uid, &ehr_id.to_string(), composition)?;
@@ -644,10 +710,10 @@ impl Store for SqliteStore {
                         index.context_end.as_ref().and_then(|i| i.utc_seconds),
                     ],
                 )
-                .map_err(|e| engine(&e))?;
+                .map_err(engine)?;
         }
 
-        transaction.commit().map_err(|e| engine(&e))?;
+        transaction.commit().map_err(engine)?;
         Ok(CommitOutcome {
             version_uid: version.uid().clone(),
             created_container,
@@ -690,7 +756,7 @@ impl Store for SqliteStore {
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()
-            .map_err(|e| engine(&e))?;
+            .map_err(engine)?;
 
         // `db:H5.19`: the `EHR` named here must own the container this version
         // joins. Until this check the argument was consulted only when the
@@ -719,12 +785,25 @@ impl Store for SqliteStore {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| engine(&e))?;
+            .map_err(engine)?;
         check_commit_rules(
             head.as_ref(),
             already.is_some(),
             version.preceding_version_uid(),
         )?;
+        // `db:H5.22`: the named contribution exists, is this EHR's, and declared
+        // this version. After the commit rules, so a duplicate or stale commit
+        // is still reported as one.
+        let declared: Option<(String, String)> = self
+            .connection
+            .query_row(
+                "SELECT ehr_id, versions_json FROM openehr_contribution WHERE uid = ?1",
+                params![contribution_uid],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(engine)?;
+        openehr_store::check_membership(declared, &ehr_id.to_string(), contribution_uid, &uid)?;
 
         let previous_digest = head
             .as_ref()
@@ -732,10 +811,7 @@ impl Store for SqliteStore {
             .transpose()?;
         let row = VersionRow::project(version, contribution_uid, previous_digest, None)?;
         let created_container = head.is_none();
-        let transaction = self
-            .connection
-            .unchecked_transaction()
-            .map_err(|e| engine(&e))?;
+        let transaction = self.connection.unchecked_transaction().map_err(engine)?;
 
         if created_container {
             let created =
@@ -753,7 +829,7 @@ impl Store for SqliteStore {
                         created.utc_seconds
                     ],
                 )
-                .map_err(|e| engine(&e))?;
+                .map_err(engine)?;
         }
 
         transaction
@@ -762,12 +838,12 @@ impl Store for SqliteStore {
                  (uid, versioned_object_uid, creating_system_id, trunk_version, branch_number, \
                   branch_version, preceding_version_uid, lifecycle_state_code, is_deleted, \
                   contribution_uid, audit_system_id, audit_change_type_code, \
-                  audit_committer_name, audit_time_committed_text, audit_time_committed_utc, \
-                  data_json, audit_description, signature, attestations_json, \
+                  audit_committer_name, audit_committer_json, audit_time_committed_text, \
+                  audit_time_committed_utc, data_json, audit_description, signature, attestations_json, \
                   other_input_version_uids_json, chain_previous, chain_content, chain_digest, \
                   chain_tag_key_id, chain_tag_mac) \
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, \
-                         ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
+                         ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
                 params![
                     row.uid,
                     row.versioned_object_uid,
@@ -783,6 +859,7 @@ impl Store for SqliteStore {
                     row.audit_system_id,
                     row.audit_change_type_code,
                     row.audit_committer_name,
+                    row.audit_committer_json,
                     row.audit_time_committed.text,
                     row.audit_time_committed.utc_seconds,
                     row.data_json,
@@ -794,12 +871,12 @@ impl Store for SqliteStore {
                     row.chain.content.as_slice(),
                     row.chain.digest.as_slice(),
                     row.chain.tag_key_id,
-                    row.chain.tag_mac.map(|m| m.to_vec()),
+                    row.chain.tag_mac,
                 ],
             )
-            .map_err(|e| engine(&e))?;
+            .map_err(engine)?;
 
-        transaction.commit().map_err(|e| engine(&e))?;
+        transaction.commit().map_err(engine)?;
         Ok(CommitOutcome {
             version_uid: version.uid().clone(),
             created_container,
@@ -818,7 +895,7 @@ impl Store for SqliteStore {
                 Self::read_version,
             )
             .optional()
-            .map_err(|e| engine(&e))?
+            .map_err(engine)?
             .ok_or(StoreError::NotFound {
                 kind: "version",
                 id,
@@ -838,7 +915,7 @@ impl Store for SqliteStore {
                 Self::read_version,
             )
             .optional()
-            .map_err(|e| engine(&e))?
+            .map_err(engine)?
             .ok_or(StoreError::NotFound {
                 kind: "versioned_object",
                 id,
@@ -858,7 +935,7 @@ impl Store for SqliteStore {
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()
-            .map_err(|e| engine(&e))?
+            .map_err(engine)?
             .ok_or(StoreError::NotFound {
                 kind: "versioned_object",
                 id,
@@ -883,13 +960,13 @@ impl Store for SqliteStore {
             });
         };
         let sql = version_at_time_candidates_sql(Placeholder::Question);
-        let mut statement = self.connection.prepare(&sql).map_err(|e| engine(&e))?;
+        let mut statement = self.connection.prepare(&sql).map_err(engine)?;
         let candidates = statement
             .query_map(params![id, at_seconds, id, at_seconds], |row| {
                 Ok((row.get(0)?, row.get(1)?, row.get(2)?))
             })
-            .map_err(|e| engine(&e))?;
-        let uid = version_uid_at_time(at, candidates.map(|row| row.map_err(|e| engine(&e))))?;
+            .map_err(engine)?;
+        let uid = version_uid_at_time(at, candidates.map(|row| row.map_err(engine)))?;
         self.get_version(&uid.ok_or(StoreError::NotFound {
             kind: "version",
             id,
@@ -904,15 +981,14 @@ impl Store for SqliteStore {
                  ORDER BY trunk_version ASC, branch_number ASC, branch_version ASC",
                 Self::VERSION_COLUMNS
             ))
-            .map_err(|e| engine(&e))?;
+            .map_err(engine)?;
         let rows = statement
             .query_map(
                 params![versioned_object_uid.to_string()],
                 Self::read_version,
             )
-            .map_err(|e| engine(&e))?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(|e| engine(&e))
+            .map_err(engine)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(engine)
     }
 
     fn chain_checkpoint(&self, versioned_object_uid: &HierObjectId) -> Result<String> {
@@ -949,34 +1025,118 @@ impl Store for SqliteStore {
                  WHERE ehr_id = ?1 AND archetype_id = ?2 \
                  ORDER BY version_uid",
             )
-            .map_err(|e| engine(&e))?;
+            .map_err(engine)?;
         let rows = statement
-            .query_map(params![ehr_id.to_string(), archetype_id], |row| {
-                let instant = |text: Option<String>, utc: Option<i64>| {
-                    text.map(|text| StoredInstant {
-                        text,
-                        utc_seconds: utc,
-                    })
-                };
-                Ok(CompositionIndexRow {
-                    version_uid: row.get("version_uid")?,
-                    ehr_id: row.get("ehr_id")?,
-                    archetype_id: row.get("archetype_id")?,
-                    template_id: row.get("template_id")?,
-                    category_code: row.get("category_code")?,
-                    composer_name: row.get("composer_name")?,
-                    language_code: row.get("language_code")?,
-                    territory_code: row.get("territory_code")?,
-                    setting_code: row.get("setting_code")?,
-                    context_start: instant(
-                        row.get("context_start_text")?,
-                        row.get("context_start_utc")?,
-                    ),
-                    context_end: instant(row.get("context_end_text")?, row.get("context_end_utc")?),
-                })
-            })
-            .map_err(|e| engine(&e))?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(|e| engine(&e))
+            .query_map(
+                params![ehr_id.to_string(), archetype_id],
+                Self::read_index_row,
+            )
+            .map_err(engine)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(engine)
     }
+
+    // `db:P6.25`: the page is cut by the engine. The count and the page are two
+    // statements on the store's one connection, which every writer here
+    // shares, so no commit can land between them.
+    fn versions_page_in(
+        &self,
+        ehr: &HierObjectId,
+        versioned_object_uid: &HierObjectId,
+        rm_type: &str,
+        offset: usize,
+        count: usize,
+    ) -> Result<openehr_store::RowPage<VersionRow>> {
+        openehr_store::require_owned(
+            self,
+            ehr,
+            versioned_object_uid,
+            rm_type,
+            "versioned_object",
+            &versioned_object_uid.to_string(),
+        )?;
+        let id = versioned_object_uid.to_string();
+        let total: i64 = self
+            .connection
+            .query_row(
+                "SELECT count(*) FROM openehr_version WHERE versioned_object_uid = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .map_err(engine)?;
+        let mut statement = self
+            .connection
+            .prepare(&format!(
+                "SELECT {} FROM openehr_version WHERE versioned_object_uid = ?1 \
+                 ORDER BY trunk_version ASC, branch_number ASC, branch_version ASC \
+                 LIMIT ?2 OFFSET ?3",
+                Self::VERSION_COLUMNS
+            ))
+            .map_err(engine)?;
+        let rows = statement
+            .query_map(
+                params![id, sql_count(count), sql_count(offset)],
+                Self::read_version,
+            )
+            .map_err(engine)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(engine)?;
+        Ok(openehr_store::RowPage {
+            rows,
+            total: usize::try_from(total).unwrap_or(usize::MAX),
+        })
+    }
+
+    fn find_compositions_by_archetype_page(
+        &self,
+        ehr_id: &HierObjectId,
+        archetype_id: &str,
+        offset: usize,
+        count: usize,
+    ) -> Result<openehr_store::RowPage<CompositionIndexRow>> {
+        let total: i64 = self
+            .connection
+            .query_row(
+                "SELECT count(*) FROM openehr_composition_index \
+                 WHERE ehr_id = ?1 AND archetype_id = ?2",
+                params![ehr_id.to_string(), archetype_id],
+                |row| row.get(0),
+            )
+            .map_err(engine)?;
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT version_uid, ehr_id, archetype_id, template_id, category_code, \
+                        composer_name, language_code, territory_code, setting_code, \
+                        context_start_text, context_start_utc, context_end_text, context_end_utc \
+                 FROM openehr_composition_index \
+                 WHERE ehr_id = ?1 AND archetype_id = ?2 \
+                 ORDER BY version_uid LIMIT ?3 OFFSET ?4",
+            )
+            .map_err(engine)?;
+        let rows = statement
+            .query_map(
+                params![
+                    ehr_id.to_string(),
+                    archetype_id,
+                    sql_count(count),
+                    sql_count(offset)
+                ],
+                Self::read_index_row,
+            )
+            .map_err(engine)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(engine)?;
+        Ok(openehr_store::RowPage {
+            rows,
+            total: usize::try_from(total).unwrap_or(usize::MAX),
+        })
+    }
+}
+
+/// A `LIMIT` or `OFFSET` for SQLite, which takes an `i64`. A value past
+/// `i64::MAX` saturates: as a limit it means "all of them", and as an offset
+/// "past the end". Both are what the caller asked for, and neither can wrap
+/// into a negative, which SQLite would read as "no limit".
+fn sql_count(n: usize) -> i64 {
+    i64::try_from(n).unwrap_or(i64::MAX)
 }

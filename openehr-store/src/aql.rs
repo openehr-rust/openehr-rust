@@ -139,6 +139,34 @@ pub fn scoped_ehr(query: &AqlQuery, params: &HashMap<String, Literal>) -> Result
 /// the store's own error if a lookup fails, or [`StoreError::Json`] if a
 /// candidate's canonical JSON does not parse as a `COMPOSITION`.
 ///
+/// With the default work budget, [`DEFAULT_CANDIDATE_BUDGET`]; see
+/// [`execute_with_budget`].
+// Same reason as `execute_with_budget` below: a caller's own map.
+#[allow(clippy::implicit_hasher)]
+pub fn execute(
+    store: &dyn Store,
+    query: &AqlQuery,
+    params: &HashMap<String, Literal>,
+) -> Result<QueryResult> {
+    execute_with_budget(store, query, params, DEFAULT_CANDIDATE_BUDGET)
+}
+
+/// The most archetype-index rows [`execute`] examines for one query
+/// (`db:P6.26`).
+///
+/// One row per content-bearing version, so a composition amended ten times
+/// counts eleven. Each costs a version read and a JSON decode. Set so that an
+/// ordinary chart (hundreds of encounters, each amended a few times) is well
+/// inside it. The number was chosen, not measured.
+pub const DEFAULT_CANDIDATE_BUDGET: usize = 10_000;
+
+/// [`execute`] with an explicit work budget (`db:P6.26`).
+///
+/// # Errors
+///
+/// As [`execute`], and [`StoreError::AqlBudgetExceeded`] when the query
+/// has more than `budget` candidates. That is checked before any content is
+/// read.
 /// # Panics
 ///
 /// Never: once an `OBJECT_VERSION_ID` parses, its object component is already
@@ -154,10 +182,11 @@ pub fn scoped_ehr(query: &AqlQuery, params: &HashMap<String, Literal>) -> Result
 // default hasher's generic parameter here for one function's sake is
 // friction `openehr-axa`'s own eventual caller would have to carry too.
 #[allow(clippy::implicit_hasher)]
-pub fn execute(
+pub fn execute_with_budget(
     store: &dyn Store,
     query: &AqlQuery,
     params: &HashMap<String, Literal>,
+    budget: usize,
 ) -> Result<QueryResult> {
     // The library's own alias check, first: every path in `columns`,
     // `order_by`, and `where_clause` must root at a bound alias before this
@@ -234,7 +263,23 @@ pub fn execute(
         check_expr_shape(w, composition_alias)?;
     }
 
-    let candidates = store.find_compositions_by_archetype(&ehr_id, archetype_id)?;
+    // `db:P6.26`: count before reading any content, and refuse above the
+    // budget rather than examine a subset (`db:P6.15`). One paged call does
+    // both: `total` is the count, and at most `budget + 1` rows come back. An
+    // engine that pages in SQL (`db:P6.25`) never reads past that.
+    let page = store.find_compositions_by_archetype_page(
+        &ehr_id,
+        archetype_id,
+        0,
+        budget.saturating_add(1),
+    )?;
+    if page.total > budget {
+        return Err(StoreError::AqlBudgetExceeded {
+            candidates: page.total,
+            budget,
+        });
+    }
+    let candidates = page.rows;
 
     let mut matched: Vec<(Vec<Cell>, Vec<Cell>)> = Vec::new();
     // Containers already answered. The index has one row per content-bearing
@@ -711,6 +756,9 @@ mod tests {
     struct ReadStore {
         index: Vec<CompositionIndexRow>,
         version: VersionRow,
+        /// How many times content was read: `db:P6.26` requires none before
+        /// a budget refusal.
+        reads: std::cell::Cell<usize>,
     }
 
     impl ReadStore {
@@ -723,6 +771,7 @@ mod tests {
             Self {
                 index: vec![index],
                 version: row,
+                reads: std::cell::Cell::new(0),
             }
         }
     }
@@ -771,6 +820,7 @@ mod tests {
         }
 
         fn latest_version(&self, _: &HierObjectId) -> Result<VersionRow> {
+            self.reads.set(self.reads.get() + 1);
             Ok(self.version.clone())
         }
 
@@ -1465,6 +1515,73 @@ mod tests {
         };
         assert!(
             std::panic::catch_unwind(|| eval_operand(lhs, &composition, &params(), "uid")).is_err()
+        );
+    }
+
+    #[test]
+    fn a_query_over_its_work_budget_is_refused_before_any_content_is_read() {
+        // `db:P6.26`: three index rows (one container, three versions; the
+        // index keeps a row per version), and a budget of two.
+        let mut store = ReadStore::one();
+        let row = store.index[0].clone();
+        store.index = vec![row.clone(), row.clone(), row];
+        let query: AqlQuery = "SELECT c/name/value FROM EHR e[ehr_id/value=$ehrUid] \
+             CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] LIMIT 1"
+            .parse()
+            .expect("parses");
+        let params = HashMap::from([("ehrUid".to_owned(), Literal::String(RECORD.to_owned()))]);
+
+        let error =
+            super::execute_with_budget(&store, &query, &params, 2).expect_err("over budget");
+        assert!(
+            matches!(
+                error,
+                StoreError::AqlBudgetExceeded {
+                    candidates: 3,
+                    budget: 2
+                }
+            ),
+            "{error:?}"
+        );
+        assert_eq!(
+            store.reads.get(),
+            0,
+            "no content may be read before the refusal"
+        );
+        assert!(error.to_string().contains("narrow the query"), "{error}");
+
+        // At the budget exactly, it runs, and `LIMIT 1` does not change that the
+        // work was three candidates (one container, answered once, `db:D-20`).
+        let result = super::execute_with_budget(&store, &query, &params, 3).expect("at budget");
+        assert_eq!(result.rows.len(), 1);
+        assert_eq!(store.reads.get(), 1);
+        // And the default budget is the one `execute` applies.
+        assert_eq!(execute(&store, &query, &params).expect("default"), result);
+        assert_eq!(super::DEFAULT_CANDIDATE_BUDGET, 10_000);
+    }
+
+    #[test]
+    fn cells_of_one_numeric_kind_order_by_value() {
+        // `ORDER BY` over two integers or two reals. Both arms fell through
+        // to `_ => Equal` when deleted, and nothing failed (found by `cargo
+        // mutants` over this file, 2026-11-26).
+        use super::compare_cells;
+        use std::cmp::Ordering;
+        assert_eq!(
+            compare_cells(&Cell::Integer(1), &Cell::Integer(2)),
+            Ordering::Less
+        );
+        assert_eq!(
+            compare_cells(&Cell::Integer(3), &Cell::Integer(2)),
+            Ordering::Greater
+        );
+        assert_eq!(
+            compare_cells(&Cell::Number(1.5), &Cell::Number(2.5)),
+            Ordering::Less
+        );
+        assert_eq!(
+            compare_cells(&Cell::Number(2.5), &Cell::Number(1.5)),
+            Ordering::Greater
         );
     }
 }

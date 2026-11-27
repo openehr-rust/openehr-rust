@@ -138,6 +138,11 @@ pub enum ConfigError {
     )]
     NoKeys,
 
+    /// A setting is present but cannot be read (`db:PR12.24`). The message
+    /// names the setting and never quotes its value.
+    #[error("{0}")]
+    Setting(String),
+
     /// One entry was not a PASERK `k4.public.…` key.
     ///
     /// Names the position and not the value: a misconfigured variable is
@@ -235,6 +240,10 @@ pub struct Principal {
     pub issuer: Option<String>,
     /// The `jti` claim, if the token carried one.
     pub token_id: Option<String>,
+    /// The issuer's grants (`openehr_grants`, `db:PR12.18`): the only thing
+    /// an access decision is made from. Empty when the token carries none,
+    /// which allows no clinical request.
+    pub grants: crate::authz::Grants,
 }
 
 /// Checks PASETO v4 public tokens against a set of configured public keys.
@@ -253,11 +262,30 @@ impl PasetoVerifier {
     /// [`ConfigError::NoKeys`] if [`KEYS_VAR`] is unset or empty, and
     /// [`ConfigError::BadKey`] if an entry does not parse.
     pub fn from_env() -> Result<Self, ConfigError> {
+        Self::from_lookup(&|name| std::env::var_os(name))
+    }
+
+    /// [`PasetoVerifier::from_env`], reading through `lookup`
+    /// (`db:PR12.24`).
+    ///
+    /// An issuer, audience or implicit assertion that is absent or empty is
+    /// unset. One that is set but not Unicode refuses startup: it used to go
+    /// through `.ok()` and quietly become no constraint at all (`db:D-30`).
+    ///
+    /// # Errors
+    ///
+    /// As [`PasetoVerifier::from_env`], and [`ConfigError::Setting`] for a
+    /// value that is not Unicode.
+    pub fn from_lookup(
+        lookup: &impl Fn(&str) -> Option<std::ffi::OsString>,
+    ) -> Result<Self, ConfigError> {
+        let setting = |name| crate::settings::claim(name, lookup).map_err(ConfigError::Setting);
+        let keys = setting(KEYS_VAR)?.ok_or(ConfigError::NoKeys)?;
         Self::new(
-            &std::env::var(KEYS_VAR).map_err(|_| ConfigError::NoKeys)?,
-            std::env::var(ISSUER_VAR).ok().as_deref(),
-            std::env::var(AUDIENCE_VAR).ok().as_deref(),
-            std::env::var(IMPLICIT_VAR).ok().as_deref(),
+            &keys,
+            setting(ISSUER_VAR)?.as_deref(),
+            setting(AUDIENCE_VAR)?.as_deref(),
+            setting(IMPLICIT_VAR)?.as_deref(),
         )
     }
 
@@ -363,11 +391,16 @@ impl Principal {
                 .and_then(serde_json::Value::as_str)
                 .map(ToOwned::to_owned)
         };
+        // A grants claim the service cannot read makes the token invalid, not
+        // grant-less: guessing either way would be a policy nobody wrote.
+        let grants = crate::authz::Grants::from_claim(claims.get_claim(crate::authz::GRANTS_CLAIM))
+            .map_err(|_| Denial::Invalid)?;
         Ok(Self {
             subject: string("sub").ok_or(Denial::NoSubject)?,
             name: string("name"),
             issuer: string("iss"),
             token_id: string("jti"),
+            grants,
         })
     }
 }
@@ -432,8 +465,8 @@ impl FromRequestParts<AppContext> for Principal {
 #[cfg(test)]
 mod tests {
     use super::{
-        ConfigError, Denial, HeaderMap, HeaderValue, PasetoVerifier, StatusCode, header,
-        principal_from_headers,
+        AUDIENCE_VAR, ConfigError, Denial, HeaderMap, HeaderValue, IMPLICIT_VAR, ISSUER_VAR,
+        KEYS_VAR, PasetoVerifier, StatusCode, header, principal_from_headers,
     };
     use pasetors::{
         claims::Claims,
@@ -572,6 +605,77 @@ mod tests {
         let production =
             public::sign(&pair.secret, &claims, None, Some(b"production")).expect("signs");
         assert!(verifier.verify(&production).is_ok());
+    }
+
+    /// `db:PR12.24`: a lookup holding exactly the given settings.
+    fn settings(
+        pairs: Vec<(&'static str, std::ffi::OsString)>,
+    ) -> impl Fn(&str) -> Option<std::ffi::OsString> {
+        move |name| {
+            pairs
+                .iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| value.clone())
+        }
+    }
+
+    #[test]
+    fn an_empty_audience_is_unset_as_the_compose_default_needs() {
+        // `compose.yaml` passes `${OPENEHR_PASETO_AUDIENCE:-}`, which is empty
+        // when the operator sets nothing. Taken as a configured audience, it
+        // refused the documented throwaway token, which carries none.
+        let pair = AsymmetricKeyPair::<V4>::generate().expect("keypair");
+        let verifier = PasetoVerifier::from_lookup(&settings(vec![
+            (KEYS_VAR, paserk(&pair).into()),
+            (AUDIENCE_VAR, "".into()),
+        ]))
+        .expect("verifier");
+        assert!(
+            verifier
+                .verify(&signed(&pair, &subject_claims("clinician-4417")))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn a_configured_audience_read_from_settings_stays_enforced() {
+        let pair = AsymmetricKeyPair::<V4>::generate().expect("keypair");
+        let verifier = PasetoVerifier::from_lookup(&settings(vec![
+            (KEYS_VAR, paserk(&pair).into()),
+            (AUDIENCE_VAR, "openehr-axa".into()),
+        ]))
+        .expect("verifier");
+        let mut other = subject_claims("clinician-4417");
+        other.audience("some-other-service").expect("audience");
+        assert_eq!(
+            verifier.verify(&signed(&pair, &other)),
+            Err(Denial::Invalid)
+        );
+        let mut ours = subject_claims("clinician-4417");
+        ours.audience("openehr-axa").expect("audience");
+        assert!(verifier.verify(&signed(&pair, &ours)).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_claim_setting_that_is_not_unicode_refuses_startup_rather_than_vanishing() {
+        use std::os::unix::ffi::OsStringExt as _;
+        let pair = AsymmetricKeyPair::<V4>::generate().expect("keypair");
+        for name in [ISSUER_VAR, AUDIENCE_VAR, IMPLICIT_VAR] {
+            let error = PasetoVerifier::from_lookup(&settings(vec![
+                (KEYS_VAR, paserk(&pair).into()),
+                (name, std::ffi::OsString::from_vec(vec![0x61, 0xff])),
+            ]))
+            .expect_err("not Unicode");
+            assert!(
+                matches!(&error, ConfigError::Setting(m) if m.starts_with(name)),
+                "{error}"
+            );
+        }
+        assert!(matches!(
+            PasetoVerifier::from_lookup(&settings(vec![])),
+            Err(ConfigError::NoKeys)
+        ));
     }
 
     #[test]

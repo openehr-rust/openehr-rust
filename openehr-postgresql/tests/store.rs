@@ -111,6 +111,35 @@ fn a_record_reads_and_commits_only_its_own_containers() {
     conformance::run_ehr_scope(&mut store).expect("EHR scope conformance suite");
 }
 
+/// `db:H5.22`, `db:D-26`: the contribution-membership suite.
+#[test]
+#[ignore = "needs a real PostgreSQL server, see this file's own module doc"]
+fn a_version_is_committed_only_into_its_declared_contribution() {
+    let mut store = connect();
+    reset(&mut store);
+    conformance::run_contribution_membership(&mut store).expect("membership suite");
+}
+
+/// `db:P6.25`: the paging suite. `PostgresqlStore` does not override the
+/// paged lookups yet, so this checks the default slice against a real server.
+#[test]
+#[ignore = "needs a real PostgreSQL server, see this file's own module doc"]
+fn a_page_matches_the_whole() {
+    let mut store = connect();
+    reset(&mut store);
+    conformance::run_paging(&mut store).expect("paging suite");
+}
+
+/// `db:H5.20`, `db:D-23`: the same status-binding suite `openehr-sqlite`
+/// runs, against a real PostgreSQL server.
+#[test]
+#[ignore = "needs a real PostgreSQL server, see this file's own module doc"]
+fn a_record_reads_and_gates_on_only_a_status_it_owns() {
+    let mut store = connect();
+    reset(&mut store);
+    conformance::run_ehr_status_binding(&mut store).expect("EHR status binding suite");
+}
+
 /// Installing twice must be safe: a deployment runs migrations on every
 /// boot. `SqliteStore`'s own suite checks this inline (`conformance::run`);
 /// checked again here because `install`'s idempotence rests on

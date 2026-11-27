@@ -40,6 +40,22 @@ IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_versioned_object
 )')
 GO
 
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_contribution' AND type = 'U')
+  EXEC('CREATE TABLE [openehr_contribution] (
+  [uid] nvarchar(255) NOT NULL,
+  [ehr_id] nvarchar(255) NOT NULL,
+  [audit_change_type_code] nvarchar(16) NOT NULL,
+  [audit_system_id] nvarchar(255) NOT NULL,
+  [audit_committer_name] nvarchar(255),
+  [audit_committer_json] nvarchar(max) NOT NULL,
+  [audit_time_committed_text] nvarchar(64) NOT NULL,
+  [audit_time_committed_utc] datetimeoffset(7),
+  [versions_json] nvarchar(max) NOT NULL,
+  PRIMARY KEY ([uid]),
+  FOREIGN KEY ([ehr_id]) REFERENCES [openehr_ehr] ([ehr_id])
+)')
+GO
+
 IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_version' AND type = 'U')
   EXEC('CREATE TABLE [openehr_version] (
   [uid] nvarchar(255) NOT NULL,
@@ -55,6 +71,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_version' AND typ
   [audit_system_id] nvarchar(255) NOT NULL,
   [audit_change_type_code] nvarchar(16) NOT NULL,
   [audit_committer_name] nvarchar(255),
+  [audit_committer_json] nvarchar(max) NOT NULL,
   [audit_time_committed_text] nvarchar(64) NOT NULL,
   [audit_time_committed_utc] datetimeoffset(7),
   [data_json] nvarchar(max),
@@ -68,21 +85,8 @@ IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_version' AND typ
   [chain_tag_key_id] nvarchar(255),
   [chain_tag_mac] binary(32),
   PRIMARY KEY ([uid]),
-  FOREIGN KEY ([versioned_object_uid]) REFERENCES [openehr_versioned_object] ([uid])
-)')
-GO
-
-IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name = N'openehr_contribution' AND type = 'U')
-  EXEC('CREATE TABLE [openehr_contribution] (
-  [uid] nvarchar(255) NOT NULL,
-  [ehr_id] nvarchar(255) NOT NULL,
-  [audit_change_type_code] nvarchar(16) NOT NULL,
-  [audit_system_id] nvarchar(255) NOT NULL,
-  [audit_committer_name] nvarchar(255),
-  [audit_time_committed_text] nvarchar(64) NOT NULL,
-  [audit_time_committed_utc] datetimeoffset(7),
-  PRIMARY KEY ([uid]),
-  FOREIGN KEY ([ehr_id]) REFERENCES [openehr_ehr] ([ehr_id])
+  FOREIGN KEY ([versioned_object_uid]) REFERENCES [openehr_versioned_object] ([uid]),
+  FOREIGN KEY ([contribution_uid]) REFERENCES [openehr_contribution] ([uid])
 )')
 GO
 
@@ -110,6 +114,10 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_versioned_object_ehr'
   EXEC('CREATE INDEX [ix_versioned_object_ehr] ON [openehr_versioned_object] ([ehr_id], [rm_type])')
 GO
 
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_contribution_ehr_time')
+  EXEC('CREATE INDEX [ix_contribution_ehr_time] ON [openehr_contribution] ([ehr_id], [audit_time_committed_utc])')
+GO
+
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_version_container_trunk')
   EXEC('CREATE UNIQUE INDEX [ix_version_container_trunk] ON [openehr_version] ([versioned_object_uid], [trunk_version], [branch_number], [branch_version])')
 GO
@@ -122,10 +130,6 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_version_preceding')
   EXEC('CREATE INDEX [ix_version_preceding] ON [openehr_version] ([preceding_version_uid])')
 GO
 
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_contribution_ehr_time')
-  EXEC('CREATE INDEX [ix_contribution_ehr_time] ON [openehr_contribution] ([ehr_id], [audit_time_committed_utc])')
-GO
-
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_composition_archetype')
   EXEC('CREATE INDEX [ix_composition_archetype] ON [openehr_composition_index] ([ehr_id], [archetype_id])')
 GO
@@ -134,8 +138,8 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_composition_context_s
   EXEC('CREATE INDEX [ix_composition_context_start] ON [openehr_composition_index] ([ehr_id], [context_start_utc])')
 GO
 
-CREATE OR ALTER TRIGGER [trg_openehr_version_append_only] ON [openehr_version] INSTEAD OF UPDATE, DELETE AS BEGIN THROW 50000, 'openehr_version is append-only (openEHR V8.10)', 1; END
+CREATE OR ALTER TRIGGER [trg_openehr_contribution_append_only] ON [openehr_contribution] INSTEAD OF UPDATE, DELETE AS BEGIN THROW 50000, 'openehr_contribution is append-only (openEHR V8.10)', 1; END
 GO
 
-CREATE OR ALTER TRIGGER [trg_openehr_contribution_append_only] ON [openehr_contribution] INSTEAD OF UPDATE, DELETE AS BEGIN THROW 50000, 'openehr_contribution is append-only (openEHR V8.10)', 1; END
+CREATE OR ALTER TRIGGER [trg_openehr_version_append_only] ON [openehr_version] INSTEAD OF UPDATE, DELETE AS BEGIN THROW 50000, 'openehr_version is append-only (openEHR V8.10)', 1; END
 GO

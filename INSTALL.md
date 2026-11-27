@@ -144,7 +144,13 @@ cd openehr-axa && cargo run --example generate_test_token
 ```
 
 That prints an `OPENEHR_PASETO_PUBLIC_KEYS=k4.public…` line and an
-`Authorization: Bearer …` line. Export the first and start the service:
+`Authorization: Bearer …` line. The token carries an `openehr_grants` claim
+for every record, read and write. The service refuses any clinical request a
+token's grants do not cover (`db:PR12.18`), and a real issuer grants per
+record. The Compose stack also audits reads to
+`/home/openehr/data/access.jsonl` on its data volume. Set
+`OPENEHR_ACCESS_LOG` to change the path, or unset it in `compose.yaml` to turn
+auditing off. Export the first and start the service:
 
 ```sh
 export OPENEHR_PASETO_PUBLIC_KEYS=k4.public...   # from the line above

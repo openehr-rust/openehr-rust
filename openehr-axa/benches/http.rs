@@ -53,6 +53,14 @@ fn served() -> (Router, String, String) {
     let pair = AsymmetricKeyPair::<V4>::generate().expect("keypair");
     let mut claims = Claims::new().expect("claims");
     claims.subject("clinician-4417").expect("subject");
+    // Every route checks the token's grants (`db:PR12.18`). A benchmark of a
+    // refusal would measure the wrong path.
+    claims
+        .add_additional(
+            openehr_axa::authz::GRANTS_CLAIM,
+            serde_json::json!([{"ehr": "*", "actions": ["read"]}]),
+        )
+        .expect("claim");
     let token = public::sign(&pair.secret, &claims, None, None).expect("signs");
 
     let mut store = SqliteStore::in_memory().expect("store");

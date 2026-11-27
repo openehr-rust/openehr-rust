@@ -109,16 +109,41 @@ of this.
   invisible until somebody goes looking, so it MUST be documented wherever the
   configuration is documented.
 
-- **PR12.18** Verification is **not** authorization. A service MUST NOT present
-  a token requirement as an access control, and MUST NOT make an access decision
-  from a claim.
+- **PR12.18** *(amended 2026-11-26, maintainer's decision, `tasks.md` triage
+  item 6)* Verification is **not** authorization. Knowing that a caller is
+  `clinician-4417` does not say which records they may open. That needs the
+  care relationship, the care team, the consent directives, and the
+  break-glass rules, and this repository holds none of them (`S1.5`).
 
-  Knowing that a caller is `clinician-4417` says nothing about which records
-  they may open. That needs the care relationship, the care team, the consent
-  directives, and the break-glass rules — a model this repository does not have
-  (`S1.5`). A service that checked a `roles` claim and considered the matter
-  settled would be enforcing a policy nobody wrote, which is worse than
-  enforcing none, because it looks like it works.
+  So the **issuer** decides, and the service enforces exactly what it decided.
+  A verified token carries explicit grants, and the service MUST refuse every
+  clinical request they do not cover:
+
+  - **The claim.** `openehr_grants` is a list of
+    `{"ehr": "<ehr id>" | "*", "actions": ["read", "write"]}`. `"*"` covers
+    every record, for a service account or a break-glass token the issuer
+    chose to mint. It is never assumed.
+  - **Deny by default.** No claim, or no grant for the record and the action,
+    is `403`. A claim that is present but malformed makes the token invalid
+    (`401`): a grant the service cannot read is not a grant it may guess at.
+  - **The actions.** `read` covers every `GET` under an `EHR`, and an AQL
+    query on the `EHR` it resolves to. `write` covers declaring a
+    contribution, committing a version, and creating the `EHR` with
+    `PUT /ehr/{ehr_id}`. `POST /ehr` mints an id no per-record grant can name,
+    so it needs `write` on `"*"` (`S1.22`).
+  - **Before the store.** The check runs before the store is asked anything,
+    so a `403` is the same for a record that exists and one that does not. It
+    is not an oracle, which `H5.18`'s `404` also guards against.
+  - **Recorded.** A denied read is recorded with outcome `denied`
+    (`PR12.23`).
+  - **Nothing inferred.** No decision is made from any other claim: not
+    `roles`, not `name`, not `sub`. Grants are not widened from a role, and
+    an absent grant is not filled in.
+
+  What this enforces is the issuer's policy, as encoded at issue time. A grant
+  outlives a care relationship that ends before the token expires, so token
+  lifetime is part of the policy. The care-relationship model itself stays
+  outside this repository.
 
 - **PR12.19** A verified subject MUST NOT silently replace a committer the
   request supplies. Where a write endpoint accepts an `AUDIT_DETAILS` naming a
@@ -255,13 +280,63 @@ of this.
   quoting what it said is a second copy of the data under weaker protection than
   the first.
 
+- **PR12.25** *(added 2026-11-26, `D-22`, `D-25`)* The committer of every
+  version and every contribution MUST be stored **whole**, as canonical JSON
+  of its `PARTY_PROXY`: its external reference, its identifiers, and its
+  name. It MUST be readable back. A display name is not an identity: two
+  clinicians share one, and one clinician changes theirs.
+
+  A service MUST apply `PR12.19`'s comparison to the contribution's own
+  audit as well as to each version's, before either is written. In
+  `openehr-axa` the stored committer is therefore the verified caller.
+  The store holds no second, "verified actor" column, because this service
+  refuses every write in which the declared committer and the verified
+  caller differ. A service that acts on another party's behalf would need
+  one, and none exists here.
+
+  The committer JSON identifies a person. It is held in the same append-only,
+  chained rows as the rest of the audit, and the same access rules apply to
+  it (`PHI.md`).
+
+- **PR12.24** *(added 2026-11-26, `D-30`)* An optional setting that turns
+  a protection on — the access log (`PR12.6`), the expected issuer, audience,
+  or implicit assertion of a token (`PR12.17`) — MUST be read in one of four
+  states, and none of them may silently turn the protection off:
+
+  - **absent**: the protection is off, as documented for that setting;
+  - **configured**: the protection is on, with that value;
+  - **invalid** (a value the process cannot read, such as one that is not
+    Unicode where text is required): startup MUST fail, naming the setting
+    and not quoting the value;
+  - **empty**: stated per setting. An empty claim constraint means absent,
+    because that is what a Compose default of `${VAR:-}` produces, and an
+    empty constraint matches no real token. An empty access-log path MUST
+    fail startup: an audit control must not fall open on a typo, and turning
+    auditing off means unsetting the variable.
+
+  A path is read as an operating-system path, not as text, so a valid path
+  that is not Unicode is still a path. Found by source inspection: every read
+  error, invalid Unicode included, meant "auditing off", and `.ok()` made an
+  unreadable audience into no audience at all.
+
 - **PR12.23** A failed read MUST be recorded, with an outcome distinguishing it
   from a successful one. Someone probing for records they cannot see is what an
   investigation is looking for, and a log of successes only omits it.
 
-  `openehr-axa` distinguishes `ok`, `not_found`, `gone`, and `refused`. `gone`
-  is separate from `ok` because who looked at a **withdrawn** record is a
-  sharper question than who looked at a live one.
+  `openehr-axa` distinguishes `ok`, `not_found`, `gone`, `refused`,
+  *(amended 2026-11-26, `D-28`, `D-29`)* `error`, and *(amended 2026-11-26,
+  `PR12.18`)* `denied`, a request the token's grants did not cover. `gone` is separate from
+  `ok` because who looked at a **withdrawn** record is a sharper question than
+  who looked at a live one. `error` is a read the service could not complete: a
+  stored document that does not decode, or an engine failure. It MUST NOT be
+  recorded as `ok`, and the response MUST NOT present it as an absent value.
+
+  The outcome MUST be decided from the **response about to be sent**, after
+  every check that can still refuse it (paging, decoding, a missing parent
+  record), and appended before any content is released. A record written
+  after the store lookup and before those checks says `ok` for a request the
+  caller was refused. One written only on some branches omits an
+  authenticated lookup of a record that does not exist.
 
 ## Tamper evidence
 

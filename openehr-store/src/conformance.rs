@@ -205,6 +205,58 @@ pub fn sample_contribution(uid: &str, versions: &[u32]) -> Contribution {
     .expect("literal")
 }
 
+/// A contribution declaring exactly `versions` (full `OBJECT_VERSION_ID`s),
+/// for a story whose versions are not [`sample_contribution`]'s composition
+/// versions of [`RECORD`] (`db:H5.22`: a commit must be declared).
+///
+/// # Panics
+///
+/// If a version id does not parse, which is a fixture bug.
+#[must_use]
+pub fn sample_contribution_declaring(uid: &str, versions: &[String]) -> Contribution {
+    Contribution::new(
+        HierObjectId::from_uid_str(uid).expect("literal"),
+        versions
+            .iter()
+            .map(|v| v.parse().expect("fixture version uid"))
+            .collect(),
+        AuditDetails::new(
+            SYSTEM,
+            DvDateTime::new("2026-08-01T09:05:00Z").expect("literal"),
+            audit_change_type::CREATION,
+            PartyIdentified::named("Dr A Nurse")
+                .expect("literal")
+                .into(),
+        )
+        .expect("literal"),
+    )
+    .expect("literal")
+}
+
+/// The composition version `n` of [`RECORD`], as [`sample_version`] makes it.
+#[must_use]
+pub fn composition_version_uid(n: u32) -> String {
+    format!("{RECORD}::{SYSTEM}::{n}")
+}
+
+/// The status version `n`, as [`sample_ehr_status_version`] makes it.
+#[must_use]
+pub fn status_version_uid(n: u32) -> String {
+    format!("{EHR_STATUS_RECORD}::{SYSTEM}::{n}")
+}
+
+/// A contribution declaring composition versions `compositions` and status
+/// versions `statuses`.
+#[must_use]
+pub fn sample_contribution_of(uid: &str, compositions: &[u32], statuses: &[u32]) -> Contribution {
+    let versions: Vec<String> = compositions
+        .iter()
+        .map(|n| composition_version_uid(*n))
+        .chain(statuses.iter().map(|n| status_version_uid(*n)))
+        .collect();
+    sample_contribution_declaring(uid, &versions)
+}
+
 /// Builds a sample `EHR_STATUS`.
 ///
 /// # Panics
@@ -815,7 +867,10 @@ pub fn run_ehr_status<S: Store>(store: &mut S) -> Result<()> {
     store.create_ehr(&ehr)?;
 
     let contribution_uid = "33333333-4444-5555-6666-777777777777";
-    store.create_contribution(&ehr_id, &sample_contribution(contribution_uid, &[1, 2]))?;
+    store.create_contribution(
+        &ehr_id,
+        &sample_contribution_of(contribution_uid, &[1, 2], &[1, 2]),
+    )?;
 
     // Commit the first version — active, modifiable — and read it back every
     // way the trait offers, none of which was written with `EHR_STATUS` in
@@ -915,7 +970,10 @@ pub fn run_is_modifiable_gate<S: Store>(store: &mut S) -> Result<()> {
     store.create_ehr(&ehr)?;
 
     let contribution_uid = "44444444-5555-6666-7777-888888888888";
-    store.create_contribution(&ehr_id, &sample_contribution(contribution_uid, &[1, 2, 3]))?;
+    store.create_contribution(
+        &ehr_id,
+        &sample_contribution_of(contribution_uid, &[1, 2, 3], &[1, 2]),
+    )?;
 
     // No `EHR_STATUS` has ever been committed for this EHR: a freshly created
     // record is modifiable by default, so this commit succeeds.
@@ -953,6 +1011,349 @@ pub fn run_is_modifiable_gate<S: Store>(store: &mut S) -> Result<()> {
             )
         });
 
+    Ok(())
+}
+
+/// `db:P6.25`, `db:P6.15`: a paged read is the matching slice of the whole
+/// result, in the same order, with the true total.
+///
+/// The pages are compared with the unpaged read rather than with literals, so
+/// an engine that pages in SQL and one that uses the default slice are held
+/// to the same answer: every page boundary, an empty page past the end,
+/// `count` and `offset` at their extremes, and a container the `EHR`
+/// does not own.
+///
+/// # Errors
+///
+/// Returns the first unexpected engine error. A conformance failure panics.
+///
+/// # Panics
+///
+/// Panics when the engine fails a conformance assertion.
+pub fn run_paging<S: Store>(store: &mut S) -> Result<()> {
+    let engine = store.engine();
+    store.install()?;
+    let ehr = sample_ehr();
+    let ehr_id = ehr.ehr_id().clone();
+    store.create_ehr(&ehr)?;
+    let other = second_ehr();
+    store.create_ehr(&other)?;
+    let contribution = "66666666-7777-8888-9999-000000000041";
+    store.create_contribution(
+        &ehr_id,
+        &sample_contribution(contribution, &[1, 2, 3, 4, 5]),
+    )?;
+    for (n, preceding) in [
+        (1, None),
+        (2, Some(1)),
+        (3, Some(2)),
+        (4, Some(3)),
+        (5, Some(4)),
+    ] {
+        store.commit_composition(&ehr_id, &sample_version(n, preceding, n * 3), contribution)?;
+    }
+    let container = HierObjectId::from_uid_str(RECORD).expect("literal");
+    let archetype = "openEHR-EHR-COMPOSITION.encounter.v1";
+    let all: Vec<String> = store
+        .all_versions_in(&ehr_id, &container, "COMPOSITION")?
+        .into_iter()
+        .map(|row| row.uid)
+        .collect();
+    let found: Vec<String> = store
+        .find_compositions_by_archetype(&ehr_id, archetype)?
+        .into_iter()
+        .map(|row| row.version_uid)
+        .collect();
+    assert_eq!(all.len(), 5, "{engine}: fixture");
+    assert_eq!(found.len(), 5, "{engine}: fixture");
+
+    for (offset, count) in [
+        (0, 2),
+        (2, 2),
+        (4, 2),
+        (5, 2),
+        (9, 1),
+        (0, 100),
+        (1, 0),
+        (0, usize::MAX),
+        (usize::MAX, 3),
+    ] {
+        let expect = |whole: &[String]| -> Vec<String> {
+            whole.iter().skip(offset).take(count).cloned().collect()
+        };
+        let page = store.versions_page_in(&ehr_id, &container, "COMPOSITION", offset, count)?;
+        assert_eq!(page.total, 5, "{engine}: history total at {offset}/{count}");
+        assert_eq!(
+            page.rows.into_iter().map(|row| row.uid).collect::<Vec<_>>(),
+            expect(&all),
+            "{engine}: history page {offset}/{count}"
+        );
+        let page = store.find_compositions_by_archetype_page(&ehr_id, archetype, offset, count)?;
+        assert_eq!(page.total, 5, "{engine}: search total at {offset}/{count}");
+        assert_eq!(
+            page.rows
+                .into_iter()
+                .map(|row| row.version_uid)
+                .collect::<Vec<_>>(),
+            expect(&found),
+            "{engine}: search page {offset}/{count}"
+        );
+    }
+
+    // Scoped as the unpaged read is (`db:H5.18`): another EHR gets NotFound,
+    // not an empty page that reads as "no history".
+    assert!(
+        matches!(
+            store.versions_page_in(other.ehr_id(), &container, "COMPOSITION", 0, 10),
+            Err(crate::StoreError::NotFound { .. })
+        ),
+        "{engine}: a paged read of another EHR's container must be NotFound"
+    );
+    let none = store.find_compositions_by_archetype_page(other.ehr_id(), archetype, 0, 10)?;
+    assert_eq!((none.rows.len(), none.total), (0, 0), "{engine}");
+    Ok(())
+}
+
+/// `db:H5.22` (`db:D-26`): a version is committed only into a contribution
+/// of the same `EHR` that declared it, on both write paths, and a refusal
+/// writes nothing.
+///
+/// Cases: a contribution declaring two versions of two containers commits both
+/// (one act, several versions). Then a version it did not declare, a
+/// contribution that does not exist, and another record's contribution are
+/// each refused as `NotInContribution`, and none of them leaves a row.
+///
+/// # Errors
+///
+/// Returns the first unexpected engine error. A conformance failure panics.
+///
+/// # Panics
+///
+/// Panics when the engine fails a conformance assertion.
+pub fn run_contribution_membership<S: Store>(store: &mut S) -> Result<()> {
+    let engine = store.engine();
+    store.install()?;
+    let ehr = sample_ehr();
+    let ehr_id = ehr.ehr_id().clone();
+    store.create_ehr(&ehr)?;
+    let other = second_ehr();
+    store.create_ehr(&other)?;
+
+    // One act, two versions of two containers: a composition and the status.
+    let act = "66666666-7777-8888-9999-000000000051";
+    store.create_contribution(&ehr_id, &sample_contribution_of(act, &[1], &[1]))?;
+    store.commit_composition(&ehr_id, &sample_version(1, None, 5), act)?;
+    store.commit_ehr_status(&ehr_id, &sample_ehr_status_version(1, None, 6, true), act)?;
+
+    // Another record's contribution, declaring the very version we try.
+    let foreign = "66666666-7777-8888-9999-000000000052";
+    store.create_contribution(other.ehr_id(), &sample_contribution(foreign, &[2]))?;
+
+    let refused = |result: Result<crate::CommitOutcome>, what: &str| {
+        assert!(
+            matches!(result, Err(crate::StoreError::NotInContribution { .. })),
+            "{engine}: {what} must be refused as NotInContribution, got {result:?}"
+        );
+    };
+    // Not declared: the act named version 1 only.
+    refused(
+        store.commit_composition(&ehr_id, &sample_version(2, Some(1), 7), act),
+        "an undeclared version",
+    );
+    refused(
+        store.commit_ehr_status(
+            &ehr_id,
+            &sample_ehr_status_version(2, Some(1), 8, true),
+            act,
+        ),
+        "an undeclared status version",
+    );
+    // No such contribution.
+    refused(
+        store.commit_composition(
+            &ehr_id,
+            &sample_version(2, Some(1), 7),
+            "66666666-7777-8888-9999-000000000059",
+        ),
+        "an absent contribution",
+    );
+    // Another record's, although it declares the version.
+    refused(
+        store.commit_composition(&ehr_id, &sample_version(2, Some(1), 7), foreign),
+        "another record's contribution",
+    );
+
+    // Nothing was written by any refusal.
+    let container = HierObjectId::from_uid_str(RECORD).expect("literal");
+    let status = HierObjectId::from_uid_str(EHR_STATUS_RECORD).expect("literal");
+    assert_eq!(
+        store.all_versions(&container)?.len(),
+        1,
+        "{engine}: compositions"
+    );
+    assert_eq!(store.all_versions(&status)?.len(), 1, "{engine}: statuses");
+    assert_eq!(
+        store.latest_version(&container)?.contribution_uid,
+        act,
+        "{engine}: the version records its change set"
+    );
+    Ok(())
+}
+
+/// An `EHR` otherwise like [`sample_ehr`], with id `ehr_uid`, whose
+/// `ehr_status` reference names `status`, which may be any identifier.
+fn ehr_naming_status(ehr_uid: &str, status: ObjectId) -> Ehr {
+    let uid = HierObjectId::from_uid_str(ehr_uid).expect("literal");
+    Ehr::new(
+        HierObjectId::from_uid_str("11111111-2222-3333-4444-555555555555").expect("literal"),
+        uid.clone(),
+        ObjectRef::new("local", "VERSIONED_EHR_STATUS", status).expect("literal"),
+        ObjectRef::new("local", "VERSIONED_EHR_ACCESS", ObjectId::HierObjectId(uid))
+            .expect("literal"),
+        DvDateTime::new("2026-08-01T09:00:00Z").expect("literal"),
+    )
+    .expect("literal")
+}
+
+/// `db:H5.20` (`db:D-23`): an `EHR`'s status is the container its
+/// reference names **only if it owns that container and the container holds
+/// `EHR_STATUS`**. The reference is submitted with the `EHR`, so naming
+/// proves nothing.
+///
+/// 1. A record naming another chart's status container, or a composition
+///    container, reads no status through the scoped lookups (current or as
+///    of a time), exactly as an absent one, and its content commits are
+///    refused as an inconsistent reference, writing nothing. Before
+///    `db:H5.20`, the first case inherited the other chart's deactivation.
+///    Read as "never committed", it would escape any deactivation of its own.
+/// 2. The owner still reads its status, and its own deactivation still
+///    holds.
+/// 3. A record whose status container does not exist yet is open, as a
+///    freshly created record is; so is one whose reference names no
+///    `HIER_OBJECT_ID` at all.
+///
+/// # Errors
+///
+/// Returns the first unexpected engine error. A conformance failure panics.
+///
+/// # Panics
+///
+/// Panics when the engine fails a conformance assertion.
+// Long on purpose, like `run_ehr_scope`: three numbered cases in the order a
+// reader checks them, each a separate way for the fix to be wrong.
+#[allow(clippy::too_many_lines)]
+pub fn run_ehr_status_binding<S: Store>(store: &mut S) -> Result<()> {
+    let engine = store.engine();
+    store.install()?;
+    let owner = sample_ehr();
+    let owner_id = owner.ehr_id().clone();
+    store.create_ehr(&owner)?;
+    let contribution = "66666666-7777-8888-9999-000000000011";
+    store.create_contribution(&owner_id, &sample_contribution_of(contribution, &[1], &[1]))?;
+    store.commit_composition(&owner_id, &sample_version(1, None, 5), contribution)?;
+    store.commit_ehr_status(
+        &owner_id,
+        &sample_ehr_status_version(1, None, 10, false),
+        contribution,
+    )?;
+    let status_container = HierObjectId::from_uid_str(EHR_STATUS_RECORD).expect("literal");
+    let at = DvDateTime::new("2026-08-01T09:30:00Z").expect("literal");
+
+    // 1. Records naming a container they do not own.
+    for (n, (ehr_uid, named)) in [
+        ("20000000-0000-0000-0000-0000000000d1", EHR_STATUS_RECORD),
+        ("20000000-0000-0000-0000-0000000000d2", RECORD),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let named = HierObjectId::from_uid_str(named).expect("literal");
+        let ehr = ehr_naming_status(ehr_uid, ObjectId::HierObjectId(named.clone()));
+        let ehr_id = ehr.ehr_id().clone();
+        store.create_ehr(&ehr)?;
+        assert!(
+            matches!(
+                store.latest_version_in(&ehr_id, &named, "EHR_STATUS"),
+                Err(crate::StoreError::NotFound { .. })
+            ),
+            "{engine}: case {n}: a status this EHR does not own was served"
+        );
+        assert!(
+            matches!(
+                store.version_at_time_in(&ehr_id, &named, "EHR_STATUS", &at),
+                Err(crate::StoreError::NotFound { .. })
+            ),
+            "{engine}: case {n}: an as-of status this EHR does not own was served"
+        );
+        assert!(
+            matches!(
+                crate::ehr_is_modifiable(store, &ehr),
+                Err(crate::StoreError::Conflict {
+                    kind: "ehr_status",
+                    ..
+                })
+            ),
+            "{engine}: case {n}: an inconsistent status reference must be a conflict"
+        );
+        let own = format!("66666666-7777-8888-9999-00000000002{n}");
+        store.create_contribution(&ehr_id, &sample_contribution(&own, &[1]))?;
+        let version: Version<Composition> = serde_json::from_str(
+            &serde_json::to_string(&sample_version(1, None, 20))
+                .expect("fixture serialises")
+                .replace(RECORD, ehr_uid),
+        )
+        .expect("fixture deserialises");
+        assert!(
+            matches!(
+                store.commit_composition(&ehr_id, &version, &own),
+                Err(crate::StoreError::Conflict {
+                    kind: "ehr_status",
+                    ..
+                })
+            ),
+            "{engine}: case {n}: content was accepted under an inconsistent status reference"
+        );
+        assert!(
+            matches!(
+                store.latest_version(&ehr_id),
+                Err(crate::StoreError::NotFound { .. })
+            ),
+            "{engine}: case {n}: a refused commit wrote a version"
+        );
+    }
+
+    // 2. The owner.
+    assert_eq!(
+        store
+            .latest_version_in(&owner_id, &status_container, "EHR_STATUS")?
+            .uid,
+        format!("{EHR_STATUS_RECORD}::{SYSTEM}::1"),
+        "{engine}: the owner must read its own status"
+    );
+    store.version_at_time_in(&owner_id, &status_container, "EHR_STATUS", &at)?;
+    assert!(
+        !crate::ehr_is_modifiable(store, &owner)?,
+        "{engine}: the owner's deactivation must hold"
+    );
+
+    // 3. Never committed, and no container named at all.
+    let fresh = ehr_naming_status(
+        "20000000-0000-0000-0000-0000000000d3",
+        ObjectId::HierObjectId(
+            HierObjectId::from_uid_str("20000000-0000-0000-0000-0000000000d4").expect("literal"),
+        ),
+    );
+    store.create_ehr(&fresh)?;
+    assert!(
+        crate::ehr_is_modifiable(store, &fresh)?,
+        "{engine}: a status never committed leaves the record open"
+    );
+    let unnamed = ehr_naming_status(
+        "20000000-0000-0000-0000-0000000000d5",
+        ObjectId::GenericId(openehr::base::GenericId::new("status-1", "local").expect("literal")),
+    );
+    assert!(crate::ehr_status_container(&unnamed).is_none());
+    assert!(crate::ehr_is_modifiable(store, &unnamed)?);
     Ok(())
 }
 
@@ -1181,8 +1582,21 @@ pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
     let ehr_id = ehr.ehr_id().clone();
     store.create_ehr(&ehr)?;
 
+    // Declares every version the story commits (`db:H5.22`): containers 1 to 4
+    // and 6 and 7 at version 1, 4 at version 2 (its deletion), and 5 at
+    // versions 1 to 3 (its amendments). A few declared versions are never
+    // committed. `H5.22` requires every commit to be declared, not every
+    // declaration to be committed.
     let contribution_uid = "55555555-6666-7777-8888-999999999999";
-    store.create_contribution(&ehr_id, &sample_contribution(contribution_uid, &[1, 2, 3]))?;
+    let declared: Vec<String> = (1..=7)
+        .flat_map(|c| {
+            (1..=3).map(move |v| format!("10000000-0000-0000-0000-00000000000{c}::{SYSTEM}::{v}"))
+        })
+        .collect();
+    store.create_contribution(
+        &ehr_id,
+        &sample_contribution_declaring(contribution_uid, &declared),
+    )?;
 
     for (i, container) in CONTAINERS.iter().enumerate() {
         let n = u32::try_from(i).expect("three fits");
@@ -1991,8 +2405,9 @@ mod store_tests {
     //! `openehr-sqlite`.
 
     use super::{
-        EHR_STATUS_RECORD, run, run_aql, run_ehr_scope, run_ehr_status, run_fractional_history,
-        run_is_modifiable_gate, run_language_validation,
+        EHR_STATUS_RECORD, run, run_aql, run_contribution_membership, run_ehr_scope,
+        run_ehr_status, run_ehr_status_binding, run_fractional_history, run_is_modifiable_gate,
+        run_language_validation, run_paging,
     };
     use crate::record::{CompositionIndexRow, VersionRow};
     use crate::{CommitOutcome, Result, Store, StoreError, check_commit_rules};
@@ -2021,6 +2436,7 @@ mod store_tests {
         version_reads: Cell<usize>,
         fail_history_read: bool,
         refuse_reactivated_content: bool,
+        contributions: HashMap<String, crate::record::ContributionRow>,
     }
 
     impl MemoryStore {
@@ -2066,24 +2482,20 @@ mod store_tests {
                     .any(|row| row.uid == version.uid().to_string()),
                 version.preceding_version_uid(),
             )?;
+            // `db:H5.22`: after the commit rules, as every engine orders it.
+            crate::check_membership(
+                self.contributions
+                    .get(contribution_uid)
+                    .map(|c| (c.ehr_id.clone(), c.versions_json.clone())),
+                &ehr_id.to_string(),
+                contribution_uid,
+                &version.uid().to_string(),
+            )?;
             let previous = head.as_ref().map(|row| row.chain.digest);
             Ok((
                 VersionRow::project(version, contribution_uid, previous, None)?,
                 head.is_none(),
             ))
-        }
-
-        fn ehr_is_modifiable(&self, ehr: &Ehr) -> Result<bool> {
-            let container = ehr.ehr_status().id().to_string();
-            let Some(row) = self.rows(&container).last().cloned() else {
-                return Ok(true);
-            };
-            let json = row
-                .data_json
-                .as_deref()
-                .ok_or_else(|| Self::missing("EHR_STATUS", &container))?;
-            let status: EhrStatus = serde_json::from_str(json)?;
-            Ok(status.is_modifiable())
         }
     }
 
@@ -2100,7 +2512,7 @@ mod store_tests {
             ehr.validate_ok()?;
             let id = ehr.ehr_id().to_string();
             if self.ehrs.contains_key(&id) {
-                return Err(StoreError::Conflict { kind: "ehr", id });
+                return Err(crate::StoreError::Conflict { kind: "ehr", id });
             }
             self.ehrs.insert(id, ehr.clone());
             Ok(())
@@ -2117,9 +2529,19 @@ mod store_tests {
         fn create_contribution(
             &mut self,
             ehr_id: &HierObjectId,
-            _contribution: &Contribution,
+            contribution: &Contribution,
         ) -> Result<()> {
-            self.get_ehr(ehr_id).map(|_| ())
+            self.get_ehr(ehr_id)?;
+            let uid = contribution.uid().to_string();
+            if self.contributions.contains_key(&uid) {
+                return Err(crate::StoreError::Conflict {
+                    kind: "contribution",
+                    id: uid,
+                });
+            }
+            let row = crate::record::ContributionRow::project(&ehr_id.to_string(), contribution)?;
+            self.contributions.insert(uid, row);
+            Ok(())
         }
 
         fn commit_composition(
@@ -2130,13 +2552,13 @@ mod store_tests {
         ) -> Result<CommitOutcome> {
             version.validate_ok()?;
             let ehr = self.get_ehr(ehr_id)?;
-            if !self.ehr_is_modifiable(&ehr)? {
-                return Err(StoreError::NotModifiable {
+            if !crate::ehr_is_modifiable(self, &ehr)? {
+                return Err(crate::StoreError::NotModifiable {
                     ehr_id: ehr_id.to_string(),
                 });
             }
             if self.refuse_reactivated_content && self.rows(EHR_STATUS_RECORD).len() >= 2 {
-                return Err(StoreError::Engine {
+                return Err(crate::StoreError::Engine {
                     engine: "owner-memory",
                     message: "injected refusal after reactivation".to_owned(),
                 });
@@ -2201,7 +2623,7 @@ mod store_tests {
             versioned_object_uid: &HierObjectId,
         ) -> Result<(HierObjectId, String)> {
             if self.fail_owner_lookup {
-                return Err(StoreError::Engine {
+                return Err(crate::StoreError::Engine {
                     engine: "owner-memory",
                     message: "injected owner lookup failure".to_owned(),
                 });
@@ -2228,7 +2650,7 @@ mod store_tests {
         ) -> Result<VersionRow> {
             let id = versioned_object_uid.to_string();
             if self.fail_history_read {
-                return Err(StoreError::Engine {
+                return Err(crate::StoreError::Engine {
                     engine: "owner-memory",
                     message: "injected historical read failure".to_owned(),
                 });
@@ -2299,6 +2721,9 @@ mod store_tests {
             run_is_modifiable_gate,
             run_aql,
             run_ehr_scope,
+            run_ehr_status_binding,
+            run_paging,
+            run_contribution_membership,
         ] {
             story(&mut MemoryStore::default()).expect("owner conformance story");
         }
@@ -2329,6 +2754,36 @@ mod store_tests {
             matches!(error, StoreError::Engine { .. }),
             "an engine failure must stay an engine failure: {error:?}"
         );
+        // The write gate too (`db:H5.20`): a lookup that could not run is not
+        // "never committed", which would open a deactivated record.
+        let gate = crate::ehr_is_modifiable(&store, &ehr).unwrap_err();
+        assert!(matches!(gate, StoreError::Engine { .. }), "{gate:?}");
+    }
+
+    #[test]
+    fn a_logically_deleted_status_does_not_open_the_record() {
+        // `db:H5.17`: a status version with no content is not evidence the
+        // record is open. openEHR gives a status version no reason to take
+        // that shape, so it is made here by hand.
+        let mut store = MemoryStore::default();
+        let ehr = super::sample_ehr();
+        store.create_ehr(&ehr).expect("ehr");
+        store
+            .create_contribution(
+                ehr.ehr_id(),
+                &super::sample_contribution_of("66666666-7777-8888-9999-000000000031", &[1], &[1]),
+            )
+            .expect("contribution");
+        store
+            .commit_ehr_status(
+                ehr.ehr_id(),
+                &super::sample_ehr_status_version(1, None, 1, true),
+                "66666666-7777-8888-9999-000000000031",
+            )
+            .expect("status");
+        assert!(crate::ehr_is_modifiable(&store, &ehr).expect("gate"));
+        store.versions.last_mut().expect("the status row").data_json = None;
+        assert!(!crate::ehr_is_modifiable(&store, &ehr).expect("gate"));
     }
 
     #[test]
@@ -2350,7 +2805,7 @@ mod store_tests {
         };
         assert!(matches!(
             run_fractional_history(&mut history_failure),
-            Err(StoreError::Engine { .. })
+            Err(crate::StoreError::Engine { .. })
         ));
 
         let mut reactivation_failure = MemoryStore {

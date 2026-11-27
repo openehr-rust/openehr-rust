@@ -14,7 +14,8 @@ use openehr_store::{Store as _, record::VersionRow};
 use serde::Deserialize;
 
 use crate::auth::Principal;
-use crate::controllers::{Refusal, check_attribution, outcome_of, record_read, status_for, store};
+use crate::authz::{Action, authorize};
+use crate::controllers::{Refusal, check_attribution, recorded, status_for, store};
 use crate::views::{Page, VersionView};
 
 type Reply<T> = Result<(StatusCode, HeaderMap, Json<T>), Refusal>;
@@ -86,8 +87,39 @@ fn hex(bytes: &[u8; 32]) -> String {
     out
 }
 
-pub(crate) fn view(row: &VersionRow) -> VersionView {
-    VersionView {
+/// The HTTP view of a stored version.
+///
+/// Fallible (`db:D-28`). A stored, content-bearing row whose document does not
+/// decode used to become `data: null` through `.ok()`, the same shape a
+/// deletion takes. The response said "this version has no content" when the
+/// truth was "this service cannot read it". Now it is a `500` naming the
+/// version and quoting none of it, recorded as `error` (`db:PR12.23`). A row
+/// with no document (a tombstone) is still `data: null`.
+pub(crate) fn view(row: &VersionRow) -> Result<VersionView, (StatusCode, String)> {
+    let data = match row.data_json.as_deref() {
+        None => None,
+        Some(json) => Some(serde_json::from_str(json).map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!(
+                    "the stored content of version {} could not be decoded",
+                    row.uid
+                ),
+            )
+        })?),
+    };
+    // Decoded like the content: a stored committer that does not decode is a
+    // `500`, never a silent `null` (`db:D-28`).
+    let committer = serde_json::from_str(&row.audit_committer_json).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!(
+                "the stored committer of version {} could not be decoded",
+                row.uid
+            ),
+        )
+    })?;
+    Ok(VersionView {
         uid: row.uid.clone(),
         versioned_object_uid: row.versioned_object_uid.clone(),
         lifecycle_state_code: row.lifecycle_state_code.clone(),
@@ -95,11 +127,54 @@ pub(crate) fn view(row: &VersionRow) -> VersionView {
         // The exact lexical form, never the derived instant (`db:M3.25`).
         time_committed: row.audit_time_committed.text.clone(),
         chain_digest: hex(&row.chain.digest),
-        data: row
-            .data_json
-            .as_deref()
-            .and_then(|j| serde_json::from_str(j).ok()),
+        data,
+        committer,
+    })
+}
+
+/// The resource a version holds, as ITS-REST answers with it (`db:S1.23`).
+///
+/// A version that records a deletion holds none, and is `410` (`db:S1.20`). A
+/// stored document that does not decode is `500`, never `null` (`db:D-28`).
+pub(crate) fn resource(row: &VersionRow) -> Result<serde_json::Value, (StatusCode, String)> {
+    let Some(json) = row.data_json.as_deref() else {
+        return Err((
+            StatusCode::GONE,
+            format!(
+                "version {} records a deletion and carries no content",
+                row.uid
+            ),
+        ));
+    };
+    serde_json::from_str(json).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!(
+                "the stored content of version {} could not be decoded",
+                row.uid
+            ),
+        )
+    })
+}
+
+/// `ETag` naming the version and `Location` naming its own URL (`db:S1.23`).
+pub(crate) fn resource_headers(version_uid: &str, location: &str) -> HeaderMap {
+    let mut map = headers(version_uid);
+    if let Ok(value) = location.parse() {
+        map.insert(header::LOCATION, value);
     }
+    map
+}
+
+/// [`resource`] for the answer after a commit: its failure must not read as
+/// a failed write (`db:D-28`).
+fn committed_resource(row: &VersionRow) -> Result<serde_json::Value, (StatusCode, String)> {
+    resource(row).map_err(|(status, message)| {
+        (
+            status,
+            format!("{message}; the commit itself succeeded as {}", row.uid),
+        )
+    })
 }
 
 pub(crate) fn parse_id(raw: &str) -> Result<HierObjectId, (StatusCode, String)> {
@@ -130,36 +205,54 @@ async fn read(
     State(ctx): State<AppContext>,
     principal: Principal,
     Path((ehr_id, uid)): Path<(String, String)>,
-) -> Reply<VersionView> {
+) -> Reply<serde_json::Value> {
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
-    let container = parse_id(&uid)?;
-    // Scoped to the EHR in the path (`db:H5.18`, `db:D-19`): a container the
-    // EHR does not own, or that is not a composition, is `404`, exactly as an
-    // absent one is. Reading by container alone served any chart's content
-    // under any EHR id, including one that exists nowhere.
-    let found = guard.latest_version_in(&parse_id(&ehr_id)?, &container, "COMPOSITION");
-    // Deleted is its own outcome. An investigation asking who looked at a
-    // withdrawn record is asking a sharper question than who looked at a live
-    // one, and `not_found` would not distinguish the two.
-    let outcome = match &found {
-        Ok(row) if row.is_deleted => "gone",
-        other => outcome_of(other),
-    };
-    record_read(&ctx, &principal, "read", &ehr_id, &uid, outcome)?;
-    let row = found.map_err(|e| status_for(&e))?;
-
-    if row.is_deleted {
-        return Err(Refusal::from((
-            StatusCode::GONE,
-            format!(
-                "composition {} was deleted by version {}; its history remains at _history",
-                container, row.uid
-            ),
-        )));
-    }
-    let head = headers(&row.uid);
-    Ok((StatusCode::OK, head, Json(view(&row))))
+    // Decided whole, then recorded, then released (`db:PR12.23`, `db:D-29`).
+    let reply = (|| -> Reply<serde_json::Value> {
+        // `db:PR12.18`: the token's grants, before the store is asked anything.
+        authorize(&principal, &ehr_id, Action::Read)?;
+        let owner = parse_id(&ehr_id)?;
+        // ITS-REST's `uid_based_id` (`db:S1.23`): a version id reads that
+        // version, and a container id the latest. A version id is tried first,
+        // because one would otherwise parse as a container id with an extension.
+        // Scoped to the EHR in the path either way (`db:H5.18`, `db:D-19`): a
+        // container the EHR does not own, or that is not a composition, is
+        // `404`, exactly as an absent one is.
+        let (container, row) = if let Ok(version) = uid.parse::<openehr::base::ObjectVersionId>() {
+            let row = guard
+                .get_version_in(&owner, &version, "COMPOSITION")
+                .map_err(|e| status_for(&e))?;
+            (version.object_id().to_string(), row)
+        } else {
+            let container = parse_id(&uid)?;
+            let row = guard
+                .latest_version_in(&owner, &container, "COMPOSITION")
+                .map_err(|e| status_for(&e))?;
+            (container.to_string(), row)
+        };
+        // Deleted is its own outcome (`gone`, from the `410`). An investigation
+        // asking who looked at a withdrawn record is asking a sharper question
+        // than who looked at a live one, and `not_found` would not distinguish
+        // the two.
+        if row.is_deleted {
+            return Err(Refusal::from((
+                StatusCode::GONE,
+                format!(
+                    "composition {} was deleted by version {}; its history remains at _history",
+                    container, row.uid
+                ),
+            )));
+        }
+        // The COMPOSITION itself, the version in headers (`db:S1.23`).
+        let location = format!("/openehr/v1/ehr/{ehr_id}/composition/{}", row.uid);
+        Ok((
+            StatusCode::OK,
+            resource_headers(&row.uid, &location),
+            Json(resource(&row)?),
+        ))
+    })();
+    recorded(&ctx, &principal, "read", &ehr_id, &uid, reply)
 }
 
 /// `GET /openehr/v1/ehr/{ehr_id}/composition/{uid}/version/{version_uid}` — vread.
@@ -174,31 +267,27 @@ async fn vread(
 ) -> Reply<VersionView> {
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
-    let id: openehr::base::ObjectVersionId = version_uid
-        .parse()
-        .map_err(|_| (StatusCode::BAD_REQUEST, "malformed version uid".to_owned()))?;
-    let container = parse_id(&uid)?;
-    // The version must belong to the container the path names, as well as to
-    // the EHR: `/composition/A/version/<a version of B>` is not a read of A.
-    let found = if id.object_id().to_string() == container.to_string() {
-        guard.get_version_in(&parse_id(&ehr_id)?, &id, "COMPOSITION")
-    } else {
-        Err(openehr_store::StoreError::NotFound {
-            kind: "version",
-            id: version_uid.clone(),
-        })
-    };
-    record_read(
-        &ctx,
-        &principal,
-        "vread",
-        &ehr_id,
-        &version_uid,
-        outcome_of(&found),
-    )?;
-    let row = found.map_err(|e| status_for(&e))?;
-    let head = headers(&row.uid);
-    Ok((StatusCode::OK, head, Json(view(&row))))
+    let reply = (|| -> Reply<VersionView> {
+        // `db:PR12.18`: the token's grants, before the store is asked anything.
+        authorize(&principal, &ehr_id, Action::Read)?;
+        let id: openehr::base::ObjectVersionId = version_uid
+            .parse()
+            .map_err(|_| (StatusCode::BAD_REQUEST, "malformed version uid".to_owned()))?;
+        let container = parse_id(&uid)?;
+        // The version must belong to the container the path names, as well as
+        // to the EHR: `/composition/A/version/<a version of B>` is not a read of A.
+        let row = if id.object_id().to_string() == container.to_string() {
+            guard.get_version_in(&parse_id(&ehr_id)?, &id, "COMPOSITION")
+        } else {
+            Err(openehr_store::StoreError::NotFound {
+                kind: "version",
+                id: version_uid.clone(),
+            })
+        }
+        .map_err(|e| status_for(&e))?;
+        Ok((StatusCode::OK, headers(&row.uid), Json(view(&row)?)))
+    })();
+    recorded(&ctx, &principal, "vread", &ehr_id, &version_uid, reply)
 }
 
 /// `GET /openehr/v1/ehr/{ehr_id}/composition/{uid}/_history`
@@ -213,29 +302,39 @@ async fn history(
 ) -> Reply<Page<VersionView>> {
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
-    let container = parse_id(&uid)?;
-    let found = guard.all_versions_in(&parse_id(&ehr_id)?, &container, "COMPOSITION");
-    record_read(
-        &ctx,
-        &principal,
-        "history",
-        &ehr_id,
-        &uid,
-        outcome_of(&found),
-    )?;
-    let all = found.map_err(|e| status_for(&e))?;
-    let (count, offset) = paging.resolve()?;
-    let items = all.iter().skip(offset).take(count).map(view).collect();
-    Ok((
-        StatusCode::OK,
-        HeaderMap::new(),
-        Json(Page {
-            items,
-            total: all.len(),
-            offset,
-            count,
-        }),
-    ))
+    // The page is resolved, and every row on it decoded, before the read is
+    // recorded: it used to be recorded `ok` and then refused for a bad
+    // `_count` (`db:D-29`). One unreadable row fails the whole page, rather
+    // than appearing as a version with no content (`db:D-28`). The page is
+    // cut by the store, not here: this read the whole history to show twenty
+    // versions of it (`db:P6.25`).
+    let reply = (|| -> Reply<Page<VersionView>> {
+        // `db:PR12.18`: the token's grants, before the store is asked anything.
+        authorize(&principal, &ehr_id, Action::Read)?;
+        let container = parse_id(&uid)?;
+        let (count, offset) = paging.resolve()?;
+        let page = guard
+            .versions_page_in(
+                &parse_id(&ehr_id)?,
+                &container,
+                "COMPOSITION",
+                offset,
+                count,
+            )
+            .map_err(|e| status_for(&e))?;
+        let items = page.rows.iter().map(view).collect::<Result<Vec<_>, _>>()?;
+        Ok((
+            StatusCode::OK,
+            HeaderMap::new(),
+            Json(Page {
+                items,
+                total: page.total,
+                offset,
+                count,
+            }),
+        ))
+    })();
+    recorded(&ctx, &principal, "history", &ehr_id, &uid, reply)
 }
 
 /// `GET /openehr/v1/ehr/{ehr_id}/composition?archetype_id=…` — search.
@@ -251,43 +350,49 @@ async fn search(
 ) -> Reply<Page<serde_json::Value>> {
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;
-    let id = parse_id(&ehr_id)?;
-    let found = guard.find_compositions_by_archetype(&id, &filter.archetype_id);
+    let reply = (|| -> Reply<Page<serde_json::Value>> {
+        // `db:PR12.18`: the token's grants, before the store is asked anything.
+        authorize(&principal, &ehr_id, Action::Read)?;
+        let id = parse_id(&ehr_id)?;
+        // Before the record, as for `history` (`db:D-29`), and before the store,
+        // which cuts the page itself (`db:P6.25`).
+        let (count, offset) = paging.resolve()?;
+        let page = guard
+            .find_compositions_by_archetype_page(&id, &filter.archetype_id, offset, count)
+            .map_err(|e| status_for(&e))?;
+        let items = page
+            .rows
+            .iter()
+            .map(serde_json::to_value)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("a stored row does not serialize: {e}"),
+                )
+            })?;
+        Ok((
+            StatusCode::OK,
+            HeaderMap::new(),
+            Json(Page {
+                items,
+                total: page.total,
+                offset,
+                count,
+            }),
+        ))
+    })();
     // The archetype filter is the target: it is design-time metadata, not
     // content, so recording it says which *kind* of record was sought without
     // quoting any of them (`db:M3.38`).
-    record_read(
+    recorded(
         &ctx,
         &principal,
         "search",
         &ehr_id,
         &filter.archetype_id,
-        outcome_of(&found),
-    )?;
-    let rows = found.map_err(|e| status_for(&e))?;
-    let (count, offset) = paging.resolve()?;
-    let items = rows
-        .iter()
-        .skip(offset)
-        .take(count)
-        .map(serde_json::to_value)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("a stored row does not serialize: {e}"),
-            )
-        })?;
-    Ok((
-        StatusCode::OK,
-        HeaderMap::new(),
-        Json(Page {
-            items,
-            total: rows.len(),
-            offset,
-            count,
-        }),
-    ))
+        reply,
+    )
 }
 
 /// The search filter.
@@ -318,7 +423,8 @@ async fn create(
     Path(ehr_id): Path<String>,
     Query(commit): Query<Commit>,
     Json(version): Json<Version<Composition>>,
-) -> Reply<VersionView> {
+) -> Reply<serde_json::Value> {
+    authorize(&principal, &ehr_id, Action::Write)?;
     check_attribution(&version, &principal)?;
     if version.preceding_version_uid().is_some() {
         return Err(Refusal::from((
@@ -337,8 +443,12 @@ async fn create(
     let row = guard
         .get_version(&outcome.version_uid)
         .map_err(|e| status_for(&e))?;
-    let head = headers(&row.uid);
-    Ok((StatusCode::CREATED, head, Json(view(&row))))
+    let location = format!("/openehr/v1/ehr/{ehr_id}/composition/{}", row.uid);
+    Ok((
+        StatusCode::CREATED,
+        resource_headers(&row.uid, &location),
+        Json(committed_resource(&row)?),
+    ))
 }
 
 /// `PUT /openehr/v1/ehr/{ehr_id}/composition/{uid}?contribution=…`
@@ -359,13 +469,15 @@ async fn update(
     Query(commit): Query<Commit>,
     request_headers: HeaderMap,
     Json(version): Json<Version<Composition>>,
-) -> Reply<VersionView> {
+) -> Reply<serde_json::Value> {
+    authorize(&principal, &ehr_id, Action::Write)?;
     check_attribution(&version, &principal)?;
     let expected = if_match(&request_headers)?;
+    let container = parse_id(&uid)?;
+    bind_update(&version, &container)?;
 
     let handle = store(&ctx)?;
     let mut guard = lock(&handle)?;
-    let container = parse_id(&uid)?;
     // Scoped, as in `read`: the precondition is compared against the container
     // *this EHR* owns, so a caller cannot probe another chart's current version
     // through a `412` that names it (`db:D-19`).
@@ -387,14 +499,68 @@ async fn update(
         )));
     }
 
+    bind_predecessor(&version, &expected)?;
+
     let outcome = guard
         .commit_composition(&parse_id(&ehr_id)?, &version, &commit.contribution)
         .map_err(|e| status_for(&e))?;
     let row = guard
         .get_version(&outcome.version_uid)
         .map_err(|e| status_for(&e))?;
-    let head = headers(&row.uid);
-    Ok((StatusCode::OK, head, Json(view(&row))))
+    let location = format!("/openehr/v1/ehr/{ehr_id}/composition/{}", row.uid);
+    Ok((
+        StatusCode::OK,
+        resource_headers(&row.uid, &location),
+        Json(committed_resource(&row)?),
+    ))
+}
+
+/// An update commits to the container its path names (`db:H5.21`,
+/// `db:D-24`); [`bind_predecessor`] is the other half.
+///
+/// The precondition is checked against the path's container, and the commit
+/// goes wherever the *body* says, so without this the two could name
+/// different compositions. Both belong to this `EHR`, so the ownership checks
+/// (`db:H5.18`, `db:H5.19`) pass, and a `PUT` to one composition committed a
+/// new version of another. Checked before the store is touched; a mismatch is
+/// the caller's `400`.
+///
+/// Identifiers are compared in their parsed, rendered form, as everywhere else
+/// in this service. Spelling is not normalised; a `Uuid` renders as written.
+fn bind_update(
+    version: &Version<Composition>,
+    container: &HierObjectId,
+) -> Result<(), (StatusCode, String)> {
+    let target = version.uid().object_id().to_string();
+    if target != container.to_string() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("the version is for container {target}, and this request names {container}"),
+        ));
+    }
+    Ok(())
+}
+
+/// The other half of `db:H5.21`: the submitted version must replace the one
+/// the precondition named. Run after the `412` check, so a stale `If-Match`
+/// is still answered `412` (`db:H5.15`) and an `EHR` that does not own the
+/// container still gets `404`. By then `expected` *is* the current version.
+fn bind_predecessor(
+    version: &Version<Composition>,
+    expected: &str,
+) -> Result<(), (StatusCode, String)> {
+    let preceding = version
+        .preceding_version_uid()
+        .map_or_else(|| "absent".to_owned(), ToString::to_string);
+    if preceding != expected {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "the version's preceding_version_uid is {preceding}, and If-Match names {expected}"
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// The version named by `If-Match`.

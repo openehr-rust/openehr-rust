@@ -150,6 +150,98 @@
     "append_only": false
   },
   {
+    "name": "openehr_contribution",
+    "note": "One row per CONTRIBUTION — the unit a user recognises as 'I saved the consultation', which is one change set over several versions.",
+    "columns": [
+      {
+        "name": "uid",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "HIER_OBJECT_ID"
+      },
+      {
+        "name": "ehr_id",
+        "ty": {
+          "Id": 255
+        },
+        "nullable": false,
+        "note": "owning record"
+      },
+      {
+        "name": "audit_change_type_code",
+        "ty": {
+          "Id": 16
+        },
+        "nullable": false,
+        "note": "restricted to creation | amendment | deleted (V8.15)"
+      },
+      {
+        "name": "audit_system_id",
+        "ty": {
+          "Text": 255
+        },
+        "nullable": false,
+        "note": ""
+      },
+      {
+        "name": "audit_committer_name",
+        "ty": {
+          "Text": 255
+        },
+        "nullable": true,
+        "note": ""
+      },
+      {
+        "name": "audit_committer_json",
+        "ty": "Json",
+        "nullable": false,
+        "note": "the whole committer PARTY_PROXY, canonical JSON (PR12.25, D-22, D-25)"
+      },
+      {
+        "name": "audit_time_committed_text",
+        "ty": "Instant",
+        "nullable": false,
+        "note": "authoritative"
+      },
+      {
+        "name": "audit_time_committed_utc",
+        "ty": "InstantUtc",
+        "nullable": true,
+        "note": "derived"
+      },
+      {
+        "name": "versions_json",
+        "ty": "Json",
+        "nullable": false,
+        "note": "CONTRIBUTION.versions: the declared version uids, canonical JSON array. A version commit is refused unless it is one of them (H5.22, D-26)"
+      }
+    ],
+    "primary_key": [
+      "uid"
+    ],
+    "foreign_keys": [
+      {
+        "column": "ehr_id",
+        "table": "openehr_ehr",
+        "references": "ehr_id"
+      }
+    ],
+    "indexes": [
+      {
+        "name": "ix_contribution_ehr_time",
+        "columns": [
+          "ehr_id",
+          "audit_time_committed_utc"
+        ],
+        "unique": false,
+        "note": "a record's change history in commit order"
+      }
+    ],
+    "append_only": true
+  },
+  {
     "name": "openehr_version",
     "note": "One row per VERSION. Append-only: a correction is a new row, and the row it corrects stays (V8.10). The version identity is stored decomposed because the commit rules are checked on its parts (V8.1).",
     "columns": [
@@ -250,6 +342,12 @@
         "note": "NULL for an anonymous PARTY_SELF committer — which is legitimate (M5.16), not missing data"
       },
       {
+        "name": "audit_committer_json",
+        "ty": "Json",
+        "nullable": false,
+        "note": "the whole committer PARTY_PROXY, canonical JSON: external_ref, identifiers and name. The name alone is not an identity (PR12.25, D-22)"
+      },
+      {
         "name": "audit_time_committed_text",
         "ty": "Instant",
         "nullable": false,
@@ -332,6 +430,11 @@
         "column": "versioned_object_uid",
         "table": "openehr_versioned_object",
         "references": "uid"
+      },
+      {
+        "column": "contribution_uid",
+        "table": "openehr_contribution",
+        "references": "uid"
       }
     ],
     "indexes": [
@@ -362,86 +465,6 @@
         ],
         "unique": false,
         "note": "walk a version tree forwards"
-      }
-    ],
-    "append_only": true
-  },
-  {
-    "name": "openehr_contribution",
-    "note": "One row per CONTRIBUTION — the unit a user recognises as 'I saved the consultation', which is one change set over several versions.",
-    "columns": [
-      {
-        "name": "uid",
-        "ty": {
-          "Id": 255
-        },
-        "nullable": false,
-        "note": "HIER_OBJECT_ID"
-      },
-      {
-        "name": "ehr_id",
-        "ty": {
-          "Id": 255
-        },
-        "nullable": false,
-        "note": "owning record"
-      },
-      {
-        "name": "audit_change_type_code",
-        "ty": {
-          "Id": 16
-        },
-        "nullable": false,
-        "note": "restricted to creation | amendment | deleted (V8.15)"
-      },
-      {
-        "name": "audit_system_id",
-        "ty": {
-          "Text": 255
-        },
-        "nullable": false,
-        "note": ""
-      },
-      {
-        "name": "audit_committer_name",
-        "ty": {
-          "Text": 255
-        },
-        "nullable": true,
-        "note": ""
-      },
-      {
-        "name": "audit_time_committed_text",
-        "ty": "Instant",
-        "nullable": false,
-        "note": "authoritative"
-      },
-      {
-        "name": "audit_time_committed_utc",
-        "ty": "InstantUtc",
-        "nullable": true,
-        "note": "derived"
-      }
-    ],
-    "primary_key": [
-      "uid"
-    ],
-    "foreign_keys": [
-      {
-        "column": "ehr_id",
-        "table": "openehr_ehr",
-        "references": "ehr_id"
-      }
-    ],
-    "indexes": [
-      {
-        "name": "ix_contribution_ehr_time",
-        "columns": [
-          "ehr_id",
-          "audit_time_committed_utc"
-        ],
-        "unique": false,
-        "note": "a record's change history in commit order"
       }
     ],
     "append_only": true

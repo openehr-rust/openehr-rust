@@ -138,6 +138,34 @@ in 1.1.0, is taken to inherit `DV_ORDERED`'s invariants unchanged — it is a
   added without one — the value is reported as **inside no range**, and
   therefore as **not abnormal**. A wrong answer that reads as reassurance.
 
+- **D3.14b** *(added 2026-11-26, `A-86`)* A value's position against its
+  normal range MUST be one of **inside**, **outside**, or **indeterminate with
+  a reason**. It MUST be decided over **every value the magnitude qualifier
+  admits** (`D3.22`), never over the bare magnitude:
+
+  - `=` or no qualifier: the magnitude alone;
+  - `<`, `<=`: every value below the magnitude (at or below, for `<=`);
+  - `>`, `>=`: likewise, above;
+  - `~`: an unstated neighbourhood, so **indeterminate** (`approximate`).
+    This holds even when the magnitude lies well inside the range, because
+    the record does not say how approximate it is. Decided by the maintainer
+    on 2026-11-26, in preference to judging `~` at its stated magnitude;
+  - a value not comparable with a bound (`D3.14`): **indeterminate**
+    (`incomparable`).
+
+  Inside means every admitted value is in the range. Outside means none is.
+  Anything else is indeterminate (`qualified`): `< 4` against `3–5`
+  admits 3.5 and 2. The boolean `is_abnormal` keeps `D3.14a`'s fail-closed
+  direction: it is `Some(false)` only for **inside**. A qualified result
+  below a detection limit is never reported as normal unless every value it
+  admits is normal. The authored qualifier, units, range and `normal_status`
+  are not rewritten by the assessment.
+
+  The `D3.24b` consistency check uses the same answer. `N` beside an
+  **outside** value, or a non-`N` flag beside an **inside** one, is a
+  violation. Beside an **indeterminate** value there is nothing the range can
+  contradict, and the laboratory's flag stands.
+
 - **D3.15** `DV_QUANTITY` values MUST be comparable only when their `units`
   strings are equal (`S1.9`).
 - **D3.16** `DV_ORDINAL` and `DV_SCALE` values MUST be comparable only when

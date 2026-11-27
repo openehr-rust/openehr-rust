@@ -53,6 +53,18 @@ fn container() -> HierObjectId {
     HierObjectId::from_uid_str(conformance::RECORD).expect("literal")
 }
 
+/// Every version either test commits, declared up front (`db:H5.22`): versions
+/// 1 to 24 from the fixture's own system, and version 2 from each racing
+/// writer's.
+fn declared() -> Vec<String> {
+    (1..=24)
+        .map(conformance::composition_version_uid)
+        .chain((0..8).map(|i| {
+            format!("{}::writer-{i}.example.org::2", conformance::RECORD)
+        }))
+        .collect()
+}
+
 /// Installs the schema, an EHR, a contribution, and version 1.
 fn seeded() {
     let mut store = connect();
@@ -61,7 +73,7 @@ fn seeded() {
     let ehr = conformance::sample_ehr();
     store.create_ehr(&ehr).expect("ehr");
     store
-        .create_contribution(ehr.ehr_id(), &conformance::sample_contribution("c1", &[1]))
+        .create_contribution(ehr.ehr_id(), &conformance::sample_contribution_declaring("c1", &declared()))
         .expect("contribution");
     store
         .commit_composition(ehr.ehr_id(), &conformance::sample_version(1, None, 0), "c1")

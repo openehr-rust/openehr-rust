@@ -263,3 +263,61 @@ async fn a_task_without_a_container_says_what_it_wanted() {
 
     let _ = std::fs::remove_file(&path);
 }
+
+/// `db:D-27` / `db:O10.20`: inspection never creates the database it was
+/// pointed at. Both tasks, through the real binary, because the exit status is
+/// what a scheduled witness reads.
+#[test]
+fn the_binary_refuses_a_missing_database_and_creates_nothing() {
+    for task in ["checkpoint", "verify"] {
+        let path = temp_db(&format!("bin-missing-{task}"));
+        let (ok, out) = run_binary(&[
+            "task",
+            task,
+            &format!("container:{}", conformance::RECORD),
+            &format!("path:{}", path.display()),
+        ]);
+        assert!(!ok, "{task} on a missing path exited zero: {out}");
+        assert!(!path.exists(), "{task} created {}", path.display());
+    }
+}
+
+#[test]
+fn a_checkpoint_of_a_container_the_database_does_not_hold_is_refused() {
+    let path = temp_db("bin-absent-container");
+    seed(&path);
+    let (ok, out) = run_binary(&[
+        "task",
+        "checkpoint",
+        "container:6BA7B810-9DAD-11D1-80B4-00C04FD430C8",
+        &format!("path:{}", path.display()),
+    ]);
+    // An empty checkpoint is well-formed, which is the problem: a witness
+    // would file `entries=0` as success.
+    assert!(!ok, "an absent container exited zero: {out}");
+    assert!(out.contains("no such container"), "{out}");
+    assert!(!out.contains("entries=0"), "{out}");
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn inspecting_a_backup_leaves_its_bytes_unchanged() {
+    let path = temp_db("bin-unchanged");
+    seed(&path);
+    let before = std::fs::read(&path).expect("read");
+    for task in ["checkpoint", "verify"] {
+        let (ok, out) = run_binary(&[
+            "task",
+            task,
+            &format!("container:{}", conformance::RECORD),
+            &format!("path:{}", path.display()),
+        ]);
+        assert!(ok, "{task} failed: {out}");
+    }
+    assert_eq!(
+        std::fs::read(&path).expect("read"),
+        before,
+        "inspection wrote to the backup"
+    );
+    let _ = std::fs::remove_file(&path);
+}

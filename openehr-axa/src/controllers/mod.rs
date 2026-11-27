@@ -13,7 +13,7 @@ pub mod metadata;
 pub mod query;
 
 use axa::AppContext;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use openehr::rm::common::{PartyProxy, Version};
 use openehr::rm::ehr::Composition;
 use openehr_store::StoreError;
@@ -95,9 +95,13 @@ pub fn status_for(error: &StoreError) -> (StatusCode, String) {
         // and `409` is what says "the request conflicts with the current
         // state of the target resource" rather than blaming the request
         // itself, which is what a `4xx` outside the 409/412 pair would imply.
-        StoreError::Conflict { .. } | StoreError::Commit(_) | StoreError::NotModifiable { .. } => {
-            StatusCode::CONFLICT
-        }
+        //
+        // A version naming a change set it is not part of (`db:H5.22`) is the
+        // same kind of refusal: the request conflicts with the declared state.
+        StoreError::Conflict { .. }
+        | StoreError::Commit(_)
+        | StoreError::NotModifiable { .. }
+        | StoreError::NotInContribution { .. } => StatusCode::CONFLICT,
         StoreError::Invalid(_) | StoreError::Parse(_) => StatusCode::UNPROCESSABLE_ENTITY,
         // The store refuses what it cannot persist rather than dropping it
         // silently (`db:D-07`). `501` rather than `400`: the request is
@@ -107,7 +111,13 @@ pub fn status_for(error: &StoreError) -> (StatusCode, String) {
         // (`db:P6.20`–`P6.24`) is a malformed *request* — the caller wrote a
         // query this executor does not run — not a capability this service
         // is missing across the board the way `Unsupported` names.
-        StoreError::AqlUnsupported(_) => StatusCode::BAD_REQUEST,
+        //
+        // A query over the executor's work budget (`db:P6.26`) is the same:
+        // the caller's to resolve by narrowing it. Not `500`, since nothing
+        // failed, and not truncated, since the refusal is the answer.
+        StoreError::AqlUnsupported(_) | StoreError::AqlBudgetExceeded { .. } => {
+            StatusCode::BAD_REQUEST
+        }
         StoreError::SchemaVersionMismatch { .. } => StatusCode::SERVICE_UNAVAILABLE,
         // Everything else, including variants added after this was written.
         //
@@ -201,7 +211,21 @@ pub fn check_attribution(
     version: &Version<Composition>,
     principal: &Principal,
 ) -> Result<(), (StatusCode, String)> {
-    match attribution(version.commit_audit().committer(), &principal.subject) {
+    check_committer(version.commit_audit().committer(), principal)
+}
+
+/// [`check_attribution`] for any `AUDIT_DETAILS.committer`: a version's, or a
+/// contribution's own (`db:PR12.19`, `db:PR12.25`, `db:D-25`). One rule for
+/// both, so they cannot drift apart.
+///
+/// # Errors
+///
+/// As [`check_attribution`].
+pub fn check_committer(
+    committer: &openehr::rm::common::PartyProxy,
+    principal: &Principal,
+) -> Result<(), (StatusCode, String)> {
+    match attribution(committer, &principal.subject) {
         Attribution::Agrees => Ok(()),
         Attribution::Disagrees => Err((
             StatusCode::FORBIDDEN,
@@ -258,7 +282,60 @@ pub fn record_read(
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))
 }
 
-/// The outcome label for a store result, for [`record_read`].
+/// The outcome an access record states, read from the status of the response
+/// about to be sent (`db:PR12.23`, `db:D-29`).
+///
+/// From the response rather than from the store lookup. A lookup that
+/// succeeded is not a read that succeeded: the page can still be refused and
+/// the document can still fail to decode.
+#[must_use]
+pub fn outcome_of_status(status: StatusCode) -> &'static str {
+    match status {
+        s if s.is_success() => "ok",
+        StatusCode::NOT_FOUND => "not_found",
+        StatusCode::GONE => "gone",
+        // The token's grants did not cover it (`db:PR12.18`). Neither a refused
+        // request nor a missing record: the caller was not allowed to ask.
+        StatusCode::FORBIDDEN => "denied",
+        s if s.is_server_error() => "error",
+        _ => "refused",
+    }
+}
+
+/// Records a read whose response is already decided, then releases it.
+///
+/// If the record cannot be written, the response is dropped and the caller
+/// gets `503`, as [`record_read`] does: no clinical content leaves ahead of
+/// its record.
+///
+/// # Errors
+///
+/// The response's own refusal, or `503` if the read cannot be recorded.
+pub fn recorded<T>(
+    ctx: &AppContext,
+    principal: &Principal,
+    action: &str,
+    ehr: &str,
+    target: &str,
+    reply: Result<(StatusCode, HeaderMap, axum::Json<T>), Refusal>,
+) -> Result<(StatusCode, HeaderMap, axum::Json<T>), Refusal> {
+    let status = match &reply {
+        Ok((status, ..)) | Err(Refusal(status, _)) => *status,
+    };
+    record_read(
+        ctx,
+        principal,
+        action,
+        ehr,
+        target,
+        outcome_of_status(status),
+    )?;
+    reply
+}
+
+/// The outcome label for a store result, for [`record_read`]. Used where
+/// nothing after the lookup can still refuse the response (`ehr`, `query`);
+/// everywhere else, [`recorded`].
 #[must_use]
 pub fn outcome_of<T>(result: &Result<T, openehr_store::StoreError>) -> &'static str {
     match result {

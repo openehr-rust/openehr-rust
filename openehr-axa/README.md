@@ -1,6 +1,6 @@
 # openehr-axa
 
-A RESTful openEHR® API server on **Axum** and **Axa 0.23**, over
+A RESTful openEHR® API server on **Axum** and **Axa 0.24**, over
 [`openehr-sqlite`](../openehr-sqlite).
 
 > openEHR® is the registered trademark of the openEHR Foundation and is used
@@ -71,7 +71,8 @@ found" stops looking (`S1.20`).
 | Method | Path | |
 | --- | --- | --- |
 | `GET` | `/openehr/v1/metadata` | what this is, and what it does **not** do |
-| `POST` | `/openehr/v1/ehr` | create a record |
+| `POST` | `/openehr/v1/ehr` | create a record with a server-minted id and commit its first `EHR_STATUS` (optional body; needs a `"*"` write grant, `S1.22`) |
+| `PUT` | `/openehr/v1/ehr/{ehr_id}` | the same, with the id the caller names; `409` if it exists (needs `write` on that record) |
 | `GET` | `/openehr/v1/ehr/{ehr_id}` | read one |
 | `POST` | `/openehr/v1/ehr/{ehr_id}/contribution` | declare a change set |
 | `POST` | `…/composition?contribution=…` | commit a first version |
@@ -265,6 +266,29 @@ presented. Fabricated evidence and misused evidence are different incidents.
 | `OPENEHR_PASETO_AUDIENCE` | optional | expected `aud` — **read the note** |
 | `OPENEHR_PASETO_IMPLICIT_ASSERTION` | optional | binds tokens to one environment |
 
+**Grants are in the token, not in the configuration** (`PR12.18`). A token
+opens what its `openehr_grants` claim lists, and nothing else:
+
+```json
+"openehr_grants": [
+  {"ehr": "7d44b88c-4199-4bad-97dc-d78268e01398", "actions": ["read", "write"]},
+  {"ehr": "*", "actions": ["read"]}
+]
+```
+
+`read` covers every `GET` under an EHR, and an AQL query on the EHR it
+resolves to. `write` covers creating the EHR, declaring a contribution, and
+committing a version. `"*"` is every record, for a token the issuer chose to
+make one. Without the claim no clinical request is allowed, and a malformed
+claim invalidates the token (`401`). The check runs before the store, so a
+`403` says nothing about whether a record exists. A denied read is recorded as
+`denied`.
+
+The three optional settings are unset when absent **or empty**, which is what
+`compose.yaml`'s `${…:-}` defaults produce. A value that is set but is not
+valid Unicode refuses startup rather than quietly becoming "no constraint"
+(`PR12.24`).
+
 **Without a key the service refuses to start** (`PR12.16`). Not a warning, not a
 development fallback. The failure being guarded against is silent in the worst
 direction: the process starts, the health check is green, every request
@@ -290,13 +314,14 @@ everybody at once.
 
 ### What it still does not do
 
-**Verification is not authorization** (`PR12.18`). Every route below
-`/openehr/v1` demands a valid token and **not one of them consults who it
-names**. Deciding which records `clinician-4417` may open needs the care
-relationship, the care team, the consent directives, and the break-glass rules —
-a model this repository does not have. A service that checked a `roles` claim
-and considered the matter settled would enforce a policy nobody wrote, which is
-worse than enforcing none, because it looks like it works.
+**It enforces grants and does not decide them** (`PR12.18`, amended
+2026-11-26). Every clinical route checks the token's `openehr_grants` before
+touching the store. Choosing *which* grants `clinician-4417` should hold needs
+the care relationship, the care team, the consent directives and the
+break-glass rules, and this repository holds none of them. The issuer decides
+when it mints the token, so token lifetime is part of the policy: a grant
+outlives a care relationship that ends before the token expires. Nothing is
+inferred from `roles`, `name` or `sub`.
 
 **Requiring a token did not create an audit trail** (`PR12.20`). The service now
 establishes who is reading, on every single request, and discards it. That is a
@@ -318,14 +343,11 @@ because a certificate held by this process would be one more thing to rotate
 in a component that already holds no other secret (see "Public key only",
 above).
 
-**One PASETO key set is the whole authorization model.** Not an
-authentication *and* authorization model — see "What it still does not do":
-verification establishes who is asking, and every route trusts every verified
-subject with every record its token can name. There is no role, no scope, no
-per-record grant. A deployment that needs "clinician A may see clinician A's
-patients and no others" does not get it from this crate; it gets it from
-whatever issues the tokens deciding what to put in them, or from a layer in
-front of this one that this crate cannot see and does not pretend to.
+**Access is per record and per action, as the token grants it.** One PASETO
+key set verifies who is asking, and the token's `openehr_grants` claim says
+which records they may read or write (see Configuration). "Clinician A may see
+clinician A's patients and no others" is a grant list the issuer writes.
+Working out who belongs on that list is the issuer's job, not this crate's.
 
 **Rate limiting is global, not per-caller, and is stated as such rather than
 oversold.** `src/app.rs`'s `after_routes` layers a fixed request budget
@@ -374,7 +396,9 @@ and `/_health/ready` answered `200`, and a clinical route without a token `401`.
 ## Read auditing
 
 Off by default. `OPENEHR_ACCESS_LOG=<path>` turns it on, and `/metadata` answers
-`records_reads` either way so a caller never has to assume.
+`records_reads` either way so a caller never has to assume. The path is read as
+an operating-system path. Set but **empty**, it refuses startup: to turn auditing
+off, unset it (`PR12.24`).
 
 A version history records what **changed**; an access investigation asks who
 **looked**. A clinician who opens a colleague's record and closes it again

@@ -50,6 +50,25 @@ END;
 /
 
 BEGIN
+  EXECUTE IMMEDIATE 'CREATE TABLE "openehr_contribution" (
+  "uid" VARCHAR2(255 CHAR) NOT NULL,
+  "ehr_id" VARCHAR2(255 CHAR) NOT NULL,
+  "audit_change_type_code" VARCHAR2(16 CHAR) NOT NULL,
+  "audit_system_id" VARCHAR2(255 CHAR) NOT NULL,
+  "audit_committer_name" VARCHAR2(255 CHAR),
+  "audit_committer_json" CLOB NOT NULL,
+  "audit_time_committed_text" VARCHAR2(64 CHAR) NOT NULL,
+  "audit_time_committed_utc" TIMESTAMP WITH TIME ZONE,
+  "versions_json" CLOB NOT NULL,
+  PRIMARY KEY ("uid"),
+  FOREIGN KEY ("ehr_id") REFERENCES "openehr_ehr" ("ehr_id")
+)';
+EXCEPTION WHEN OTHERS THEN
+  IF SQLCODE != -955 THEN RAISE; END IF;
+END;
+/
+
+BEGIN
   EXECUTE IMMEDIATE 'CREATE TABLE "openehr_version" (
   "uid" VARCHAR2(255 CHAR) NOT NULL,
   "versioned_object_uid" VARCHAR2(255 CHAR) NOT NULL,
@@ -64,6 +83,7 @@ BEGIN
   "audit_system_id" VARCHAR2(255 CHAR) NOT NULL,
   "audit_change_type_code" VARCHAR2(16 CHAR) NOT NULL,
   "audit_committer_name" VARCHAR2(255 CHAR),
+  "audit_committer_json" CLOB NOT NULL,
   "audit_time_committed_text" VARCHAR2(64 CHAR) NOT NULL,
   "audit_time_committed_utc" TIMESTAMP WITH TIME ZONE,
   "data_json" CLOB,
@@ -77,24 +97,8 @@ BEGIN
   "chain_tag_key_id" VARCHAR2(255 CHAR),
   "chain_tag_mac" RAW(32),
   PRIMARY KEY ("uid"),
-  FOREIGN KEY ("versioned_object_uid") REFERENCES "openehr_versioned_object" ("uid")
-)';
-EXCEPTION WHEN OTHERS THEN
-  IF SQLCODE != -955 THEN RAISE; END IF;
-END;
-/
-
-BEGIN
-  EXECUTE IMMEDIATE 'CREATE TABLE "openehr_contribution" (
-  "uid" VARCHAR2(255 CHAR) NOT NULL,
-  "ehr_id" VARCHAR2(255 CHAR) NOT NULL,
-  "audit_change_type_code" VARCHAR2(16 CHAR) NOT NULL,
-  "audit_system_id" VARCHAR2(255 CHAR) NOT NULL,
-  "audit_committer_name" VARCHAR2(255 CHAR),
-  "audit_time_committed_text" VARCHAR2(64 CHAR) NOT NULL,
-  "audit_time_committed_utc" TIMESTAMP WITH TIME ZONE,
-  PRIMARY KEY ("uid"),
-  FOREIGN KEY ("ehr_id") REFERENCES "openehr_ehr" ("ehr_id")
+  FOREIGN KEY ("versioned_object_uid") REFERENCES "openehr_versioned_object" ("uid"),
+  FOREIGN KEY ("contribution_uid") REFERENCES "openehr_contribution" ("uid")
 )';
 EXCEPTION WHEN OTHERS THEN
   IF SQLCODE != -955 THEN RAISE; END IF;
@@ -132,6 +136,13 @@ END;
 /
 
 BEGIN
+  EXECUTE IMMEDIATE 'CREATE INDEX "ix_contribution_ehr_time" ON "openehr_contribution" ("ehr_id", "audit_time_committed_utc")';
+EXCEPTION WHEN OTHERS THEN
+  IF SQLCODE != -955 THEN RAISE; END IF;
+END;
+/
+
+BEGIN
   EXECUTE IMMEDIATE 'CREATE UNIQUE INDEX "ix_version_container_trunk" ON "openehr_version" ("versioned_object_uid", "trunk_version", "branch_number", "branch_version")';
 EXCEPTION WHEN OTHERS THEN
   IF SQLCODE != -955 THEN RAISE; END IF;
@@ -153,13 +164,6 @@ END;
 /
 
 BEGIN
-  EXECUTE IMMEDIATE 'CREATE INDEX "ix_contribution_ehr_time" ON "openehr_contribution" ("ehr_id", "audit_time_committed_utc")';
-EXCEPTION WHEN OTHERS THEN
-  IF SQLCODE != -955 THEN RAISE; END IF;
-END;
-/
-
-BEGIN
   EXECUTE IMMEDIATE 'CREATE INDEX "ix_composition_archetype" ON "openehr_composition_index" ("ehr_id", "archetype_id")';
 EXCEPTION WHEN OTHERS THEN
   IF SQLCODE != -955 THEN RAISE; END IF;
@@ -173,8 +177,8 @@ EXCEPTION WHEN OTHERS THEN
 END;
 /
 
-CREATE OR REPLACE TRIGGER "trg_openehr_version_append_only" BEFORE UPDATE OR DELETE ON "openehr_version" FOR EACH ROW BEGIN raise_application_error(-20001, 'openehr_version is append-only (openEHR V8.10)'); END;
+CREATE OR REPLACE TRIGGER "trg_openehr_contribution_append_only" BEFORE UPDATE OR DELETE ON "openehr_contribution" FOR EACH ROW BEGIN raise_application_error(-20001, 'openehr_contribution is append-only (openEHR V8.10)'); END;
 /
 
-CREATE OR REPLACE TRIGGER "trg_openehr_contribution_append_only" BEFORE UPDATE OR DELETE ON "openehr_contribution" FOR EACH ROW BEGIN raise_application_error(-20001, 'openehr_contribution is append-only (openEHR V8.10)'); END;
+CREATE OR REPLACE TRIGGER "trg_openehr_version_append_only" BEFORE UPDATE OR DELETE ON "openehr_version" FOR EACH ROW BEGIN raise_application_error(-20001, 'openehr_version is append-only (openEHR V8.10)'); END;
 /

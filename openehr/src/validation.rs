@@ -286,9 +286,15 @@ fn check_coded_text(coded: &DvCodedText, ctx: &mut Context) {
 /// Checks the two `DV_ORDERED` invariants that relate a value to its own
 /// recorded reference range.
 ///
-/// `is_abnormal` is the value's own answer to "am I outside my normal range?",
-/// which is `None` when no range was recorded — see [`DvOrdered::is_abnormal`].
-fn check_ordered(attrs: &OrderedAttrs, is_abnormal: Option<bool>, ctx: &mut Context) {
+/// `position` is the value's own answer to "where am I against my normal
+/// range?", `None` when no range was recorded — see
+/// [`DvOrdered::range_position`]. Three states, not `is_abnormal`'s two
+/// (`D3.14b`, `A-86`).
+fn check_ordered(
+    attrs: &OrderedAttrs,
+    position: Option<crate::rm::data_types::RangePosition>,
+    ctx: &mut Context,
+) {
     // `REFERENCE_RANGE.Range_is_simple`: a reference range's endpoints must
     // themselves be simple — carrying no normal range and no reference ranges
     // of their own.
@@ -343,7 +349,17 @@ fn check_ordered(attrs: &OrderedAttrs, is_abnormal: Option<bool>, ctx: &mut Cont
     // present, `N` and "inside the range" must agree. They disagree when a
     // result is copied from one system and its flag from another — exactly the
     // case where a clinician sees a normal flag beside an abnormal number.
-    if let Some(abnormal) = is_abnormal {
+    //
+    // Only a decided position can contradict the flag (`D3.14b`). `< 4`
+    // against 3–5 is neither in nor out, so a laboratory's `N` and its `L`
+    // both stand. This check used the bare magnitude and called `< 6` beside
+    // `N` a disagreement, when the value may well be normal.
+    let decided = match position {
+        Some(crate::rm::data_types::RangePosition::Inside) => Some(false),
+        Some(crate::rm::data_types::RangePosition::Outside) => Some(true),
+        Some(crate::rm::data_types::RangePosition::Indeterminate(_)) | None => None,
+    };
+    if let Some(abnormal) = decided {
         let says_normal = status.code_string() == crate::terminology::normal_status::NORMAL;
         if says_normal == abnormal {
             ctx.violation(
@@ -461,13 +477,13 @@ impl Validate for DataValue {
             Self::CodedText(t) => check_coded_text(t, ctx),
             Self::Ordinal(o) => {
                 check_coded_text(o.symbol(), ctx);
-                check_ordered(o.ordered_attrs(), o.is_abnormal(), ctx);
+                check_ordered(o.ordered_attrs(), o.range_position(), ctx);
             }
             Self::Scale(s) => {
                 check_coded_text(s.symbol(), ctx);
-                check_ordered(s.ordered_attrs(), s.is_abnormal(), ctx);
+                check_ordered(s.ordered_attrs(), s.range_position(), ctx);
             }
-            Self::Count(c) => check_ordered(c.ordered_attrs(), c.is_abnormal(), ctx),
+            Self::Count(c) => check_ordered(c.ordered_attrs(), c.range_position(), ctx),
             Self::Quantity(q) => {
                 if !q.magnitude().is_finite() {
                     ctx.violation(
@@ -490,7 +506,7 @@ impl Validate for DataValue {
                         "precision is below -1, the unlimited-precision sentinel",
                     );
                 }
-                check_ordered(q.ordered_attrs(), q.is_abnormal(), ctx);
+                check_ordered(q.ordered_attrs(), q.range_position(), ctx);
             }
             Self::Proportion(p) => {
                 if p.denominator() == 0.0 {
@@ -512,7 +528,7 @@ impl Validate for DataValue {
                         "precision is 0 but a part has a fractional component",
                     );
                 }
-                check_ordered(p.ordered_attrs(), p.is_abnormal(), ctx);
+                check_ordered(p.ordered_attrs(), p.range_position(), ctx);
             }
             Self::Multimedia(m) => check_multimedia(m, ctx),
             Self::Text(t) if t.value().is_empty() => {
@@ -2225,6 +2241,82 @@ mod tests {
                 .iter()
                 .any(|v| v.invariant == "Range_is_simple")
         );
+    }
+
+    #[test]
+    fn range_is_simple_names_every_ordered_kind_an_endpoint_can_be() {
+        // The quantity case above alone left the other four arms of the
+        // endpoint match deletable without a test failing: `cargo mutants`
+        // found all four surviving (`lib:A-86`'s note, 2026-11-26).
+        use crate::base::Interval;
+        use crate::rm::data_types::{
+            DataValue, DvOrdinal, DvProportion, DvScale, ProportionKind, ReferenceRange,
+        };
+
+        let code = |c: &str| DvCodedText::new(c, CodePhrase::new("local", c).unwrap()).unwrap();
+        // For each kind: (a plain value, the same kind nested, a subject).
+        let nested_range = |lo: DataValue, hi: DataValue| Interval::closed(lo, hi).unwrap();
+        let cases: Vec<(&str, DataValue, DataValue)> = vec![
+            (
+                "count",
+                DataValue::Count(DvCount::new(1).with_normal_range(nested_range(
+                    DataValue::Count(DvCount::new(0)),
+                    DataValue::Count(DvCount::new(2)),
+                ))),
+                DataValue::Count(DvCount::new(9)),
+            ),
+            (
+                "ordinal",
+                DataValue::Ordinal(
+                    DvOrdinal::new(1, code("at1")).with_normal_range(nested_range(
+                        DataValue::Ordinal(DvOrdinal::new(0, code("at0"))),
+                        DataValue::Ordinal(DvOrdinal::new(2, code("at2"))),
+                    )),
+                ),
+                DataValue::Ordinal(DvOrdinal::new(9, code("at9"))),
+            ),
+            (
+                "scale",
+                DataValue::Scale(DvScale::new(1.0, code("at1")).unwrap().with_normal_range(
+                    nested_range(
+                        DataValue::Scale(DvScale::new(0.0, code("at0")).unwrap()),
+                        DataValue::Scale(DvScale::new(2.0, code("at2")).unwrap()),
+                    ),
+                )),
+                DataValue::Scale(DvScale::new(9.0, code("at9")).unwrap()),
+            ),
+            (
+                "proportion",
+                DataValue::Proportion(
+                    DvProportion::new(1.0, 10.0, ProportionKind::Ratio)
+                        .unwrap()
+                        .with_normal_range(nested_range(
+                            DataValue::Proportion(
+                                DvProportion::new(0.0, 10.0, ProportionKind::Ratio).unwrap(),
+                            ),
+                            DataValue::Proportion(
+                                DvProportion::new(2.0, 10.0, ProportionKind::Ratio).unwrap(),
+                            ),
+                        )),
+                ),
+                DataValue::Proportion(DvProportion::new(9.0, 10.0, ProportionKind::Ratio).unwrap()),
+            ),
+        ];
+        for (kind, nested, high) in cases {
+            let range = ReferenceRange::new(
+                DvText::new("normal").unwrap(),
+                Interval::closed(nested, high).unwrap(),
+            );
+            let report =
+                DataValue::Count(DvCount::new(5).with_other_reference_range(range)).validate();
+            assert!(
+                report
+                    .violations()
+                    .iter()
+                    .any(|v| v.invariant == "Range_is_simple"),
+                "{kind}: a nested endpoint must be reported: {report:?}"
+            );
+        }
     }
 
     /// The version envelope, checked here rather than only from the crates

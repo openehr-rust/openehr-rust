@@ -34,6 +34,20 @@ CREATE TABLE IF NOT EXISTS "openehr_versioned_object" (
   FOREIGN KEY ("ehr_id") REFERENCES "openehr_ehr" ("ehr_id")
 );
 
+CREATE TABLE IF NOT EXISTS "openehr_contribution" (
+  "uid" text NOT NULL,
+  "ehr_id" text NOT NULL,
+  "audit_change_type_code" text NOT NULL,
+  "audit_system_id" text NOT NULL,
+  "audit_committer_name" text,
+  "audit_committer_json" text NOT NULL,
+  "audit_time_committed_text" text NOT NULL,
+  "audit_time_committed_utc" timestamptz,
+  "versions_json" text NOT NULL,
+  PRIMARY KEY ("uid"),
+  FOREIGN KEY ("ehr_id") REFERENCES "openehr_ehr" ("ehr_id")
+);
+
 CREATE TABLE IF NOT EXISTS "openehr_version" (
   "uid" text NOT NULL,
   "versioned_object_uid" text NOT NULL,
@@ -48,6 +62,7 @@ CREATE TABLE IF NOT EXISTS "openehr_version" (
   "audit_system_id" text NOT NULL,
   "audit_change_type_code" text NOT NULL,
   "audit_committer_name" text,
+  "audit_committer_json" text NOT NULL,
   "audit_time_committed_text" text NOT NULL,
   "audit_time_committed_utc" timestamptz,
   "data_json" text,
@@ -61,19 +76,8 @@ CREATE TABLE IF NOT EXISTS "openehr_version" (
   "chain_tag_key_id" text,
   "chain_tag_mac" bytea,
   PRIMARY KEY ("uid"),
-  FOREIGN KEY ("versioned_object_uid") REFERENCES "openehr_versioned_object" ("uid")
-);
-
-CREATE TABLE IF NOT EXISTS "openehr_contribution" (
-  "uid" text NOT NULL,
-  "ehr_id" text NOT NULL,
-  "audit_change_type_code" text NOT NULL,
-  "audit_system_id" text NOT NULL,
-  "audit_committer_name" text,
-  "audit_time_committed_text" text NOT NULL,
-  "audit_time_committed_utc" timestamptz,
-  PRIMARY KEY ("uid"),
-  FOREIGN KEY ("ehr_id") REFERENCES "openehr_ehr" ("ehr_id")
+  FOREIGN KEY ("versioned_object_uid") REFERENCES "openehr_versioned_object" ("uid"),
+  FOREIGN KEY ("contribution_uid") REFERENCES "openehr_contribution" ("uid")
 );
 
 CREATE TABLE IF NOT EXISTS "openehr_composition_index" (
@@ -96,25 +100,17 @@ CREATE TABLE IF NOT EXISTS "openehr_composition_index" (
 
 CREATE INDEX IF NOT EXISTS "ix_versioned_object_ehr" ON "openehr_versioned_object" ("ehr_id", "rm_type");
 
+CREATE INDEX IF NOT EXISTS "ix_contribution_ehr_time" ON "openehr_contribution" ("ehr_id", "audit_time_committed_utc");
+
 CREATE UNIQUE INDEX IF NOT EXISTS "ix_version_container_trunk" ON "openehr_version" ("versioned_object_uid", "trunk_version", "branch_number", "branch_version");
 
 CREATE INDEX IF NOT EXISTS "ix_version_time" ON "openehr_version" ("versioned_object_uid", "audit_time_committed_utc");
 
 CREATE INDEX IF NOT EXISTS "ix_version_preceding" ON "openehr_version" ("preceding_version_uid");
 
-CREATE INDEX IF NOT EXISTS "ix_contribution_ehr_time" ON "openehr_contribution" ("ehr_id", "audit_time_committed_utc");
-
 CREATE INDEX IF NOT EXISTS "ix_composition_archetype" ON "openehr_composition_index" ("ehr_id", "archetype_id");
 
 CREATE INDEX IF NOT EXISTS "ix_composition_context_start" ON "openehr_composition_index" ("ehr_id", "context_start_utc");
-
-CREATE OR REPLACE FUNCTION "openehr_refuse_mutation_openehr_version"() RETURNS trigger AS $$
-BEGIN
-  RAISE EXCEPTION 'openehr_version is append-only (openEHR V8.10)';
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE TRIGGER "trg_append_only_openehr_version" BEFORE UPDATE OR DELETE ON "openehr_version" FOR EACH ROW EXECUTE FUNCTION "openehr_refuse_mutation_openehr_version"();
 
 CREATE OR REPLACE FUNCTION "openehr_refuse_mutation_openehr_contribution"() RETURNS trigger AS $$
 BEGIN
@@ -123,3 +119,11 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE TRIGGER "trg_append_only_openehr_contribution" BEFORE UPDATE OR DELETE ON "openehr_contribution" FOR EACH ROW EXECUTE FUNCTION "openehr_refuse_mutation_openehr_contribution"();
+
+CREATE OR REPLACE FUNCTION "openehr_refuse_mutation_openehr_version"() RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'openehr_version is append-only (openEHR V8.10)';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER "trg_append_only_openehr_version" BEFORE UPDATE OR DELETE ON "openehr_version" FOR EACH ROW EXECUTE FUNCTION "openehr_refuse_mutation_openehr_version"();

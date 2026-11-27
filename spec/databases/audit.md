@@ -64,6 +64,330 @@ resolving.
 
 ## Open findings
 
+### D-31 — The `EHR_STATUS` read answers in this service's version view, not as the resource ITS-REST defines — **Medium, fixed** (2026-11-27, not yet committed)
+
+**Found 2026-11-27 by the conformance run** (`openehr-axa/spec/conformance-runs.md`,
+Run 2). `GET /ehr/{ehr_id}/ehr_status` answers `{"uid", "versioned_object_uid",
+"lifecycle_state_code", "is_deleted", "time_committed", "chain_digest",
+"committer", "data": {…EHR_STATUS…}}`. ITS-REST 1.1.0 answers with the
+`EHR_STATUS` itself, with the version identified in headers. EHRbase 2.38.0
+does that, and the same runner reads `.is_modifiable` there and `null` here.
+The composition routes use the same view, so they diverge the same way.
+
+**Open until** a decision is made between two shapes. Option one: answer ITS-REST
+routes with the resource, and move the version metadata (uid, chain digest,
+committer) into headers or a separate versioned resource. Option two: keep the
+view and declare the departure. Either way the runner's read cases must pass
+or name the departure.
+
+**Fixed 2026-11-27**, option one, by the maintainer's decision, against the new
+`S1.23`.
+- **The ITS-REST routes** answer with the resource: the current and versioned
+  `EHR_STATUS`, the composition read, and the composition create and update.
+  The composition read accepts ITS-REST's `uid_based_id`, so the version
+  `Location` it returns can itself be read. `ETag` and `Location` name the
+  version.
+- **This service's own routes** keep the version view, with the chain digest
+  and the committer (`PR12.25`): `_history`, `…/version/{version_uid}`, and
+  search.
+- **Evidence.** HTTP tests check the resource shape and headers, the `Location`
+  read back, a deletion read by its version id (`410`), and a commit answering
+  with its `COMPOSITION`. Run 3 (`conformance-runs.md`): 9/9 here and on
+  EHRbase 2.38.0.
+- **Lost from the status response:** the committer. It is in the store
+  (`PR12.25`), but no route returns an `EHR_STATUS` version's audit yet.
+  ITS-REST's `versioned_ehr_status/revision_history` would be that route.
+
+### D-32 — A minimal ITS-REST `EHR_STATUS` body is refused as not an archetype root — **Low, closed by decision** (2026-11-27)
+
+**Found 2026-11-27 by the conformance run.** `POST /ehr` with
+`{"_type":"EHR_STATUS","archetype_node_id":"openEHR-EHR-EHR_STATUS.generic.v1",
+"name":…,"subject":{"_type":"PARTY_SELF"},"is_modifiable":false,
+"is_queryable":true}` answers `422`:
+`EHR_STATUS.Is_archetype_root — an EHR_STATUS has no archetype_details`.
+EHRbase 2.38.0 accepts the same body (`201`).
+
+This service is enforcing the RM's own invariant: `EHR_STATUS` is an archetype
+root, so its `archetype_details` is required. So this is not a defect against
+the RM. It is a strictness difference a client will meet. **Open until** a
+decision is made: keep refusing, as now (documented in `S1.22`, with the
+`422` naming the invariant), or fill `archetype_details` from
+`archetype_node_id` for this one case, as a declared, specified leniency.
+
+**Closed 2026-11-27, by the maintainer's decision: keep refusing.** Written into
+`S1.23`: a supplied `EHR_STATUS` must carry `archetype_details`, and is refused
+with `422` naming the invariant. The runner's supplied-status case now sends a
+valid RM body, which both implementations accept.
+
+### D-23 — Current and historical EHR status follow an unverified reference — **High, fixed** (2026-11-26, not yet committed)
+
+**Live PostgreSQL, 2026-11-27.** `openehr-postgresql/scripts/verify-store.sh`
+against PostgreSQL 18 over verified TLS: 28 of 28 tests pass. That includes
+`run_ehr_status_binding` (this finding), `run_ehr_scope` (`D-19`),
+`run_contribution_membership` (`D-26`), `run_paging` (`P6.25`), both
+concurrency races, and the four TLS cases, all on schema 6.
+
+**Claimed.** `db:H5.18` requires reads under an EHR path to establish the
+owning EHR and the expected RM type. The composition routes and the status
+version-by-ID route have scoped lookups.
+
+**Found by source inspection, 2026-11-25, at `ec029cf`.** In
+`openehr-axa/src/controllers/ehr_status.rs::read`, the EHR row supplies a
+container identifier, then the current and as-of branches call
+`latest_version` and `version_at_time`. Neither call checks the owner or
+type. `SqliteStore::create_ehr` persists the submitted reference, so reading
+it from a stored EHR establishes which container the EHR names but does
+not establish who owns that container. The same distinction applies when
+the two stores resolve status for the modifiability gate. The ordinary
+fixture deliberately aligns the references (`conformance::sample_ehr_status_version`).
+No cross-chart disclosure was exercised in this audit.
+
+**Acceptance.** Use owner- and type-scoped reads for both branches. Cover
+matching, absent, foreign-owner, and wrong-class references in shared store
+tests and at the HTTP boundary. Check the access outcome as well as the
+response. Define how the write gate distinguishes an uninitialized status
+from an inconsistent stored reference, and cover both on SQLite and PostgreSQL.
+
+**Reproduced 2026-11-26 over HTTP.** An `EHR` created naming the first
+chart's status container got `200` and that chart's `EHR_STATUS` from
+`GET /ehr/{second}/ehr_status`. **Fixed** against the new `H5.20`. Both
+branches of the handler use the scoped lookups (`latest_version_in` and the
+new default method `version_at_time_in`). The write gate is one shared
+`openehr_store::ehr_is_modifiable` in place of three private copies (SQLite,
+PostgreSQL, and the owner memory store), and it tells the three states apart:
+absent means open, owned means read fresh, and foreign or wrong-class means
+`Conflict`. Evidence: `conformance::run_ehr_status_binding` on the owner
+store and SQLite. HTTP tests assert the `404` with no content, and a
+`not_found` access record. Owner-crate tests cover an engine failure in the
+gate's owner lookup (it stays an engine error) and a deleted status (not
+open). **Not run:** the same story against PostgreSQL, which is wired in
+`openehr-postgresql/tests/store.rs` and needs a live server.
+
+### D-24 — A composition update checks a different source of identity from the commit — **High, fixed** (2026-11-26, not yet committed)
+
+**Claimed.** `db:H5.15` requires “a precondition naming the version being
+replaced”. **Found by source inspection at `ec029cf`.**
+`openehr-axa/src/controllers/composition.rs::update` resolves the container
+from the URL and compares its head with the header. It passes the submitted
+version to `commit_composition`, which derives the destination from
+`version.uid().object_id()`. The handler never establishes that the two
+container identifiers agree. EHR ownership checks permit multiple compositions
+within one EHR.
+
+**Acceptance.** Bind the addressed container, submitted version, predecessor,
+and precondition to the same update. Same-EHR fixtures with two containers
+must show unchanged heads, index, and history on disagreement. Preserve the
+documented stale-header and successful-amendment cases.
+
+**Reproduced 2026-11-26 over HTTP.** `PUT …/composition/LIVE`, with
+`If-Match` naming `LIVE`'s current version, committed `GONE::3`.
+**Fixed** against the new `H5.21`. `bind_update` refuses a body for another
+container before the store is touched, and `bind_predecessor` refuses a body
+whose `preceding_version_uid` is not the `If-Match` version. The second runs
+after the `412` check, so the existing stale-header (`412`) and wrong-EHR
+(`404`) tests pass unchanged, and so do the successful amendments. Both
+refusals are `400`, with `GONE`'s history and `LIVE`'s head compared before
+and after. The index is not compared separately: nothing reaches the store.
+
+### D-25 — Contribution creation omits the committer comparison — **High, fixed** (2026-11-26, not yet committed)
+
+**Claimed.** `db:PR12.19` applies wherever a write accepts an `AUDIT_DETAILS`.
+**Found by source inspection at `ec029cf`.**
+`openehr-axa/src/controllers/contribution.rs::create` discards its verified
+principal before persisting the contribution's own audit. Checking the
+version's separate audit later cannot establish who declared the change set.
+The HTTP test named `a_contribution_can_be_declared_and_is_required_before_a_commit`
+asserts creation and duplicate declaration.
+
+**Acceptance.** Apply the shared party/subject comparison before persisting
+either kind of audit. Cover agreement, disagreement (403), and a missing
+identifier (422) for each route. Assert that refusals leave the database
+unchanged. Durable attribution after an accepted write is tracked in `D-22`.
+
+**Fixed 2026-11-26.** `POST …/contribution` applies
+`controllers::check_committer`, the rule version commits use, extracted from
+`check_attribution` so the two cannot drift, before the store is called.
+`a_contribution_is_declared_only_by_the_verified_caller` covers three cases:
+another clinician's identifier (`403`), a committer with no identifier
+(`422`), and the caller (`201`) with the same uid. The last shows that
+neither refusal wrote a row. **Behaviour change:** a contribution whose
+committer carries no identifier used to be accepted, and is now `422`.
+
+### D-26 — Version commits do not establish membership in the declared contribution — **High, fixed** (2026-11-26, not yet committed)
+
+**Claimed.** The contribution controller documents “the caller declares the act,
+then commits versions into it” (`db:H5.14`, `db:PR12.10`).
+**Found by source and DDL inspection at `ec029cf`.**
+`VersionRow::project` assigns `contribution_uid` from its separate argument.
+Both real stores call it without resolving that contribution or checking the
+version's declared reference against it. In `assets/ddl/sqlite.sql` the
+version table references the versioned object but has no foreign key on
+`contribution_uid`. The declaration test cited in `D-25` makes no version
+commit. Consequently the current evidence does not establish a reconstructible
+change set for each committed version.
+
+**Acceptance.** Specify agreement between the version reference, API argument,
+and recorded contribution in the same EHR. Enforce it atomically on both
+write paths in both stores. Exercise declared, missing, mismatched, and
+wrong-EHR change sets with a positive multi-version case. Inspect existing
+rows before changing constraints. If the schema changes, follow `db:O10.14`
+through `db:O10.17`.
+
+**Fixed 2026-11-26** against the new `H5.22`, in schema 6.
+- **Schema.** `openehr_contribution.versions_json` stores the declared
+  versions, and `openehr_version.contribution_uid` is a foreign key. The
+  contribution table now emits first (`G2.12`).
+- **Commit check.** Both commit paths in SQLite, PostgreSQL and the owner
+  memory store call `openehr_store::check_membership` after the commit rules
+  and before writing: the contribution exists, it is this `EHR`'s, and it
+  declared this version. Otherwise the commit fails with
+  `StoreError::NotInContribution`, which `openehr-axa` maps to `409`.
+- **Evidence.** `conformance::run_contribution_membership`, on the owner
+  store and SQLite, covers: one contribution committing a composition and a
+  status; then an undeclared composition, an undeclared status, an absent
+  contribution, and another record's contribution, each refused with no row
+  written. HTTP: `a_version_is_committed_only_into_a_contribution_that_declared_it`.
+- **Existing rows** were not inspected against the new constraint: no
+  deployed database is known, and schema 5 is refused anyway.
+- **Fixtures changed with it.** Every test commit across the tree now commits
+  into a contribution that declares the version (`sample_contribution_of`,
+  `sample_contribution_declaring`). Before, most did not.
+- **Not run:** PostgreSQL.
+
+### D-27 — Backup inspection creates databases, and an absent checkpoint succeeds — **High, fixed** (2026-11-26, not yet committed)
+
+**Claimed.** `openehr-axa/src/tasks.rs::checkpoint_line` documents an error
+if “the database cannot be opened or the container does not exist”.
+**Observed at `ec029cf`, 2026-11-25.** The built CLI's `task checkpoint`
+and `task verify` were each given a valid synthetic container ID and a
+distinct nonexistent SQLite path in a temporary directory. Both created a
+six-table database. Checkpoint exited 0 with `entries=0`, a zero head, and
+`last_version=-`. Verify exited 1 with `Empty`. `store_for` calls the same
+open-and-install path as service startup. A scheduled witness can therefore
+record success against a mistyped backup path.
+
+**Acceptance.** Open existing databases read-only for both tasks and check
+schema compatibility without installing it. Refuse an absent requested
+container at the operator boundary. Exercise a missing file, missing
+container, incompatible schema, a populated read-only backup, and a damaged
+history. Check exit status and verify that inspection leaves the input bytes
+unchanged and creates no database on a missing path.
+
+**Reproduced 2026-11-26** on the working tree: a mistyped
+`OPENEHR_SQLITE_PATH` produced an 86 KB database even though the task then
+refused its arguments. **Fixed 2026-11-26** against the new requirement
+`O10.20`. `SqliteStore::open_read_only` opens with `SQLITE_OPEN_READ_ONLY`
+and without `CREATE`, installs nothing, and refuses a database recording no
+schema version (`found: 0`) or another one. `openehr-axa`'s
+`open_store_read_only` is the only opener the two tasks use, and
+`checkpoint` refuses a container the database does not hold instead of
+printing `entries=0`. Evidence: `openehr-sqlite/tests/read_only.rs` covers a
+missing path that stays absent, an empty file left empty, another schema
+version, and a populated store whose bytes are identical after reads, with
+writes refused. `openehr-axa/tests/tasks.rs` runs the real binary: both tasks
+exit non-zero on a missing path and create nothing, an absent container is
+refused, and both tasks leave a populated backup's bytes unchanged. The
+existing tamper tests cover the damaged history. **Not covered:** an
+incompatible schema through the binary (it is covered at the store level only),
+and the restore drill, which is a separate `tasks.md` item and not part of
+this finding.
+
+### D-28 — Undecodable stored JSON becomes absent clinical content in the HTTP view — **High, fixed** (2026-11-26, not yet committed)
+
+**Claimed.** `openehr-axa/src/views.rs::VersionView::data` describes “the
+version's content, or `null` for a deletion”. **Found by source inspection
+at `ec029cf`.** `composition::view` discards
+`serde_json::from_str` errors with `.ok()`. A stored nondeleted row whose
+content fails decoding therefore takes the successful response path with
+`data: null`. Current, historical, and status responses share this view.
+
+**Acceptance.** Make view construction fallible. Preserve a genuine tombstone
+and a valid record. For an unreadable content-bearing row, return a
+content-free server error, emit the corresponding audit outcome, and fail a
+whole history page that contains the row. Cover each caller using synthetic
+fixtures, including the readback that follows an already committed write.
+
+**Fixed 2026-11-26** (`PR12.23` amended: outcome `error`). `composition::view`
+returns a `Result`. A row with no document is still `data: null`. A
+document that does not decode is a `500` that names the version, quotes none
+of the bytes, and is recorded `error`. One such row fails a whole history
+page. After a commit, the readback's `500` says the commit succeeded and names
+the version, so a caller does not retry into a duplicate. Evidence, in
+`openehr-axa/tests/http.rs`: read, vread and history each `500` with
+`error` recorded; a tombstone in a history page is still `data: null`; the
+readback case uses a trigger that corrupts the row as it is inserted. Negative
+control run: restoring `.ok()` made the unreadable-read test answer `200`.
+**Not exercised:** an unreadable `EHR_STATUS` row. It uses the same `view`,
+but has no test of its own.
+
+### D-29 — Some read outcomes are recorded before the outcome is known — **Medium, fixed** (2026-11-26, not yet committed)
+
+**Claimed.** `db:PR12.23` requires distinguishable outcomes for failed reads.
+**Found by source inspection at `ec029cf`.** `composition::history` and
+`composition::search` record the store lookup before `Paging::resolve`
+can refuse the request. `ehr_status::read` returns directly on a missing
+parent EHR before reaching `record_read`. The audit can therefore show a
+success for a rejected page or omit an authenticated missing-record lookup.
+
+**Acceptance.** Resolve the response outcome before appending its audit record
+and release clinical content only after the append succeeds. Exercise a
+successful read, a rejected page, a missing parent, an unreadable row, and
+an unavailable log. Compare response and recorded outcome on each route.
+
+**Fixed 2026-11-26.** The composition read, vread, history and search
+handlers, and both status handlers, now build the whole response first: the
+lookup, paging, and decoding. `controllers::recorded` then derives the
+outcome from the response's own status (`outcome_of_status`: `ok`,
+`not_found`, `gone`, `refused`, `error`), appends it, and only then
+releases the response. If the append fails, the caller still gets `503` and
+nothing is released. `ehr` and `query` keep `outcome_of`, because nothing
+after their record step can refuse. Evidence: a refused `_count` on history
+and on search is recorded `refused` (it was `ok`), a status lookup under a
+missing `EHR` is recorded `not_found` (it was not recorded at all), the
+unreadable cases above are recorded `error`, and the existing unavailable-log
+test still passes. The status read's access-record target is now the literal
+`ehr_status` rather than the container its reference names. A refused read
+must not log a container the caller never named or could see. **Behaviour
+change for log consumers.**
+
+### D-30 — Invalid optional environment values disable configured protections — **Medium, fixed** (2026-11-26, not yet committed; Compose not run)
+
+**Claimed.** Startup must initialize a configured recorder before opening
+the store (`db:PR12.6`). `db:PR12.17` describes binding verification to a
+configured audience. **Found by source inspection at `ec029cf`.**
+`AccessLog::from_env` treats every environment read error as auditing off.
+`PasetoVerifier::from_env` uses `.ok()` on the issuer, audience, and implicit
+assertion. A present value with invalid Unicode is treated as absent.
+There is also a deployment mismatch in the opposite direction. Compose's
+default substitution for the optional audience sets an empty string, which
+the verifier passes on as a configured audience. The documented throwaway
+token supplies no audience.
+
+**Fixed 2026-11-26** against the new `PR12.24`. A new module,
+`openehr_axa::settings`, has one reader per kind of setting. `claim` treats
+absent or empty as unset and refuses a value that is not Unicode, naming the
+setting without quoting it. `path` treats absent as off and refuses an empty
+value; otherwise it is any OS path. `AccessLog::from_lookup` and
+`PasetoVerifier::from_lookup` take the lookup, and `from_env` passes
+`std::env::var_os`. Evidence:
+- Unit tests of the four states.
+- The Compose default (an empty audience) accepts a token with no audience.
+- A configured audience read from settings still refuses another audience.
+- A non-Unicode issuer, audience or implicit assertion is `ConfigError::Setting`.
+- `tests/startup.rs` runs the real binary: an empty `OPENEHR_ACCESS_LOG`
+  and a non-Unicode `OPENEHR_PASETO_AUDIENCE` each exit non-zero, naming the
+  setting.
+
+Negative control run: with an empty path read as "off", the service started
+and served until it was killed. **Not run:** the documented Compose stack with
+a protected route (needs podman).
+
+**Acceptance.** Distinguish absent, empty, invalid, and configured values.
+Read paths as OS paths or explicitly refuse unusable values at startup.
+Keep the optional claim constraints active when configured. Test environment
+parsing through child processes and exercise a protected route with the
+documented Compose defaults and with an explicitly bound audience.
+
 ### D-15 — PostgreSQL connected without TLS — **High, fixed**
 
 **Found 2026-11-19.** `PostgresqlStore::connect` calls
@@ -279,7 +603,7 @@ merge two real encounters with the same name. The shared suite gets a story
 with an original, two amendments, a second encounter with the same display
 name, and a withdrawal, and SQLite and PostgreSQL both pass it.
 
-### D-22 — The verified committer's identity is checked and then not stored — **High, open**
+### D-22 — The verified committer's identity is checked and then not stored — **High, fixed** (2026-11-26, not yet committed)
 
 **Found 2026-11-25 by an external clinical-safety audit (source inspection),
 reproduced here.** `openehr-axa` refuses a commit whose `AUDIT_DETAILS`
@@ -313,7 +637,26 @@ restart. Treat the identifiers as sensitive in the audit store. Needs a schema
 change and a migration story (`db:O10.14`), so it is a design decision, not a
 patch; it also changes `SCHEMA_VERSION`.
 
+**Fixed 2026-11-26** against the new `PR12.25`, as schema 6 (`SCHEMA_VERSION`
+5 → 6). `audit_committer_json` holds the whole committer `PARTY_PROXY` as
+canonical JSON, required on `openehr_version` and `openehr_contribution`.
+The version view returns it as `committer`.
+- **Verified actor and declared author** are one value here, deliberately.
+  `openehr-axa` refuses every write in which they differ (`PR12.19`, and
+  `D-25` below), so there is nothing distinct to keep. A service acting for
+  someone else would need a second column, and `PR12.25` says so.
+- **Evidence.** `openehr-sqlite/tests/attribution.rs` commits as two
+  "Dr A Nurse"s with different identifiers, reopens the file, and reads back
+  two distinct committers on both the versions and the contributions.
+- **Migration.** A schema-5 database is refused (`O10.15`) and, before 1.0,
+  exported and reloaded (`O10.14`). Its rows hold no identifier to recover,
+  and `PHI.md` now says so.
+- **Not run:** PostgreSQL (implemented, compiled), and `verify-schema.sh` on
+  real engines for the new DDL (needs podman).
+
 ### D-19 — A read route serves content under an EHR that does not own it — **High, fixed** (PostgreSQL run pending)
+
+**Scope clarification at `ec029cf`.** The current and as-of status routes follow a stored reference whose ownership still needs checking. That residual is tracked separately in `D-23`.
 
 **Found 2026-11-25 by an external clinical-safety audit (source inspection),
 then reproduced here.** `openehr-axa`'s composition read routes take

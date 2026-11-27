@@ -229,13 +229,137 @@ pub trait DvOrdered {
         self.ordered_attrs().other_reference_ranges()
     }
 
-    /// Whether the value is outside its own recorded normal range.
+    /// Whether the value is **not established inside** its own recorded
+    /// normal range: `Some(false)` only when [`DvOrdered::range_position`] is
+    /// [`RangePosition::Inside`], and `Some(true)` for outside *and* for
+    /// indeterminate (`D3.14a`'s fail-closed direction, `D3.14b`).
     ///
     /// Returns `None` when there is no normal range, rather than `false`. "We
     /// did not record a range" and "the value is normal" are different facts,
     /// and a dashboard that renders the first as the second is reassuring for
-    /// the wrong reason.
+    /// the wrong reason. A caller that can show three states should ask
+    /// [`DvOrdered::range_position`]: `< 4 mg/L` against 3–5 is not
+    /// abnormal, it is undecided, and a boolean cannot say so.
     fn is_abnormal(&self) -> Option<bool>;
+
+    /// Where the value lies against its own normal range, decided over every
+    /// value its magnitude qualifier admits (`D3.14b`, `A-86`); `None` when no
+    /// range is recorded.
+    ///
+    /// The default derives a two-state answer from [`DvOrdered::is_abnormal`]
+    /// for an implementation outside this crate. Every `DV_ORDERED` here
+    /// overrides it with the three-state one.
+    fn range_position(&self) -> Option<RangePosition> {
+        self.is_abnormal().map(|abnormal| {
+            if abnormal {
+                RangePosition::Outside
+            } else {
+                RangePosition::Inside
+            }
+        })
+    }
+}
+
+/// Where a value lies against a range (`D3.14b`).
+///
+/// Three states because a qualified result has three answers. `< 4 mg/L`
+/// against 3–5 mg/L could be 3.5 or 2: reporting it inside called a result
+/// below a detection limit normal, and reporting it outside would flag one
+/// that may well be normal (`A-86`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RangePosition {
+    /// Every value the qualifier admits is in the range.
+    Inside,
+    /// No value the qualifier admits is in the range.
+    Outside,
+    /// The range cannot decide, for the reason given.
+    Indeterminate(Indeterminate),
+}
+
+/// Why a [`RangePosition`] is undecided.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Indeterminate {
+    /// A `<`, `<=`, `>` or `>=` qualifier admits values on both sides of a
+    /// range bound.
+    Qualified,
+    /// `~`: the magnitude is approximate, by an amount the record does not
+    /// state.
+    Approximate,
+    /// The value cannot be ordered against a bound: other units, another
+    /// terminology, another kind of proportion (`D3.14`).
+    Incomparable,
+}
+
+/// [`RangePosition`] of `value`, whose qualifier is `status`, against
+/// `range` (`D3.14b`).
+///
+/// The admitted set is a ray for `<`, `<=`, `>`, `>=`. Inside means the
+/// ray fits within the range, which needs the range unbounded on the ray's
+/// open side. Outside means the ray misses the range entirely. The
+/// incomparable check comes first, so the comparisons after it are all
+/// decided.
+pub(crate) fn position_in(
+    range: &Interval<DataValue>,
+    value: &DataValue,
+    status: Option<MagnitudeStatus>,
+) -> RangePosition {
+    let lower = range.lower().map(|bound| value.semantic_cmp(bound));
+    let upper = range.upper().map(|bound| value.semantic_cmp(bound));
+    if matches!(lower, Some(None)) || matches!(upper, Some(None)) {
+        return RangePosition::Indeterminate(Indeterminate::Incomparable);
+    }
+    let lower = lower.flatten();
+    let upper = upper.flatten();
+    let lower_in = range.lower_included().unwrap_or(true);
+    let upper_in = range.upper_included().unwrap_or(true);
+    // (inside, outside) for the admitted set.
+    let (inside, outside) = match status {
+        None | Some(MagnitudeStatus::Equal) => {
+            let inside = range.contains(value);
+            (inside, !inside)
+        }
+        Some(MagnitudeStatus::Approximate) => {
+            return RangePosition::Indeterminate(Indeterminate::Approximate);
+        }
+        Some(MagnitudeStatus::LessThan | MagnitudeStatus::LessOrEqual) => {
+            let at = status == Some(MagnitudeStatus::LessOrEqual);
+            // Every admitted value is below `value`, down without limit.
+            let inside = lower.is_none()
+                && match upper {
+                    None | Some(Ordering::Less) => true,
+                    Some(Ordering::Equal) => !at || upper_in,
+                    Some(Ordering::Greater) => false,
+                };
+            let outside = match lower {
+                Some(Ordering::Less) => true,
+                Some(Ordering::Equal) => !(at && lower_in),
+                None | Some(Ordering::Greater) => false,
+            };
+            (inside, outside)
+        }
+        Some(MagnitudeStatus::GreaterThan | MagnitudeStatus::GreaterOrEqual) => {
+            let at = status == Some(MagnitudeStatus::GreaterOrEqual);
+            let inside = upper.is_none()
+                && match lower {
+                    None | Some(Ordering::Greater) => true,
+                    Some(Ordering::Equal) => !at || lower_in,
+                    Some(Ordering::Less) => false,
+                };
+            let outside = match upper {
+                Some(Ordering::Greater) => true,
+                Some(Ordering::Equal) => !(at && upper_in),
+                None | Some(Ordering::Less) => false,
+            };
+            (inside, outside)
+        }
+    };
+    if inside {
+        RangePosition::Inside
+    } else if outside {
+        RangePosition::Outside
+    } else {
+        RangePosition::Indeterminate(Indeterminate::Qualified)
+    }
 }
 
 /// Generates the `DV_ORDERED` builders for a concrete descendant.
@@ -281,6 +405,9 @@ macro_rules! ordered_builders {
 
 macro_rules! ordered {
     ($ty:ty, $as_value:expr, $cmp:expr) => {
+        ordered!($ty, $as_value, $cmp, |_: &$ty| None);
+    };
+    ($ty:ty, $as_value:expr, $cmp:expr, $status:expr) => {
         impl DvOrdered for $ty {
             fn ordered_attrs(&self) -> &OrderedAttrs {
                 &self.ordered
@@ -292,10 +419,17 @@ macro_rules! ordered {
             }
 
             fn is_abnormal(&self) -> Option<bool> {
+                self.range_position()
+                    .map(|position| position != RangePosition::Inside)
+            }
+
+            fn range_position(&self) -> Option<RangePosition> {
                 let range = self.ordered.normal_range.as_ref()?;
                 #[allow(clippy::redundant_closure_call)]
                 let value = ($as_value)(self);
-                Some(!range.contains(&value))
+                #[allow(clippy::redundant_closure_call)]
+                let status: Option<MagnitudeStatus> = ($status)(self);
+                Some(position_in(range, &value, status))
             }
         }
     };
@@ -703,7 +837,8 @@ ordered!(
             return None;
         }
         a.magnitude.semantic_cmp(&b.magnitude)
-    }
+    },
+    |s: &DvQuantity| s.magnitude_status
 );
 ordered_builders!(DvQuantity, "DvQuantity");
 
@@ -764,7 +899,8 @@ impl DvCount {
 ordered!(
     DvCount,
     |s: &DvCount| DataValue::Count(s.clone()),
-    |a: &DvCount, b: &DvCount| Some(a.magnitude.cmp(&b.magnitude))
+    |a: &DvCount, b: &DvCount| Some(a.magnitude.cmp(&b.magnitude)),
+    |s: &DvCount| s.magnitude_status
 );
 ordered_builders!(DvCount, "DvCount");
 

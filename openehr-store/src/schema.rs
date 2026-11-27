@@ -310,6 +310,13 @@ pub const VERSION: Table = Table {
              (M5.16), not missing data",
         ),
         Column::required(
+            "audit_committer_json",
+            ColTy::Json,
+            "the whole committer PARTY_PROXY, canonical JSON: external_ref, \
+             identifiers and name. The name alone is not an identity (PR12.25, \
+             D-22)",
+        ),
+        Column::required(
             "audit_time_committed_text",
             ColTy::Instant,
             "authoritative lexical form",
@@ -384,11 +391,21 @@ pub const VERSION: Table = Table {
         ),
     ],
     primary_key: &["uid"],
-    foreign_keys: &[ForeignKey {
-        column: "versioned_object_uid",
-        table: "openehr_versioned_object",
-        references: "uid",
-    }],
+    foreign_keys: &[
+        ForeignKey {
+            column: "versioned_object_uid",
+            table: "openehr_versioned_object",
+            references: "uid",
+        },
+        // H5.22, D-26: a version names a change set that exists. That it is the
+        // same EHR's, and that the change set declared this version, is checked
+        // in the commit (no single constraint states either).
+        ForeignKey {
+            column: "contribution_uid",
+            table: "openehr_contribution",
+            references: "uid",
+        },
+    ],
     indexes: &[
         Index {
             name: "ix_version_container_trunk",
@@ -435,8 +452,19 @@ pub const CONTRIBUTION: Table = Table {
         ),
         Column::required("audit_system_id", ColTy::Text(255), ""),
         Column::optional("audit_committer_name", ColTy::Text(255), ""),
+        Column::required(
+            "audit_committer_json",
+            ColTy::Json,
+            "the whole committer PARTY_PROXY, canonical JSON (PR12.25, D-22, D-25)",
+        ),
         Column::required("audit_time_committed_text", ColTy::Instant, "authoritative"),
         Column::optional("audit_time_committed_utc", ColTy::InstantUtc, "derived"),
+        Column::required(
+            "versions_json",
+            ColTy::Json,
+            "CONTRIBUTION.versions: the declared version uids, canonical JSON array. \
+             A version commit is refused unless it is one of them (H5.22, D-26)",
+        ),
     ],
     primary_key: &["uid"],
     foreign_keys: &[ForeignKey {
@@ -525,7 +553,14 @@ pub const COMPOSITION_INDEX: Table = Table {
 /// `5` since 2026-11-19: the branch-position columns became required and use
 /// zero for a trunk position. A database built under `4` permits `NULL`, which
 /// defeats the unique tree-position index (`H5.10`, `D-17`).
-pub const SCHEMA_VERSION: i64 = 5;
+///
+/// `6` since 2026-11-26: `audit_committer_json` on versions and contributions
+/// (`PR12.25`, `D-22`), `versions_json` on contributions, and a foreign key
+/// from a version to its contribution (`H5.22`, `D-26`). A database built
+/// under `5` holds no committer identity to recover. It is refused
+/// (`O10.15`), and before 1.0 it is exported, recreated and reloaded
+/// (`O10.14`).
+pub const SCHEMA_VERSION: i64 = 6;
 
 /// The `schema_version` table: what shape this database is in.
 ///
@@ -558,8 +593,11 @@ pub const TABLES: &[Table] = &[
     SCHEMA_VERSION_TABLE,
     EHR,
     VERSIONED_OBJECT,
-    VERSION,
+    // Before VERSION since schema 6: a version row now references its
+    // contribution (H5.22), and tables emit in this order with no deferred
+    // constraints (G2.12).
     CONTRIBUTION,
+    VERSION,
     COMPOSITION_INDEX,
 ];
 

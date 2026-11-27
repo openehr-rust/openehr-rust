@@ -25,6 +25,11 @@ services:
       OPENEHR_SQLITE_PATH: /home/openehr/data/openehr.sqlite3
       OPENEHR_PASETO_PUBLIC_KEYS: ${OPENEHR_PASETO_PUBLIC_KEYS:?set this to a k4.public.… key; see INSTALL.md}
       OPENEHR_PASETO_AUDIENCE: ${OPENEHR_PASETO_AUDIENCE:-}
+      # Reads are audited in this deployment by default, on the data volume
+      # (db:PR12.5, db:PR12.6). The default is a path, not empty: an empty
+      # setting refuses startup (db:PR12.24), so turning auditing off is a
+      # decision to unset it, not a typo.
+      OPENEHR_ACCESS_LOG: ${OPENEHR_ACCESS_LOG:-/home/openehr/data/access.jsonl}
     volumes:
       - openehr-data:/home/openehr/data
 

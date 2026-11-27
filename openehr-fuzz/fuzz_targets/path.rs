@@ -32,7 +32,9 @@ fn subject() -> &'static Composition {
                         .expect("literal"),
                 ),
             composition_category::EVENT,
-            PartyIdentified::named("Dr A Nurse").expect("literal").into(),
+            PartyIdentified::named("Dr A Nurse")
+                .expect("literal")
+                .into(),
             CodePhrase::new("ISO_639-1", "en").expect("literal"),
             CodePhrase::new("ISO_3166-1", "GB").expect("literal"),
         )

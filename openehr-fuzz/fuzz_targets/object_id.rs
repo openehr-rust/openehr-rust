@@ -46,6 +46,10 @@ fuzz_target!(|text: &str| {
         let _ = v.object_id().to_string();
         let _ = v.creating_system_id().to_string();
         let tree = v.version_tree_id();
-        let _ = (tree.trunk_version(), tree.branch_number(), tree.branch_version());
+        let _ = (
+            tree.trunk_version(),
+            tree.branch_number(),
+            tree.branch_version(),
+        );
     }
 });

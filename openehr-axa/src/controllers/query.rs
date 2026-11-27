@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::auth::Principal;
+use crate::authz::{Action, authorize};
 use crate::controllers::composition::lock;
 use crate::controllers::{Refusal, outcome_of, record_read, status_for, store};
 
@@ -112,6 +113,15 @@ async fn query(
     // real EHR id can equal.
     let ehr =
         openehr_store::aql_scoped_ehr(&parsed, &params).unwrap_or_else(|_| "(unscoped)".to_owned());
+
+    // `db:PR12.18`: a query reads the record it resolves to, so it needs `read`
+    // there. Checked before the store, and recorded as `denied`. A query that
+    // resolves to no record matches no grant but `"*"`, and the executor
+    // refuses it anyway.
+    if let Err(denied) = authorize(&principal, &ehr, Action::Read) {
+        record_read(&ctx, &principal, "query", &ehr, "aql", "denied")?;
+        return Err(denied.into());
+    }
 
     let handle = store(&ctx)?;
     let guard = lock(&handle)?;

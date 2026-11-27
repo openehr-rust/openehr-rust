@@ -32,17 +32,19 @@ use axa::{
 use openehr::base::HierObjectId;
 use openehr_store::{Store as _, integrity};
 
-use crate::app::{open_store, open_store_at};
+use crate::app::open_store_read_only;
 
-/// Opens the database this task is to inspect.
+/// Opens the database this task is to inspect, **read-only** (`db:O10.20`).
 ///
 /// `path:` names one explicitly; without it the store the service itself uses.
 /// The explicit form is what checks a **restored backup**, which is the copy an
 /// operator most wants verified and never the one the service has open.
+///
+/// Read-only, never created, never installed: these tasks used the server's
+/// open-and-install path, so a mistyped `path:` became a new empty database and
+/// `checkpoint` printed an empty witness with exit 0 (`db:D-27`).
 fn store_for(vars: &Vars) -> Result<openehr_sqlite::SqliteStore> {
-    vars.cli
-        .get("path")
-        .map_or_else(open_store, |path| open_store_at(std::path::Path::new(path)))
+    open_store_read_only(vars.cli.get("path").map(std::path::Path::new))
 }
 
 /// Reads the `container` argument.
@@ -93,11 +95,25 @@ impl Task for Checkpoint {
 ///
 /// # Errors
 ///
-/// Returns [`axa::Error::Message`] if the database cannot be opened or the
-/// container does not exist.
+/// Returns [`axa::Error::Message`] if the database cannot be opened read-only
+/// or the container does not exist.
 pub fn checkpoint_line(vars: &Vars) -> Result<String> {
-    store_for(vars)?
-        .chain_checkpoint(&container(vars)?)
+    // The arguments before the file: a bad identifier needs no I/O to refuse.
+    let container = container(vars)?;
+    let store = store_for(vars)?;
+    // An absent container has a well-formed checkpoint too — `entries=0` and a
+    // zero head — which a witness would file as success (`db:O10.20`). The
+    // operator asked about a record; one that is not there is an error.
+    if let Err(e) = store.latest_version(&container) {
+        return Err(axa::Error::Message(match e {
+            openehr_store::StoreError::NotFound { .. } => {
+                format!("{container}: no such container in this database")
+            }
+            other => other.to_string(),
+        }));
+    }
+    store
+        .chain_checkpoint(&container)
         .map_err(|e| axa::Error::Message(e.to_string()))
 }
 
@@ -149,8 +165,8 @@ impl Task for Verify {
 /// Returns [`axa::Error::Message`] if the history is not intact, naming the
 /// verdict — or if the database cannot be read.
 pub fn verify_line(vars: &Vars) -> Result<String> {
-    let store = store_for(vars)?;
     let container = container(vars)?;
+    let store = store_for(vars)?;
     let rows = store
         .all_versions(&container)
         .map_err(|e| axa::Error::Message(e.to_string()))?;

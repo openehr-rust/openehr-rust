@@ -4,7 +4,7 @@
 //!
 //! # Why this exists
 //!
-//! The store's engine-error paths (`map_err(|e| engine(&e))`, the 32-byte
+//! The store's engine-error paths (`map_err(engine)`, the 32-byte
 //! digest checks, the MAC length check) are the ones a healthy database never
 //! reaches. They were the bulk of `openehr-sqlite`'s uncovered lines, and an
 //! error path nothing has run is a claim nothing has checked: a `?` that
@@ -60,7 +60,20 @@ fn seeded() -> SqliteStore {
     store
         .create_contribution(
             &ehr_id,
-            &conformance::sample_contribution(CONTRIBUTION, &[1, 2, 3]),
+            // Everything `battery` commits, declared up front (`db:H5.22`), so a
+            // fault is met by the commit path it targets, not stopped first by
+            // the membership check.
+            &conformance::sample_contribution_declaring(
+                CONTRIBUTION,
+                &[1, 2, 3, 4]
+                    .map(conformance::composition_version_uid)
+                    .into_iter()
+                    .chain([
+                        conformance::status_version_uid(1),
+                        format!("{OTHER}::{}::1", conformance::SYSTEM),
+                    ])
+                    .collect::<Vec<_>>(),
+            ),
         )
         .expect("contribution");
     for (n, preceding) in [(1, None), (2, Some(1)), (3, Some(2))] {

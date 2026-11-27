@@ -7,6 +7,188 @@ together.
 
 ## Unreleased
 
+- **BREAKING (`openehr-axa`): ITS-REST routes answer with the resource**
+  (`db:S1.23`, `db:D-31`).
+  - **Resource, not wrapper.** `GET …/ehr_status`, `…/ehr_status/{version_uid}`
+    and `GET …/composition/{uid_based_id}` answer with the `EHR_STATUS` or
+    `COMPOSITION` itself, and so do composition `POST`/`PUT`. Before, each
+    came wrapped in a version view. `ETag` and `Location` name the version.
+  - **Version ids.** The composition read accepts a version id as ITS-REST
+    defines it.
+  - **Own routes unchanged.** `_history`, `…/version/{version_uid}` and search
+    keep the version view (chain digest, committer).
+  - **Strictness kept.** A supplied `EHR_STATUS` without `archetype_details`
+    stays refused (`db:D-32`, decided).
+  - **Conformance.** `scripts/conformance.sh` now runs every case even when one
+    fails. Run 3 against EHRbase 2.38.0: 9/9 on both.
+
+- **BREAKING (`openehr-axa`): `POST /ehr` follows ITS-REST** (`db:S1.22`).
+  - **New contract.** The server mints the `ehr_id`, takes an optional
+    `EHR_STATUS` body (the default when there is none), and commits that
+    status as version 1. It is committed by the verified caller, in a
+    contribution created for it, with the service's `OPENEHR_SYSTEM_ID`
+    (default `openehr-axa.local`). The answer is `201` with `Location` and
+    `ETag`.
+  - **New `PUT /ehr/{ehr_id}`** does the same with the caller's id, and
+    answers `409` if it exists.
+  - **Grants.** `POST` needs a `write` grant on `"*"`. `PUT` needs `write`
+    on the record.
+  - **Upgrading.** A caller-built `Ehr` body is no longer accepted: it is not
+    an `EHR_STATUS`, so it is `400`.
+  - **Conformance.** `scripts/conformance.sh` gained the creation cases. Run 2
+    against EHRbase 2.38.0 found two divergences here, registered as `db:D-31`
+    and `db:D-32`.
+
+- **BREAKING (`openehr-axa`): access is what the token grants** (`db:PR12.18`,
+  amended by the maintainer's decision).
+  - **The claim.** A token must carry `openehr_grants`:
+    `[{"ehr": "<id>" | "*", "actions": ["read", "write"]}]`.
+  - **The check.** Every clinical route checks it before touching the store:
+    `read` for reads and AQL, `write` for EHR creation, contributions and
+    commits. Anything not covered is `403`, the same whether or not the record
+    exists. A malformed claim is `401`, and denied reads are recorded as
+    `denied`.
+  - **Upgrading.** Tokens without the claim, which is every token issued
+    before this change, can no longer read or write any record. Issuers must
+    add grants.
+  - **Verified in the deployment.** `tests/ingress.rs` (`#[ignore]`d, needs
+    podman) checks the same rules through the Compose-built container and its
+    published port, with the access log read back from the data volume.
+    `compose.yaml` now sets `OPENEHR_ACCESS_LOG` to a path on that volume by
+    default, so the documented deployment audits reads.
+  - **API.** New `openehr_axa::authz` and `Principal::grants`. `/metadata` no
+    longer lists authorization as absent. It lists the care-relationship policy
+    as absent instead, since that stays the issuer's.
+
+- **BREAKING: schema 6. Writes are attributable, and versions belong to the
+  change set that declared them** (`db:D-22`, `db:D-25`, `db:D-26`,
+  `db:PR12.25`, `db:H5.22`).
+  - **Stored committer.** `audit_committer_json` holds the whole committer,
+    identifiers included, on every version and contribution. Before, only a
+    display name was stored, so two clinicians with one name were
+    indistinguishable. `openehr-axa`'s version view returns `committer`.
+  - **Declared versions.** A contribution now stores the versions it declares
+    (`versions_json`), and a version row has a foreign key to its contribution.
+  - **Membership check.** `commit_composition` and `commit_ehr_status` refuse a
+    version that its named contribution does not declare, or whose
+    contribution is absent or another record's, with the new
+    `StoreError::NotInContribution` (`409` over HTTP).
+  - **Contribution check.** `POST …/contribution` checks the contribution's own
+    committer against the verified caller (`403`/`422`).
+  - **Other API.** New `ContributionRow`, `check_membership`, and conformance
+    fixtures `sample_contribution_of`, `sample_contribution_declaring`,
+    `composition_version_uid`, `status_version_uid`, plus a new story
+    `run_contribution_membership`.
+  - **Migration.** A schema-5 database is refused (`db:O10.15`). Export,
+    recreate and reload (`db:O10.14`). Its rows hold no committer identity to
+    recover.
+  - **Verified on real engines, 2026-11-27.** PostgreSQL 18 passes the live
+    `Store` suite (28/28). `verify-schema.sh` passes on PostgreSQL, MySQL 8.4,
+    MariaDB 11.4 and Oracle Free. SQL Server was not run: its amd64-only image
+    stalls before it is ready under arm64 emulation, so CI's x86 `schema` job
+    is the evidence for it. That run first found the script's own seed
+    `INSERT`s missing the new `NOT NULL` columns, which would have turned CI's
+    `schema` job red. They now name their columns.
+
+- **`openehr-axa` is on Axa 0.24** (from 0.23). `app::run` uses Axa's own
+  command dispatch — `Cli::environment`, `cli::answer` for `check` and
+  `health`, `Cli::config` (`Config::for_task` for a task, with
+  `--binding`/`--port` applied), and `Tasks::run_or_list` — in place of the
+  same logic written by hand. No behaviour change: `task` with no name still
+  prints one tab-separated line per task. 0.24.0 was under the two-day minimum
+  publish age and was taken with that check waived for `axa` alone.
+- **AQL has a work budget** (`db:P6.26`). The executor counts its candidates
+  before reading any content. Above the budget it refuses with
+  `StoreError::AqlBudgetExceeded { candidates, budget }`, and `openehr-axa`
+  answers `400`. It used to read, decode, filter and sort every candidate
+  before applying `LIMIT`. New `execute_aql_with_budget`. `execute_aql` uses
+  `aql::DEFAULT_CANDIDATE_BUDGET`, which is 10 000 index rows.
+  `openehr-store`'s `cargo mutants` configuration no longer excludes `src/aql.rs`.
+- **History and search pages are cut by the store** (`db:P6.25`). New
+  `Store::versions_page_in` and `Store::find_compositions_by_archetype_page`
+  return a `RowPage { rows, total }`. Their default bodies read everything and
+  slice. `SqliteStore` overrides both with `COUNT(*)` and `LIMIT`/`OFFSET`.
+  `openehr-axa`'s `_history` and archetype search used to load every match
+  before applying `_count`/`_offset`, and now use them. One side effect: a bad
+  `_count` is refused before the store is asked, so it is `400` even for a
+  container the `EHR` does not own (it was `404`). New shared story
+  `conformance::run_paging`.
+- **A restore drill for SQLite** (`db:O10.6`, `db:O10.19`).
+  `openehr-sqlite/tests/restore_drill.rs` takes a `VACUUM INTO` backup of a
+  live store, restores it read-only, and checks it against a witness. The
+  README now says how to back up (the engine's own mechanism) and how to check
+  a restored copy.
+- **A qualified result is no longer judged against its range as if exact**
+  (`lib:A-86`, `lib:D3.14b`). `< 4 mg/L` against 3–5 mg/L was "normal".
+  New `DvOrdered::range_position` returns `RangePosition::{Inside, Outside,
+  Indeterminate(Indeterminate::{Qualified, Approximate, Incomparable})}`. It
+  has a default, so an implementation outside the crate still compiles.
+  **Behaviour changes:**
+  - `is_abnormal` is now "not established inside": `Some(true)` for an
+    indeterminate value, so `< 4` against 3–5 is `Some(true)`, and so is every
+    `~` value that has a range.
+  - The `Normal_range_and_status_consistency` check no longer reports a flag
+    beside an undecided value, including an incomparable one.
+- **A protection setting that cannot be read refuses startup** (`db:D-30`,
+  `db:PR12.24`). `OPENEHR_ACCESS_LOG` treated every read error, invalid
+  Unicode included, as "auditing off". The issuer, audience and implicit
+  assertion went through `.ok()`. Now an empty `OPENEHR_ACCESS_LOG` refuses
+  startup (unset it to turn auditing off), and the path is read as an OS path.
+  An empty claim setting is unset, matching Compose's `${…:-}` defaults, which
+  used to install an empty audience. A non-Unicode value refuses startup,
+  naming the setting. **Behaviour change:** `OPENEHR_ACCESS_LOG=` no longer
+  starts the service. New `openehr_axa::settings`, `AccessLog::from_lookup`,
+  and `PasetoVerifier::from_lookup`.
+- **An unreadable stored document is an error, not missing content**
+  (`db:D-28`). The HTTP view decoded stored JSON with `.ok()`, so a
+  content-bearing row that did not decode was served `200` with `data: null`,
+  the shape of a deletion. It is now `500`, and it fails a whole history page.
+  After a commit, the readback's `500` says the commit succeeded.
+- **Access records state the outcome the caller actually got** (`db:D-29`,
+  `db:PR12.23` amended). History and search were recorded `ok` before a bad
+  `_count` refused them, and a status lookup under a missing `EHR` was not
+  recorded at all. New outcome `error`. The status read's record target is now
+  `ehr_status`.
+- **A record's `EHR_STATUS` is read and enforced only if the record owns
+  it** (`db:D-23`, `db:H5.20`). `GET /ehr/{id}/ehr_status` read the
+  container the record's reference named, unscoped, so an `EHR` created
+  naming another chart's status container was served that chart's status.
+  Both the current and the as-of reads are now scoped. New
+  `Store::version_at_time_in` is a default method, so it is not breaking.
+  New `openehr_store::ehr_is_modifiable` and `ehr_status_container` replace
+  the private copies in `openehr-sqlite` and `openehr-postgresql`.
+  **Behaviour change:** content committed under an `EHR` whose status
+  reference names a container it does not own is now refused with
+  `StoreError::Conflict { kind: "ehr_status" }`. Before, it was judged by the
+  other container's status. New shared story
+  `conformance::run_ehr_status_binding`; PostgreSQL has not been run.
+- **An update commits to the composition its path names** (`db:D-24`,
+  `db:H5.21`). A `PUT` to one composition, with that composition's current
+  version in `If-Match`, committed a new version of whichever composition the
+  body named. Now `400` when the body's container is not the path's, or when
+  its `preceding_version_uid` is not the `If-Match` version.
+- **The inspection tasks no longer create the database they inspect**
+  (`db:D-27`, `db:O10.20`). `task checkpoint` and `task verify` used the
+  server's open-and-install path, so a mistyped `path:` became a new six-table
+  database and `checkpoint` printed an empty witness with exit 0. New
+  `SqliteStore::open_read_only` (no create, no install, refuses an unrecorded
+  or foreign schema version) and `openehr_axa::app::open_store_read_only`.
+  `checkpoint` now refuses a container the database does not hold.
+- **`openehr-sqlite` coverage: 99.3% lines, 68/69 functions** (`W0.41a`
+  floor 16/19 → 5/1). New `tests/uncovered_paths.rs`: a composition with an
+  `EVENT_CONTEXT` is indexed and read back with both instants (no SQLite test
+  had ever written a `context_start_*`/`context_end_*` column); an
+  unopenable path, a read-only database at `install`, and a commit refused
+  only at `COMMIT` (a deferred foreign key) are each an `Engine` error that
+  writes nothing. The 34 identical `|e| engine(&e)` closures are one
+  `.map_err(engine)` adapter, which removed 38 compiler-generated functions
+  from the count — so part of the function-percentage gain is that
+  denominator, not new tests — and `tag_mac` binds as `[u8; 32]` without a
+  per-commit copy. The ratchet is also deterministic now: the database-level
+  `NotLatest`/`DuplicateVersion` arms were reached only when
+  `concurrency.rs`'s race happened to overlap, so the uncovered count
+  flickered between 6 and 8. A temporary trigger now forces each one.
+
 - **BREAKING: `Store` gains `versioned_object_owner` and three scoped lookups;
   a container now belongs to one `EHR`** (`db:D-19`, `db:H5.18`, `db:H5.19`).
   `openehr-axa` served any chart's composition under any `EHR` id in the path

@@ -106,6 +106,19 @@ Requirement prefix: `O10`.
   the history is not rewritten in place, so a backup is a prefix rather than a
   snapshot of mutable state.
 
+- **O10.20** A tool that **inspects** a database — a checkpoint for a witness,
+  a verification of a restored backup — MUST open it read-only, MUST NOT create
+  it, and MUST NOT install or migrate a schema in it. A path that names no
+  database, or a database with no recorded schema version of this build
+  (`O10.15`), MUST be refused with a non-zero exit, and the inspected bytes
+  MUST be unchanged afterwards. A request for a container the database does
+  not hold MUST be refused rather than answered with an empty checkpoint.
+
+  An inspector that opens with the server's open-and-install path turns a
+  mistyped backup path into a new, empty, valid-looking database, and an empty
+  checkpoint printed with exit 0 is exactly what a scheduled witness records
+  as success (`D-27`).
+
 ## Release evidence
 
 - **O10.10** A release MUST ship supply-chain evidence: an advisory and licence

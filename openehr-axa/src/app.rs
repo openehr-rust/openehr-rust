@@ -1,9 +1,9 @@
 //! The application: its routes, its startup, and its tasks.
 
 use axa::{
-    AppContext, Environment, Result,
-    cli::{Cli, Command, parse_vars},
-    config::{Config, Defaults, MB},
+    AppContext, Result,
+    cli::{Cli, Command},
+    config::{Defaults, MB},
     routes::AppRoutes,
     server,
     task::Tasks,
@@ -39,11 +39,14 @@ pub type SharedOpenehrStore = Arc<Mutex<SqliteStore>>;
 
 /// Opens and installs the store.
 ///
-/// Shared by [`prepare`] and by [`crate::tasks`], because **a task
-/// does not get `prepare`** — `cli::main` builds the context and calls
-/// `run_task` directly, so a task reading the store out of `shared_store`
-/// finds nothing. One opener rather than two means the path and the install
-/// cannot drift between the server and the tools that inspect what it wrote.
+/// The server's opener, used by [`prepare`]. The inspection tasks do **not**
+/// use it: they open read-only through [`open_store_read_only`], because an
+/// inspector that creates and installs turns a mistyped backup path into a new
+/// empty store (`db:O10.20`, `db:D-27`). Both read the same path setting
+/// ([`configured_path`]), so the default database cannot drift between the
+/// server and the tools that inspect what it wrote. A task does not get
+/// `prepare` — `app::run` builds the context and runs it directly — so it
+/// opens its own store either way.
 ///
 /// # Errors
 ///
@@ -52,6 +55,12 @@ pub type SharedOpenehrStore = Arc<Mutex<SqliteStore>>;
 /// different schema version, which is refused rather than half-served
 /// (`db:O10.15`).
 pub fn open_store() -> Result<SqliteStore> {
+    open_store_at(&configured_path()?)
+}
+
+/// The database path the service uses: `OPENEHR_SQLITE_PATH`, or
+/// `openehr.sqlite3` when it is unset.
+fn configured_path() -> Result<std::path::PathBuf> {
     let path = match std::env::var("OPENEHR_SQLITE_PATH") {
         Ok(path) => path,
         // RCA-IN-3: absent only. An unset variable means the default file.
@@ -63,7 +72,28 @@ pub fn open_store() -> Result<SqliteStore> {
             ));
         }
     };
-    open_store_at(std::path::Path::new(&path))
+    Ok(std::path::PathBuf::from(path))
+}
+
+/// Opens an existing store **read-only**, for the inspection tasks
+/// (`db:O10.20`): `path` when given, otherwise the service's own database.
+///
+/// Not [`open_store_at`]: that one creates and installs, which is right for a
+/// server starting on an empty volume and wrong for a tool pointed at a
+/// backup. Through it, a mistyped backup path became a new six-table database
+/// and `checkpoint` printed an empty witness with exit 0 (`db:D-27`).
+///
+/// # Errors
+///
+/// Returns [`axa::Error::Message`] if the file does not exist, cannot be
+/// opened, or holds no installed schema of this build's version.
+pub fn open_store_read_only(path: Option<&std::path::Path>) -> Result<SqliteStore> {
+    let path = match path {
+        Some(path) => path.to_path_buf(),
+        None => configured_path()?,
+    };
+    SqliteStore::open_read_only(&path)
+        .map_err(|e| axa::Error::Message(format!("{}: {e}", path.display())))
 }
 
 /// Opens and installs the store at an explicit path.
@@ -153,6 +183,11 @@ pub fn prepare(ctx: &AppContext) -> Result<()> {
     // configured to audit reads and unable to write the log must not reach
     // a state where it holds an open database (`db:PR12.6`).
     let access_log = AccessLog::from_env().map_err(axa::Error::Message)?;
+    // The service's own system id (`db:S1.22`), refused at startup if unusable,
+    // like every other setting (`db:PR12.24`).
+    let system_id = crate::controllers::ehr::system_id_from(&|name| std::env::var_os(name))
+        .map_err(axa::Error::Message)?;
+    ctx.shared_store.insert(system_id);
 
     install(ctx, verifier, access_log, open_store()?);
     Ok(())
@@ -241,24 +276,16 @@ pub fn router(ctx: &AppContext) -> Result<AxumRouter> {
 ///
 /// Whatever the command fails with, so that `main` exits non-zero.
 pub async fn run(cli: Cli) -> Result<()> {
-    let environment = cli
-        .environment
-        .as_deref()
-        .map_or_else(Environment::from_env, Environment::parse);
-    // Before anything is opened, so they work with the store missing.
-    if matches!(cli.command, Command::Check) {
-        return axa::cli::check(&environment, &defaults());
+    let environment = cli.environment();
+    // `check` and `health` are answered before anything is opened, so they
+    // work with the store missing.
+    if let Some(answered) = axa::cli::answer(&cli, &environment, &defaults()).await {
+        return answered;
     }
-    if let Command::Health { ready, port } = cli.command {
-        return axa::cli::health(&environment, &defaults(), ready, port).await;
-    }
-    // A task does not listen, so a listener-only setting must not refuse it.
-    let mut config = if matches!(cli.command, Command::Task { .. }) {
-        Config::for_task(&environment, &defaults())?
-    } else {
-        Config::from_env(&environment, &defaults())?
-    };
-    config.apply_cli(&cli);
+    // `Config::for_task` for a task, which does not listen and so must not be
+    // refused for a listener-only setting; `Config::from_env` otherwise; the
+    // command line's `--binding` and `--port` applied either way.
+    let config = cli.config(&environment, &defaults())?;
     axa::logger::init(app_name(), &config.logger);
     let ctx = AppContext::new(environment, (), config);
     match cli.command {
@@ -267,18 +294,9 @@ pub async fn run(cli: Cli) -> Result<()> {
             let server_config = ctx.config.server.clone();
             server::serve(router(&ctx)?, &server_config).await
         }
-        Command::Task { name, params } => {
-            // A task opens its own store: `prepare` is not on this path
-            // (see [`crate::tasks`]).
-            let tasks = tasks();
-            let Some(name) = name else {
-                for task in tasks.list() {
-                    println!("{}\t{}", task.name, task.detail);
-                }
-                return Ok(());
-            };
-            tasks.run(&name, &ctx, &parse_vars(&params)?).await
-        }
+        // A task opens its own store: `prepare` is not on this path (see
+        // [`crate::tasks`]). With no name, the task list is printed.
+        Command::Task { name, params } => tasks().run_or_list(name.as_deref(), &ctx, &params).await,
         Command::Db { .. } => Err(axa::Error::Message(
             "this service has no database of Axa's: its store is openehr-store, \
              installed when it starts (db:O10.14)"

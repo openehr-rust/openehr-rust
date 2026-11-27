@@ -55,8 +55,8 @@ pub use basic::{DvBoolean, DvIdentifier, DvState};
 pub use date_time::{DvDate, DvDateTime, DvDuration, DvTime};
 pub use encapsulated::{DvMultimedia, DvParsable, EncapsulatedAttrs, IntegrityCheck};
 pub use quantity::{
-    DvCount, DvOrdered, DvOrdinal, DvProportion, DvQuantity, DvScale, MagnitudeStatus,
-    OrderedAttrs, ProportionKind, ReferenceRange,
+    DvCount, DvOrdered, DvOrdinal, DvProportion, DvQuantity, DvScale, Indeterminate,
+    MagnitudeStatus, OrderedAttrs, ProportionKind, RangePosition, ReferenceRange,
 };
 pub use text::{
     CodePhrase, DvCodedText, DvParagraph, DvText, MappingMatch, TermMapping, Text, formatting,

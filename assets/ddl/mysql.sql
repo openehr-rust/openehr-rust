@@ -35,6 +35,21 @@ CREATE TABLE IF NOT EXISTS `openehr_versioned_object` (
   KEY `ix_versioned_object_ehr` (`ehr_id`, `rm_type`)
 );
 
+CREATE TABLE IF NOT EXISTS `openehr_contribution` (
+  `uid` VARCHAR(255) NOT NULL,
+  `ehr_id` VARCHAR(255) NOT NULL,
+  `audit_change_type_code` VARCHAR(16) NOT NULL,
+  `audit_system_id` VARCHAR(255) NOT NULL,
+  `audit_committer_name` VARCHAR(255),
+  `audit_committer_json` LONGTEXT NOT NULL,
+  `audit_time_committed_text` VARCHAR(64) NOT NULL,
+  `audit_time_committed_utc` DATETIME(6),
+  `versions_json` LONGTEXT NOT NULL,
+  PRIMARY KEY (`uid`),
+  FOREIGN KEY (`ehr_id`) REFERENCES `openehr_ehr` (`ehr_id`),
+  KEY `ix_contribution_ehr_time` (`ehr_id`, `audit_time_committed_utc`)
+);
+
 CREATE TABLE IF NOT EXISTS `openehr_version` (
   `uid` VARCHAR(255) NOT NULL,
   `versioned_object_uid` VARCHAR(255) NOT NULL,
@@ -49,6 +64,7 @@ CREATE TABLE IF NOT EXISTS `openehr_version` (
   `audit_system_id` VARCHAR(255) NOT NULL,
   `audit_change_type_code` VARCHAR(16) NOT NULL,
   `audit_committer_name` VARCHAR(255),
+  `audit_committer_json` LONGTEXT NOT NULL,
   `audit_time_committed_text` VARCHAR(64) NOT NULL,
   `audit_time_committed_utc` DATETIME(6),
   `data_json` LONGTEXT,
@@ -63,22 +79,10 @@ CREATE TABLE IF NOT EXISTS `openehr_version` (
   `chain_tag_mac` BINARY(32),
   PRIMARY KEY (`uid`),
   FOREIGN KEY (`versioned_object_uid`) REFERENCES `openehr_versioned_object` (`uid`),
+  FOREIGN KEY (`contribution_uid`) REFERENCES `openehr_contribution` (`uid`),
   UNIQUE KEY `ix_version_container_trunk` (`versioned_object_uid`, `trunk_version`, `branch_number`, `branch_version`),
   KEY `ix_version_time` (`versioned_object_uid`, `audit_time_committed_utc`),
   KEY `ix_version_preceding` (`preceding_version_uid`)
-);
-
-CREATE TABLE IF NOT EXISTS `openehr_contribution` (
-  `uid` VARCHAR(255) NOT NULL,
-  `ehr_id` VARCHAR(255) NOT NULL,
-  `audit_change_type_code` VARCHAR(16) NOT NULL,
-  `audit_system_id` VARCHAR(255) NOT NULL,
-  `audit_committer_name` VARCHAR(255),
-  `audit_time_committed_text` VARCHAR(64) NOT NULL,
-  `audit_time_committed_utc` DATETIME(6),
-  PRIMARY KEY (`uid`),
-  FOREIGN KEY (`ehr_id`) REFERENCES `openehr_ehr` (`ehr_id`),
-  KEY `ix_contribution_ehr_time` (`ehr_id`, `audit_time_committed_utc`)
 );
 
 CREATE TABLE IF NOT EXISTS `openehr_composition_index` (
@@ -101,14 +105,6 @@ CREATE TABLE IF NOT EXISTS `openehr_composition_index` (
   KEY `ix_composition_context_start` (`ehr_id`, `context_start_utc`)
 );
 
-DROP TRIGGER IF EXISTS `trg_openehr_version_no_update`;
-
-CREATE TRIGGER `trg_openehr_version_no_update` BEFORE UPDATE ON `openehr_version` FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'openehr_version is append-only (openEHR V8.10)';
-
-DROP TRIGGER IF EXISTS `trg_openehr_version_no_delete`;
-
-CREATE TRIGGER `trg_openehr_version_no_delete` BEFORE DELETE ON `openehr_version` FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'openehr_version is append-only (openEHR V8.10)';
-
 DROP TRIGGER IF EXISTS `trg_openehr_contribution_no_update`;
 
 CREATE TRIGGER `trg_openehr_contribution_no_update` BEFORE UPDATE ON `openehr_contribution` FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'openehr_contribution is append-only (openEHR V8.10)';
@@ -116,3 +112,11 @@ CREATE TRIGGER `trg_openehr_contribution_no_update` BEFORE UPDATE ON `openehr_co
 DROP TRIGGER IF EXISTS `trg_openehr_contribution_no_delete`;
 
 CREATE TRIGGER `trg_openehr_contribution_no_delete` BEFORE DELETE ON `openehr_contribution` FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'openehr_contribution is append-only (openEHR V8.10)';
+
+DROP TRIGGER IF EXISTS `trg_openehr_version_no_update`;
+
+CREATE TRIGGER `trg_openehr_version_no_update` BEFORE UPDATE ON `openehr_version` FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'openehr_version is append-only (openEHR V8.10)';
+
+DROP TRIGGER IF EXISTS `trg_openehr_version_no_delete`;
+
+CREATE TRIGGER `trg_openehr_version_no_delete` BEFORE DELETE ON `openehr_version` FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'openehr_version is append-only (openEHR V8.10)';

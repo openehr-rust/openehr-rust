@@ -171,6 +171,30 @@ touch `S1.5`, `P6.10`, or `P6.19`, all of which stay exactly as written.
   an operation whose result set grows without limit in the size of a record
   unless the caller has asked for exactly that — `all_versions` is deliberately
   such an operation, and is named so the caller knows.
+- **P6.25** *(added 2026-11-26)* A paged read, whether a container's history
+  or an archetype search, MUST be answered **by the engine**. The store returns
+  the requested page in a stable order together with the total size of the
+  result (`P6.15`), and MUST NOT read every matching row to produce one page.
+  An offset past the end is an empty page with the true total, not an error.
+
+  The store offers this as `versions_page_in` and
+  `find_compositions_by_archetype_page`. Their default bodies, for an engine
+  that has not overridden them yet, read everything and slice. That is
+  correct, but it is not bounded, and the conformance matrix says which
+  engines override them. Found by the 2026-11-25 production-readiness review:
+  `openehr-axa` loaded the whole history and the whole search result before
+  applying `_count` and `_offset`.
+- **P6.26** *(added 2026-11-26)* The AQL executor MUST bound its own work.
+  Its cost is its candidate set: one archetype-index row per content-bearing
+  version, each read and decoded. Before reading any content it counts the
+  candidates, and above a stated budget it MUST refuse the query by name
+  (`StoreError::AqlBudgetExceeded`, with the count and the budget), never
+  examine a subset (`P6.15`). The default budget is
+  `openehr_store::aql::DEFAULT_CANDIDATE_BUDGET`. A caller that needs another
+  passes one to `execute_with_budget`. `LIMIT` does not bound the work,
+  because `WHERE` and `ORDER BY` have to see every candidate before the
+  limit applies. Counting is bounded only where the engine pages in SQL
+  (`P6.25`).
 - **P6.15** A store MUST NOT silently truncate a result set. If a bound is
   applied, the caller MUST be able to tell that it was.
 

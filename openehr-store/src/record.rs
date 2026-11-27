@@ -76,6 +76,10 @@ pub struct VersionRow {
     pub audit_change_type_code: String,
     /// The committer's name, where the party has one.
     pub audit_committer_name: Option<String>,
+    /// The whole committer `PARTY_PROXY`, canonical JSON (`db:PR12.25`): its
+    /// external reference and identifiers as well as its name, so that two
+    /// parties sharing a name stay two parties (`db:D-22`).
+    pub audit_committer_json: String,
     /// When it was committed.
     pub audit_time_committed: StoredInstant,
     /// Canonical JSON of the content, or `None` for a deletion.
@@ -179,6 +183,7 @@ impl VersionRow {
             audit_system_id: audit.system_id().to_owned(),
             audit_change_type_code: audit.change_type_code().to_owned(),
             audit_committer_name: party_name(audit.committer()),
+            audit_committer_json: openehr::security::to_canonical_string(audit.committer())?,
             audit_time_committed: StoredInstant::from_date_time(audit.time_committed().value()),
             data_json,
             audit_description: audit.description().map(ToString::to_string),
@@ -227,6 +232,95 @@ fn encode_if_any<T: Serialize>(items: &[T]) -> Result<Option<String>> {
 /// quality problem.
 fn party_name(party: &PartyProxy) -> Option<String> {
     party.name().map(ToOwned::to_owned)
+}
+
+/// One row of the `contribution` table (`db:H5.14`, `db:PR12.10`).
+///
+/// One projection for every engine, as [`VersionRow`] is, so the committer and
+/// the declared version list are encoded the same way everywhere.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContributionRow {
+    /// `CONTRIBUTION.uid`.
+    pub uid: String,
+    /// Owning record.
+    pub ehr_id: String,
+    /// openEHR change-type code.
+    pub audit_change_type_code: String,
+    /// `AUDIT_DETAILS.system_id`.
+    pub audit_system_id: String,
+    /// The committer's name, where the party has one.
+    pub audit_committer_name: Option<String>,
+    /// The whole committer, canonical JSON (`db:PR12.25`).
+    pub audit_committer_json: String,
+    /// When it was committed.
+    pub audit_time_committed: StoredInstant,
+    /// The declared version uids, as a canonical JSON array of strings
+    /// (`db:H5.22`).
+    pub versions_json: String,
+}
+
+impl ContributionRow {
+    /// Projects a contribution belonging to `ehr_id`.
+    ///
+    /// # Errors
+    ///
+    /// [`crate::StoreError::Json`] if a value cannot be canonicalised.
+    pub fn project(ehr_id: &str, contribution: &openehr::rm::common::Contribution) -> Result<Self> {
+        let audit = contribution.audit();
+        let versions: Vec<String> = contribution
+            .versions()
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        Ok(Self {
+            uid: contribution.uid().to_string(),
+            ehr_id: ehr_id.to_owned(),
+            audit_change_type_code: audit.change_type_code().to_owned(),
+            audit_system_id: audit.system_id().to_owned(),
+            audit_committer_name: party_name(audit.committer()),
+            audit_committer_json: openehr::security::to_canonical_string(audit.committer())?,
+            audit_time_committed: StoredInstant::from_date_time(audit.time_committed().value()),
+            versions_json: openehr::security::to_canonical_string(&versions)?,
+        })
+    }
+}
+
+/// Refuses a version commit unless its contribution exists, belongs to
+/// `ehr_id`, and declared `version_uid` (`db:H5.22`, `db:D-26`).
+///
+/// `stored` is what the engine found for `contribution_uid`: the owning EHR
+/// and the stored `versions_json`, or `None` for no such row. A pure
+/// function, so each engine looks the row up in its own transaction and every
+/// engine applies the same rule.
+///
+/// # Errors
+///
+/// [`crate::StoreError::NotInContribution`], naming which of the three it
+/// was. [`crate::StoreError::Json`] if the stored list does not parse.
+pub fn check_membership(
+    stored: Option<(String, String)>,
+    ehr_id: &str,
+    contribution_uid: &str,
+    version_uid: &str,
+) -> Result<()> {
+    let refuse = |reason: &'static str| crate::StoreError::NotInContribution {
+        version: version_uid.to_owned(),
+        contribution: contribution_uid.to_owned(),
+        reason,
+    };
+    let Some((owner, versions_json)) = stored else {
+        return Err(refuse("no such contribution"));
+    };
+    if owner != ehr_id {
+        // Indistinguishable from absent, as a read of another chart is
+        // (`db:H5.18`): the caller learns nothing about another record.
+        return Err(refuse("no such contribution"));
+    }
+    let declared: Vec<String> = serde_json::from_str(&versions_json)?;
+    if !declared.iter().any(|v| v == version_uid) {
+        return Err(refuse("the contribution does not declare this version"));
+    }
+    Ok(())
 }
 
 /// One row of the `composition_index` table.

@@ -103,6 +103,68 @@ reader deciding whether to use these crates needs the reason more than the fact.
   its history is still readable. `404` would tell a caller that a record it once
   held never was — and a clinician or auditor told "not found" stops looking.
 
+- **S1.22** *(added 2026-11-27, ITS-REST 1.1.0 `EHR` API, the maintainer's
+  decision, `tasks.md` triage item 8)* A service MUST create an `EHR` the way
+  ITS-REST defines it: the **server** builds the record and commits its first
+  `EHR_STATUS` in the same request.
+
+  - `POST /ehr` mints the `ehr_id`. `PUT /ehr/{ehr_id}` uses the one the
+    caller names, and answers `409` when it exists.
+  - The body is an optional `EHR_STATUS`. Without one the server commits the
+    default: `is_modifiable` and `is_queryable` true, an anonymous
+    `PARTY_SELF` subject, archetype `openEHR-EHR-EHR_STATUS.generic.v1`. A
+    supplied status that is not valid RM is refused (`422`) before anything
+    is written.
+  - The status version is version 1 of a server-minted container. It is
+    committed by the **verified caller**: the committer's identifier is the
+    token subject and its name the token's `name`, as `PR12.19` requires of
+    every commit. It is committed inside a `CONTRIBUTION` the server creates
+    for that one act and that declares only that version (`H5.22`). Its
+    `system_id` is the service's own (`OPENEHR_SYSTEM_ID`, default
+    `openehr-axa.local`).
+  - **Grants** (`PR12.18`). `PUT` needs `write` on the named record. `POST`
+    needs a `write` grant on `"*"`, because no per-record grant can name an
+    id that does not exist yet.
+  - The answer is `201` with the `EHR`, a `Location` naming it, and an
+    `ETag` naming the record.
+  - **Not atomic across the three writes.** The record, the contribution and
+    the status are three store calls, and everything is validated before the
+    first. A failure after the first leaves an `EHR` with no status. Such an
+    `EHR` answers `404` for its status and stays modifiable (`H5.20`).
+
+  Before this, `POST /ehr` took a caller-built `Ehr` and committed no status,
+  so no shared request could create an `EHR` against this service and against
+  EHRbase alike.
+
+- **S1.23** *(added 2026-11-27, `D-31`, the maintainer's decision)* A route
+  ITS-REST 1.1.0 defines MUST answer with the **resource** it defines, not a
+  wrapper of this service's own. The version is identified in headers: `ETag`
+  names the version uid, and `Location` names the version's own URL.
+
+  - `GET /ehr/{ehr_id}/ehr_status` and `…/ehr_status/{version_uid}` answer
+    with the `EHR_STATUS`.
+  - `GET /ehr/{ehr_id}/composition/{uid_based_id}` answers with the
+    `COMPOSITION`. As ITS-REST defines it, `{uid_based_id}` is a container
+    id (the latest version) or a version id (that version), so the
+    `Location` a create or read returns can be read.
+  - `POST` and `PUT` of a composition answer with the `COMPOSITION`
+    committed.
+  - This service's own routes are not ITS-REST routes and keep its version
+    view: `…/composition/{uid}/_history`, `…/composition/{uid}/version/{version_uid}`,
+    and the archetype search. That view is where the version metadata ITS-REST
+    puts elsewhere stays readable: uid, lifecycle, deletion, chain digest, and
+    committer (`PR12.25`).
+  - A version that records a deletion has no resource to answer with. Read by
+    a version id it is `410`, as the latest one already is (`S1.20`).
+
+  Found by the conformance run against EHRbase 2.38.0: a client reading
+  `.is_modifiable` read `null` here.
+
+  *(`D-32`, decided the same day.)* A supplied `EHR_STATUS` MUST still carry
+  `archetype_details`. It is an archetype root (`EHR_STATUS.Is_archetype_root`),
+  and a status without it is refused (`422`) naming that invariant. EHRbase
+  accepts one. This service does not, deliberately.
+
 - **S1.21** Sections 7 and 8 remain **retired** (`C0.6`). The requirements
   withdrawn there described a FHIR REST surface and are not restored by a
   service existing; reinstating text nobody wrote, and mapping it to regulatory
@@ -116,8 +178,9 @@ reader deciding whether to use these crates needs the reason more than the fact.
   deployment signed — `openehr-axa` does (`PR12.13`–`PR12.15`). That is
   checking a signature, not establishing an identity, and it changes nothing
   above: `openehr`, `openehr-store`, and the six engine crates still contain no
-  credential, no key, and no principal. Neither the core nor any service
-  authorizes (`PR12.18`).
+  credential, no key, and no principal. The core does not authorize. Since
+  2026-11-26 the service enforces the per-record grants the token's issuer
+  wrote (`PR12.18`, amended). It decides none of them.
 - **S1.9** The core MUST NOT resolve external terminologies, convert units, or
   interpret timing expressions. Those exclusions belong to the `openehr` crate
   (`lib:S1.8`–`lib:S1.10`) and are inherited here unchanged: a store does not get

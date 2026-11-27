@@ -29,10 +29,10 @@
 # fail), and `openehr-postgresql`'s `#[ignore]`d twin.
 exclude_re = ["replace run(_ehr_status|_is_modifiable_gate|_aql|_ehr_scope)? ->"]
 
-# `src/aql.rs`: the bounded AQL executor `run_aql` above calls. Every
-# function in it is reachable *only* through `run_aql`, so it inherits the
-# identical gap for the identical reason — excluding the file rather than
-# enumerating every helper by name, since a new helper added here would
-# otherwise need its own line in the regex above just to avoid a false
-# "MISSED" the day it is written, before any engine's test has run once.
-exclude_globs = ["src/aql.rs"]
+# `src/aql.rs` was excluded here too, on the ground that the executor was
+# reachable only through `run_aql`. That stopped being true when its owner-
+# crate tests and their `ReadStore` fixture were written: on 2026-11-26 a
+# full run over the file found 80 mutants, 69 caught, 9 unviable, and 2 missed
+# (both arms of `compare_cells`). A test was added for those two. The
+# exclusion is removed, so the `mutants` job now sees a change to the
+# executor (`db:P6.26`'s budget check among them).
