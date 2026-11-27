@@ -998,7 +998,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        crate: [openehr, openehr-store, openehr-sqlite]
+        crate: [openehr, openehr-store, openehr-sqlite, openehr-axa]
     steps:
       - uses: actions/checkout@v7
       # See the fuzz job: `rustup default` loses to `rust-toolchain.toml`.

@@ -119,6 +119,15 @@ Requirement prefix: `O10`.
   checkpoint printed with exit 0 is exactly what a scheduled witness records
   as success (`D-27`).
 
+- **O10.21** *(added 2026-11-27, `D-34`)* A service's request that needs no
+  store, its health check above all, MUST NOT wait for store work. Store work
+  may be serialised, but waiting for it MUST NOT occupy the threads that serve
+  every other request.
+
+  A load balancer reads a late health check as a failed one. Under load, a
+  service whose health check waits for the store is taken out of rotation for
+  being busy, or kept in rotation while it is wedged, and neither says which.
+
 ## Release evidence
 
 - **O10.10** A release MUST ship supply-chain evidence: an advisory and licence

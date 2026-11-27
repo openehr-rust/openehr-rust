@@ -815,6 +815,15 @@ mod tests {
             unreachable!("the AQL executor does not commit")
         }
 
+        fn create_ehr_with_status(
+            &mut self,
+            _: &Ehr,
+            _: &Contribution,
+            _: &Version<EhrStatus>,
+        ) -> Result<CommitOutcome> {
+            unreachable!("the AQL executor does not create an EHR")
+        }
+
         fn get_version(&self, _: &ObjectVersionId) -> Result<VersionRow> {
             unreachable!("the executor resolves candidates through latest_version")
         }

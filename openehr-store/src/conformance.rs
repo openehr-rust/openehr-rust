@@ -1200,6 +1200,128 @@ pub fn run_contribution_membership<S: Store>(store: &mut S) -> Result<()> {
     Ok(())
 }
 
+/// `db:H5.23` (`db:D-33`): creating an `EHR` with its first status is one
+/// change.
+///
+/// Each of the three steps is made to refuse in turn: a contribution id
+/// already taken (step two), a status its contribution does not declare and a
+/// status naming a predecessor (step three). After each, the `EHR` is absent,
+/// its status container holds nothing, and the contribution id is still free,
+/// which the successful creation at the end proves by reusing it. A second
+/// creation of the same record is then a conflict that changes nothing.
+///
+/// # Errors
+///
+/// Returns the first unexpected engine error. A conformance failure panics.
+///
+/// # Panics
+///
+/// Panics when the engine fails a conformance assertion.
+pub fn run_atomic_creation<S: Store>(store: &mut S) -> Result<()> {
+    let engine = store.engine();
+    store.install()?;
+    let ehr = sample_ehr();
+    let ehr_id = ehr.ehr_id().clone();
+    let status = HierObjectId::from_uid_str(EHR_STATUS_RECORD).expect("literal");
+    let act = "66666666-7777-8888-9999-000000000061";
+
+    // A contribution id another record already holds.
+    let other = second_ehr();
+    store.create_ehr(&other)?;
+    let taken = "66666666-7777-8888-9999-000000000062";
+    store.create_contribution(other.ehr_id(), &sample_contribution_of(taken, &[], &[1]))?;
+
+    let left_nothing = |store: &S, what: &str| -> Result<()> {
+        assert!(
+            matches!(
+                store.get_ehr(&ehr_id),
+                Err(crate::StoreError::NotFound { .. })
+            ),
+            "{engine}: {what} left the EHR behind"
+        );
+        assert!(
+            store.all_versions(&status)?.is_empty(),
+            "{engine}: {what} left a status version behind"
+        );
+        Ok(())
+    };
+
+    // Step two refuses: the contribution id is taken.
+    let result = store.create_ehr_with_status(
+        &ehr,
+        &sample_contribution_of(taken, &[], &[1]),
+        &sample_ehr_status_version(1, None, 30, true),
+    );
+    assert!(
+        matches!(result, Err(crate::StoreError::Conflict { .. })),
+        "{engine}: a taken contribution id must be a Conflict, got {result:?}"
+    );
+    left_nothing(store, "a refused contribution")?;
+
+    // Step three refuses: the contribution does not declare this status.
+    let result = store.create_ehr_with_status(
+        &ehr,
+        &sample_contribution_of(act, &[], &[2]),
+        &sample_ehr_status_version(1, None, 30, true),
+    );
+    assert!(
+        matches!(result, Err(crate::StoreError::NotInContribution { .. })),
+        "{engine}: an undeclared status must be NotInContribution, got {result:?}"
+    );
+    left_nothing(store, "an undeclared status")?;
+
+    // Step three refuses: a first status cannot name a predecessor.
+    let result = store.create_ehr_with_status(
+        &ehr,
+        &sample_contribution_of(act, &[], &[2]),
+        &sample_ehr_status_version(2, Some(1), 31, true),
+    );
+    assert!(
+        matches!(result, Err(crate::StoreError::Commit(_))),
+        "{engine}: a first status naming a predecessor must be refused, got {result:?}"
+    );
+    left_nothing(store, "a status with a predecessor")?;
+
+    // The same contribution id, now accepted: nothing of the refused attempts
+    // survived to conflict with it.
+    let outcome = store.create_ehr_with_status(
+        &ehr,
+        &sample_contribution_of(act, &[], &[1]),
+        &sample_ehr_status_version(1, None, 30, false),
+    )?;
+    assert!(
+        outcome.created_container,
+        "{engine}: the status container is new"
+    );
+    assert_eq!(store.get_ehr(&ehr_id)?.ehr_id(), &ehr_id, "{engine}");
+    let head = store.latest_version_in(&ehr_id, &status, "EHR_STATUS")?;
+    assert_eq!(
+        head.contribution_uid, act,
+        "{engine}: the status names its act"
+    );
+    assert!(
+        !crate::ehr_is_modifiable(store, &store.get_ehr(&ehr_id)?)?,
+        "{engine}: the status committed is the one supplied"
+    );
+
+    // Created once: a second creation is a conflict and changes nothing.
+    let again = store.create_ehr_with_status(
+        &ehr,
+        &sample_contribution_of("66666666-7777-8888-9999-000000000063", &[], &[1]),
+        &sample_ehr_status_version(1, None, 32, true),
+    );
+    assert!(
+        matches!(again, Err(crate::StoreError::Conflict { .. })),
+        "{engine}: a second creation must be a Conflict, got {again:?}"
+    );
+    assert_eq!(store.all_versions(&status)?.len(), 1, "{engine}");
+    assert!(
+        !crate::ehr_is_modifiable(store, &store.get_ehr(&ehr_id)?)?,
+        "{engine}"
+    );
+    Ok(())
+}
+
 /// An `EHR` otherwise like [`sample_ehr`], with id `ehr_uid`, whose
 /// `ehr_status` reference names `status`, which may be any identifier.
 fn ehr_naming_status(ehr_uid: &str, status: ObjectId) -> Ehr {
@@ -1588,9 +1710,11 @@ pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
     // committed. `H5.22` requires every commit to be declared, not every
     // declaration to be committed.
     let contribution_uid = "55555555-6666-7777-8888-999999999999";
-    let declared: Vec<String> = (1..=7)
+    // Containers 1 to 8, versions 1 to 4: container 5's withdrawal is its
+    // fourth version, and container 8 changes archetype at its second.
+    let declared: Vec<String> = (1..=8)
         .flat_map(|c| {
-            (1..=3).map(move |v| format!("10000000-0000-0000-0000-00000000000{c}::{SYSTEM}::{v}"))
+            (1..=4).map(move |v| format!("10000000-0000-0000-0000-00000000000{c}::{SYSTEM}::{v}"))
         })
         .collect();
     store.create_contribution(
@@ -1896,7 +2020,7 @@ pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
         store.commit_composition(&ehr_id, &version, contribution_uid)?;
     }
 
-    let rows_where = |name: &str| -> Result<usize> {
+    let rows_where = |store: &S, name: &str| -> Result<usize> {
         let q: AqlQuery = format!(
             "SELECT c/name/value AS name FROM EHR e[ehr_id/value=$ehrUid] \
              CONTAINS COMPOSITION c[openEHR-EHR-COMPOSITION.encounter.v1] \
@@ -1910,27 +2034,141 @@ pub fn run_aql<S: Store>(store: &mut S) -> Result<()> {
         )
     };
     assert_eq!(
-        rows_where("Amended 3")?,
+        rows_where(store, "Amended 3")?,
         1,
         "{engine}: a container amended twice must answer once, as its current content"
     );
     assert_eq!(
-        rows_where("Amended 1")?,
+        rows_where(store, "Amended 1")?,
         0,
         "{engine}: an amended-away version's content must not match"
     );
     assert_eq!(
-        rows_where("Amended 2")?,
+        rows_where(store, "Amended 2")?,
         0,
         "{engine}: an amended-away version's content must not match"
     );
     assert_eq!(
-        rows_where("Twin")?,
+        rows_where(store, "Twin")?,
         2,
         "{engine}: two different containers sharing a display name are two rows"
     );
 
+    // (4) Withdrawn after its amendments: a deletion is a new version with no
+    // content (`db:H5.2`), so the container matches nothing, although three
+    // of its index rows still name the archetype.
+    store.commit_composition(
+        &ehr_id,
+        &amendment(&ehr_id, amended, 4, None, 24),
+        contribution_uid,
+    )?;
+    assert_eq!(
+        rows_where(store, "Amended 3")?,
+        0,
+        "{engine}: a withdrawn container must not answer as its last content"
+    );
+
+    // (5) An amendment that changes the archetype. The container's first index
+    // row still says `encounter`, and its current content is a `report`: it
+    // answers the `report` query once, and the `encounter` query not at all.
+    let changed = "10000000-0000-0000-0000-000000000008";
+    let report = "openEHR-EHR-COMPOSITION.report.v1";
+    store.commit_composition(
+        &ehr_id,
+        &amendment(&ehr_id, changed, 1, Some(sample_composition("Changed")), 25),
+        contribution_uid,
+    )?;
+    store.commit_composition(
+        &ehr_id,
+        &amendment(
+            &ehr_id,
+            changed,
+            2,
+            Some(composition_of("Changed", report)),
+            26,
+        ),
+        contribution_uid,
+    )?;
+    assert_eq!(
+        rows_where(store, "Changed")?,
+        0,
+        "{engine}: a container amended to another archetype must not match its old one"
+    );
+    let as_report: AqlQuery = format!(
+        "SELECT c/name/value AS name FROM EHR e[ehr_id/value=$ehrUid] \
+         CONTAINS COMPOSITION c[{report}] LIMIT 10"
+    )
+    .parse()?;
+    assert_eq!(
+        crate::aql::execute(store, &as_report, &params(&ehr_id.to_string()))?
+            .rows
+            .len(),
+        1,
+        "{engine}: a container amended to another archetype answers as the new one, once"
+    );
+
     Ok(())
+}
+
+/// Version `n` of `container`, carrying `composition` or, for `None`, a
+/// deletion; the change type follows (creation, amendment, deletion).
+fn amendment(
+    ehr_id: &HierObjectId,
+    container: &str,
+    n: u32,
+    composition: Option<Composition>,
+    minute: u32,
+) -> Version<Composition> {
+    let id = |v: u32| -> ObjectVersionId {
+        format!("{container}::{SYSTEM}::{v}")
+            .parse()
+            .expect("fixture")
+    };
+    let (lifecycle, change) = match (&composition, n) {
+        (None, _) => (version_lifecycle_state::DELETED, audit_change_type::DELETED),
+        (Some(_), 1) => (
+            version_lifecycle_state::COMPLETE,
+            audit_change_type::CREATION,
+        ),
+        (Some(_), _) => (
+            version_lifecycle_state::COMPLETE,
+            audit_change_type::AMENDMENT,
+        ),
+    };
+    OriginalVersion::new(
+        id(n),
+        (n > 1).then(|| id(n - 1)),
+        lifecycle,
+        composition,
+        AuditDetails::new(
+            SYSTEM,
+            DvDateTime::new(&format!("2026-08-01T09:{minute:02}:00Z")).expect("fixture"),
+            change,
+            PartyIdentified::named("Dr A Nurse")
+                .expect("fixture")
+                .into(),
+        )
+        .expect("fixture"),
+        ObjectRef::new("local", "EHR", ObjectId::HierObjectId(ehr_id.clone())).expect("fixture"),
+    )
+    .expect("fixture")
+    .into()
+}
+
+/// [`sample_composition`] under another archetype.
+fn composition_of(name: &str, archetype: &str) -> Composition {
+    Composition::new(
+        LocatableAttrs::named(name, archetype)
+            .expect("literal")
+            .with_archetype_details(Archetyped::new(archetype, "1.1.0").expect("literal")),
+        composition_category::EVENT,
+        PartyIdentified::named("Dr A Nurse")
+            .expect("literal")
+            .into(),
+        CodePhrase::new("ISO_639-1", "en").expect("literal"),
+        CodePhrase::new("ISO_3166-1", "GB").expect("literal"),
+    )
+    .expect("literal")
 }
 
 /// The sum of statement counts, which come from the crate's own static tables
@@ -2405,9 +2643,9 @@ mod store_tests {
     //! `openehr-sqlite`.
 
     use super::{
-        EHR_STATUS_RECORD, run, run_aql, run_contribution_membership, run_ehr_scope,
-        run_ehr_status, run_ehr_status_binding, run_fractional_history, run_is_modifiable_gate,
-        run_language_validation, run_paging,
+        EHR_STATUS_RECORD, run, run_aql, run_atomic_creation, run_contribution_membership,
+        run_ehr_scope, run_ehr_status, run_ehr_status_binding, run_fractional_history,
+        run_is_modifiable_gate, run_language_validation, run_paging,
     };
     use crate::record::{CompositionIndexRow, VersionRow};
     use crate::{CommitOutcome, Result, Store, StoreError, check_commit_rules};
@@ -2602,6 +2840,34 @@ mod store_tests {
             })
         }
 
+        // `db:H5.23`: each step is undone if a later one refuses. The status
+        // commit writes nothing until its checks pass, so only the first two
+        // steps' rows can need removing.
+        fn create_ehr_with_status(
+            &mut self,
+            ehr: &Ehr,
+            contribution: &Contribution,
+            status: &Version<EhrStatus>,
+        ) -> Result<CommitOutcome> {
+            let ehr_id = ehr.ehr_id().clone();
+            let contribution_uid = contribution.uid().to_string();
+            self.create_ehr(ehr)?;
+            let rest = self
+                .create_contribution(&ehr_id, contribution)
+                .map_err(|e| (e, false))
+                .and_then(|()| {
+                    self.commit_ehr_status(&ehr_id, status, &contribution_uid)
+                        .map_err(|e| (e, true))
+                });
+            rest.map_err(|(error, contributed)| {
+                if contributed {
+                    self.contributions.remove(&contribution_uid);
+                }
+                self.ehrs.remove(&ehr_id.to_string());
+                error
+            })
+        }
+
         fn get_version(&self, uid: &ObjectVersionId) -> Result<VersionRow> {
             let id = uid.to_string();
             let mut row = self
@@ -2724,6 +2990,7 @@ mod store_tests {
             run_ehr_status_binding,
             run_paging,
             run_contribution_membership,
+            run_atomic_creation,
         ] {
             story(&mut MemoryStore::default()).expect("owner conformance story");
         }

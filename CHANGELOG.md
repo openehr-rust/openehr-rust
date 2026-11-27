@@ -61,7 +61,11 @@ together.
     podman) checks the same rules through the Compose-built container and its
     published port, with the access log read back from the data volume.
     `compose.yaml` now sets `OPENEHR_ACCESS_LOG` to a path on that volume by
-    default, so the documented deployment audits reads.
+    default, so the documented deployment audits reads. The same test then
+    stops and restarts the stack on its volume. The record, its status
+    history, its chain checkpoint (`task checkpoint`, run in the container) and
+    the access log all survive, and `task verify` passes. A negative control
+    that wipes the volume on the stop fails it.
   - **API.** New `openehr_axa::authz` and `Principal::grants`. `/metadata` no
     longer lists authorization as absent. It lists the care-relationship policy
     as absent instead, since that stays the issuer's.
@@ -96,6 +100,34 @@ together.
     `INSERT`s missing the new `NOT NULL` columns, which would have turned CI's
     `schema` job red. They now name their columns.
 
+- **`openehr-axa`'s health check no longer waits for the store** (`db:O10.21`,
+  `db:D-34`). A handler waiting for the store lock blocked its runtime worker,
+  so under 16 clients `GET /metadata` answered up to 1.9 s late. A contended
+  lock is now waited for in `block_in_place`, and the worst lateness measured
+  is 7 ms. Throughput on a large chart is unchanged; on a small chart under
+  heavy contention it is about 30% lower. New `examples/contention.rs`, with
+  the numbers in `BENCHMARKS.md`.
+- **BREAKING: an EHR and its first status are created as one change**
+  (`db:H5.23`, `db:D-33`). New required `Store::create_ehr_with_status`, with
+  no default body: a `Store` outside this tree must implement it. SQLite uses
+  one savepoint, and `commit_ehr_status` now opens a savepoint so that it
+  nests. PostgreSQL uses one transaction. `openehr-axa`'s `POST`/`PUT /ehr`
+  used to make three calls, and an engine failure after the first left a
+  record with no status that a retry could only answer `409`. New shared
+  story `conformance::run_atomic_creation`. Also, `SqliteStore::create_contribution`
+  reports only a primary-key collision as `Conflict`; any other constraint,
+  a trigger's included, is an engine error.
+- **`openehr-axa` coverage is gated** (`W-23`). The CI `coverage` job and
+  `bin/test-coverage` now measure `openehr-axa` too, at a floor of 72 lines
+  and 32 functions: 95.05% of production lines, from 89%. New tests cover the
+  query-parameter and result-cell conversions, the system id, every
+  authentication denial's challenge, a configured issuer, refusals on
+  malformed identifiers and `If-Match`, damaged stored rows (`500` or `410`,
+  never a guess), and the binary's startup refusals, clean `SIGTERM`, `check`,
+  and Axa's `db` commands, which refuse even in a development shell that has
+  set `AXA_DESTROY_DATA`. They found two defects: `db:D-33` (an EHR whose
+  status fails to commit is left behind, fixed below) and `lib:A-87` (an
+  untyped party decodes as the record subject, open).
 - **`openehr-axa` is on Axa 0.24** (from 0.23). `app::run` uses Axa's own
   command dispatch — `Cli::environment`, `cli::answer` for `check` and
   `health`, `Cli::config` (`Config::for_task` for a task, with
@@ -113,12 +145,21 @@ together.
 - **History and search pages are cut by the store** (`db:P6.25`). New
   `Store::versions_page_in` and `Store::find_compositions_by_archetype_page`
   return a `RowPage { rows, total }`. Their default bodies read everything and
-  slice. `SqliteStore` overrides both with `COUNT(*)` and `LIMIT`/`OFFSET`.
+  slice. `SqliteStore` and `PostgresqlStore` override both with `COUNT(*)` and
+  `LIMIT`/`OFFSET`; PostgreSQL reads the two in one read-only `REPEATABLE READ`
+  transaction, so the total describes the page's own snapshot.
   `openehr-axa`'s `_history` and archetype search used to load every match
   before applying `_count`/`_offset`, and now use them. One side effect: a bad
   `_count` is refused before the store is asked, so it is `400` even for a
   container the `EHR` does not own (it was `404`). New shared story
   `conformance::run_paging`.
+- **A restore drill for PostgreSQL** (`db:O10.6`, `db:O10.19`).
+  `openehr-postgresql/tests/restore_drill.rs`, run by `verify-store.sh`, takes a
+  `pg_dump -Fc` while the store is connected, commits once more, drops the
+  source, and restores into a new database opened read-only. The restored
+  history is exactly the dumped prefix, its chain re-verifies, its checkpoint
+  equals the witness, and writes are refused. Not covered: WAL point-in-time
+  recovery.
 - **A restore drill for SQLite** (`db:O10.6`, `db:O10.19`).
   `openehr-sqlite/tests/restore_drill.rs` takes a `VACUUM INTO` backup of a
   live store, restores it read-only, and checks it against a witness. The
@@ -217,7 +258,9 @@ together.
   answers once per container, judged on its **current** content: an amendment
   that changes the composition's archetype stops matching the old one. Rows are
   de-duplicated by container, never by displayed value. Behaviour change for
-  any caller that was (unknowingly) relying on the duplicates.
+  any caller that was (unknowingly) relying on the duplicates. The shared
+  `run_aql` story also covers a withdrawn amended container and an amendment
+  that changes archetype; it passes on SQLite and live PostgreSQL.
 - **`POST /openehr/v1/query/aql` records the read** (`db:D-21`). It wrote no
   access record while serving clinical rows with read auditing on; it now
   records `query`, actor, resolved EHR and outcome before the rows are released,

@@ -321,3 +321,25 @@ fn inspecting_a_backup_leaves_its_bytes_unchanged() {
     );
     let _ = std::fs::remove_file(&path);
 }
+
+/// A container argument that is not an identifier is refused before any file
+/// is opened, by both tasks, naming what it was given.
+#[test]
+fn a_container_that_is_not_an_identifier_is_refused_by_both_tasks() {
+    let vars = Vars::from_cli_args(vec![
+        ("container".to_owned(), "two words".to_owned()),
+        (
+            "path".to_owned(),
+            "/nonexistent/never-opened.sqlite3".to_owned(),
+        ),
+    ]);
+    for error in [
+        checkpoint_line(&vars).expect_err("checkpoint"),
+        verify_line(&vars).expect_err("verify"),
+    ] {
+        assert!(
+            error.to_string().contains("not an identifier: two words"),
+            "{error}"
+        );
+    }
+}

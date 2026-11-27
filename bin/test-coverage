@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Production-source coverage, measured and gated exactly as CI does (W0.41).
 #
-#   bin/test-coverage                 the three workspaces CI measures
+#   bin/test-coverage                 the four workspaces CI measures
 #   bin/test-coverage openehr-store   one of them
 #
 # For each workspace: nightly `cargo llvm-cov --lib --tests` writes LCOV, then
@@ -17,7 +17,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
-if [[ $# -gt 0 ]]; then workspaces=("$@"); else workspaces=(openehr openehr-store openehr-sqlite); fi
+if [[ $# -gt 0 ]]; then workspaces=("$@"); else workspaces=(openehr openehr-store openehr-sqlite openehr-axa); fi
 
 # `RUSTUP_TOOLCHAIN` outranks the checked-in rust-toolchain.toml; `rustup
 # default` does not. RUSTFLAGS is empty on purpose: this measures, it does

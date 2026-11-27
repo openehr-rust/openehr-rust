@@ -2757,3 +2757,348 @@ async fn the_status_revision_history_is_oldest_first_and_scoped() {
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
     assert!(!body.contains("Dr A Nurse"), "{body}");
 }
+
+// --- refusals the other tests reach only on their success path -------------
+
+#[tokio::test]
+async fn a_status_revision_history_is_404_before_any_status_is_committed() {
+    // The fixture commits compositions only. The history of a status that was
+    // never committed is not an empty list: there is no status to have one.
+    let served = Served::new();
+    let (status, body, _) = served
+        .get(&format!(
+            "/openehr/v1/ehr/{}/versioned_ehr_status/revision_history",
+            served.ehr_id()
+        ))
+        .await;
+    // The store refuses first (no such container), so the handler's own
+    // empty-history refusal is reached only by a store that answers an empty
+    // list instead; both are `404`.
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+}
+
+#[tokio::test]
+async fn a_version_naming_a_predecessor_is_an_update_and_cannot_be_posted() {
+    let served = Served::new();
+    let (status, body, _) = served
+        .send_json(
+            "POST",
+            &served.compositions(),
+            &version(LIVE, 2, Some(1), false),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(
+        body.contains("If-Match"),
+        "says what to send instead: {body}"
+    );
+    // Nothing was committed: version 1 is still the current one.
+    let (_, _, etag) = served.get(&served.composition(LIVE)).await;
+    assert_eq!(
+        etag.as_deref(),
+        Some(format!("W/\"{LIVE}::{SYSTEM}::1\"").as_str())
+    );
+}
+
+#[tokio::test]
+async fn a_malformed_identifier_on_the_ehr_and_status_routes_is_400() {
+    let served = Served::new();
+    let (status, _, _) = served.get("/openehr/v1/ehr/two%20words").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "GET /ehr");
+    let (status, _, _) = served
+        .send(
+            Request::builder()
+                .method("PUT")
+                .uri("/openehr/v1/ehr/two%20words")
+                .header(header::AUTHORIZATION, &served.authorization)
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "PUT /ehr");
+    let (status, _, _) = served
+        .get(&format!("{}/not-a-version-uid", served.ehr_status()))
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "status vread");
+}
+
+#[tokio::test]
+async fn an_if_match_that_is_not_visible_ascii_is_400() {
+    let served = Served::new();
+    let (status, body, _) = served
+        .send(
+            Request::builder()
+                .method("PUT")
+                .uri(served.composition(LIVE) + &format!("?contribution={CONTRIBUTION}"))
+                .header(header::AUTHORIZATION, &served.authorization)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(
+                    header::IF_MATCH,
+                    HeaderValue::from_bytes(b"W/\"\xff\"").expect("a header value"),
+                )
+                .body(Body::from(
+                    serde_json::to_vec(&version(LIVE, 2, Some(1), false)).expect("json"),
+                ))
+                .expect("request"),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(body.contains("If-Match"), "{body}");
+}
+
+// --- a stored row that does not decode is a 500, never a guess (`db:D-28`) ---
+
+impl Served {
+    /// Rewrites stored rows behind the store's back, as damage or a bad restore
+    /// would. Nothing in the service can write these values: the append-only
+    /// trigger is dropped first, as `openehr-sqlite/tests/faults.rs` does,
+    /// because someone with file access is not stopped by it either.
+    fn damage(&self, statement: &str) {
+        let store = self
+            .ctx
+            .shared_store
+            .get::<SharedOpenehrStore>()
+            .expect("the fixture installs a store");
+        let guard = store.lock().expect("lock");
+        guard
+            .connection()
+            .execute_batch("DROP TRIGGER IF EXISTS trg_openehr_version_no_update;")
+            .expect("drops the guard");
+        let changed = guard
+            .connection()
+            .execute(statement, [])
+            .expect("the statement runs");
+        assert!(changed > 0, "{statement} changed nothing");
+    }
+
+    fn revision_history(&self) -> String {
+        format!(
+            "/openehr/v1/ehr/{}/versioned_ehr_status/revision_history",
+            self.ehr_id
+        )
+    }
+}
+
+#[tokio::test]
+async fn a_stored_committer_that_does_not_decode_is_500_and_quotes_nothing() {
+    let served = Served::new();
+    served.damage(&format!(
+        "UPDATE openehr_version SET audit_committer_json = '{{\"secret\": 1' \
+         WHERE uid = '{LIVE}::{SYSTEM}::1'"
+    ));
+    let (status, body, _) = served
+        .get(&format!(
+            "{}/version/{LIVE}::{SYSTEM}::1",
+            served.composition(LIVE)
+        ))
+        .await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{body}");
+    assert!(body.contains("committer"), "names what failed: {body}");
+    assert!(!body.contains("secret"), "quotes nothing stored: {body}");
+}
+
+#[tokio::test]
+async fn a_status_revision_history_carries_a_stored_description() {
+    let served = Served::with_ehr_status(true);
+    served.damage(
+        "UPDATE openehr_version SET audit_description = 'status set at registration' \
+         WHERE versioned_object_uid IN \
+           (SELECT versioned_object_uid FROM openehr_version WHERE data_json LIKE '%EHR_STATUS%')",
+    );
+    let (status, body, _) = served.get(&served.revision_history()).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let history: serde_json::Value = serde_json::from_str(&body).expect("json");
+    assert_eq!(
+        history["items"][0]["audits"][0]["description"]["value"], "status set at registration",
+        "{history}"
+    );
+}
+
+#[tokio::test]
+async fn a_status_revision_history_over_a_damaged_row_is_500_not_a_partial_list() {
+    for (column, value) in [
+        // Not `'{}'` or `'[]'`: both decode as PARTY_SELF by the library's
+        // shape inference, so a damaged committer can read back as the patient
+        // (`lib:A-87`, open). A string is no party at all.
+        ("audit_committer_json", "'\"x\"'"),
+        ("audit_time_committed_text", "'not a time'"),
+        ("audit_change_type_code", "''"),
+    ] {
+        let served = Served::with_ehr_status(true);
+        served.damage(&format!(
+            "UPDATE openehr_version SET {column} = {value} \
+             WHERE data_json LIKE '%EHR_STATUS%'"
+        ));
+        let (status, body, _) = served.get(&served.revision_history()).await;
+        assert_eq!(
+            status,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "{column}: {body}"
+        );
+        assert!(body.contains("could not be read"), "{column}: {body}");
+    }
+}
+
+#[tokio::test]
+async fn an_ehr_whose_initial_status_cannot_be_committed_is_not_left_behind() {
+    // ITS-REST creates the EHR and its first EHR_STATUS together (`db:S1.22`).
+    // If the second write fails, the first must not survive it: an EHR with no
+    // status is a record `GET …/ehr_status` cannot read and `PUT` cannot fix.
+    let served = Served::new();
+    {
+        let store = served
+            .ctx
+            .shared_store
+            .get::<SharedOpenehrStore>()
+            .expect("store");
+        store
+            .lock()
+            .expect("lock")
+            .connection()
+            .execute_batch(
+                "CREATE TRIGGER fault_contribution BEFORE INSERT ON openehr_contribution \
+                 BEGIN SELECT RAISE(ABORT, 'injected'); END;",
+            )
+            .expect("trigger");
+    }
+    let path = format!("/openehr/v1/ehr/{FRESH}");
+    let (status, body, _) = served
+        .send(
+            Request::builder()
+                .method("PUT")
+                .uri(&path)
+                .header(header::AUTHORIZATION, &served.authorization)
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+    // An engine failure, so a `5xx`: not a `409` naming a duplicate that
+    // does not exist (`db:D-33`'s aside).
+    assert!(status.is_server_error(), "{status}: {body}");
+    let (after, body, _) = served.get(&path).await;
+    assert_eq!(
+        after,
+        StatusCode::NOT_FOUND,
+        "a partial EHR was left: {body}"
+    );
+}
+
+#[tokio::test]
+async fn a_status_version_with_no_stored_content_is_410_not_an_empty_status() {
+    // A status is never deleted through this service, so only damage reaches
+    // a status row without content. It answers as a deletion does, and never
+    // as `null` or a default `EHR_STATUS` (`db:D-28`).
+    let served = Served::with_ehr_status(true);
+    served
+        .damage("UPDATE openehr_version SET data_json = NULL WHERE data_json LIKE '%EHR_STATUS%'");
+    let (status, body, _) = served.get(&served.ehr_status()).await;
+    assert_eq!(status, StatusCode::GONE, "{body}");
+    assert!(body.contains("carries no content"), "{body}");
+}
+
+#[tokio::test]
+async fn a_malformed_composition_version_uid_is_400() {
+    let served = Served::new();
+    let (status, _, _) = served
+        .get(&format!(
+            "{}/version/not-a-version-uid",
+            served.composition(LIVE)
+        ))
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+// --- a request that needs no store does not wait for one that does ---------
+
+/// `db:O10.21` (`db:D-34`). Handlers do store work synchronously under one
+/// `std::sync::Mutex`. A handler that waited for it blocked its runtime
+/// worker, so with every worker waiting, `/metadata` (no store) could not be
+/// scheduled at all: measured at 1.7–1.9 s late under 16 clients
+/// (`examples/contention.rs`). The lock is now waited for in
+/// `block_in_place`.
+///
+/// One worker makes it deterministic. The store lock is held on another thread,
+/// a store request is sent and must wait, and `/metadata` must still answer.
+/// The bound is liveness, not speed (`W0.35`). Before the fix the one worker
+/// was stuck in the store request and `/metadata` never ran.
+#[test]
+fn metadata_answers_while_a_store_request_waits_for_the_lock() {
+    let served = Served::new();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .expect("runtime");
+    let store = served
+        .ctx
+        .shared_store
+        .get::<SharedOpenehrStore>()
+        .expect("store");
+    let (held_tx, held_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+    let holder = std::thread::spawn(move || {
+        let _guard = store.lock().expect("lock");
+        held_tx.send(()).expect("signal");
+        let _ = release_rx.recv_timeout(std::time::Duration::from_secs(15));
+    });
+    held_rx.recv().expect("the lock is held");
+
+    runtime.block_on(async {
+        let waiting = {
+            let path = served.composition(LIVE);
+            let authorization = served.authorization.clone();
+            let router = served.router.clone();
+            tokio::spawn(async move {
+                router
+                    .oneshot(
+                        Request::builder()
+                            .uri(path)
+                            .header(header::AUTHORIZATION, authorization)
+                            .body(Body::empty())
+                            .expect("request"),
+                    )
+                    .await
+                    .expect("infallible")
+                    .status()
+            })
+        };
+        // Let the store request reach the lock first.
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        // On the runtime, as a server's requests are: `block_on` itself runs on
+        // this thread, not the worker, and would answer regardless.
+        let metadata = {
+            let router = served.router.clone();
+            tokio::spawn(async move {
+                router
+                    .oneshot(
+                        Request::builder()
+                            .uri("/openehr/v1/metadata")
+                            .body(Body::empty())
+                            .expect("request"),
+                    )
+                    .await
+                    .expect("infallible")
+                    .status()
+            })
+        };
+        let metadata = tokio::time::timeout(std::time::Duration::from_secs(10), metadata)
+            .await
+            .expect("/metadata must answer while a store request waits for the lock")
+            .expect("task");
+        assert_eq!(metadata, StatusCode::OK);
+        // `/metadata` must have answered *before* the lock was released. On
+        // the old code it cannot: the one worker is blocked, and so is the
+        // runtime's timer, so the timeout above never fires either. Both wait
+        // for the holder's own fallback, and the store request has answered
+        // by the time `/metadata` does.
+        assert!(
+            !waiting.is_finished(),
+            "/metadata answered only after the store request: it waited for the store"
+        );
+
+        release_tx.send(()).expect("release");
+        assert_eq!(waiting.await.expect("task"), StatusCode::OK);
+    });
+    holder.join().expect("holder");
+}

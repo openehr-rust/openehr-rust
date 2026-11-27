@@ -495,8 +495,13 @@ impl Store for SqliteStore {
                 ],
             )
             .map_err(|e| match e {
+                // Only a key collision is "already exists" (the contribution's
+                // one uniqueness constraint is its primary key). Every constraint
+                // shares `ConstraintViolation`, a trigger's `RAISE(ABORT)`
+                // included, and naming that a conflict told the caller to look
+                // for a duplicate that was not there (`db:D-33`).
                 rusqlite::Error::SqliteFailure(f, _)
-                    if f.code == rusqlite::ErrorCode::ConstraintViolation =>
+                    if f.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_PRIMARYKEY =>
                 {
                     StoreError::Conflict {
                         kind: "contribution",
@@ -811,7 +816,10 @@ impl Store for SqliteStore {
             .transpose()?;
         let row = VersionRow::project(version, contribution_uid, previous_digest, None)?;
         let created_container = head.is_none();
-        let transaction = self.connection.unchecked_transaction().map_err(engine)?;
+        // A savepoint, not `BEGIN`: on its own it is the same deferred
+        // transaction, and inside `create_ehr_with_status`'s it nests, so the
+        // status rolls back with the record it was created for (`db:H5.23`).
+        let transaction = self.connection.savepoint().map_err(engine)?;
 
         if created_container {
             let created =
@@ -881,6 +889,34 @@ impl Store for SqliteStore {
             version_uid: version.uid().clone(),
             created_container,
         })
+    }
+
+    // `db:H5.23`: the three steps inside one savepoint, so a refusal or an
+    // engine failure at any of them rolls back the rows of all three. The
+    // status commit's own savepoint nests inside this one.
+    fn create_ehr_with_status(
+        &mut self,
+        ehr: &Ehr,
+        contribution: &Contribution,
+        status: &Version<EhrStatus>,
+    ) -> Result<CommitOutcome> {
+        self.connection
+            .execute_batch("SAVEPOINT openehr_create_ehr")
+            .map_err(engine)?;
+        let ehr_id = ehr.ehr_id().clone();
+        let outcome = self
+            .create_ehr(ehr)
+            .and_then(|()| self.create_contribution(&ehr_id, contribution))
+            .and_then(|()| {
+                self.commit_ehr_status(&ehr_id, status, &contribution.uid().to_string())
+            });
+        let end = if outcome.is_ok() {
+            "RELEASE openehr_create_ehr"
+        } else {
+            "ROLLBACK TO openehr_create_ehr; RELEASE openehr_create_ehr"
+        };
+        self.connection.execute_batch(end).map_err(engine)?;
+        outcome
     }
 
     fn get_version(&self, uid: &ObjectVersionId) -> Result<VersionRow> {

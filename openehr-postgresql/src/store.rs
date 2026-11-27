@@ -14,11 +14,11 @@ use openehr_store::{
 use postgres::error::SqlState;
 use postgres::fallible_iterator::FallibleIterator as _;
 use postgres::types::ToSql;
-use postgres::{Client, Row};
+use postgres::{Client, GenericClient, Row};
 use rustls::pki_types::CertificateDer;
 use rustls::pki_types::pem::PemObject as _;
 use rustls::{ClientConfig, RootCertStore};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::sync::Arc;
 use time::OffsetDateTime;
 use tokio_postgres_rustls::MakeRustlsConnect;
@@ -44,6 +44,11 @@ const ENGINE: &str = "PostgreSQL";
 /// exactly as `SqliteStore` is in `openehr-axa`) is supposed to have anyway.
 pub struct PostgresqlStore {
     client: RefCell<Client>,
+    /// Set while [`Store::create_ehr_with_status`] holds a transaction open:
+    /// the status commit then writes inside it instead of opening its own,
+    /// which on this driver would be a second `BEGIN` and an early `COMMIT`
+    /// of the caller's transaction (`db:H5.23`).
+    creating: Cell<bool>,
 }
 
 impl PostgresqlStore {
@@ -107,6 +112,7 @@ impl PostgresqlStore {
         config.ssl_mode(postgres::config::SslMode::Require);
         Ok(Self {
             client: RefCell::new(config.connect(tls).map_err(|e| engine(&e))?),
+            creating: Cell::new(false),
         })
     }
 
@@ -180,6 +186,48 @@ impl PostgresqlStore {
     }
 
     /// Reads a version row from a query row.
+    /// The composition-index columns, in the order every index read names them.
+    const INDEX_COLUMNS: &'static str = "version_uid, ehr_id, archetype_id, template_id, \
+        category_code, composer_name, language_code, territory_code, setting_code, \
+        context_start_text, context_start_utc, context_end_text, context_end_utc";
+
+    /// One composition-index row, as both the search and its paged form read
+    /// it.
+    fn read_index_row(row: &Row) -> Result<CompositionIndexRow> {
+        let context_start_utc: Option<OffsetDateTime> = column(row, "context_start_utc")?;
+        let context_end_utc: Option<OffsetDateTime> = column(row, "context_end_utc")?;
+        let instant = |text: Option<String>, utc: Option<OffsetDateTime>| {
+            text.map(|text| StoredInstant {
+                text,
+                utc_seconds: Self::timestamptz_to_utc_seconds(utc),
+            })
+        };
+        Ok(CompositionIndexRow {
+            version_uid: column(row, "version_uid")?,
+            ehr_id: column(row, "ehr_id")?,
+            archetype_id: column(row, "archetype_id")?,
+            template_id: column(row, "template_id")?,
+            category_code: column(row, "category_code")?,
+            composer_name: column(row, "composer_name")?,
+            language_code: column(row, "language_code")?,
+            territory_code: column(row, "territory_code")?,
+            setting_code: column(row, "setting_code")?,
+            context_start: instant(column(row, "context_start_text")?, context_start_utc),
+            context_end: instant(column(row, "context_end_text")?, context_end_utc),
+        })
+    }
+
+    /// A read-only `REPEATABLE READ` transaction: every statement in it reads
+    /// one snapshot, so a count and the page it describes agree (`db:P6.25`).
+    fn snapshot(client: &mut Client) -> Result<postgres::Transaction<'_>> {
+        client
+            .build_transaction()
+            .isolation_level(postgres::IsolationLevel::RepeatableRead)
+            .read_only(true)
+            .start()
+            .map_err(|e| engine(&e))
+    }
+
     fn read_version(row: &Row) -> Result<VersionRow> {
         let audit_time_committed_utc: Option<OffsetDateTime> =
             column(row, "audit_time_committed_utc")?;
@@ -710,36 +758,72 @@ impl Store for PostgresqlStore {
         let row = VersionRow::project(version, contribution_uid, previous_digest, None)?;
         let created_container = head.is_none();
 
+        let container_created = created_container.then(|| {
+            StoredInstant::from_date_time(version.commit_audit().time_committed().value())
+        });
         let mut client = self.client.borrow_mut();
-        let mut transaction = client.transaction().map_err(|e| engine(&e))?;
-
-        if created_container {
-            let created =
-                StoredInstant::from_date_time(version.commit_audit().time_committed().value());
-            let created_utc = Self::utc_seconds_to_timestamptz(created.utc_seconds)?;
-            transaction
-                .execute(
-                    "INSERT INTO openehr_versioned_object \
-                     (uid, ehr_id, rm_type, time_created_text, time_created_utc) \
-                     VALUES ($1, $2, $3, $4, $5)",
-                    &[
-                        &container_uid,
-                        &ehr_id.to_string(),
-                        &"EHR_STATUS",
-                        &created.text,
-                        &created_utc,
-                    ],
-                )
-                .map_err(|e| engine(&e))?;
+        if self.creating.get() {
+            // Inside `create_ehr_with_status`'s transaction (`db:H5.23`).
+            write_status(
+                &mut *client,
+                ehr_id,
+                &container_uid,
+                container_created,
+                &row,
+            )?;
+        } else {
+            let mut transaction = client.transaction().map_err(|e| engine(&e))?;
+            write_status(
+                &mut transaction,
+                ehr_id,
+                &container_uid,
+                container_created,
+                &row,
+            )?;
+            transaction.commit().map_err(|e| engine(&e))?;
         }
-
-        insert_version(&mut transaction, &row)?;
-
-        transaction.commit().map_err(|e| engine(&e))?;
         Ok(CommitOutcome {
             version_uid: version.uid().clone(),
             created_container,
         })
+    }
+
+    // `db:H5.23`: one transaction around the three steps. `create_ehr` and
+    // `create_contribution` write on the client directly, so they join it;
+    // the status commit is told to (`creating`). Any error rolls all back.
+    fn create_ehr_with_status(
+        &mut self,
+        ehr: &Ehr,
+        contribution: &Contribution,
+        status: &Version<EhrStatus>,
+    ) -> Result<CommitOutcome> {
+        self.client
+            .borrow_mut()
+            .batch_execute("BEGIN")
+            .map_err(|e| engine(&e))?;
+        self.creating.set(true);
+        let ehr_id = ehr.ehr_id().clone();
+        let outcome = self
+            .create_ehr(ehr)
+            .and_then(|()| self.create_contribution(&ehr_id, contribution))
+            .and_then(|()| {
+                self.commit_ehr_status(&ehr_id, status, &contribution.uid().to_string())
+            });
+        self.creating.set(false);
+        let end = if outcome.is_ok() {
+            "COMMIT"
+        } else {
+            "ROLLBACK"
+        };
+        let ended = self
+            .client
+            .borrow_mut()
+            .batch_execute(end)
+            .map_err(|e| engine(&e));
+        // The step's own refusal outranks a failure to roll it back.
+        let outcome = outcome?;
+        ended?;
+        Ok(outcome)
     }
 
     fn get_version(&self, uid: &ObjectVersionId) -> Result<VersionRow> {
@@ -884,46 +968,148 @@ impl Store for PostgresqlStore {
             .client
             .borrow_mut()
             .query(
-                "SELECT version_uid, ehr_id, archetype_id, template_id, category_code, \
-                        composer_name, language_code, territory_code, setting_code, \
-                        context_start_text, context_start_utc, context_end_text, context_end_utc \
-                 FROM openehr_composition_index \
-                 WHERE ehr_id = $1 AND archetype_id = $2 \
-                 ORDER BY version_uid",
+                &format!(
+                    "SELECT {} FROM openehr_composition_index \
+                     WHERE ehr_id = $1 AND archetype_id = $2 \
+                     ORDER BY version_uid",
+                    Self::INDEX_COLUMNS
+                ),
                 &[&ehr_id.to_string(), &archetype_id],
             )
             .map_err(|e| engine(&e))?;
-        rows.iter()
-            .map(|row| {
-                let context_start_utc: Option<OffsetDateTime> = column(row, "context_start_utc")?;
-                let context_end_utc: Option<OffsetDateTime> = column(row, "context_end_utc")?;
-                let instant = |text: Option<String>, utc: Option<OffsetDateTime>| {
-                    text.map(|text| StoredInstant {
-                        text,
-                        utc_seconds: Self::timestamptz_to_utc_seconds(utc),
-                    })
-                };
-                Ok(CompositionIndexRow {
-                    version_uid: column(row, "version_uid")?,
-                    ehr_id: column(row, "ehr_id")?,
-                    archetype_id: column(row, "archetype_id")?,
-                    template_id: column(row, "template_id")?,
-                    category_code: column(row, "category_code")?,
-                    composer_name: column(row, "composer_name")?,
-                    language_code: column(row, "language_code")?,
-                    territory_code: column(row, "territory_code")?,
-                    setting_code: column(row, "setting_code")?,
-                    context_start: instant(column(row, "context_start_text")?, context_start_utc),
-                    context_end: instant(column(row, "context_end_text")?, context_end_utc),
-                })
-            })
-            .collect()
+        rows.iter().map(Self::read_index_row).collect()
     }
+
+    // `db:P6.25`: the page is cut by the engine. Unlike SQLite's one shared
+    // connection, other clients can commit between two statements here, so
+    // the count and the page are read in one read-only `REPEATABLE READ`
+    // transaction: both see the same snapshot, and `total` describes the
+    // result the page was cut from.
+    fn versions_page_in(
+        &self,
+        ehr: &HierObjectId,
+        versioned_object_uid: &HierObjectId,
+        rm_type: &str,
+        offset: usize,
+        count: usize,
+    ) -> Result<openehr_store::RowPage<VersionRow>> {
+        openehr_store::require_owned(
+            self,
+            ehr,
+            versioned_object_uid,
+            rm_type,
+            "versioned_object",
+            &versioned_object_uid.to_string(),
+        )?;
+        let id = versioned_object_uid.to_string();
+        let mut client = self.client.borrow_mut();
+        let mut snapshot = Self::snapshot(&mut client)?;
+        let total: i64 = snapshot
+            .query_one(
+                "SELECT count(*) FROM openehr_version WHERE versioned_object_uid = $1",
+                &[&id],
+            )
+            .and_then(|row| row.try_get(0))
+            .map_err(|e| engine(&e))?;
+        let rows = snapshot
+            .query(
+                &format!(
+                    "SELECT {} FROM openehr_version WHERE versioned_object_uid = $1 \
+                     ORDER BY trunk_version ASC, branch_number ASC, branch_version ASC \
+                     LIMIT $2 OFFSET $3",
+                    Self::VERSION_COLUMNS
+                ),
+                &[&id, &sql_count(count), &sql_count(offset)],
+            )
+            .map_err(|e| engine(&e))?;
+        snapshot.commit().map_err(|e| engine(&e))?;
+        Ok(openehr_store::RowPage {
+            rows: rows.iter().map(Self::read_version).collect::<Result<_>>()?,
+            total: usize::try_from(total).unwrap_or(usize::MAX),
+        })
+    }
+
+    fn find_compositions_by_archetype_page(
+        &self,
+        ehr_id: &HierObjectId,
+        archetype_id: &str,
+        offset: usize,
+        count: usize,
+    ) -> Result<openehr_store::RowPage<CompositionIndexRow>> {
+        let ehr = ehr_id.to_string();
+        let mut client = self.client.borrow_mut();
+        let mut snapshot = Self::snapshot(&mut client)?;
+        let total: i64 = snapshot
+            .query_one(
+                "SELECT count(*) FROM openehr_composition_index \
+                 WHERE ehr_id = $1 AND archetype_id = $2",
+                &[&ehr, &archetype_id],
+            )
+            .and_then(|row| row.try_get(0))
+            .map_err(|e| engine(&e))?;
+        let rows = snapshot
+            .query(
+                &format!(
+                    "SELECT {} FROM openehr_composition_index \
+                     WHERE ehr_id = $1 AND archetype_id = $2 \
+                     ORDER BY version_uid LIMIT $3 OFFSET $4",
+                    Self::INDEX_COLUMNS
+                ),
+                &[&ehr, &archetype_id, &sql_count(count), &sql_count(offset)],
+            )
+            .map_err(|e| engine(&e))?;
+        snapshot.commit().map_err(|e| engine(&e))?;
+        Ok(openehr_store::RowPage {
+            rows: rows
+                .iter()
+                .map(Self::read_index_row)
+                .collect::<Result<_>>()?,
+            total: usize::try_from(total).unwrap_or(usize::MAX),
+        })
+    }
+}
+
+/// A `LIMIT` or `OFFSET` for PostgreSQL, which takes a `bigint`. A value
+/// past `i64::MAX` saturates: as a limit it means "all of them", and as an
+/// offset "past the end". Both are what the caller asked for, and neither can
+/// wrap into a negative, which PostgreSQL refuses.
+fn sql_count(n: usize) -> i64 {
+    i64::try_from(n).unwrap_or(i64::MAX)
+}
+
+/// The rows a status commit writes: its container when it is new, and the
+/// version. On whichever client the caller holds: its own transaction, or the
+/// one `create_ehr_with_status` has open (`db:H5.23`).
+fn write_status(
+    client: &mut impl GenericClient,
+    ehr_id: &HierObjectId,
+    container_uid: &str,
+    container_created: Option<StoredInstant>,
+    row: &VersionRow,
+) -> Result<()> {
+    if let Some(created) = container_created {
+        let created_utc = PostgresqlStore::utc_seconds_to_timestamptz(created.utc_seconds)?;
+        client
+            .execute(
+                "INSERT INTO openehr_versioned_object \
+                 (uid, ehr_id, rm_type, time_created_text, time_created_utc) \
+                 VALUES ($1, $2, $3, $4, $5)",
+                &[
+                    &container_uid,
+                    &ehr_id.to_string(),
+                    &"EHR_STATUS",
+                    &created.text,
+                    &created_utc,
+                ],
+            )
+            .map_err(|e| engine(&e))?;
+    }
+    insert_version(client, row)
 }
 
 /// Inserts one `openehr_version` row, shared by `commit_composition` and
 /// `commit_ehr_status` — the one piece of SQL identical between them.
-fn insert_version(transaction: &mut postgres::Transaction<'_>, row: &VersionRow) -> Result<()> {
+fn insert_version(transaction: &mut impl GenericClient, row: &VersionRow) -> Result<()> {
     let committed_utc =
         PostgresqlStore::utc_seconds_to_timestamptz(row.audit_time_committed.utc_seconds)?;
     let tag_mac = row.chain.tag_mac.map(|m| m.to_vec());

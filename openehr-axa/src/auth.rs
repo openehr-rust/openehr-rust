@@ -852,4 +852,83 @@ mod tests {
         assert!(message.contains("entry 1"), "{message}");
         assert!(!message.contains("not-a-key"), "{message}");
     }
+
+    /// Each denial is answered as RFC 6750 says. A request with no credentials
+    /// gets a bare challenge; bad credentials get `invalid_token` and a
+    /// description that says which kind, and nothing about the record; a
+    /// service still starting is `503`, not the caller's fault.
+    #[test]
+    fn every_denial_answers_with_its_own_status_and_challenge() {
+        use axum::response::IntoResponse as _;
+        let answer = |denial: Denial| {
+            let response = denial.into_response();
+            let challenge = response
+                .headers()
+                .get(header::WWW_AUTHENTICATE)
+                .map(|v| v.to_str().expect("ASCII").to_owned());
+            (response.status(), challenge)
+        };
+        assert_eq!(
+            answer(Denial::Missing),
+            (StatusCode::UNAUTHORIZED, Some("Bearer".to_owned()))
+        );
+        for (denial, says) in [
+            (Denial::Malformed, "expected Authorization"),
+            (Denial::Expired, "has expired"),
+            (Denial::Invalid, "could not be verified"),
+            (Denial::NoSubject, "could not be verified"),
+        ] {
+            let (status, challenge) = answer(denial);
+            assert_eq!(status, StatusCode::UNAUTHORIZED, "{denial:?}");
+            let challenge = challenge.expect("a challenge");
+            assert!(
+                challenge.starts_with("Bearer error=\"invalid_token\"") && challenge.contains(says),
+                "{denial:?}: {challenge}"
+            );
+        }
+        assert_eq!(
+            answer(Denial::NotReady),
+            (StatusCode::SERVICE_UNAVAILABLE, None)
+        );
+    }
+
+    /// With an issuer configured, only that issuer's tokens verify.
+    #[test]
+    fn a_configured_issuer_refuses_a_token_from_another() {
+        let pair = AsymmetricKeyPair::<V4>::generate().expect("keypair");
+        let verifier = PasetoVerifier::new(&paserk(&pair), Some("https://idp.example"), None, None)
+            .expect("verifier");
+        let mut ours = subject_claims("clinician-4417");
+        ours.issuer("https://idp.example").expect("iss");
+        let mut theirs = subject_claims("clinician-4417");
+        theirs.issuer("https://elsewhere.example").expect("iss");
+
+        assert!(verifier.verify(&signed(&pair, &ours)).is_ok());
+        assert_eq!(
+            verifier.verify(&signed(&pair, &theirs)),
+            Err(Denial::Invalid)
+        );
+        // No issuer at all is not the configured one either.
+        assert_eq!(
+            verifier.verify(&signed(&pair, &subject_claims("clinician-4417"))),
+            Err(Denial::Invalid)
+        );
+    }
+
+    /// A header value that is not visible ASCII cannot be a bearer token, and
+    /// is malformed rather than missing.
+    #[test]
+    fn a_non_ascii_authorization_header_is_malformed() {
+        let pair = AsymmetricKeyPair::<V4>::generate().expect("keypair");
+        let verifier = PasetoVerifier::new(&paserk(&pair), None, None, None).expect("verifier");
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            HeaderValue::from_bytes(b"Bearer \xff").expect("a header value"),
+        );
+        assert_eq!(
+            principal_from_headers(&headers, &verifier).map(|_| ()),
+            Err(Denial::Malformed)
+        );
+    }
 }

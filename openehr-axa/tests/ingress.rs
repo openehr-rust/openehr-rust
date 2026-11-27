@@ -15,7 +15,9 @@
 //! ```
 //!
 //! It mints its own throwaway keypair, starts the stack with that public key,
-//! and tears the stack and its volume down afterwards.
+//! stops and restarts it on the same volume (the record, its chain checkpoint
+//! and the access log must all survive), and tears the stack and its volume
+//! down afterwards.
 
 use openehr_store::conformance;
 use pasetors::{
@@ -107,7 +109,7 @@ impl Drop for Teardown<'_> {
 #[allow(clippy::too_many_lines)]
 #[test]
 #[ignore = "needs podman; builds and starts the compose stack"]
-fn the_deployed_service_enforces_grants_and_records_denials() {
+fn the_deployed_service_enforces_grants_records_denials_and_survives_a_restart() {
     let pair = AsymmetricKeyPair::<V4>::generate().expect("keypair");
     let mut paserk = String::new();
     pair.public.fmt(&mut paserk).expect("PASERK");
@@ -120,16 +122,7 @@ fn the_deployed_service_enforces_grants_and_records_denials() {
     );
     let _teardown = Teardown(&paserk);
 
-    // Ready when metadata answers. It is the one route served without a token.
-    let deadline = Instant::now() + Duration::from_secs(120);
-    loop {
-        let (status, _) = call("GET", "/metadata", "", None);
-        if status == 200 {
-            break;
-        }
-        assert!(Instant::now() < deadline, "the service never became ready");
-        std::thread::sleep(Duration::from_millis(500));
-    }
+    wait_ready();
 
     let ehr = conformance::sample_ehr();
     let ehr_id = ehr.ehr_id().to_string();
@@ -195,22 +188,7 @@ fn the_deployed_service_enforces_grants_and_records_denials() {
 
     // The deployment audits reads (`compose.yaml` sets the path): the denials
     // are in the log on the data volume, as `denied`, and so are the reads.
-    let log = Command::new("podman")
-        .arg("compose")
-        .args([
-            "-p",
-            PROJECT,
-            "exec",
-            "-T",
-            "openehr-axa",
-            "cat",
-            "/home/openehr/data/access.jsonl",
-        ])
-        .current_dir(repository_root())
-        .env("OPENEHR_PASETO_PUBLIC_KEYS", &paserk)
-        .output()
-        .expect("podman runs");
-    let log = String::from_utf8_lossy(&log.stdout);
+    let log = access_log(&paserk);
     let outcomes: Vec<String> = log
         .lines()
         .map(|line| {
@@ -232,4 +210,128 @@ fn the_deployed_service_enforces_grants_and_records_denials() {
         outcomes.len(),
         count("denied")
     );
+
+    // --- Restart on the same volume (release evidence: install and restart
+    // the packaged service on a disposable volume). What was committed before
+    // the stop is there after it, its chain unchanged, and the access log
+    // keeps its earlier records rather than starting over.
+    let (_, text) = call("GET", &path, &reader, None);
+    let body: serde_json::Value = serde_json::from_str(&text).expect("the EHR is JSON");
+    let status_id = body["ehr_status"]["id"]["value"]
+        .as_str()
+        .unwrap_or_else(|| panic!("the EHR names its status: {text}"))
+        .to_owned();
+    let before = operator_task(&paserk, "checkpoint", &status_id);
+    assert!(before.status.success(), "{}", stderr_of(&before));
+    let before = String::from_utf8_lossy(&before.stdout).trim().to_owned();
+    assert!(before.starts_with("entries=1 "), "{before}");
+
+    // The log as the stop finds it: the read above, for the status id, is in it.
+    let at_stop = access_log(&paserk);
+    let down = compose(&paserk, &["down"]);
+    assert!(down.status.success(), "compose down: {}", stderr_of(&down));
+    let up = compose(&paserk, &["up", "-d"]);
+    assert!(up.status.success(), "compose up again: {}", stderr_of(&up));
+    wait_ready();
+
+    let (ok, text) = call("GET", &path, &reader, None);
+    assert_eq!(ok, 200, "the record survives the restart: {text}");
+    let (ok, text) = call(
+        "GET",
+        &format!("{path}/versioned_ehr_status/revision_history"),
+        &reader,
+        None,
+    );
+    assert_eq!(ok, 200, "{text}");
+    let history: serde_json::Value = serde_json::from_str(&text).expect("JSON");
+    assert_eq!(history["items"].as_array().map(Vec::len), Some(1), "{text}");
+
+    let after = operator_task(&paserk, "checkpoint", &status_id);
+    assert!(after.status.success(), "{}", stderr_of(&after));
+    assert_eq!(
+        String::from_utf8_lossy(&after.stdout).trim(),
+        before,
+        "the chain is the one committed before the stop"
+    );
+    let verified = operator_task(&paserk, "verify", &status_id);
+    assert!(
+        verified.status.success(),
+        "verify after restart: {}",
+        stderr_of(&verified)
+    );
+
+    let kept = access_log(&paserk);
+    assert!(
+        kept.starts_with(at_stop.as_str()),
+        "the log was appended to, not replaced"
+    );
+    assert_eq!(
+        kept.lines().count(),
+        at_stop.lines().count() + 2,
+        "plus the two reads after the restart: {kept}"
+    );
+    eprintln!("ingress: restart kept the record, its chain ({before}) and the log");
+}
+
+/// Runs an operator task inside the running container, as an operator would
+/// (`podman compose exec`), against the deployment's own database file.
+fn operator_task(public_key: &str, task: &str, container: &str) -> std::process::Output {
+    Command::new("podman")
+        .arg("compose")
+        .args([
+            "-p",
+            PROJECT,
+            "exec",
+            "-T",
+            "openehr-axa",
+            "openehr-axa",
+            "task",
+            task,
+        ])
+        .arg(format!("container:{container}"))
+        .arg("path:/home/openehr/data/openehr.sqlite3")
+        .current_dir(repository_root())
+        .env("OPENEHR_PASETO_PUBLIC_KEYS", public_key)
+        .output()
+        .expect("podman runs")
+}
+
+fn access_log(public_key: &str) -> String {
+    let out = Command::new("podman")
+        .arg("compose")
+        .args([
+            "-p",
+            PROJECT,
+            "exec",
+            "-T",
+            "openehr-axa",
+            "cat",
+            "/home/openehr/data/access.jsonl",
+        ])
+        .current_dir(repository_root())
+        .env("OPENEHR_PASETO_PUBLIC_KEYS", public_key)
+        .output()
+        .expect("podman runs");
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+fn stderr_of(out: &std::process::Output) -> String {
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
+}
+
+/// Ready when metadata answers. It is the one route served without a token.
+fn wait_ready() {
+    let deadline = Instant::now() + Duration::from_secs(120);
+    loop {
+        let (status, _) = call("GET", "/metadata", "", None);
+        if status == 200 {
+            break;
+        }
+        assert!(Instant::now() < deadline, "the service never became ready");
+        std::thread::sleep(Duration::from_millis(500));
+    }
 }

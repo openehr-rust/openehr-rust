@@ -123,6 +123,39 @@ not happen.
 | `read/latest_version` | 11.9 µs | 11.815 – 11.936 µs |
 | `http/read_composition` | 49.3 µs | 49.163 – 49.487 µs |
 
+## A third measurement: contention in `openehr-axa`
+
+**2026-11-27**, with `openehr-axa/examples/contention.rs` (triage item 7,
+`db:P6.7`). It is a measuring program, not a criterion benchmark, and it is
+run by hand and never gated: `cargo run --release --example contention`.
+
+| Condition | Value |
+| --- | --- |
+| Date | 2026-11-27 |
+| Machine | Apple M4 Max, macOS |
+| Toolchain | rustc 1.100.0 (`0ef1bc386`), release profile |
+| Commit | the working tree after `d255ef8` |
+| Load | an ordinary interactive desktop; nothing was quiesced |
+| Shape | one chart, one composition amended to *size* versions; in-memory SQLite; 4 runtime workers; router driven in process |
+| Mix | each client sends 30 requests in turn: a history page (`_count=20` from the middle), a search page, an AQL query (`LIMIT 10`) |
+| Probe | `GET /metadata` every 5 ms; reported as **lateness**, from when it was due to its answer |
+
+Two runs of each, before and after the `db:D-34` fix (`lock`, above). Ranges
+are across the two runs. The probe has a floor of about 2 ms, timer
+resolution, even with one client.
+
+| Size | Clients | Throughput before | Probe worst before | Throughput after | Probe worst after |
+| --- | --- | --- | --- | --- | --- |
+| 100 | 16 | 6,639–6,713/s | 65–67 ms | 4,190–5,169/s | 4.0–4.7 ms |
+| 1,000 | 16 | 1,308–1,352/s | 346–357 ms | 1,102–1,207/s | 4.0–4.5 ms |
+| 5,000 | 1 | 271–272/s | 2.6 ms | 260/s | 3.2–3.8 ms |
+| 5,000 | 4 | 266–275/s | 402–434 ms | 249–251/s | 4.0–5.7 ms |
+| 5,000 | 16 | 221–276/s | 1.71–1.88 s | 254–259/s | 6.1–7.2 ms |
+
+Per request, one client, 5,000 versions (first run): history page p50 0.44 ms,
+search page 2.2 ms, AQL 8.5 ms. Resident memory peaked at about 31 MB at 5,000
+versions.
+
 ## What the shape says
 
 - **Integrity verification is linear**, at roughly 1.65 µs per version across
@@ -154,6 +187,18 @@ not happen.
   multiple of the store's own cost. Both numbers are against the same
   in-memory connection; nothing here says what a real deployment's network
   hop costs, only what this crate's own code costs once a request reaches it.
+
+- **Throughput does not grow with clients.** On one chart it is the same for
+  1, 4 and 16 clients, at every size. Every store request takes one lock, so
+  the store is the queue. More clients only lengthen it.
+- **A history page is cut by the engine; a search page and AQL are not free.**
+  At 5,000 versions a history page costs about what it does at 100
+  (`db:P6.25`). A search page from the middle costs 2.2 ms, because
+  `OFFSET` still walks the rows before it. AQL costs 8.5 ms, because it reads
+  every candidate's current version within its budget (`db:P6.26`).
+- **Before `db:D-34`, a busy store silenced the health check.** The probe was
+  late by the length of the whole run. A load balancer would have taken the
+  instance out for being busy.
 
 ## What is not measured, and will not be claimed
 

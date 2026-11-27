@@ -182,10 +182,35 @@ pub(crate) fn parse_id(raw: &str) -> Result<HierObjectId, (StatusCode, String)> 
         .map_err(|_| (StatusCode::BAD_REQUEST, "malformed identifier".to_owned()))
 }
 
+/// Takes the store lock (`db:O10.21`, `db:D-34`).
+///
+/// Store work is synchronous and runs under this one `std::sync::Mutex`. A
+/// handler that simply waited for it blocked its runtime worker, and with every
+/// worker waiting, a request that needs no store (`/metadata`, the health
+/// check) could not be scheduled: 1.7–1.9 s late under 16 clients
+/// (`examples/contention.rs`, `BENCHMARKS.md`). So an uncontended lock is
+/// taken at once, and a contended one is waited for in `block_in_place`, which
+/// hands this worker's other tasks to another thread. Only on a multi-thread
+/// runtime: `block_in_place` panics on a current-thread one, the kind tests use.
+///
+/// Measured against `spawn_blocking` for the whole handler body only in the
+/// sense that this was the smaller change and closed the finding. The holder
+/// still runs its SQL on a worker, so one worker per in-flight store request is
+/// still occupied.
 pub(crate) fn lock<T>(
     handle: &std::sync::Mutex<T>,
 ) -> Result<std::sync::MutexGuard<'_, T>, (StatusCode, String)> {
-    handle.lock().map_err(|_| {
+    let multi_thread = tokio::runtime::Handle::try_current()
+        .is_ok_and(|h| h.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread);
+    let acquired = match handle.try_lock() {
+        Ok(guard) => Ok(guard),
+        Err(std::sync::TryLockError::Poisoned(e)) => Err(e),
+        Err(std::sync::TryLockError::WouldBlock) if multi_thread => {
+            tokio::task::block_in_place(|| handle.lock())
+        }
+        Err(std::sync::TryLockError::WouldBlock) => handle.lock(),
+    };
+    acquired.map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             "store lock poisoned".to_owned(),

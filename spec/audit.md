@@ -163,7 +163,7 @@ exists. It runs, on every push and pull request:
 | `layering` | that `openehr` and `openehr-store` depend inward only, dev-dependencies included, against a crate list **derived** from the tree (**W-13**) |
 | `claims` | that no engine crate claims Schema or above without a `schema` job backing it (the check list emptied 2026-09-06, once `openehr-oracle` and then `openehr-mssql` each got one); that the **library** matrix covers every requirement exactly once, and that both conformance matrices do not contradict themselves — the databases matrix has no exactly-once check: it is five topic tables in which one requirement can legitimately appear more than once; that every one of the databases matrix's 221 requirements is mentioned at least once (`scripts/check-databases-matrix-coverage.py`, wired in 2026-09-10 once `db:D-11`'s own ten-batch assessment closed it — a mention is not a mark, so this floor does not replace reading the matrix); that this file's summary paragraph counts itself correctly; that the licence expression is harmonized across every crate (`W0.22`); that no requirement marked satisfied calls itself unverified (**W-17**); that the documentation's countable claims match the tree (`scripts/check-docs.py`); and that `openehr/spec/corpus-index.md` — a reverse index from a requirement or finding id to where a corpus run cites it — is current (`scripts/generate-corpus-index.py`) |
 | `trademarks` | `scripts/check-trademarks.py`: every root document and every published crate's rustdoc that uses the openEHR mark in prose carries the professionalization rule 5 notice verbatim (added 2026-08-26, once the changes it was deferred behind had landed) |
-| `coverage` | Production-source line and function coverage of `openehr`, `openehr-store` and `openehr-sqlite`, each in its own workspace under nightly `cargo llvm-cov` (`W0.41`). A crate in `coverage-floor.tsv` may not fall below its floor and must lower it when it improves (`W0.41a`, a ratchet toward 100%); a crate not listed owes 100%. Only the crate's own `src/` counts. Does not yet cover the other crates (`W-23`) |
+| `coverage` | Production-source line and function coverage of `openehr`, `openehr-store`, `openehr-sqlite` and `openehr-axa`, each in its own workspace under nightly `cargo llvm-cov` (`W0.41`). A crate in `coverage-floor.tsv` may not fall below its floor and must lower it when it improves (`W0.41a`, a ratchet toward 100%); a crate not listed owes 100%. Only the crate's own `src/` counts. Does not yet cover the other crates (`W-23`) |
 | `format` | `cargo fmt --check` in all eighteen workspaces against a crate list derived from the tree; added 2026-11-26, after two fuzz targets were found unformatted by an external review although `test` installed rustfmt |
 | `mutants` | `cargo-mutants --in-diff` over the lines a push or a pull request changed, scoped to the diff because a full run is hours per crate. Pull-request-only until **W-18**. `openehr-sqlite` uses `--in-place`, not the isolated copy every other crate in the matrix gets, since its sibling dev-dependencies do not resolve inside one (**W-20**) |
 
@@ -1175,7 +1175,14 @@ external `#[non_exhaustive]` enums. Floors at this date: `openehr` 172 lines /
 SQLite went from 19 uncovered functions to 1 partly through tests
 (`uncovered_paths.rs`, `read_only.rs`) and partly by removing 34 identical
 error closures in favour of one adapter, which shrank the function count.
-Seven further workspaces are not yet measured. Found while covering `cadl.rs` (2026-11-24): the refusal tables
+**Progress 2026-11-27.** `openehr-axa` is measured and gated (floor 72 lines /
+32 functions). It started at 89.18% of lines by `cargo llvm-cov`'s count, which
+includes the inline test modules; by production lines alone it reached
+95.05% (71 of 1,434 uncovered). The tests that got it there found
+`db:D-33` (EHR creation is not atomic) and `lib:A-87` (an untyped party
+decodes as the record subject). The binary's refusals are measured through
+the real executable (`tests/startup.rs`), whose profiles the gate collects.
+Six further workspaces are not yet measured. Found while covering `cadl.rs` (2026-11-24): the refusal tables
 in its tests assert only `is_err()`, and their `allow_archetype` entries begin at the
 top level, where a slot is not legal, so they failed at offset 15 and never reached the
 slot parser; the new test `refusals_under_an_attribute_name_the_defect` asserts the

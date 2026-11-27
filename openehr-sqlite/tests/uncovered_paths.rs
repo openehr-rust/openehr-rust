@@ -273,3 +273,47 @@ fn a_rival_with_the_same_identity_is_a_duplicate_version() {
         "{error:?}"
     );
 }
+
+/// `db:D-33`'s aside. A trigger's `RAISE(ABORT)` is a `ConstraintViolation`
+/// like a duplicate key, and was reported as "contribution already exists". It
+/// is an engine failure, and only the primary key's collision is a conflict.
+#[test]
+fn a_refused_contribution_insert_is_an_engine_error_unless_the_id_is_taken() {
+    let mut store = SqliteStore::in_memory().expect("open");
+    store.install().expect("install");
+    let ehr = conformance::sample_ehr();
+    store.create_ehr(&ehr).expect("ehr");
+    let contribution = conformance::sample_contribution_of(CONTRIBUTION, &[1], &[]);
+
+    store
+        .connection()
+        .execute_batch(
+            "CREATE TRIGGER fault_contribution BEFORE INSERT ON openehr_contribution \
+             BEGIN SELECT RAISE(ABORT, 'injected'); END;",
+        )
+        .expect("trigger");
+    let refused = store.create_contribution(ehr.ehr_id(), &contribution);
+    assert!(
+        matches!(refused, Err(StoreError::Engine { .. })),
+        "a trigger's refusal is the engine's, got {refused:?}"
+    );
+
+    store
+        .connection()
+        .execute_batch("DROP TRIGGER fault_contribution;")
+        .expect("drop");
+    store
+        .create_contribution(ehr.ehr_id(), &contribution)
+        .expect("the id was never taken");
+    let again = store.create_contribution(ehr.ehr_id(), &contribution);
+    assert!(
+        matches!(
+            again,
+            Err(StoreError::Conflict {
+                kind: "contribution",
+                ..
+            })
+        ),
+        "a taken id is a conflict, got {again:?}"
+    );
+}

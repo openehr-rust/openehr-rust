@@ -248,6 +248,20 @@ Added 2026-08-02, when `openehr-axa` gained an update endpoint. These bind a
   Found reproduced over HTTP: an `EHR` created naming another chart's status
   container was served that chart's `EHR_STATUS` with `200`.
 
+- **H5.23** *(added 2026-11-27, `D-33`)* Creating an `EHR` with its first
+  `EHR_STATUS` is **one change**. The store MUST offer an operation that
+  writes the `EHR`, the `CONTRIBUTION` that declares the status, and the
+  status version together, or writes none of them. Every refusal the three
+  steps make on their own still applies, and any of them, or an engine
+  failure part-way, leaves no row behind.
+
+  `S1.22` requires a service to create the record and its status together,
+  and nothing else repairs a record left without one: its status cannot be
+  read, a retried creation is a conflict, and there is no route that creates
+  a status for an existing `EHR`. Before this, a service made three calls,
+  each its own transaction, and an engine failure after the first left
+  exactly that record.
+
 - **H5.22** *(added 2026-11-26, `D-26`)* A version commit names the
   `CONTRIBUTION` it belongs to, and the store MUST refuse it, writing
   nothing, unless:

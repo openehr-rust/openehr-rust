@@ -15,15 +15,15 @@ implements it and the test that exercises it; the specification sources
 re-fetched from `specifications.openehr.org` and `openEHR/specifications-TERM`;
 `cargo clippy --all-targets` and `cargo test` run clean.
 
-**85 findings, 85 in the table below: 8 High, 47 Medium, 30 Low. 78 fixed or
+**86 findings, 86 in the table below: 8 High, 47 Medium, 31 Low. 79 fixed or
 classified, 7 open.** These counts are checked against the table by CI
 (`claims` / *the audit summary counts itself correctly*) — if this paragraph
 and the table disagree, the table is correct (`W0.3`: never claim more than is
 verified), and the check should have failed. Every one of the 7 open findings
 is open by a stated reason rather than by omission — **A-40** is the largest,
-an entire specification section in force with no code behind it — **A-86**
-is a reproduced clinical defect with no fix yet (open for that reason, not by
-decision) — and the rest: **A-02** and **A-08**
+an entire specification section in force with no code behind it — **A-87**
+is a decode that names the record subject for an untyped party, open pending
+a decision on the library's inference rule — and the rest: **A-02** and **A-08**
 are declared departures the crate does not intend to close (**A-19** is the same
 kind of departure, and is *classified*, which the count above treats as closed); **A-05**, **A-10**,
 **A-30** are recorded limitations or residuals with the reasoning
@@ -173,7 +173,8 @@ in the documentation, which is the class this register most exists to catch.
 | A-83 | Medium | `DateTime::semantic_cmp` ordered local calendar dates before applying their UTC offsets, and `Time::semantic_cmp` truncated chronology after three fractional digits. Equal instants across midnight could compare unequal, while distinct sub-millisecond instants could compare equal (`D3.18`). | **fixed** — compare the offset-adjusted calendar minute, second, and every significant fractional digit. |
 | A-84 | Medium | `Real::from_f64` accepted `NaN` and infinities, whose authoritative text is not a JSON number; converting that `Real` into `serde_json::Number` silently substituted `0` after both parses failed (`base/real.rs:148-155`). Reference Model constructors rejected such a `Real` before it reached a document, but the public primitive conversion itself turned an invalid value into a plausible clinical number. Found by the production-only coverage pass: the fallback was the file's only uncovered function. | **fixed** — `D3.18g` chooses construction-time refusal: `from_f64` and `TryFrom<f64>` return a PHI-safe error for all three non-finite classes, infallible `From<f64>` is removed, and serialization reconstructs only from authoritative number text with no substitute. A syntactically valid out-of-range JSON number still round-trips by that text. |
 | A-85 | Medium | `am::cadl`'s ISO-8601 scanner included every comma in a temporal token, so the comma separating two `C_DATE` values was handed to `Date::from_str` as part of the first value and every temporal primitive list was effectively unreadable. Removing comma wholesale would instead reject the ISO-8601 comma decimal sign required by `D3.10b`. Found by the production-only external `parse_definition` coverage suite. | **fixed** (`K15.33`) — the scanner consumes a comma only when the surrounding text makes it a fractional-second decimal sign; otherwise it remains the cADL list token. Tests cover no-whitespace lists and comma-decimal time, date-time, and duration values. |
-| A-86 | High | `DvOrdered::is_abnormal` compares a quantity's magnitude as if it were exact: `magnitude_status` (`<`, `>`, `~`…) is ignored, so against a 3–5 mg/L range `< 4 mg/L` and `> 4 mg/L` both answer "inside" (`Some(false)`), and `< 6 mg/L` answers "outside" although the value could be 4. The validator's flag-agreement check (`D3.24b`) uses the same answer. Found by an external clinical-safety audit; reproduced. | **fixed 2026-11-26** (not committed): `D3.14b`, `DvOrdered::range_position`, `RangePosition`/`Indeterminate`; `is_abnormal` is now "not established inside" |
+| A-86 | High | `DvOrdered::is_abnormal` compares a quantity's magnitude as if it were exact: `magnitude_status` (`<`, `>`, `~`…) is ignored, so against a 3–5 mg/L range `< 4 mg/L` and `> 4 mg/L` both answer "inside" (`Some(false)`), and `< 6 mg/L` answers "outside" although the value could be 4. The validator's flag-agreement check (`D3.24b`) uses the same answer. Found by an external clinical-safety audit; reproduced. | **fixed** (2026-11-26): `D3.14b`, `DvOrdered::range_position`, `RangePosition`/`Indeterminate`; `is_abnormal` is now "not established inside" |
+| A-87 | Low | `PartyProxy`'s `Deserialize` infers the variant from the fields present when `_type` is absent, and an object with none of them is `PARTY_SELF`. So `{}` decodes as the record subject, and so does `[]`: serde reads a struct whose fields are all optional from an empty sequence. Found 2026-11-27 by `openehr-axa`'s damaged-row tests: a stored committer overwritten with `{}` or `[]` reads back as the patient instead of failing (`db:D-28`). Nothing this tree writes lacks `_type`. | **open** — whether an untyped `PARTY_PROXY`, an abstract type, should be refused rather than inferred is a decision about the inference rule documented at `rm/common.rs:697`; an empty array should be refused either way |
 
 
 ---
@@ -4881,7 +4882,7 @@ the latter makes a future boundary regression local to the scanner.
 
 ## A-86 — a qualified lab result is judged against its range as if exact
 
-**Severity: High. Status: open.**
+**Severity: High. Status: fixed 2026-11-26.**
 
 **Found 2026-11-25 by an external clinical-safety audit; reproduced the same
 day** with `DvQuantity::new(4.0, "mg/L").with_magnitude_status(…)
@@ -4942,3 +4943,39 @@ independently; the validator's `D3.24b` check and any display use the same
 answer; and tests cover exact endpoints, qualified bounds that overlap, wholly
 outside, incomparable units, and no range. Unit *conversion* stays outside the
 RM library (`01-scope.md`).
+
+---
+
+## A-87 — an untyped party decodes as the record subject
+
+**Severity: Low. Status: open.**
+
+**Found 2026-11-27** while testing `openehr-axa`'s handling of damaged stored
+rows (`db:D-28`). A version's committer was overwritten in SQLite, behind the
+store, and the revision history read back:
+
+| stored committer | decodes as |
+| --- | --- |
+| `{}` | `PARTY_SELF` |
+| `[]` | `PARTY_SELF` |
+| `"x"`, `1`, `null` | refused |
+| `{"_type":"NOPE"}` | refused: not a `PARTY_PROXY` class |
+
+`PartyProxy` is abstract, so a document that names one should carry `_type`.
+When it does not, the library infers the variant from the fields present
+(`rm/common.rs:697`): `relationship` means `PARTY_RELATED`, `name` or
+`identifiers` mean `PARTY_IDENTIFIED`, and **anything else is
+`PARTY_SELF`**. An empty object has nothing else, and serde reads the wire
+struct, whose fields are all optional, from an empty array as well.
+
+For a committer this is a misattribution, not a gap: a damaged row says the
+patient made the change. Nothing in this tree writes a party without `_type`,
+so only damage or a foreign writer reaches it.
+
+**Not fixed here, by decision pending.** The inference rule is documented and
+deliberate (it reads producers that omit `_type` where the type is implied).
+Two changes are candidates: refuse an object with none of the distinguishing
+fields and no `_type`, and refuse a sequence outright. The second is safe on
+its own; the first changes what a lenient reader accepts. `openehr-axa`'s
+test `a_status_revision_history_over_a_damaged_row_is_500_not_a_partial_list`
+uses a string committer for that reason and names this finding.

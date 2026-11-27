@@ -66,6 +66,13 @@ fn a_version_is_committed_only_into_its_declared_contribution() {
 }
 
 #[test]
+fn an_ehr_and_its_first_status_are_created_together_or_not_at_all() {
+    // `db:H5.23`, `db:D-33`.
+    let mut store = SqliteStore::in_memory().expect("open");
+    conformance::run_atomic_creation(&mut store).expect("atomic creation suite");
+}
+
+#[test]
 fn a_page_is_cut_by_the_engine_and_matches_the_whole() {
     // `db:P6.25`: `SqliteStore` overrides both paged lookups with
     // `LIMIT`/`OFFSET`, and the story holds them to the unpaged answer.

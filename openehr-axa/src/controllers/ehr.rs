@@ -205,14 +205,14 @@ fn create_record(
             .map_err(|r| status_for(&openehr_store::StoreError::Invalid(r)))?;
     }
 
+    // One change: the record, its contribution and its first status, or
+    // nothing (`db:H5.23`). Three calls left a statusless record behind when
+    // the second or third failed, and a retry could only answer `409`
+    // (`db:D-33`).
     let handle = store(ctx)?;
     let mut guard = lock(&handle)?;
-    guard.create_ehr(&ehr).map_err(|e| status_for(&e))?;
     guard
-        .create_contribution(ehr_id, &contribution)
-        .map_err(|e| status_for(&e))?;
-    guard
-        .commit_ehr_status(ehr_id, &version, &contribution.uid().to_string())
+        .create_ehr_with_status(&ehr, &contribution, &version)
         .map_err(|e| status_for(&e))?;
 
     let mut headers = HeaderMap::new();
@@ -234,12 +234,7 @@ async fn read(
     Path(ehr_id): Path<String>,
 ) -> Reply<Ehr> {
     let handle = store(&ctx)?;
-    let guard = handle.lock().map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "store lock poisoned".to_owned(),
-        )
-    })?;
+    let guard = lock(&handle)?;
     let id = ehr_id
         .parse()
         .map_err(|_| (StatusCode::BAD_REQUEST, "malformed ehr_id".to_owned()))?;
@@ -268,4 +263,38 @@ pub fn routes() -> Routes {
         .prefix("/openehr/v1/ehr")
         .add("/", post(create))
         .add("/{ehr_id}", get(read).put(create_named))
+}
+
+#[cfg(test)]
+mod system_id_tests {
+    use super::{DEFAULT_SYSTEM_ID, SYSTEM_ID_VAR, system_id_from};
+    use std::ffi::OsString;
+
+    fn from(value: Option<&str>) -> Result<String, String> {
+        system_id_from(&|name| {
+            assert_eq!(name, SYSTEM_ID_VAR);
+            value.map(OsString::from)
+        })
+        .map(|id| id.0)
+    }
+
+    /// Unset is the documented default; a usable id is taken as given.
+    #[test]
+    fn the_system_id_defaults_when_unset_and_is_taken_as_given_otherwise() {
+        assert_eq!(from(None).as_deref(), Ok(DEFAULT_SYSTEM_ID));
+        assert_eq!(
+            from(Some("ehr1.example.org")).as_deref(),
+            Ok("ehr1.example.org")
+        );
+    }
+
+    /// An id that could not name a container or a version's creating system
+    /// refuses startup, rather than minting identifiers that do not parse back.
+    #[test]
+    fn an_unusable_system_id_refuses_startup() {
+        for bad in ["two words", "a::b"] {
+            let message = from(Some(bad)).expect_err(bad);
+            assert!(message.contains(SYSTEM_ID_VAR), "{message}");
+        }
+    }
 }

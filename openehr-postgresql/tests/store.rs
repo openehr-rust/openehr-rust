@@ -120,8 +120,17 @@ fn a_version_is_committed_only_into_its_declared_contribution() {
     conformance::run_contribution_membership(&mut store).expect("membership suite");
 }
 
-/// `db:P6.25`: the paging suite. `PostgresqlStore` does not override the
-/// paged lookups yet, so this checks the default slice against a real server.
+/// `db:H5.23`, `db:D-33`: an EHR and its first status in one transaction.
+#[test]
+#[ignore = "needs a real PostgreSQL server, see this file's own module doc"]
+fn an_ehr_and_its_first_status_are_created_together_or_not_at_all() {
+    let mut store = connect();
+    reset(&mut store);
+    conformance::run_atomic_creation(&mut store).expect("atomic creation suite");
+}
+
+/// `db:P6.25`: the paging suite, against `PostgresqlStore`'s own paged
+/// lookups (one `REPEATABLE READ` snapshot per page).
 #[test]
 #[ignore = "needs a real PostgreSQL server, see this file's own module doc"]
 fn a_page_matches_the_whole() {

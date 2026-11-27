@@ -163,3 +163,51 @@ pub fn routes() -> Routes {
         .prefix("/openehr/v1/query")
         .add("/aql", post(query))
 }
+
+#[cfg(test)]
+mod conversion_tests {
+    use super::{Cell, Literal, cell_to_json, json_to_literal};
+    use axum::http::StatusCode;
+    use serde_json::json;
+
+    /// Every JSON scalar becomes the literal of its own kind. An integer stays
+    /// an integer: `2` compared as `2.0` would be a different operand.
+    #[test]
+    fn a_query_parameter_keeps_its_json_kind() {
+        let literal = |v: serde_json::Value| json_to_literal("p", &v).expect("converts");
+        assert!(matches!(literal(json!("x")), Literal::String(s) if s == "x"));
+        assert!(matches!(literal(json!(true)), Literal::Boolean(true)));
+        assert!(matches!(literal(json!(7)), Literal::Integer(7)));
+        assert!(
+            matches!(literal(json!(2.5)), Literal::Number(n) if (n - 2.5).abs() < f64::EPSILON)
+        );
+        // Past `i64`, still a number, not a refusal and not a wrapped integer.
+        assert!(matches!(literal(json!(u64::MAX)), Literal::Number(_)));
+    }
+
+    /// An array, an object or `null` is not an operand, and the refusal names
+    /// the parameter so the caller can find it.
+    #[test]
+    fn a_query_parameter_that_is_not_a_scalar_is_refused_by_name() {
+        for value in [json!([1]), json!({"a": 1}), serde_json::Value::Null] {
+            let (status, message) = json_to_literal("ehrUid", &value).expect_err("refused");
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+            assert!(message.contains("query_parameters.ehrUid"), "{message}");
+        }
+    }
+
+    /// The inverse, cell by cell. A non-finite number has no JSON spelling and
+    /// answers `null` rather than failing the whole response.
+    #[test]
+    fn a_result_cell_keeps_its_kind_in_json() {
+        assert_eq!(cell_to_json(&Cell::Str("x".to_owned())), json!("x"));
+        assert_eq!(cell_to_json(&Cell::Integer(-3)), json!(-3));
+        assert_eq!(cell_to_json(&Cell::Number(1.5)), json!(1.5));
+        assert_eq!(
+            cell_to_json(&Cell::Number(f64::NAN)),
+            serde_json::Value::Null
+        );
+        assert_eq!(cell_to_json(&Cell::Boolean(false)), json!(false));
+        assert_eq!(cell_to_json(&Cell::Null), serde_json::Value::Null);
+    }
+}

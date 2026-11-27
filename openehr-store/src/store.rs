@@ -361,6 +361,36 @@ pub trait Store {
         contribution_uid: &str,
     ) -> Result<CommitOutcome>;
 
+    /// Creates an `EHR`, the contribution that declares its first
+    /// `EHR_STATUS`, and that status version, as **one change**
+    /// (`db:H5.23`): all three are written, or none is.
+    ///
+    /// Each step refuses exactly as its own method does
+    /// ([`Store::create_ehr`], [`Store::create_contribution`],
+    /// [`Store::commit_ehr_status`] under `contribution.uid()`), and a
+    /// refusal or an engine failure at any step leaves no row from any of them.
+    /// Three separate calls are not equivalent: an engine failure after the
+    /// first leaves a record with no status, which nothing can then repair
+    /// (`db:D-33`).
+    ///
+    /// No default body, on purpose. The only body every engine could share is
+    /// the three calls in sequence, which is the defect.
+    ///
+    /// # Errors
+    ///
+    /// The first error of the three steps, after the earlier steps' rows are
+    /// removed: [`crate::StoreError::Conflict`] for an existing `EHR` or
+    /// contribution, [`crate::StoreError::Invalid`],
+    /// [`crate::StoreError::Commit`] or
+    /// [`crate::StoreError::NotInContribution`] for the status, or
+    /// [`crate::StoreError::Engine`].
+    fn create_ehr_with_status(
+        &mut self,
+        ehr: &Ehr,
+        contribution: &Contribution,
+        status: &Version<EhrStatus>,
+    ) -> Result<CommitOutcome>;
+
     /// Reads one version by identifier.
     ///
     /// # Errors

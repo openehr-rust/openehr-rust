@@ -17,7 +17,8 @@
 //!   witness's `last_version`.
 //!
 //! It measures elapsed time for the record and asserts nothing about it
-//! (`W0.35`). Not covered: a large database, PostgreSQL's `pg_dump`/PITR, or
+//! (`W0.35`). Not covered: a large database (PostgreSQL's drill is
+//! `openehr-postgresql/tests/restore_drill.rs`), or
 //! a restore across schema versions (refused by `O10.15`).
 
 use openehr::base::HierObjectId;

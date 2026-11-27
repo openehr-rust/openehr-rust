@@ -64,6 +64,75 @@ resolving.
 
 ## Open findings
 
+### D-34 — Under load, `openehr-axa`'s health check waits for the store — **Medium, fixed** (2026-11-27, not yet committed)
+
+**Found 2026-11-27 by `openehr-axa/examples/contention.rs`** (triage item 7).
+Handlers do their store work synchronously, under one `std::sync::Mutex`, on
+the async runtime's workers. A handler waiting for that lock blocked its
+worker. With four workers and sixteen clients, all four were either holding
+the lock or waiting for it. `GET /openehr/v1/metadata` takes no lock, yet a
+probe sent every 5 ms completed 4 times in 1.74 s, and the probe that came due
+during the run answered 1.71 s and 1.88 s late in two runs. That is the whole
+run.
+
+**Fixed** against the new `O10.21`. `controllers::composition::lock` takes an
+uncontended lock at once and waits for a contended one in
+`tokio::task::block_in_place`, on a multi-thread runtime only. The one handler
+that locked directly (`GET /ehr/{ehr_id}`) uses it now. The worst lateness
+measured at the same load is 6–7 ms. Throughput on a 5,000-version chart is
+unchanged within run-to-run noise. On a 100-version chart under sixteen
+clients it is about 30% lower, the cost of handing off contended waiters (all
+in `BENCHMARKS.md`).
+- **Test.** `tests/http.rs`
+  `metadata_answers_while_a_store_request_waits_for_the_lock` uses one
+  worker, holds the lock on another thread, and requires `/metadata` to
+  answer while a store request waits. It passes, and it fails on the old
+  `lock` with "/metadata answered only after the store request".
+- **Not done.** The lock holder's SQL still runs on a worker. `spawn_blocking`
+  for whole handler bodies, or a dedicated store thread, would free that
+  worker too. Neither is measured, and this finding does not need them.
+
+### D-33 — An EHR whose initial status fails to commit is left behind, statusless — **Medium, fixed** (2026-11-27, not yet committed)
+
+**Found 2026-11-27 by a fault-injection test** written for `openehr-axa`'s
+coverage (`tests/http.rs`,
+`an_ehr_whose_initial_status_cannot_be_committed_is_not_left_behind`,
+`#[ignore]`d against this finding). `POST /ehr` and `PUT /ehr/{ehr_id}` create
+the record in three `Store` calls: `create_ehr`, `create_contribution`,
+`commit_ehr_status`. Each is its own transaction. With a trigger refusing the
+contribution insert, `PUT /ehr/{id}` fails, and `GET /ehr/{id}` then answers
+`200` with an EHR that has no `EHR_STATUS` version. A retried `PUT` is `409`,
+so the record cannot be repaired through the API: its status cannot be read
+(`404`) and there is no route to create one.
+
+`db:S1.22` makes creation one change: the EHR and its initial status, or
+nothing. Validation already runs before the first write, so only an engine
+failure (disk full, lock timeout, a constraint) reaches the gap. It is still a
+partial write of the kind `db:D-26`'s acceptance case forbids ("a refused
+declaration or commit leaves no partial change").
+
+**Fixed 2026-11-27** against the new `H5.23`.
+- **The operation.** `Store::create_ehr_with_status`, with no default body
+  (the only shareable one is the defect). SQLite runs the three steps in one
+  savepoint, and `commit_ehr_status` now opens a savepoint rather than
+  `BEGIN`, so it nests. PostgreSQL runs them in one transaction, and the
+  status commit writes inside it rather than opening its own. The owner
+  store removes the earlier steps' rows when a later one refuses.
+- **The story.** `conformance::run_atomic_creation`: steps two and three
+  each refuse in turn, and nothing from any step remains. The refused
+  contribution id is then reused successfully, and a second creation is a
+  conflict. It passes on the owner store, SQLite, and PostgreSQL live
+  (29/29). Negative controls (keep on failure, and `COMMIT` in place of
+  `ROLLBACK`) fail on all three.
+- **The service.** `openehr-axa`'s `create_record` calls it. The fault test is
+  no longer `#[ignore]`d: the creation answers `5xx` and the record is absent.
+
+**Aside, same test, also fixed.** SQLite reports the injected
+`RAISE(ABORT, …)` as `SQLITE_CONSTRAINT_TRIGGER`, which `openehr-sqlite`
+mapped to `contribution already exists` and `409`, as it did any constraint.
+Only the primary key's collision is a conflict now, and anything else is an
+engine error (`tests/uncovered_paths.rs`; mutation-checked).
+
 ### D-31 — The `EHR_STATUS` read answers in this service's version view, not as the resource ITS-REST defines — **Medium, fixed** (2026-11-27, not yet committed)
 
 **Found 2026-11-27 by the conformance run** (`openehr-axa/spec/conformance-runs.md`,
@@ -547,7 +616,7 @@ keeps only an optional display name, so two clinicians with the same name are
 indistinguishable later (`PHI.md` claims). Not checked here; it stays in
 `tasks.md`.
 
-### D-20 — An amended composition appears once per version in an AQL result — **High, open** (fix landed, CI pending)
+### D-20 — An amended composition appears once per version in an AQL result — **High, fixed** (2026-11-27, not yet committed)
 
 **Found 2026-11-25 by an external clinical-safety audit, reproduced here on
 SQLite.** One `COMPOSITION` container, committed and then amended twice,
@@ -602,6 +671,17 @@ paging applied — **not** by deduplicating on displayed value, which would
 merge two real encounters with the same name. The shared suite gets a story
 with an original, two amendments, a second encounter with the same display
 name, and a withdrawal, and SQLite and PostgreSQL both pass it.
+
+**Closed 2026-11-27.** The story now has the two cases it lacked. (4) The
+twice-amended container is withdrawn, and then answers nothing although three
+of its index rows still name the archetype. (5) A container amended from
+`encounter` to `report` answers the `report` query once and the `encounter`
+query not at all, through its stale first index row. Both pass on the owner
+store, SQLite, and live PostgreSQL 18 (`verify-store.sh`, 29/29, including
+`the_bounded_aql_executor_passes_against_a_real_database`). Negative control:
+with the current-archetype check disabled, SQLite fails case (5) by name.
+Disabling the deletion skip fails the suite too, but on an earlier deleted
+container, so it does not single out case (4).
 
 ### D-22 — The verified committer's identity is checked and then not stored — **High, fixed** (2026-11-26, not yet committed)
 

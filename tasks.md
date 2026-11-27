@@ -1753,8 +1753,10 @@ recommended until the first three close):
       version id: no type check); `PUT` under a nonexistent EHR is refused
       404, under a second *real* EHR untested (needs a two-EHR fixture —
       build that first, it is the acceptance test too). Fix not started.* — **M**
-- [ ] **AQL returns an amended composition twice (High, reproduced on
-      SQLite per the report).** One commit → one row; after a successor in
+- [x] **AQL returns an amended composition twice (High, reproduced on
+      SQLite per the report).** *Closed 2026-11-27: the withdrawal and
+      archetype-changing cases added; owner store, SQLite and live PostgreSQL
+      pass (`db:D-20`).* One commit → one row; after a successor in
       the same container the same query returns two rows of the *current*
       content. Resolve each distinct container once, then match archetype on
       current content, then filter/order/page. Do not dedupe by displayed
@@ -1862,7 +1864,8 @@ before acting). Items worth keeping, each to be checked against the tree first:
 
 Taken from an external production-readiness review (GPT-6.2 Astra, high)
 of revision `ec029cf`: a one-page summary in `docs/audits/` (since removed)
-and its full queue, `audits/2026-11-25-production-readiness.md`. The review
+and its full queue, `audits/2026-11-25-production-readiness.md` (removed
+2026-11-27; every row of it is an item below). The review
 already registered `db:D-23`–`db:D-30` in `spec/databases/audit.md` and
 corrected six rows of the database matrix; those register entries own the
 evidence and acceptance cases, and nothing here restates them. **Decision it
@@ -1938,8 +1941,11 @@ authorization, cost, interoperability.
       drill done 2026-11-26 for SQLite (`openehr-sqlite/tests/restore_drill.rs`):
       a `VACUUM INTO` backup taken under a live store restores read-only, its
       chain re-verifies, its checkpoint equals the witness, and a later commit
-      is absent. Measured: about 1 ms each way, on a tiny fixture. Left:
-      PostgreSQL (`pg_dump`/PITR) and a realistically sized store.* The drill
+      is absent. Measured: about 1 ms each way, on a tiny fixture. PostgreSQL
+      done 2026-11-27 (`openehr-postgresql/tests/restore_drill.rs`, run by
+      `verify-store.sh`): `pg_dump -Fc` under a connected store, restore into a
+      new database opened read-only, same checks; negative control run. Left:
+      WAL point-in-time recovery and a realistically sized store.* The drill
       as specified: restore a populated backup, read
       a historical version, recompute content and chain, compare count and
       head with a witness kept outside the database; record recovery time
@@ -1963,8 +1969,14 @@ authorization, cost, interoperability.
       `run_paging`; `openehr-axa` uses them. AQL work budget done the same day
       (`db:P6.26`, a refusal with zero content read, mutation-checked). In
       passing, `openehr-store`'s `mutants.toml` stopped excluding `aql.rs`, whose
-      reason for exclusion was stale. Left: PostgreSQL overrides, the contention
-      measurements, and `spawn_blocking`.* History
+      reason for exclusion was stale. PostgreSQL overrides done 2026-11-27
+      (one `REPEATABLE READ` snapshot per page; live 28/28, negative control
+      run). Contention measured 2026-11-27
+      (`openehr-axa/examples/contention.rs`, `BENCHMARKS.md`): throughput is
+      flat in clients (one lock), and the health check waited for the whole
+      run, up to 1.9 s (`db:D-34`, fixed: a contended lock is waited for in
+      `block_in_place`; `db:O10.21`). Left: `spawn_blocking` or a store thread
+      for the holder's SQL, unmeasured and not needed by the finding.* History
       and search collect every match before paging; AQL gathers, reads
       current versions and sorts before its `LIMIT`; synchronous store and
       audit work runs in async handlers under one mutex. Push paging into
@@ -1985,18 +1997,36 @@ authorization, cost, interoperability.
       status, supplied status, readback and an invalid request against this
       service and EHRbase through one runner, bodies and headers included;
       publish the transcript in `openehr-axa/spec/conformance-runs.md`. — **M**
-- [ ] **Release evidence after remediation.** Complete `db:D-20`'s
+- [ ] **Release evidence after remediation.** ~~Complete `db:D-20`'s
       amendment, withdrawal and changed-archetype fixtures on SQLite and live
-      PostgreSQL at the candidate revision; install and restart the packaged
-      service on a disposable volume; extend the coverage ratchet (`W-23`)
-      to `openehr-axa` and live PostgreSQL, where these findings arose. Keep
+      PostgreSQL~~ *(done 2026-11-27; rerun at the candidate revision)*; ~~extend the coverage ratchet to
+      `openehr-axa`~~ *(done 2026-11-27: floor 72/32, 95.05% of production
+      lines; it found `db:D-33` and `lib:A-87`)*; ~~install and restart the packaged
+      service on a disposable volume~~ *(done 2026-11-27: `openehr-axa/tests/
+      ingress.rs` restarts the Compose stack on its volume and checks the
+      record, its revision history, an in-container `task checkpoint` taken
+      before and after, `task verify`, and that the access log was appended to;
+      negative control `down -v` fails it. One earlier run answered `401` to
+      the first authenticated call and did not reproduce in three later runs;
+      unexplained)*; extend the coverage ratchet (`W-23`)
+      to live PostgreSQL, where these findings arose. Keep
       a failed checkpoint, a refused update and an indeterminate measurement
       as release fixtures. — **M**
+- [x] **Create an EHR atomically** (`db:D-33`, Medium, **reproduced
+      2026-11-27**). *Done 2026-11-27 (not committed): `db:H5.23`,
+      `Store::create_ehr_with_status`, `run_atomic_creation` on the owner
+      store, SQLite and live PostgreSQL with negative controls; `openehr-axa`
+      uses it; the trigger abort is an engine error.* A `Store` operation that creates the EHR, its contribution
+      and its first `EHR_STATUS` in one transaction (requirement first), on the
+      owner store, SQLite and PostgreSQL, held by a shared story;
+      `openehr-axa` calls it, and the `#[ignore]`d fault test in `tests/http.rs`
+      is un-ignored. Also: an injected trigger abort is reported as a
+      `409` "already exists". — **M**
 - [x] **`rustfmt` in every workspace.** *Done 2026-11-26:* the two diffs in
       `openehr-fuzz/fuzz_targets/` reproduced and are formatted; `cargo fmt
       --check` passes in all 18 workspaces. CI's new `format` job runs it on a
-      crate list derived from the tree; not yet seen running on a pushed
-      commit. — **S**
+      crate list derived from the tree; it ran green on `3d266d2`, after
+      catching an unformatted `openehr-postgresql` test on its first run. — **S**
 
 ## Done (condensed; full evidence in `git show 4761700:tasks.md`)
 

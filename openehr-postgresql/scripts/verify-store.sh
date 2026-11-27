@@ -117,6 +117,10 @@ export OPENEHR_POSTGRESQL_URL="host=localhost hostaddr=127.0.0.1 port=${PORT} us
 export OPENEHR_POSTGRESQL_WRONG_HOST_URL="host=wrong.example hostaddr=127.0.0.1 port=${PORT} user=postgres password=${PASS} dbname=openehr"
 export OPENEHR_POSTGRESQL_PLAINTEXT_URL="host=localhost hostaddr=127.0.0.1 port=${PLAIN_PORT} user=postgres password=${PASS} dbname=openehr sslmode=disable"
 export OPENEHR_POSTGRESQL_CA="$TLS_DIR/ca.crt"
+# For `tests/restore_drill.rs`, which runs `pg_dump`/`pg_restore` beside the
+# server, inside its container, as a backup job would.
+export OPENEHR_POSTGRESQL_CONTAINER="$NAME"
+export OPENEHR_POSTGRESQL_PASSWORD="$PASS"
 export OPENEHR_POSTGRESQL_WRONG_CA="$TLS_DIR/wrong-ca.crt"
 
 # `--test-threads=1`: every test in `tests/store.rs` and `tests/
@@ -129,5 +133,5 @@ export OPENEHR_POSTGRESQL_WRONG_CA="$TLS_DIR/wrong-ca.crt"
 # *test functions* the harness runs at once, not threads a test spawns
 # itself.
 cargo test --manifest-path "$ROOT/openehr-postgresql/Cargo.toml" \
-    --test store --test concurrency --test tls -- \
+    --test store --test concurrency --test tls --test restore_drill -- \
     --ignored --test-threads=1
