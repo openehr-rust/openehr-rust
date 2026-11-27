@@ -59,9 +59,7 @@ fn container() -> HierObjectId {
 fn declared() -> Vec<String> {
     (1..=24)
         .map(conformance::composition_version_uid)
-        .chain((0..8).map(|i| {
-            format!("{}::writer-{i}.example.org::2", conformance::RECORD)
-        }))
+        .chain((0..8).map(|i| format!("{}::writer-{i}.example.org::2", conformance::RECORD)))
         .collect()
 }
 
@@ -73,7 +71,10 @@ fn seeded() {
     let ehr = conformance::sample_ehr();
     store.create_ehr(&ehr).expect("ehr");
     store
-        .create_contribution(ehr.ehr_id(), &conformance::sample_contribution_declaring("c1", &declared()))
+        .create_contribution(
+            ehr.ehr_id(),
+            &conformance::sample_contribution_declaring("c1", &declared()),
+        )
         .expect("contribution");
     store
         .commit_composition(ehr.ehr_id(), &conformance::sample_version(1, None, 0), "c1")
